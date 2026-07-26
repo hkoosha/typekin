@@ -36,3 +36,10 @@ path = "examples/my_u32.rs"
 name = "my_u32_expanded"
 path = "examples/my_u32_expanded.rs"
 
+[[example]]
+name = "my_u32_non_const"
+path = "examples/my_u32_non_const.rs"
+
+[[example]]
+name = "my_u32_non_const_expanded"
+path = "examples/my_u32_non_const_expanded.rs"

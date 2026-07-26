@@ -1,90 +1,86 @@
 // AUTO-GENERATED VIA typekin-unexpand, DO NOT MODIFY
 #![allow(clippy::needless_return)]
-#![allow(dead_code)]
-#![feature(const_cmp)]
-#![feature(const_trait_impl)]
-#![feature(const_ops)]
-#![feature(const_convert)]
-#![feature(const_clone)]
-#![feature(const_destruct)]
+
 extern crate std;
 use typekin_testing::demo_u128;
 mod subject {
     use std::fmt::Formatter;
     pub struct MyExample(u32);
+    #[allow(dead_code)]
+    #[allow(unused_qualifications)]
     const _: () = {
-        const impl Into<usize> for MyExample {
+        impl Into<usize> for MyExample {
             #[inline(always)]
             fn into(self) -> usize {
                 return MyExample::into_usize(self);
             }
         }
-        const impl Into<u32> for MyExample {
+        impl Into<u32> for MyExample {
             #[inline(always)]
             fn into(self) -> u32 {
                 return MyExample::into_u32(self);
             }
         }
-        const impl Into<u64> for MyExample {
+        impl Into<u64> for MyExample {
             #[inline(always)]
             fn into(self) -> u64 {
                 return MyExample::into_u64(self);
             }
         }
-        const impl Into<u128> for MyExample {
+        impl Into<u128> for MyExample {
             #[inline(always)]
             fn into(self) -> u128 {
                 return MyExample::into_u128(self);
             }
         }
-        const impl Into<i64> for MyExample {
+        impl Into<i64> for MyExample {
             #[inline(always)]
             fn into(self) -> i64 {
                 return MyExample::into_i64(self);
             }
         }
-        const impl Into<i128> for MyExample {
+        impl Into<i128> for MyExample {
             #[inline(always)]
             fn into(self) -> i128 {
                 return MyExample::into_i128(self);
             }
         }
-        const impl TryInto<u8> for MyExample {
+        impl TryInto<u8> for MyExample {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> Result<u8, Self::Error> {
                 return MyExample::try_into_u8(self);
             }
         }
-        const impl TryInto<u16> for MyExample {
+        impl TryInto<u16> for MyExample {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> Result<u16, Self::Error> {
                 return MyExample::try_into_u16(self);
             }
         }
-        const impl TryInto<i8> for MyExample {
+        impl TryInto<i8> for MyExample {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> Result<i8, Self::Error> {
                 return MyExample::try_into_i8(self);
             }
         }
-        const impl TryInto<i16> for MyExample {
+        impl TryInto<i16> for MyExample {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> Result<i16, Self::Error> {
                 return MyExample::try_into_i16(self);
             }
         }
-        const impl TryInto<i32> for MyExample {
+        impl TryInto<i32> for MyExample {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> Result<i32, Self::Error> {
                 return MyExample::try_into_i32(self);
             }
         }
-        const impl core::ops::Shr<usize> for MyExample {
+        impl core::ops::Shr<usize> for MyExample {
             type Output = MyExample;
             #[inline(always)]
             fn shr(
@@ -94,7 +90,7 @@ mod subject {
                 return self._shr(rhs);
             }
         }
-        const impl core::ops::Shl<usize> for MyExample {
+        impl core::ops::Shl<usize> for MyExample {
             type Output = MyExample;
             #[inline(always)]
             fn shl(
@@ -104,7 +100,7 @@ mod subject {
                 return self._shl(rhs);
             }
         }
-        const impl core::ops::ShrAssign<usize> for MyExample {
+        impl core::ops::ShrAssign<usize> for MyExample {
             #[inline(always)]
             fn shr_assign(
                 &mut self,
@@ -113,7 +109,7 @@ mod subject {
                 *self = self._shr(other);
             }
         }
-        const impl core::ops::ShlAssign<usize> for MyExample {
+        impl core::ops::ShlAssign<usize> for MyExample {
             #[inline(always)]
             fn shl_assign(
                 &mut self,
@@ -122,7 +118,7 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        const impl core::ops::BitAndAssign<MyExample> for MyExample {
+        impl core::ops::BitAndAssign<MyExample> for MyExample {
             #[inline(always)]
             fn bitand_assign(
                 &mut self,
@@ -131,7 +127,7 @@ mod subject {
                 *self = self._and(other.0);
             }
         }
-        const impl core::ops::AddAssign<MyExample> for MyExample {
+        impl core::ops::AddAssign<MyExample> for MyExample {
             #[inline(always)]
             fn add_assign(
                 &mut self,
@@ -140,7 +136,7 @@ mod subject {
                 *self = self._add(other.0);
             }
         }
-        const impl core::ops::SubAssign<MyExample> for MyExample {
+        impl core::ops::SubAssign<MyExample> for MyExample {
             #[inline(always)]
             fn sub_assign(
                 &mut self,
@@ -149,7 +145,7 @@ mod subject {
                 *self = self._sub(other.0);
             }
         }
-        const impl core::ops::MulAssign<MyExample> for MyExample {
+        impl core::ops::MulAssign<MyExample> for MyExample {
             #[inline(always)]
             fn mul_assign(
                 &mut self,
@@ -158,7 +154,7 @@ mod subject {
                 *self = self._mul(other.0);
             }
         }
-        const impl core::ops::DivAssign<MyExample> for MyExample {
+        impl core::ops::DivAssign<MyExample> for MyExample {
             #[inline(always)]
             fn div_assign(
                 &mut self,
@@ -167,7 +163,7 @@ mod subject {
                 *self = self._div(other.0);
             }
         }
-        const impl core::ops::RemAssign<MyExample> for MyExample {
+        impl core::ops::RemAssign<MyExample> for MyExample {
             #[inline(always)]
             fn rem_assign(
                 &mut self,
@@ -176,7 +172,7 @@ mod subject {
                 *self = self._rem(other.0);
             }
         }
-        const impl core::ops::BitOrAssign<MyExample> for MyExample {
+        impl core::ops::BitOrAssign<MyExample> for MyExample {
             #[inline(always)]
             fn bitor_assign(
                 &mut self,
@@ -194,14 +190,14 @@ mod subject {
             }
         }
         impl core::marker::Copy for MyExample {}
-        const impl Clone for MyExample {
+        impl Clone for MyExample {
             #[inline(always)]
             fn clone(&self) -> Self {
                 Self(Clone::clone(&self.0))
             }
         }
-        const impl core::cmp::Eq for MyExample {}
-        const impl core::cmp::Ord for MyExample {
+        impl core::cmp::Eq for MyExample {}
+        impl core::cmp::Ord for MyExample {
             #[inline(always)]
             fn cmp(
                 &self,
@@ -212,10 +208,10 @@ mod subject {
         }
         if !(size_of::<MyExample>() == size_of::<u32>()) {
             panic!("invalid memory layout: #ty(#el) != #el");
-        };
-        const impl<T> core::cmp::PartialEq<T> for MyExample
+        }
+        impl<T> core::cmp::PartialEq<T> for MyExample
         where
-            T: [const] FriendMathRel + [const] core::marker::Destruct,
+            T: FriendMathRel,
         {
             #[inline(always)]
             fn eq(
@@ -226,11 +222,9 @@ mod subject {
                 return self.raw() == that;
             }
         }
-        const impl<T> core::cmp::PartialOrd<T> for MyExample
+        impl<T> core::cmp::PartialOrd<T> for MyExample
         where
-            T: [const] PartialEq<MyExample>
-                + [const] FriendMathRel
-                + [const] core::marker::Destruct,
+            T: PartialEq<MyExample> + FriendMathRel,
         {
             #[inline(always)]
             fn partial_cmp(
@@ -241,9 +235,9 @@ mod subject {
                 return self.raw().partial_cmp(&that);
             }
         }
-        const impl<T> core::ops::Add<T> for MyExample
+        impl<T> core::ops::Add<T> for MyExample
         where
-            T: [const] FriendMathOps + [const] core::marker::Destruct,
+            T: FriendMathOps,
         {
             type Output = Self;
             #[inline(always)]
@@ -255,9 +249,9 @@ mod subject {
                 return self._add(that);
             }
         }
-        const impl<T> core::ops::Sub<T> for MyExample
+        impl<T> core::ops::Sub<T> for MyExample
         where
-            T: [const] FriendMathOps + [const] core::marker::Destruct,
+            T: FriendMathOps,
         {
             type Output = Self;
             #[inline(always)]
@@ -269,9 +263,9 @@ mod subject {
                 return self._sub(that);
             }
         }
-        const impl<T> core::ops::Mul<T> for MyExample
+        impl<T> core::ops::Mul<T> for MyExample
         where
-            T: [const] FriendMathOps + [const] core::marker::Destruct,
+            T: FriendMathOps,
         {
             type Output = Self;
             #[inline(always)]
@@ -283,9 +277,9 @@ mod subject {
                 return self._mul(that);
             }
         }
-        const impl<T> core::ops::Div<T> for MyExample
+        impl<T> core::ops::Div<T> for MyExample
         where
-            T: [const] FriendMathOps + [const] core::marker::Destruct,
+            T: FriendMathOps,
         {
             type Output = Self;
             #[inline(always)]
@@ -297,9 +291,9 @@ mod subject {
                 return self._div(that);
             }
         }
-        const impl<T> core::ops::Rem<T> for MyExample
+        impl<T> core::ops::Rem<T> for MyExample
         where
-            T: [const] FriendMathOps + [const] core::marker::Destruct,
+            T: FriendMathOps,
         {
             type Output = Self;
             #[inline(always)]
@@ -311,9 +305,9 @@ mod subject {
                 return self._rem(that);
             }
         }
-        const impl<T> core::ops::BitAnd<T> for MyExample
+        impl<T> core::ops::BitAnd<T> for MyExample
         where
-            T: [const] FriendMathBit + [const] core::marker::Destruct,
+            T: FriendMathBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -325,9 +319,9 @@ mod subject {
                 return self._and(that);
             }
         }
-        const impl<T> core::ops::BitOr<T> for MyExample
+        impl<T> core::ops::BitOr<T> for MyExample
         where
-            T: [const] FriendMathBit + [const] core::marker::Destruct,
+            T: FriendMathBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -339,9 +333,9 @@ mod subject {
                 return self._or(that);
             }
         }
-        const impl<T> core::ops::BitXor<T> for MyExample
+        impl<T> core::ops::BitXor<T> for MyExample
         where
-            T: [const] FriendMathBit + [const] core::marker::Destruct,
+            T: FriendMathBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -353,36 +347,36 @@ mod subject {
                 return self._xor(that);
             }
         }
-        const impl core::ops::Not for MyExample {
+        impl core::ops::Not for MyExample {
             type Output = MyExample;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
             }
         }
-        const trait Seal {
+        trait Seal {
             #[must_use]
             fn conv_my_example(&self) -> u32;
         }
-        const trait FriendMake: [const] Seal {}
-        const trait FriendMathOps: [const] Seal {}
-        const trait FriendMathBit: [const] Seal {}
-        const trait FriendMathRel: [const] Seal {}
-        const impl Seal for MyExample {
+        trait FriendMake: Seal {}
+        trait FriendMathOps: Seal {}
+        trait FriendMathBit: Seal {}
+        trait FriendMathRel: Seal {}
+        impl Seal for MyExample {
             #[inline(always)]
             fn conv_my_example(&self) -> u32 {
                 return Self::raw(*self);
             }
         }
-        const impl FriendMake for MyExample {}
-        const impl FriendMathOps for MyExample {}
-        const impl FriendMathBit for MyExample {}
-        const impl FriendMathRel for MyExample {}
-        const impl FriendMathOps for u32 {}
-        const impl FriendMathBit for u32 {}
-        const impl FriendMathRel for u32 {}
-        const impl FriendMake for u32 {}
-        const impl Seal for u32 {
+        impl FriendMake for MyExample {}
+        impl FriendMathOps for MyExample {}
+        impl FriendMathBit for MyExample {}
+        impl FriendMathRel for MyExample {}
+        impl FriendMathOps for u32 {}
+        impl FriendMathBit for u32 {}
+        impl FriendMathRel for u32 {}
+        impl FriendMake for u32 {}
+        impl Seal for u32 {
             #[inline(always)]
             fn conv_my_example(&self) -> u32 {
                 let it: u32 = *self;
@@ -392,11 +386,10 @@ mod subject {
         impl MyExample {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub const fn of<T, B>(it: B) -> MyExample
+            pub fn of<T, B>(it: B) -> MyExample
             where
-                T: [const] FriendMake,
-                B: [const] core::borrow::Borrow<T>
-                    + [const] core::marker::Destruct,
+                T: FriendMake,
+                B: core::borrow::Borrow<T>,
             {
                 let this = Seal::conv_my_example(it.borrow());
                 return Self::_make(this);
@@ -523,7 +516,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _add(
+            pub(self) fn _add(
                 self,
                 it: u32,
             ) -> Self {
@@ -534,7 +527,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _sub(
+            pub(self) fn _sub(
                 self,
                 it: u32,
             ) -> Self {
@@ -545,7 +538,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _mul(
+            pub(self) fn _mul(
                 self,
                 it: u32,
             ) -> Self {
@@ -556,7 +549,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _div(
+            pub(self) fn _div(
                 self,
                 it: u32,
             ) -> Self {
@@ -567,7 +560,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _rem(
+            pub(self) fn _rem(
                 self,
                 it: u32,
             ) -> Self {
@@ -578,7 +571,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _xor(
+            pub(self) fn _xor(
                 self,
                 it: u32,
             ) -> Self {
@@ -589,7 +582,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _and(
+            pub(self) fn _and(
                 self,
                 it: u32,
             ) -> Self {
@@ -600,7 +593,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _or(
+            pub(self) fn _or(
                 self,
                 it: u32,
             ) -> Self {
@@ -611,7 +604,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _shr(
+            pub(self) fn _shr(
                 self,
                 it: usize,
             ) -> Self {
@@ -622,7 +615,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _shl(
+            pub(self) fn _shl(
                 self,
                 it: usize,
             ) -> Self {
@@ -652,7 +645,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _cmp(
+            pub(self) fn _cmp(
                 self,
                 it: u32,
             ) -> core::cmp::Ordering {

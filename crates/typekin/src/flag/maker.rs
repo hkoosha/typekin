@@ -28,15 +28,25 @@ macro_rules! maybe_quote {
 pub(crate) struct Reusable {
     konst: TokenStream,
     bonst: TokenStream,
-    copy_if_konst: TokenStream,
+    destruct: TokenStream,
 }
 
 impl Reusable {
-    fn new(with_const: bool) -> Self {
-        return Self {
-            bonst: maybe_quote!(with_const, [const]),
-            copy_if_konst: maybe_quote!(with_const, ::core::marker::Copy),
-            konst: maybe_quote!(with_const, const),
+    fn new(with_konst: bool) -> Self {
+        if(!with_konst) {
+            panic!("fuck");
+        }
+        return match with_konst {
+            true => Self {
+                konst: TokenStream::new(),
+                bonst: TokenStream::new(),
+                destruct: TokenStream::new(),
+            },
+            false => Self {
+                konst: quote! { const },
+                bonst: quote! { [const] },
+                destruct: quote! { ::core::marker::Destruct },
+            },
         };
     }
 }
@@ -82,7 +92,7 @@ impl<'a> Generator<'a> {
             fconv: quote! { Seal::#conv },
             sz: n_of_ident(el)?,
             raw_fn_name: cfg.fn_get_raw.path.segments[1].ident.clone(),
-            tk: Reusable::new(cfg.flags.with_const),
+            tk: Reusable::new(cfg.flags.with_konst),
             ty: &item.ident,
             el,
             conv,
@@ -234,14 +244,14 @@ impl Generator<'_> {
 
         let konst = &self.tk.konst;
         let bonst = &self.tk.bonst;
-        let copy_if_const = &self.tk.copy_if_konst;
+        let destruct = &self.tk.destruct;
 
         let fconv = &self.fconv;
 
         return quote! {
-            const impl<T> ::core::cmp::PartialEq<T> for #ty
+            #konst impl<T> ::core::cmp::PartialEq<T> for #ty
             where
-                T: #bonst FriendMathRel + #copy_if_const,
+                T: #bonst FriendMathRel + #destruct,
             {
                 fn eq(
                     &self,
@@ -252,11 +262,11 @@ impl Generator<'_> {
                 }
             }
 
-            const impl<T> ::core::cmp::PartialOrd<T> for #ty
+            #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
             where
                 T: #bonst PartialEq<#ty>
                     + #bonst FriendMathRel
-                    + #copy_if_const
+                    + #destruct
             {
                 fn partial_cmp(
                     &self,
@@ -269,7 +279,7 @@ impl Generator<'_> {
 
             #konst impl<T> ::core::ops::Add<T> for #ty
             where
-                T: #bonst FriendMathOps + #copy_if_const,
+                T: #bonst FriendMathOps + #destruct,
             {
                 type Output = Self;
 
@@ -282,9 +292,9 @@ impl Generator<'_> {
                 }
             }
 
-            const impl<T> ::core::ops::Sub<T> for #ty
+            #konst impl<T> ::core::ops::Sub<T> for #ty
             where
-                T: #bonst FriendMathOps + #copy_if_const,
+                T: #bonst FriendMathOps + #destruct,
             {
                 type Output = Self;
 
@@ -297,9 +307,9 @@ impl Generator<'_> {
                 }
             }
 
-            const impl<T> ::core::ops::Mul<T> for #ty
+            #konst impl<T> ::core::ops::Mul<T> for #ty
             where
-                T: #bonst FriendMathOps + #copy_if_const,
+                T: #bonst FriendMathOps + #destruct,
             {
                 type Output = Self;
 
@@ -312,9 +322,9 @@ impl Generator<'_> {
                 }
             }
 
-            const impl<T> ::core::ops::Div<T> for #ty
+            #konst impl<T> ::core::ops::Div<T> for #ty
             where
-                T: #bonst FriendMathOps + #copy_if_const,
+                T: #bonst FriendMathOps + #destruct,
             {
                 type Output = Self;
 
@@ -327,9 +337,9 @@ impl Generator<'_> {
                 }
             }
 
-            const impl<T> ::core::ops::Rem<T> for #ty
+            #konst impl<T> ::core::ops::Rem<T> for #ty
             where
-                T: #bonst FriendMathOps + #copy_if_const,
+                T: #bonst FriendMathOps + #destruct,
             {
                 type Output = Self;
 
@@ -344,7 +354,7 @@ impl Generator<'_> {
 
             #konst impl<T> ::core::ops::BitAnd<T> for #ty
             where
-                T: #bonst FriendMathBit + #copy_if_const,
+                T: #bonst FriendMathBit + #destruct,
             {
                 type Output = Self;
 
@@ -360,7 +370,7 @@ impl Generator<'_> {
 
             #konst impl<T> ::core::ops::BitOr<T> for #ty
             where
-                T: #bonst FriendMathBit + #copy_if_const,
+                T: #bonst FriendMathBit + #destruct,
             {
                 type Output = Self;
 
@@ -376,7 +386,7 @@ impl Generator<'_> {
 
             #konst impl<T> ::core::ops::BitXor<T> for #ty
             where
-                T: #bonst FriendMathBit + #copy_if_const,
+                T: #bonst FriendMathBit + #destruct,
             {
                 type Output = Self;
 
@@ -402,7 +412,7 @@ impl Generator<'_> {
 
         let konst = &self.tk.konst;
         let bonst = &self.tk.bonst;
-        let copy_if_const = &self.tk.copy_if_konst;
+        let destruct = &self.tk.destruct;
 
         let conv = &self.conv;
         let fconv = &self.fconv;
@@ -434,7 +444,7 @@ impl Generator<'_> {
                 ) -> #ty
                 where
                     T: #bonst FriendMake,
-                    B: #bonst ::core::borrow::Borrow<T> + #copy_if_const,
+                    B: #bonst ::core::borrow::Borrow<T> + #destruct,
                 {
                     let this = #fconv(it.borrow());
                     return Self::_make(this);
@@ -553,6 +563,7 @@ impl Generator<'_> {
     ) -> TokenStream {
         let raw = &self.cfg.fn_get_raw;
         let fn_name = format_ident!("_{}", it.op.name());
+        let konst = self.tk.konst;
         let el = match it.arg {
             NumBinArg::Variable => self.el,
             NumBinArg::Predefined(n) => &ident_of_n(n),
@@ -563,7 +574,7 @@ impl Generator<'_> {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn #fn_name(
+            pub(self) #konst fn #fn_name(
                 self,
                 it: #el,
             ) -> Self {
@@ -577,12 +588,13 @@ impl Generator<'_> {
     fn make_fn_private_rel(&self) -> TokenStream {
         let raw = &self.cfg.fn_get_raw;
         let el = self.el;
+        let konst = self.tk.konst;
 
         return quote! {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _eq(
+            pub(self) #konst fn _eq(
                 self,
                 it: #el,
             ) -> bool {
@@ -594,7 +606,7 @@ impl Generator<'_> {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _cmp(
+            pub(self) #konst fn _cmp(
                 self,
                 it: #el,
             ) -> ::core::cmp::Ordering {
@@ -611,13 +623,14 @@ impl Generator<'_> {
     ) -> TokenStream {
         let raw = &self.cfg.fn_get_raw;
         let fn_name = format_ident!("_{}", unary.op.name());
+        let konst = self.tk.konst;
         let op = unary.op.stream();
 
         return quote! {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn #fn_name(
+            pub(self) #konst fn #fn_name(
                 self,
             ) -> Self {
                 let this = #raw(self);
@@ -860,21 +873,15 @@ impl Generator<'_> {
     fn make_fn_raw(&self) -> TokenStream {
         let raw_fn_name = &self.raw_fn_name;
         let el = self.el;
+        let konst = self.tk.konst;
 
         return quote! {
 
             #[must_use]
             #[inline(always)]
-            pub const fn #raw_fn_name(self) -> #el {
+            pub #konst fn #raw_fn_name(self) -> #el {
                 return self.0;
             }
-        };
-    }
-
-    fn make_constructor(&self) -> TokenStream {
-        return match &self.cfg.fn_validator {
-            None => self.make_constructor_unchecked(),
-            Some(it) => self.make_constructor_checked(it),
         };
     }
 
@@ -906,11 +913,12 @@ impl Generator<'_> {
         validator: &Path,
     ) -> TokenStream {
         let el = self.el;
+        let konst = self.tk.konst;
 
         return quote! {
 
             #[inline(always)]
-            pub const fn try_make(it: #el) -> Result<Self, #el> {
+            pub #konst fn try_make(it: #el) -> Result<Self, #el> {
                 return if #validator(it) {
                     return Self(it);
                 }
@@ -921,7 +929,7 @@ impl Generator<'_> {
 
             #[must_use]
             #[inline(always)]
-            pub(self) const fn _make(it: #el) -> Self {
+            pub(self) #konst fn _make(it: #el) -> Self {
                 if #validator(it) {
                     return Self(it);
                 }

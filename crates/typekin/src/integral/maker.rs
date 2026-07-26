@@ -312,6 +312,8 @@ impl<'a> Generator<'a> {
         let impls = self.ekran_impls();
 
         let it = quote::quote! {
+            #[allow(dead_code)]
+            #[allow(unused_qualifications)]
             const _: () = {
                 #impls
 
@@ -603,6 +605,7 @@ impl<'a> Generator<'a> {
     ) -> TokenStream {
         let raw = &self.cfg.fn_get_raw;
         let fn_name = format_ident!("_{}", it.op.name());
+        let konst = &self.tk.konst;
         let el = match it.arg {
             NumBinArg::Variable => self.el,
             NumBinArg::Predefined(n) => &ident_of_n(n),
@@ -613,7 +616,7 @@ impl<'a> Generator<'a> {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn #fn_name(
+            pub(self) #konst fn #fn_name(
                 self,
                 it: #el,
             ) -> Self {
@@ -1235,12 +1238,13 @@ impl Generator<'_> {
     fn make_cmp(&self) -> TokenStream {
         let raw = &self.cfg.fn_get_raw;
         let el = self.el;
+        let konst = &self.tk.konst;
 
         return quote! {
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _cmp(
+            pub(self) #konst fn _cmp(
                 self,
                 it: #el,
             ) -> ::core::cmp::Ordering {
@@ -1459,7 +1463,6 @@ impl Generator<'_> {
         let el = self.el;
 
         return quote! {
-
             #[must_use]
             #[inline(always)]
             pub const fn #raw_fn_name(self) -> #el {
@@ -1508,10 +1511,11 @@ impl Generator<'_> {
         validator: &Path,
     ) -> TokenStream {
         let el = self.el;
+        let konst = &self.tk.konst;
 
         return quote! {
             #[inline(always)]
-            pub const fn try_make(it: #el) -> Result<Self, #el> {
+            pub #konst fn try_make(it: #el) -> Result<Self, #el> {
                 return if #validator(it) {
                     return Self(it);
                 }

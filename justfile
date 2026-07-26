@@ -41,3 +41,6 @@ alias run := prettify
 [group("example")]
 u32: (z-expand-example 'u32')
 
+[group("example")]
+plain: (z-expand-example 'u32_non_const')
+
