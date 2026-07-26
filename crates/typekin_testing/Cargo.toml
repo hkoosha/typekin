@@ -2,6 +2,7 @@
 name = "typekin_testing"
 authors = ["Koosha H <git@koosha.io>"]
 license = "GPL-3"
+description = "test helpers for typekin crate"
 
 version.workspace = true
 edition.workspace = true

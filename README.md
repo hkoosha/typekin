@@ -1,3 +1,11 @@
+AI Disclaimer: The code is handwritten so far, but the README is AI generated via
+the following command: 
+
+```
+Read this project and create comprehensive readme. This is crate for the new-type
+pattern, borrowing the concept of `friend classes` from c++.
+```
+
 # Typekin
 
 `typekin` is a Rust proc-macro crate for building **zero-cost newtypes** around
