@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Koosha H <git@koosha.io>"]
+homepage = "https://koosha.io/typekin"
+documentation = "https://koosha.io/typekin"
+repository = "https://gitlab.com/hkoosha/typekin"
+readme = "README.md"
+license = "GPL-3"
+keywords = ["newtype", "derive", "invariant"]
+categories = ["data-structures"]
+rust-version = "1.97"
+
+[profile.dev]
+lto = "off"
+split-debuginfo = "unpacked"
+codegen-units = 256
+incremental = true
+opt-level = 0
+debug = "full"
+
+[profile.dev.package."*"]
+split-debuginfo = "unpacked"
+codegen-units = 256
+incremental = true
+opt-level = 0
+debug = "full"
+
+[workspace.lints.clippy]
+needless_return = "allow"
+
+[workspace.dependencies]
+syn = { version = "3", features = ["full", "visit-mut"] }
+quote = { version = "1", }
+proc-macro2 = { version = "1", features = ["span-locations"] }
