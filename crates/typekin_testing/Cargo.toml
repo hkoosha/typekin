@@ -1,7 +1,7 @@
 [package]
 name = "typekin_testing"
 authors = ["Koosha H <git@koosha.io>"]
-license = "GPL-3"
+license = "GPL-3.0-only"
 description = "test helpers for typekin crate"
 
 version.workspace = true

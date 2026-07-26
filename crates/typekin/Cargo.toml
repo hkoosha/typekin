@@ -1,7 +1,8 @@
 [package]
 name = "typekin"
 authors = ["Koosha H <git@koosha.io>"]
-license = "GPL-3"
+license = "GPL-3.0-only"
+description = "new-type pattern with concept of Friends borrowed from c++"
 
 version.workspace = true
 edition.workspace = true
