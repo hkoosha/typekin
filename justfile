@@ -1,26 +1,8 @@
 set shell := ["bash", "-e", "-u", "-o", "pipefail", "-c"]
 
-examples := 'crates' / 'typekin' / 'examples' / 'my_'
-
 [group("z")]
 @def:
   just -l
-
-[group("z")]
-z-expand from to:
-  work="$(mktemp)" && \
-    cargo expand -p typekin --example '{{ from }}' > "$work" && \
-    cargo run -p typekin -- "$work" > '{{ to }}'
-
-[group("z")]
-z-expand-example what: \
-    (z-expand
-      'my_' + what
-      examples + what + '_expanded.rs'
-    ) \
-    fmt
-
-# ==============================================================================
 
 clean:
   cargo clean
@@ -36,11 +18,55 @@ build: fmt
 
 alias run := prettify
 @prettify file:
-  cargo run -qp typekin -- {{ file }}
+  cargo -q run -qp typekin -- '{{ file }}'
+
+
+# --------------------------------------
+
 
 [group("example")]
-u32: (z-expand-example 'u32')
+u32-expand: (z-expand 'my_u32')
+[group("example")]
+u32-pretty: (z-pretty 'my_u32')
+[group("example")]
+u32: u32-expand u32-pretty fmt
 
 [group("example")]
-plain: (z-expand-example 'u32_non_const')
+plain-expand: (z-expand 'my_u32_non_const')
+[group("example")]
+plain-pretty: (z-pretty 'my_u32_non_const')
+[group("example")]
+plain: plain-expand plain-pretty fmt
+
+[group("example")]
+thingy-expand: (z-expand 'my_thingy')
+[group("example")]
+thingy-pretty: (z-pretty 'my_thingy')
+[group("example")]
+thingy: thingy-expand thingy-pretty fmt
+
+[group("example")]
+flag-expand: (z-expand 'my_flag')
+[group("example")]
+flag-pretty: (z-pretty 'my_flag')
+[group("example")]
+flag: flag-expand flag-pretty fmt
+
+
+# ==============================================================================
+
+examples := 'crates' / 'typekin' / 'examples' 
+
+[group("z")]
+z-expand what:
+  touch '{{ examples / what }}_exp.rs'
+  work="$(mktemp)" && \
+  cargo -q expand -p typekin --example '{{ what }}' > "$work" && \
+  cp "$work" '{{ examples / what }}_exp.rs'
+
+[group("z")]
+z-pretty what:
+  work="$(mktemp)" && \
+  just prettify '{{ examples / what }}_exp.rs' > "$work" && \
+  cp "$work" '{{ examples / what }}_exp.rs'
 

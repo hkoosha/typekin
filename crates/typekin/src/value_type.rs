@@ -87,7 +87,7 @@ impl N {
 }
 
 impl N {
-    pub fn name(&self) -> &'static str {
+    pub fn typekin_name(&self) -> &'static str {
         return match self {
             N::USIZ => "USIZ",
             N::ISIZ => "ISIZ",
@@ -212,7 +212,7 @@ impl Display for N {
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(f, "{}", self.name())
+        write!(f, "{}", self.typekin_name())
     }
 }
 

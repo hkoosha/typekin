@@ -5,8 +5,10 @@ mod subject {
 
     #[typekin::integral(
         friends = [u32(conv = self, level = Full)],
-        with_const = false,
+        without = [konst]
     )]
+    #[derive(Copy, Clone)]
+    #[repr(transparent)]
     pub struct MyExample(u32);
 
     impl std::fmt::Display for MyExample {

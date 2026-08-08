@@ -1,313 +1,158 @@
-use crate::integral_op::NumBinArg;
-use crate::integral_op::NumBinOp;
-use crate::integral_op::NumUnaryPrefixOp;
-use crate::integral_op::Op;
-use crate::integral_token::ident_of_n;
-use crate::integral_token::make_fn_into;
-use crate::integral_token::make_fn_try_into_checked;
-use crate::integral_token::make_fn_try_into_unchecked;
-use crate::integral_token::make_impl_into;
-use crate::integral_token::make_impl_try_into;
-use crate::integral_token::n_of_ident;
-use crate::integral_token::to_snake_case;
-use crate::integral_types::N;
+use crate::runner;
+use crate::runner::Handy;
+use crate::runner::MkErr;
+use crate::runner::mk_flags;
+use crate::type_friendship::{FriendReq, FriendshipLevel};
+use crate::value_ops::BinOp;
+use crate::value_ops::UnaryOp;
+use crate::value_type::N;
 use proc_macro2::Ident;
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use quote::quote;
+use syn::ExprPath;
 use syn::Path;
-use syn::parse_quote;
-use syn::spanned::Spanned;
-use syn::{ExprPath, ItemStruct};
 
-macro_rules! maybe_quote {
-    ($maybe:expr, $($tt:tt)*) => {{
-        if $maybe {
-            quote::quote! {$($tt)*}
-        }
-        else {
-            TokenStream::new()
-        }
-    }};
-}
+mk_flags! {
+    #[derive(Debug, Clone)]
+    pub(crate) struct IntegralFlags {
+        pub impl_range: bool = false,
 
-// If adding any non-boolean field, then fix the Default implementation
-// else the unsafe code is UB.
-#[derive(Debug)]
-pub(super) struct IntegralFlags {
-    pub with_const: bool,
-    pub stmt_assertions: bool,
+        pub konst: bool = true,
+        pub assertions: bool = true,
 
-    pub impl_debug: bool,
-    pub impl_clone: bool,
-    pub impl_copy: bool,
-    pub impl_eq: bool,
-    pub impl_ord: bool,
-    pub impl_partial_eq: bool,
-    pub impl_partial_ord: bool,
-    pub impl_into: bool,
-    pub impl_try_into: bool,
-    pub impl_range: bool,
+        pub impl_debug: bool = true,
+        pub impl_eq: bool = true,
+        pub impl_fmt_binary: bool = true,
+        pub impl_fmt_hex_lower: bool = true,
+        pub impl_fmt_hex_upper: bool = true,
+        pub impl_fmt_octal: bool = true,
+        pub impl_into: bool = true,
+        pub impl_ord: bool = true,
+        pub impl_partial_eq: bool = true,
+        pub impl_partial_ord: bool = true,
+        pub impl_try_into: bool = true,
 
-    pub impl_assign_mul: bool,
-    pub impl_assign_sub: bool,
-    pub impl_assign_add: bool,
-    pub impl_assign_div: bool,
-    pub impl_assign_rem: bool,
-    pub impl_assign_and: bool,
-    pub impl_assign_or: bool,
-    pub impl_assign_shr: bool,
-    pub impl_assign_shl: bool,
-    pub impl_sub: bool,
-    pub impl_add: bool,
-    pub impl_mul: bool,
-    pub impl_div: bool,
-    pub impl_rem: bool,
-    pub impl_and: bool,
-    pub impl_xor: bool,
-    pub impl_or: bool,
-    pub impl_not: bool,
-    pub impl_shr: bool,
-    pub impl_shl: bool,
-    pub impl_friend_seal: bool,
-    pub impl_friend_make: bool,
-    pub impl_friend_math_ops: bool,
-    pub impl_friend_math_bit: bool,
-    pub impl_friend_math_rel: bool,
-    pub impl_friendzone_seal: bool,
-    pub impl_friendzone_friend_make: bool,
-    pub impl_friendzone_friend_math_ops: bool,
-    pub impl_friendzone_friend_math_bit: bool,
-    pub impl_friendzone_friend_math_rel: bool,
-    pub impl_friends: bool,
+        pub impl_assign_add: bool = true,
+        pub impl_assign_and: bool = true,
+        pub impl_assign_div: bool = true,
+        pub impl_assign_mul: bool = true,
+        pub impl_assign_or: bool = true,
+        pub impl_assign_rem: bool = true,
+        pub impl_assign_shl: bool = true,
+        pub impl_assign_shr: bool = true,
+        pub impl_assign_sub: bool = true,
+        pub impl_math_add: bool = true,
+        pub impl_math_and: bool = true,
+        pub impl_math_div: bool = true,
+        pub impl_math_mul: bool = true,
+        pub impl_math_not: bool = true,
+        pub impl_math_or: bool = true,
+        pub impl_math_rem: bool = true,
+        pub impl_math_shl: bool = true,
+        pub impl_math_shr: bool = true,
+        pub impl_math_sub: bool = true,
+        pub impl_math_xor: bool = true,
 
-    pub fn_of: bool,
-    pub fn_raw: bool,
-    pub fn_eq: bool,
-    pub fn_cmp: bool,
-    pub fn_unchecked_try_make: bool,
-    pub fn_unchecked_make: bool,
-    pub fn_checked_try_make: bool,
-    pub fn_checked_make: bool,
-    pub fn_shr: bool,
-    pub fn_shl: bool,
-    pub fn_and: bool,
-    pub fn_or: bool,
-    pub fn_xor: bool,
-    pub fn_not: bool,
-    pub fn_add: bool,
-    pub fn_sub: bool,
-    pub fn_mul: bool,
-    pub fn_div: bool,
-    pub fn_rem: bool,
-    pub fn_into: bool,
-    pub fn_try_into_checked: bool,
-    pub fn_try_into_unchecked: bool,
-}
+        pub impl_friend: bool = true,
+        pub impl_friend_make: bool = true,
+        pub impl_friend_math_bit: bool = true,
+        pub impl_friend_math_ops: bool = true,
+        pub impl_friend_math_rel: bool = true,
+        pub impl_friend_seal: bool = true,
+        pub impl_friendzone_friend_make: bool = true,
+        pub impl_friendzone_friend_math_bit: bool = true,
+        pub impl_friendzone_friend_math_ops: bool = true,
+        pub impl_friendzone_friend_math_rel: bool = true,
+        pub impl_friendzone_seal: bool = true,
 
-impl Default for IntegralFlags {
-    fn default() -> Self {
-        return Self {
-            impl_range: false,
-            // ---
-            with_const: true,
-            stmt_assertions: true,
-            impl_debug: true,
-            impl_clone: true,
-            impl_copy: true,
-            impl_eq: true,
-            impl_ord: true,
-            impl_partial_eq: true,
-            impl_partial_ord: true,
-            impl_into: true,
-            impl_try_into: true,
-            impl_assign_mul: true,
-            impl_assign_sub: true,
-            impl_assign_add: true,
-            impl_assign_div: true,
-            impl_assign_rem: true,
-            impl_assign_and: true,
-            impl_assign_or: true,
-            impl_assign_shr: true,
-            impl_assign_shl: true,
-            impl_sub: true,
-            impl_add: true,
-            impl_mul: true,
-            impl_div: true,
-            impl_rem: true,
-            impl_and: true,
-            impl_xor: true,
-            impl_or: true,
-            impl_not: true,
-            impl_shr: true,
-            impl_shl: true,
-            impl_friend_seal: true,
-            impl_friend_make: true,
-            impl_friend_math_ops: true,
-            impl_friend_math_bit: true,
-            impl_friend_math_rel: true,
-            impl_friendzone_seal: true,
-            impl_friendzone_friend_make: true,
-            impl_friendzone_friend_math_ops: true,
-            impl_friendzone_friend_math_bit: true,
-            impl_friendzone_friend_math_rel: true,
-            impl_friends: true,
-            fn_of: true,
-            fn_raw: true,
-            fn_eq: true,
-            fn_cmp: true,
-            fn_unchecked_try_make: true,
-            fn_unchecked_make: true,
-            fn_checked_try_make: true,
-            fn_checked_make: true,
-            fn_shr: true,
-            fn_shl: true,
-            fn_and: true,
-            fn_or: true,
-            fn_xor: true,
-            fn_not: true,
-            fn_add: true,
-            fn_sub: true,
-            fn_mul: true,
-            fn_div: true,
-            fn_rem: true,
-            fn_into: true,
-            fn_try_into_checked: true,
-            fn_try_into_unchecked: true,
-        };
+        pub fn_conv_into: bool = true,
+        pub fn_conv_of: bool = true,
+        pub fn_conv_raw: bool = true,
+        pub fn_conv_try_into_checked: bool = true,
+        pub fn_conv_try_into_unchecked: bool = true,
+        pub fn_make_checked: bool = true,
+        pub fn_make_checked_try: bool = true,
+        pub fn_make_unchecked: bool = true,
+        pub fn_make_unchecked_try: bool = true,
+        pub fn_math_add: bool = true,
+        pub fn_math_and: bool = true,
+        pub fn_math_div: bool = true,
+        pub fn_math_mul: bool = true,
+        pub fn_math_not: bool = true,
+        pub fn_math_or: bool = true,
+        pub fn_math_rem: bool = true,
+        pub fn_math_shl: bool = true,
+        pub fn_math_shr: bool = true,
+        pub fn_math_sub: bool = true,
+        pub fn_math_xor: bool = true,
+        pub fn_op_cmp: bool = true,
+        pub fn_op_eq: bool = true,
     }
 }
 
-pub(super) struct FriendReq {
-    pub(super) ty: Path,
-    pub(super) level: FriendshipLevel,
-    pub(super) conv: Option<ExprPath>,
+pub(super) struct Generator {
+    repr: N,
+    el: Ident,
+    ty: Ident,
+
+    fn_get_raw_ident: Ident,
+    conv_fn_name: Ident,
+    friend_conv_fn_name: TokenStream,
+
+    int: Box<IntegralFlags>,
+    fn_get_raw: ExprPath,
+    fn_validator: Option<Path>,
+    friends: Vec<FriendReq>,
+
+    handy: Handy,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(super) enum FriendshipLevel {
-    None,
-    Make,
-    Rel,
-    Bit,
-    Math,
-    MathRel,
-    MathBit,
-    Full,
-}
-
-impl FriendshipLevel {
-    fn has_make(self) -> bool {
-        return !matches!(self, Self::None);
-    }
-
-    fn has_rel(self) -> bool {
-        return matches!(self, Self::Rel | Self::MathRel | Self::Full);
-    }
-
-    fn has_math(self) -> bool {
-        return matches!(
-            self,
-            Self::Math | Self::MathRel | Self::MathBit | Self::Full
-        );
-    }
-
-    fn has_bit(self) -> bool {
-        return matches!(self, Self::Bit | Self::MathBit | Self::Full);
-    }
-}
-
-pub(super) struct IntegralCfg {
-    pub(super) flags: IntegralFlags,
-    pub(super) fn_get_raw: ExprPath,
-    pub(super) fn_validator: Option<Path>,
-    pub(super) friends: Vec<FriendReq>,
-    pub(super) output_type: ExprPath,
-}
-
-impl Default for IntegralCfg {
-    fn default() -> Self {
-        return Self {
-            flags: IntegralFlags::default(),
-            fn_get_raw: parse_quote! { Self::raw },
-            fn_validator: None,
-            friends: Vec::with_capacity(0),
-            output_type: parse_quote!(Self),
-        };
-    }
-}
-
-#[derive(Debug)]
-struct Reusable {
-    konst: TokenStream,
-    bonst: TokenStream,
-    destruct: TokenStream,
-}
-
-impl Reusable {
-    fn new(with_const: bool) -> Self {
-        return Self {
-            bonst: maybe_quote!(with_const, [const]),
-            konst: maybe_quote!(with_const, const),
-            destruct: maybe_quote!(with_const, [const] ::core::marker::Destruct),
-        };
-    }
-}
-
-pub(super) struct Generator<'a> {
-    sz: N,
-    raw_fn_name: Ident,
-    item: &'a ItemStruct,
-    el: &'a Ident,
-    ty: &'a Ident,
-    conv: Ident,
-    fconv: TokenStream,
-    cfg: IntegralCfg,
-    tk: Reusable,
-}
-
-impl<'a> Generator<'a> {
+impl Generator {
     pub(super) fn new(
-        item: &'a ItemStruct,
-        el: &'a Ident,
-        mut cfg: IntegralCfg,
+        ty: Ident,
+        el: Ident,
+        int: Box<IntegralFlags>,
+        fn_get_raw: ExprPath,
+        fn_validator: Option<Path>,
+        friends: Vec<FriendReq>,
     ) -> syn::Result<Self> {
-        if cfg.output_type.path.segments.len() == 1
-            && cfg.output_type.path.segments[0].ident.to_string() == "Self"
+        if fn_get_raw.path.segments.len() != 2
+            || fn_get_raw.path.segments[0].ident != "Self"
         {
-            let output_type = &item.ident;
-            cfg.output_type = parse_quote! { #output_type };
-        }
-
-        if cfg.fn_get_raw.path.segments.len() != 2
-            || cfg.fn_get_raw.path.segments[0].ident != "Self"
-        {
-            return Err(syn::Error::new(
-                item.span(),
-                "can only generate raw fn of the form Self::FN_NAME",
-            ));
+            return ty.fail(
+                "currently can only generate raw fn of the form Self::FN_NAME",
+            );
         }
 
         let conv =
-            format_ident!("conv_{}", to_snake_case(&item.ident.to_string()));
+            format_ident!("conv_{}", runner::snake_case_of(&ty.to_string()));
+
+        let fn_get_raw_ident = fn_get_raw.path.segments[1].ident.clone();
+        let friend_conv_fn_name = quote! { Seal::#conv };
+        let repr = N::of(el.to_string()).ok_or_else(|| {
+            syn::Error::new(el.span(), "unknown integral type")
+        })?;
 
         let this = Self {
-            fconv: quote! { Seal::#conv },
-            sz: n_of_ident(el)?,
-            raw_fn_name: cfg.fn_get_raw.path.segments[1].ident.clone(),
-            tk: Reusable::new(cfg.flags.with_const),
-            ty: &item.ident,
+            handy: Handy::of(int.konst),
+            friend_conv_fn_name,
+            repr,
+            fn_get_raw_ident,
+            ty,
             el,
-            conv,
-            cfg,
-            item,
+            conv_fn_name: conv,
+            fn_get_raw,
+            fn_validator,
+            friends,
+            int,
         };
 
         return Ok(this);
     }
 
     pub(super) fn ekran(&self) -> syn::Result<TokenStream> {
-        let ty = self.ty;
+        let ty = &self.ty;
         let impl_items = self.ekran_impl_items();
         let impls = self.ekran_impls();
 
@@ -328,97 +173,93 @@ impl<'a> Generator<'a> {
     fn ekran_impl_items(&self) -> TokenStream {
         let mut stream = TokenStream::new();
 
-        if self.cfg.flags.fn_of {
+        if self.int.fn_conv_of {
             stream.extend(self.make_impl_fn_of());
         }
 
-        if self.cfg.flags.fn_raw {
+        if self.int.fn_conv_raw {
             stream.extend(self.make_fn_raw());
         }
 
-        if self.cfg.flags.fn_into {
+        if self.int.fn_conv_into {
             stream.extend(self.make_fns_into());
         }
 
-        if self.cfg.flags.fn_try_into_unchecked {
+        if self.int.fn_conv_try_into_unchecked {
             stream.extend(self.make_fns_try_into_unchecked());
         }
 
-        if self.cfg.flags.fn_try_into_checked {
+        if self.int.fn_conv_try_into_checked {
             stream.extend(self.make_fns_try_into_checked());
         }
 
-        if self.cfg.flags.fn_add {
-            stream.extend(self.gen_binary_op(Op::add()));
+        if self.int.fn_math_add {
+            stream.extend(self.gen_binary_op(BinOp::Add));
         }
 
-        if self.cfg.flags.fn_sub {
-            stream.extend(self.gen_binary_op(Op::sub()));
+        if self.int.fn_math_sub {
+            stream.extend(self.gen_binary_op(BinOp::Sub));
         }
 
-        if self.cfg.flags.fn_mul {
-            stream.extend(self.gen_binary_op(Op::mul()));
+        if self.int.fn_math_mul {
+            stream.extend(self.gen_binary_op(BinOp::Mul));
         }
 
-        if self.cfg.flags.fn_div {
-            stream.extend(self.gen_binary_op(Op::div()));
+        if self.int.fn_math_div {
+            stream.extend(self.gen_binary_op(BinOp::Div));
         }
 
-        if self.cfg.flags.fn_rem {
-            stream.extend(self.gen_binary_op(Op::rem()));
+        if self.int.fn_math_rem {
+            stream.extend(self.gen_binary_op(BinOp::Rem));
         }
 
-        if self.cfg.flags.fn_xor {
-            stream.extend(self.gen_binary_op(Op::xor()));
+        if self.int.fn_math_xor {
+            stream.extend(self.gen_binary_op(BinOp::Xor));
         }
 
-        if self.cfg.flags.fn_and {
-            stream.extend(self.gen_binary_op(Op::and()));
+        if self.int.fn_math_and {
+            stream.extend(self.gen_binary_op(BinOp::And));
         }
 
-        if self.cfg.flags.fn_or {
-            stream.extend(self.gen_binary_op(Op::or()));
+        if self.int.fn_math_or {
+            stream.extend(self.gen_binary_op(BinOp::Or_));
         }
 
-        if self.cfg.flags.fn_shr {
-            stream.extend(self.gen_binary_op(Op::shr()));
+        if self.int.fn_math_shr {
+            stream.extend(self.gen_binary_op(BinOp::Shr));
         }
 
-        if self.cfg.flags.fn_shl {
-            stream.extend(self.gen_binary_op(Op::shl()));
+        if self.int.fn_math_shl {
+            stream.extend(self.gen_binary_op(BinOp::Shl));
         }
 
-        if self.cfg.flags.fn_not {
-            stream.extend(self.gen_unary_op(Op::not()));
+        if self.int.fn_math_not {
+            stream.extend(self.gen_unary_op(UnaryOp::Not));
         }
 
-        if self.cfg.flags.fn_eq {
+        if self.int.fn_op_eq {
             stream.extend(self.make_eq());
         }
 
-        if self.cfg.flags.fn_cmp {
+        if self.int.fn_op_cmp {
             stream.extend(self.make_cmp());
         }
 
-        if self.cfg.flags.fn_unchecked_try_make
-            && let Some(validator) = &self.cfg.fn_validator
+        if self.int.fn_make_unchecked_try
+            && let Some(validator) = &self.fn_validator
         {
             stream.extend(self.make_fn_try_make_checked(validator));
         }
-        else if self.cfg.flags.fn_checked_try_make
-            && self.cfg.fn_validator.is_none()
-        {
+        else if self.int.fn_make_checked_try && self.fn_validator.is_none() {
             stream.extend(self.make_try_make_unchecked());
         }
 
-        if self.cfg.flags.fn_unchecked_make
-            && let Some(validator) = &self.cfg.fn_validator
+        if self.int.fn_make_unchecked
+            && let Some(validator) = &self.fn_validator
         {
             stream.extend(self.make_make_checked(validator));
         }
-        else if self.cfg.flags.fn_checked_make
-            && self.cfg.fn_validator.is_none()
-        {
+        else if self.int.fn_make_checked && self.fn_validator.is_none() {
             stream.extend(self.make_make_unchecked());
         }
 
@@ -428,189 +269,200 @@ impl<'a> Generator<'a> {
     fn ekran_impls(&self) -> TokenStream {
         let mut stream = TokenStream::new();
 
-        if self.cfg.flags.impl_into {
+        if self.int.impl_into {
             stream.extend(self.make_impl_into());
         }
 
-        if self.cfg.flags.impl_try_into {
+        if self.int.impl_try_into {
             stream.extend(self.make_impl_try_into());
         }
 
-        if self.cfg.flags.impl_shr {
+        if self.int.impl_math_shr {
             stream.extend(self.make_impl_shr());
         }
 
-        if self.cfg.flags.impl_shl {
+        if self.int.impl_math_shl {
             stream.extend(self.make_impl_shl());
         }
 
-        if self.cfg.flags.impl_assign_shr {
+        if self.int.impl_assign_shr {
             stream.extend(self.make_impl_shr_assign());
         }
 
-        if self.cfg.flags.impl_assign_shl {
+        if self.int.impl_assign_shl {
             stream.extend(self.make_impl_shl_assign());
         }
 
-        if self.cfg.flags.impl_assign_and {
+        if self.int.impl_assign_and {
             stream.extend(self.make_impl_and_assign());
         }
 
-        if self.cfg.flags.impl_assign_add {
+        if self.int.impl_assign_add {
             stream.extend(self.make_impl_add_assign());
         }
 
-        if self.cfg.flags.impl_assign_sub {
+        if self.int.impl_assign_sub {
             stream.extend(self.make_impl_sub_assign());
         }
 
-        if self.cfg.flags.impl_assign_mul {
+        if self.int.impl_assign_mul {
             stream.extend(self.make_impl_mul_assign());
         }
 
-        if self.cfg.flags.impl_assign_div {
+        if self.int.impl_assign_div {
             stream.extend(self.make_impl_div_assign());
         }
 
-        if self.cfg.flags.impl_assign_rem {
+        if self.int.impl_assign_rem {
             stream.extend(self.make_impl_rem_assign());
         }
 
-        if self.cfg.flags.impl_assign_or {
+        if self.int.impl_assign_or {
             stream.extend(self.make_impl_or_assign());
         }
 
-        if self.cfg.flags.impl_range {
+        if self.int.impl_range {
             stream.extend(self.make_impl_range());
         }
 
-        if self.cfg.flags.impl_debug {
-            stream.extend(self.make_impl_debug());
+        if self.int.impl_debug {
+            stream.extend(self.make_impl_fmt_debug());
         }
 
-        if self.cfg.flags.impl_copy {
-            stream.extend(self.make_impl_copy());
-        }
-
-        if self.cfg.flags.impl_clone {
-            stream.extend(self.make_impl_clone());
-        }
-
-        if self.cfg.flags.impl_eq {
+        if self.int.impl_eq {
             stream.extend(self.make_impl_eq());
         }
 
-        if self.cfg.flags.impl_ord {
+        if self.int.impl_ord {
             stream.extend(self.make_impl_ord());
         }
 
-        if self.cfg.flags.stmt_assertions {
-            stream.extend(self.make_stmt_assertions());
+        if self.int.assertions {
+            stream.extend(self.make_assertions());
         }
 
-        if self.cfg.flags.impl_partial_eq {
+        if self.int.impl_partial_eq {
             stream.extend(self.make_impl_partial_eq());
         }
 
-        if self.cfg.flags.impl_partial_ord {
+        if self.int.impl_partial_ord {
             stream.extend(self.make_impl_partial_ord());
         }
 
-        if self.cfg.flags.impl_add {
+        if self.int.impl_math_add {
             stream.extend(self.make_impl_add());
         }
 
-        if self.cfg.flags.impl_sub {
+        if self.int.impl_math_sub {
             stream.extend(self.make_impl_sub());
         }
 
-        if self.cfg.flags.impl_mul {
+        if self.int.impl_math_mul {
             stream.extend(self.make_impl_mul());
         }
 
-        if self.cfg.flags.impl_div {
+        if self.int.impl_math_div {
             stream.extend(self.make_impl_div());
         }
 
-        if self.cfg.flags.impl_rem {
+        if self.int.impl_math_rem {
             stream.extend(self.make_impl_rem());
         }
 
-        if self.cfg.flags.impl_and {
+        if self.int.impl_math_and {
             stream.extend(self.make_impl_and());
         }
 
-        if self.cfg.flags.impl_or {
+        if self.int.impl_math_or {
             stream.extend(self.make_impl_or());
         }
 
-        if self.cfg.flags.impl_xor {
+        if self.int.impl_math_xor {
             stream.extend(self.make_impl_xor());
         }
 
-        if self.cfg.flags.impl_not {
+        if self.int.impl_math_not {
             stream.extend(self.make_impl_not());
         }
 
-        if self.cfg.flags.impl_friendzone_seal {
+        if self.int.impl_friendzone_seal {
             stream.extend(self.make_friendzone_seal());
         }
 
-        if self.cfg.flags.impl_friendzone_friend_make {
+        if self.int.impl_friendzone_friend_make {
             stream.extend(self.make_friendzone_friend_make());
         }
 
-        if self.cfg.flags.impl_friendzone_friend_math_ops {
+        if self.int.impl_friendzone_friend_math_ops {
             stream.extend(self.make_friendzone_friend_math_ops());
         }
 
-        if self.cfg.flags.impl_friendzone_friend_math_bit {
+        if self.int.impl_friendzone_friend_math_bit {
             stream.extend(self.make_friendzone_friend_math_bit());
         }
 
-        if self.cfg.flags.impl_friendzone_friend_math_rel {
+        if self.int.impl_friendzone_friend_math_rel {
             stream.extend(self.make_friendzone_friend_math_rel());
         }
 
-        if self.cfg.flags.impl_friend_seal {
+        if self.int.impl_friend_seal {
             stream.extend(self.make_impl_friend_seal());
         }
 
-        if self.cfg.flags.impl_friend_make {
+        if self.int.impl_friend_make {
             stream.extend(self.make_impl_friend_make());
         }
 
-        if self.cfg.flags.impl_friend_math_ops {
+        if self.int.impl_friend_math_ops {
             stream.extend(self.make_impl_friend_math_ops());
         }
 
-        if self.cfg.flags.impl_friend_math_bit {
+        if self.int.impl_friend_math_bit {
             stream.extend(self.make_impl_friend_math_bit());
         }
 
-        if self.cfg.flags.impl_friend_math_rel {
+        if self.int.impl_friend_math_rel {
             stream.extend(self.make_impl_friend_math_rel());
         }
 
-        if self.cfg.flags.impl_friends {
+        if self.int.impl_friend {
             stream.extend(self.make_impl_friends());
+        }
+
+        if self.int.impl_fmt_binary {
+            stream.extend(self.make_impl_fmt_binary());
+        }
+
+        if self.int.impl_fmt_octal {
+            stream.extend(self.make_impl_fmt_octal());
+        }
+
+        if self.int.impl_fmt_hex_lower {
+            stream.extend(self.make_impl_fmt_hex_lower());
+        }
+
+        if self.int.impl_fmt_hex_upper {
+            stream.extend(self.make_impl_fmt_hex_upper());
         }
 
         return stream;
     }
+}
 
+// Gen.
+impl Generator {
     fn gen_binary_op(
         &self,
-        it: NumBinOp,
+        it: BinOp,
     ) -> TokenStream {
-        let raw = &self.cfg.fn_get_raw;
-        let fn_name = format_ident!("_{}", it.op.name());
-        let konst = &self.tk.konst;
-        let el = match it.arg {
-            NumBinArg::Variable => self.el,
-            NumBinArg::Predefined(n) => &ident_of_n(n),
+        let raw = &self.fn_get_raw;
+        let fn_name = format_ident!("_{}", it.name());
+        let konst = self.handy.konst();
+        let el = match it.predefined_arg_size() {
+            Some(n) => &runner::ident_of(n),
+            None => &self.el,
         };
-        let op = it.op.stream();
+        let op = it.stream();
 
         return quote! {
             #[must_use]
@@ -622,18 +474,18 @@ impl<'a> Generator<'a> {
             ) -> Self {
                 let this = #raw(self);
                 let result = this #op it;
-                return Self::_make(result);
+                return Self::_unchecked(result);
             }
         };
     }
 
     fn gen_unary_op(
         &self,
-        unary: NumUnaryPrefixOp,
+        unary: UnaryOp,
     ) -> TokenStream {
-        let raw = &self.cfg.fn_get_raw;
-        let fn_name = format_ident!("_{}", unary.op.name());
-        let op = unary.op.stream();
+        let raw = &self.fn_get_raw;
+        let fn_name = format_ident!("_{}", unary.name());
+        let op = unary.stream();
 
         return quote! {
             #[must_use]
@@ -644,7 +496,7 @@ impl<'a> Generator<'a> {
             ) -> Self {
                 let this = #raw(self);
                 let result = #op this;
-                return Self::_make(result);
+                return Self::_unchecked(result);
             }
         };
     }
@@ -653,11 +505,11 @@ impl<'a> Generator<'a> {
         &self,
         cty: &FriendReq,
     ) -> TokenStream {
-        let el = self.el;
-        let konst = &self.tk.konst;
-        let conv = &self.conv;
+        let el = &self.el;
+        let konst = self.handy.konst();
+        let conv = &self.conv_fn_name;
         let friend = &cty.ty;
-        let level = cty.level;
+        let level = &cty.level;
 
         let to_el = match &cty.conv {
             None => quote! { *self },
@@ -669,22 +521,22 @@ impl<'a> Generator<'a> {
 
         let mut friendships = TokenStream::new();
 
-        if level.has_math() {
+        if level.contains(&FriendshipLevel::Math) {
             friendships.extend(quote! {
                 #konst impl FriendMathOps for #friend { }
             });
         }
-        if level.has_bit() {
+        if level.contains(&FriendshipLevel::Bit) {
             friendships.extend(quote! {
                 #konst impl FriendMathBit for #friend { }
             });
         }
-        if level.has_rel() {
+        if level.contains(&FriendshipLevel::Rel) {
             friendships.extend(quote! {
                 #konst impl FriendMathRel for #friend { }
             });
         }
-        if level.has_make() {
+        if level.contains(&FriendshipLevel::Make) {
             friendships.extend(quote! {
                 #konst impl FriendMake for #friend { }
             });
@@ -705,13 +557,11 @@ impl<'a> Generator<'a> {
 }
 
 // Pub.
-impl Generator<'_> {
+impl Generator {
     fn make_impl_add(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::Add<T> for #ty
@@ -733,11 +583,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_sub(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::Sub<T> for #ty
@@ -759,11 +607,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_mul(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::Mul<T> for #ty
@@ -785,11 +631,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_div(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::Div<T> for #ty
@@ -812,11 +656,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_rem(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::Rem<T> for #ty
@@ -839,11 +681,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_and(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::BitAnd<T> for #ty
@@ -866,11 +706,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_or(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::BitOr<T> for #ty
@@ -893,11 +731,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_xor(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #konst impl<T> ::core::ops::BitXor<T> for #ty
@@ -919,14 +755,13 @@ impl Generator<'_> {
     }
 
     fn make_impl_not(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let out = &self.cfg.output_type;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
 
             #konst impl ::core::ops::Not for #ty {
-                type Output = #out;
+                type Output = Self;
 
                 #[inline(always)]
                 fn not(self) -> Self::Output {
@@ -936,8 +771,8 @@ impl Generator<'_> {
         };
     }
 
-    fn make_impl_debug(&self) -> TokenStream {
-        let ty = self.ty;
+    fn make_impl_fmt_debug(&self) -> TokenStream {
+        let ty = &self.ty;
         let fmt_str = format!("{}({})", ty, "{}");
 
         return quote! {
@@ -952,31 +787,85 @@ impl Generator<'_> {
         };
     }
 
-    fn make_impl_copy(&self) -> TokenStream {
-        let ty = self.ty;
+    fn make_impl_fmt_binary(&self) -> TokenStream {
+        let ty = &self.ty;
+        let raw = &self.fn_get_raw;
 
         return quote! {
-            impl ::core::marker::Copy for #ty {}
+
+            impl ::core::fmt::Binary for #ty {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    let raw = #raw(*self);
+                    return ::core::fmt::Binary::fmt(&raw, f);
+                }
+            }
+
         };
     }
 
-    fn make_impl_clone(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+    fn make_impl_fmt_octal(&self) -> TokenStream {
+        let ty = &self.ty;
+        let raw = &self.fn_get_raw;
 
         return quote! {
-            #konst impl ::core::clone::Clone for #ty {
-                #[inline(always)]
-                fn clone(&self) -> Self {
-                    Self(::core::clone::Clone::clone(&self.0))
+
+            impl ::core::fmt::Octal for #ty {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    let raw = #raw(*self);
+                    return ::core::fmt::Octal::fmt(&raw, f);
                 }
             }
+
+        };
+    }
+
+    fn make_impl_fmt_hex_lower(&self) -> TokenStream {
+        let ty = &self.ty;
+        let raw = &self.fn_get_raw;
+
+        return quote! {
+
+            impl ::core::fmt::LowerHex for #ty {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    let raw = #raw(*self);
+                    return ::core::fmt::LowerHex::fmt(&raw, f);
+                }
+            }
+
+        };
+    }
+
+    fn make_impl_fmt_hex_upper(&self) -> TokenStream {
+        let ty = &self.ty;
+        let raw = &self.fn_get_raw;
+
+        return quote! {
+
+            impl ::core::fmt::UpperHex for #ty {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    let raw = #raw(*self);
+                    return ::core::fmt::UpperHex::fmt(&raw, f);
+                }
+            }
+
         };
     }
 
     fn make_impl_eq(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::cmp::Eq for #ty {}
@@ -984,8 +873,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_ord(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::cmp::Ord for #ty {
@@ -1000,9 +889,14 @@ impl Generator<'_> {
     fn make_impl_into(&self) -> TokenStream {
         let items = N::items()
             .iter()
-            .filter(|it| self.sz.fits_in(it))
+            .filter(|it| self.repr.fits_in(it))
             .map(|it| {
-                make_impl_into(self.sz, *it, &self.item.ident, &self.tk.konst)
+                stuff::impl_into_of(
+                    self.repr,
+                    *it,
+                    &self.ty,
+                    self.handy.konst(),
+                )
             })
             .collect::<Vec<_>>();
 
@@ -1015,8 +909,10 @@ impl Generator<'_> {
     fn make_impl_try_into(&self) -> TokenStream {
         let items = N::items()
             .iter()
-            .filter(|it| !self.sz.fits_in(it))
-            .map(|it| make_impl_try_into(*it, &self.item.ident, &self.tk.konst))
+            .filter(|it| !self.repr.fits_in(it))
+            .map(|it| {
+                stuff::impl_try_into_of(*it, &self.ty, self.handy.konst())
+            })
             .collect::<Vec<_>>();
 
         let mut merged = TokenStream::new();
@@ -1027,13 +923,12 @@ impl Generator<'_> {
 }
 
 // Anon.
-impl Generator<'_> {
+impl Generator {
     fn make_impl_partial_eq(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
+        let raw = &self.fn_get_raw;
 
         return quote! {
             #konst impl<T> ::core::cmp::PartialEq<T> for #ty
@@ -1046,18 +941,17 @@ impl Generator<'_> {
                     rhs: &T,
                 ) -> bool {
                     let that = #fconv(rhs);
-                    return self.raw() == that;
+                    return #raw(*self) == that;
                 }
             }
         };
     }
 
     fn make_impl_partial_ord(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
+        let raw = &self.fn_get_raw;
 
         return quote! {
             #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
@@ -1072,16 +966,16 @@ impl Generator<'_> {
                     rhs: &T,
                 ) -> ::core::option::Option<::core::cmp::Ordering> {
                     let that = #fconv(rhs);
-                    return self.raw().partial_cmp(&that);
+                    return #raw(*self).partial_cmp(&that);
                 }
             }
         };
     }
 
     fn make_friendzone_seal(&self) -> TokenStream {
-        let el = self.el;
-        let konst = &self.tk.konst;
-        let conv = &self.conv;
+        let el = &self.el;
+        let konst = self.handy.konst();
+        let conv = &self.conv_fn_name;
 
         return quote! {
             #konst trait Seal {
@@ -1092,8 +986,7 @@ impl Generator<'_> {
     }
 
     fn make_friendzone_friend_make(&self) -> TokenStream {
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
+        let (konst, bonst) = self.handy.konst_bonst();
 
         return quote! {
             #konst trait FriendMake:    #bonst Seal {}
@@ -1101,8 +994,7 @@ impl Generator<'_> {
     }
 
     fn make_friendzone_friend_math_ops(&self) -> TokenStream {
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
+        let (konst, bonst) = self.handy.konst_bonst();
 
         return quote! {
             #konst trait FriendMathOps: #bonst Seal {}
@@ -1110,8 +1002,7 @@ impl Generator<'_> {
     }
 
     fn make_friendzone_friend_math_rel(&self) -> TokenStream {
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
+        let (konst, bonst) = self.handy.konst_bonst();
 
         return quote! {
             #konst trait FriendMathRel: #bonst Seal {}
@@ -1119,8 +1010,7 @@ impl Generator<'_> {
     }
 
     fn make_friendzone_friend_math_bit(&self) -> TokenStream {
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
+        let (konst, bonst) = self.handy.konst_bonst();
 
         return quote! {
             #konst trait FriendMathBit: #bonst Seal {}
@@ -1128,11 +1018,11 @@ impl Generator<'_> {
     }
 
     fn make_impl_friend_seal(&self) -> TokenStream {
-        let el = self.el;
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let conv = &self.conv;
-        let raw = &self.cfg.fn_get_raw;
+        let el = &self.el;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
+        let conv = &self.conv_fn_name;
+        let raw = &self.fn_get_raw;
 
         return quote! {
             #konst impl Seal for #ty {
@@ -1145,17 +1035,17 @@ impl Generator<'_> {
     }
 
     fn make_impl_friend_make(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
-            #konst impl FriendMake    for #ty {}
+            #konst impl FriendMake for #ty {}
         };
     }
 
     fn make_impl_friend_math_ops(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl FriendMathOps for #ty {}
@@ -1163,8 +1053,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_friend_math_rel(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl FriendMathRel for #ty {}
@@ -1172,8 +1062,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_friend_math_bit(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl FriendMathBit for #ty {}
@@ -1181,11 +1071,9 @@ impl Generator<'_> {
     }
 
     fn make_impl_fn_of(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let bonst = &self.tk.bonst;
-        let destruct = &self.tk.destruct;
-        let fconv = &self.fconv;
+        let ty = &self.ty;
+        let (konst, bonst, destruct) = self.handy.konst_bonst_destruct();
+        let fconv = &self.friend_conv_fn_name;
 
         return quote! {
             #[inline(always)]
@@ -1198,14 +1086,13 @@ impl Generator<'_> {
                 B: #bonst ::core::borrow::Borrow<T> + #destruct,
             {
                 let this = #fconv(it.borrow());
-                return Self::_make(this);
+                return Self::_unchecked(this);
             }
         };
     }
 
     fn make_impl_friends(&self) -> TokenStream {
         return self
-            .cfg
             .friends
             .iter()
             .map(|it| self.gen_friend(it))
@@ -1217,8 +1104,8 @@ impl Generator<'_> {
     }
 
     fn make_eq(&self) -> TokenStream {
-        let raw = &self.cfg.fn_get_raw;
-        let el = self.el;
+        let raw = &self.fn_get_raw;
+        let el = &self.el;
 
         return quote! {
             #[must_use]
@@ -1236,9 +1123,9 @@ impl Generator<'_> {
     }
 
     fn make_cmp(&self) -> TokenStream {
-        let raw = &self.cfg.fn_get_raw;
-        let el = self.el;
-        let konst = &self.tk.konst;
+        let raw = &self.fn_get_raw;
+        let el = &self.el;
+        let konst = self.handy.konst();
 
         return quote! {
             #[must_use]
@@ -1256,14 +1143,13 @@ impl Generator<'_> {
     }
 
     fn make_impl_shr(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let out = &self.cfg.output_type;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote::quote! {
 
             #konst impl ::core::ops::Shr<usize> for #ty {
-                type Output = #out;
+                type Output = Self;
 
                 #[inline(always)]
                 fn shr(
@@ -1278,14 +1164,13 @@ impl Generator<'_> {
     }
 
     fn make_impl_shl(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
-        let out = &self.cfg.output_type;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote::quote! {
 
             #konst impl ::core::ops::Shl<usize> for #ty {
-                type Output = #out;
+                type Output = Self;
 
                 #[inline(always)]
                 fn shl(
@@ -1300,8 +1185,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_shr_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::ShrAssign<usize> for #ty {
@@ -1317,8 +1202,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_shl_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::ShlAssign<usize> for #ty {
@@ -1334,8 +1219,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_and_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::BitAndAssign<#ty> for #ty {
@@ -1351,8 +1236,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_or_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::BitOrAssign<#ty> for #ty {
@@ -1368,8 +1253,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_add_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::AddAssign<#ty> for #ty {
@@ -1385,8 +1270,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_sub_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::SubAssign<#ty> for #ty {
@@ -1402,8 +1287,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_mul_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::MulAssign<#ty> for #ty {
@@ -1419,8 +1304,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_div_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::DivAssign<#ty> for #ty {
@@ -1436,8 +1321,8 @@ impl Generator<'_> {
     }
 
     fn make_impl_rem_assign(&self) -> TokenStream {
-        let ty = self.ty;
-        let konst = &self.tk.konst;
+        let ty = &self.ty;
+        let konst = self.handy.konst();
 
         return quote! {
             #konst impl ::core::ops::RemAssign<#ty> for #ty {
@@ -1459,8 +1344,8 @@ impl Generator<'_> {
     // =========================================================================
 
     fn make_fn_raw(&self) -> TokenStream {
-        let raw_fn_name = &self.raw_fn_name;
-        let el = self.el;
+        let raw_fn_name = &self.fn_get_raw_ident;
+        let el = &self.el;
 
         return quote! {
             #[must_use]
@@ -1474,7 +1359,7 @@ impl Generator<'_> {
     fn make_fns_into(&self) -> TokenStream {
         let items = N::items()
             .iter()
-            .map(|it| make_fn_into(self.sz, *it))
+            .map(|it| stuff::fn_into_of(self.repr, *it, &self.fn_get_raw))
             .collect::<Vec<_>>();
 
         let mut merged = TokenStream::new();
@@ -1486,7 +1371,9 @@ impl Generator<'_> {
     fn make_fns_try_into_checked(&self) -> TokenStream {
         let items = N::items()
             .iter()
-            .map(|it| make_fn_try_into_checked(self.sz, *it))
+            .map(|it| {
+                stuff::fn_try_into_checked_of(self.repr, *it, &self.fn_get_raw)
+            })
             .collect::<Vec<_>>();
 
         let mut merged = TokenStream::new();
@@ -1498,7 +1385,13 @@ impl Generator<'_> {
     fn make_fns_try_into_unchecked(&self) -> TokenStream {
         let items = N::items()
             .iter()
-            .map(|it| make_fn_try_into_unchecked(self.sz, *it))
+            .map(|it| {
+                stuff::fn_try_into_unchecked_of(
+                    self.repr,
+                    *it,
+                    &self.fn_get_raw,
+                )
+            })
             .collect::<Vec<_>>();
 
         let mut merged = TokenStream::new();
@@ -1510,8 +1403,8 @@ impl Generator<'_> {
         &self,
         validator: &Path,
     ) -> TokenStream {
-        let el = self.el;
-        let konst = &self.tk.konst;
+        let el = &self.el;
+        let konst = self.handy.konst();
 
         return quote! {
             #[inline(always)]
@@ -1530,12 +1423,12 @@ impl Generator<'_> {
         &self,
         validator: &Path,
     ) -> TokenStream {
-        let el = self.el;
+        let el = &self.el;
 
         return quote! {
             #[must_use]
             #[inline(always)]
-            pub(self) const fn _make(it: #el) -> Self {
+            pub(self) const fn _unchecked(it: #el) -> Self {
                 if #validator(it) {
                     return Self(it);
                 }
@@ -1548,36 +1441,166 @@ impl Generator<'_> {
     }
 
     fn make_try_make_unchecked(&self) -> TokenStream {
-        let el = self.el;
+        let el = &self.el;
 
         return quote! {
             #[inline(always)]
             pub const fn try_make(it: #el) -> Result<Self, #el> {
-                return Ok(Self::_make(it));
+                return Ok(Self::_unchecked(it));
             }
         };
     }
 
     fn make_make_unchecked(&self) -> TokenStream {
-        let el = self.el;
+        let el = &self.el;
 
         return quote! {
             #[must_use]
             #[inline(always)]
-            pub(self) const fn _make(it: #el) -> Self {
+            pub(self) const fn _unchecked(it: #el) -> Self {
                 return Self(it);
             }
         };
     }
 
-    fn make_stmt_assertions(&self) -> TokenStream {
-        let ty = self.ty;
-        let el = self.el;
+    fn make_assertions(&self) -> TokenStream {
+        let ty = &self.ty;
+        let el = &self.el;
 
         return quote! {
             if !(size_of::<#ty>() == size_of::<#el>()) {
                 panic!("invalid memory layout: #ty(#el) != #el");
             };
+        };
+    }
+}
+
+mod stuff {
+    use super::*;
+
+    pub(super) fn fn_try_into_checked_of(
+        this: N,
+        to: N,
+        raw: &ExprPath,
+    ) -> TokenStream {
+        if this.can_safe_cast_to(to) {
+            return TokenStream::new();
+        }
+
+        let source = runner::ident_of(this);
+        let target = runner::ident_of(to);
+        let name = format_ident!("try_into_{}", to.rust_name());
+
+        return quote! {
+
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn #name(self) -> ::core::result::Result<#target, ()> {
+                let r = #raw(self);
+                let t = r as #target;
+                let s = t as #source;
+
+                return if s == r {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                }
+            }
+
+        };
+    }
+
+    pub(super) fn fn_into_of(
+        this: N,
+        to: N,
+        raw: &ExprPath,
+    ) -> TokenStream {
+        if !this.can_safe_cast_to(to) {
+            return TokenStream::new();
+        }
+
+        let target = runner::ident_of(to);
+        let name = format_ident!("into_{}", to.rust_name());
+
+        return quote! {
+
+            #[must_use]
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn #name(self) -> #target {
+                return #raw(self) as #target;
+            }
+
+        };
+    }
+
+    pub(super) fn fn_try_into_unchecked_of(
+        this: N,
+        to: N,
+        raw: &ExprPath,
+    ) -> TokenStream {
+        if !this.can_safe_cast_to(to) {
+            return TokenStream::new();
+        }
+
+        let target = runner::ident_of(to);
+        let name = format_ident!("try_into_{}", to.rust_name());
+
+        return quote! {
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn #name(self) -> ::core::result::Result<#target, ()> {
+                return ::core::result::Result::Ok(
+                    #raw(self) as #target
+                );
+            }
+        };
+    }
+
+    pub(super) fn impl_try_into_of(
+        to: N,
+        whom: &Ident,
+        konst: &TokenStream,
+    ) -> TokenStream {
+        let target = runner::ident_of(to);
+        let conv = format_ident!("try_into_{}", to.rust_name());
+
+        return quote! {
+           #konst impl ::core::convert::TryInto<#target> for #whom {
+               type Error = ();
+
+               #[inline(always)]
+               fn try_into(self) -> ::core::result::Result<#target, Self::Error> {
+                    return #whom::#conv(self);
+               }
+
+           }
+        };
+    }
+
+    pub(super) fn impl_into_of(
+        this: N,
+        to: N,
+        whom: &Ident,
+        konst: &TokenStream,
+    ) -> TokenStream {
+        if !this.can_safe_cast_to(to) {
+            return TokenStream::new();
+        }
+
+        let target = runner::ident_of(to);
+        let conv = format_ident!("into_{}", to.rust_name());
+
+        return quote! {
+           #konst impl ::core::convert::Into<#target> for #whom {
+
+               #[inline(always)]
+               fn into(self) -> #target {
+                    return #whom::#conv(self);
+               }
+
+           }
         };
     }
 }

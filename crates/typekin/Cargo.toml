@@ -22,9 +22,12 @@ path = "src/main.rs"
 proc-macro = true
 
 [dependencies]
+#syn = { workspace = true }
 syn = { workspace = true, features = ["extra-traits"] }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
+
+bitflags = "2.13.1"
 
 [dev-dependencies]
 typekin_testing = { path = "../typekin_testing" }
@@ -34,13 +37,27 @@ name = "my_u32"
 path = "examples/my_u32.rs"
 
 [[example]]
-name = "my_u32_expanded"
-path = "examples/my_u32_expanded.rs"
+name = "my_u32_exp"
+path = "examples/my_u32_exp.rs"
 
 [[example]]
 name = "my_u32_non_const"
 path = "examples/my_u32_non_const.rs"
 
 [[example]]
-name = "my_u32_non_const_expanded"
-path = "examples/my_u32_non_const_expanded.rs"
+name = "my_u32_non_const_exp"
+path = "examples/my_u32_non_const_exp.rs"
+
+[[example]]
+name = "my_thingy"
+path = "examples/my_thingy.rs"
+[[example]]
+name = "thingy_exp"
+path = "examples/my_thingy_exp.rs"
+
+[[example]]
+name = "my_flag"
+path = "examples/my_flag.rs"
+[[example]]
+name = "flag_exp"
+path = "examples/my_flag_exp.rs"

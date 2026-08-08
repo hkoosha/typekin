@@ -147,7 +147,7 @@ For a struct such as `pub struct MyExample(u32);` annotated with
 
 Every one of these can be individually toggled off in the generator (see
 `crates/typekin/src/integral/maker.rs`), though the public, documented surface
-for doing so today is the `friends`/ `fn_get_raw`/`fn_validator`/ `with_const`
+for doing so today is the `friends`/ `fn_get_raw`/`fn_validator`/ `konst`
 macro arguments described below.
 
 TODO: Not all these flags are exposed through the macro.
@@ -196,7 +196,7 @@ pub struct MyExample(u32);
 | `friends`      | `[FriendReq, ...]`     | `[]`        | List of friend declarations, see above.                                                                                                    |
 | `fn_get_raw`   | path of form `Self::x` | `Self::raw` | Name of the generated raw-value accessor.                                                                                                  |
 | `fn_validator` | path                   | none        | If set, construction (`of`, `try_make`) is routed through this validator; invalid values cause a panic (`_make`) or an `Err` (`try_make`). |
-| `with_const`   | `bool`                 | `true`      | Whether generated impls are `const` (requires the unstable const-trait-impl features).                                                     |
+| `konst`   | `bool`                 | `true`      | Whether generated impls are `const` (requires the unstable const-trait-impl features).                                                     |
 
 The macro must be applied to a tuple struct with exactly one field whose type is
 one of the supported integral primitives.
