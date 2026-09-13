@@ -1,93 +1,111 @@
-#![allow(dead_code)]
-
-use crate::integral::driver::IntegralCfg;
-use crate::runner::{Handy, mk_flags};
-use crate::type_friendship::{FriendReq, FriendshipLevel};
+use crate::flag::cfg::BitflagCfg;
+use crate::type_friendship::FriendReq;
+use crate::type_friendship::FriendshipLevel;
 use crate::value_type::N;
 use proc_macro2::Ident;
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use quote::quote;
 use syn::Path;
-use syn::Visibility;
+use syn::parse_quote;
 
-mk_flags! {
-    #[derive(Debug, Clone)]
-    pub(crate) struct BitFlags {
-        pub make_value: bool = true,
-        pub impl_value: bool = true,
-        pub value_name: String = "",
-        pub value_name_suffix: String = "Value",
-    }
-}
-
-pub(super) struct Generator {
-    ty: Ident,
-    vl: Ident,
-    vis: Visibility,
+pub(super) struct Maker {
     el: Ident,
+    ty: Ident,
+
+    trait_seal: Ident,
+    trait_friend_make: Ident,
+    trait_friend_math: Ident,
+    trait_friend_bit: Ident,
+    trait_friend_rel: Ident,
+
+    cfg: Box<BitflagCfg>,
     items: Vec<Ident>,
-    repr: N,
-    int_cfg: IntegralCfg,
-    bit: Box<BitFlags>,
-    handy: Handy,
+    ty_value: Ident,
 }
 
-impl Generator {
+impl Maker {
     pub(super) fn new(
         ty: Ident,
         repr: N,
-        int_cfg: IntegralCfg,
-        bit: Box<BitFlags>,
-        vis: Visibility,
+        cfg: Box<BitflagCfg>,
         items: Vec<Ident>,
     ) -> Self {
-        let vl = match (bit.value_name.as_str(), bit.value_name_suffix.as_str())
-        {
-            ("", "") => format_ident!("{}Value", ty),
-            ("", suffix) => format_ident!("{}{}", ty, suffix),
-            (prefix, "") => format_ident!("{}", prefix),
-            (prefix, suffix) => format_ident!("{}{}", prefix, suffix),
-        };
+        let it = Self {
+            ty_value: match (
+                cfg.bit.value_name.as_str(),
+                cfg.bit.value_name_suffix.as_str(),
+            ) {
+                ("", "") => format_ident!("{}Value", ty),
+                ("", suffix) => format_ident!("{}{}", ty, suffix),
+                (prefix, "") => format_ident!("{}", prefix),
+                (prefix, suffix) => format_ident!("{}{}", prefix, suffix),
+            },
 
-        let el = format_ident!("{}", repr.rust_name());
+            trait_seal: format_ident!("{}", cfg.bit.trait_seal),
+            trait_friend_make: format_ident!("{}", cfg.bit.trait_friend_make),
+            trait_friend_math: format_ident!("{}", cfg.bit.trait_friend_math),
+            trait_friend_bit: format_ident!("{}", cfg.bit.trait_friend_bit),
+            trait_friend_rel: format_ident!("{}", cfg.bit.trait_friend_rel),
 
-        let this = Self {
-            handy: Handy::of(int_cfg.int.konst),
-            vis,
-            vl,
+            el: format_ident!("{}", repr.rust_name()),
             ty,
-            el,
-            repr,
-            int_cfg,
-            bit,
+            cfg,
             items,
         };
 
-        return this;
+        return it;
+    }
+
+    fn add_default_flag_friendships(&mut self) {
+        let ty = self.ty.clone();
+        self.add_flag_friend(&ty, parse_quote! { #ty::raw });
+
+        let value = self.ty_value.clone();
+        self.add_flag_friend(&value, parse_quote! { #value::raw });
+    }
+
+    fn add_flag_friend(
+        &mut self,
+        ty: &Ident,
+        conv: Path,
+    ) {
+        if let Some(friendship) =
+            self.cfg.friends.iter_mut().find(|it| it.ty.is_ident(ty))
+        {
+            friendship.level.insert(FriendshipLevel::Rel);
+            friendship.level.insert(FriendshipLevel::Bit);
+            friendship.conv = Some(conv);
+        }
+        else {
+            self.cfg.friends.push(FriendReq {
+                ty: Path::from(ty.clone()),
+                level: [FriendshipLevel::Rel, FriendshipLevel::Bit]
+                    .into_iter()
+                    .collect(),
+                conv: Some(conv),
+            });
+        }
     }
 
     pub(super) fn ekran(mut self) -> syn::Result<TokenStream> {
-        let ty = &self.ty.clone();
-        let impl_items = self.ekran_impl_items();
-        let impls = self.ekran_impls();
+        self.add_default_flag_friendships();
 
-        let mk_int = match self.bit.make_value {
-            true => Some(self.make_int()),
-            false => None,
-        };
-
-        let generic = self.gen_flag_generic();
-        let flag = self.gen_flag_impl();
+        let value = self.ekran_value_t();
+        let generic = self.ekran_items();
+        let flag_friendships = self.ekran_flag_friendships();
+        let flag = self.ekran_impls();
+        let enum_value_impls = self.ekran_enum_value_impls();
 
         let mut impl_int = None;
-        if self.bit.impl_value {
-            if !self.int_cfg.friends.iter().any(|it| {
+        if self.cfg.bit.impl_value {
+            if !self.cfg.int.friends.iter().any(|it| {
                 it.level.contains(&FriendshipLevel::Make)
                     && it.ty.is_ident(&self.el)
             }) {
                 if let Some(friendship) = self
-                    .int_cfg
+                    .cfg
+                    .int
                     .friends
                     .iter_mut()
                     .find(|it| it.ty.is_ident(&self.el))
@@ -95,35 +113,66 @@ impl Generator {
                     friendship.level.insert(FriendshipLevel::Make);
                 }
                 else {
-                    self.int_cfg.friends.push(FriendReq {
+                    self.cfg.int.friends.push(FriendReq {
                         ty: Path::from(self.el.clone()),
-                        level: FriendshipLevel::Make.to_set(),
+                        level: FriendshipLevel::Make.normalize(),
                         conv: None,
                     })
                 }
             }
+            let ty = &self.ty;
+            let friendship = self
+                .cfg
+                .int
+                .friends
+                .iter_mut()
+                .find(|it| it.ty.is_ident(ty));
 
-            let im =
-                crate::integral::driver::ekran(self.vl, self.el, self.int_cfg)?;
-            impl_int = Some(im);
+            if let Some(friendship) = friendship {
+                friendship.level.insert(FriendshipLevel::Rel);
+                friendship.level.insert(FriendshipLevel::Bit);
+                friendship.conv = Some(parse_quote! { #ty::raw });
+            }
+            else {
+                self.cfg.int.friends.push(FriendReq {
+                    ty: Path::from(ty.clone()),
+                    level: [FriendshipLevel::Rel, FriendshipLevel::Bit]
+                        .into_iter()
+                        .collect(),
+                    conv: Some(parse_quote! { #ty::raw }),
+                });
+            }
+
+            self.cfg.int.flags.impl_math_not = false;
+
+            let it = crate::integral::maker::Maker::new(
+                self.ty_value,
+                self.el,
+                self.cfg.int,
+            )?
+            .ekran()?;
+
+            impl_int = Some(quote::quote! {
+                #[allow(dead_code)]
+                #[allow(unused_qualifications)]
+                const _: () = {
+                    #it
+                };
+            });
         };
 
         let it = quote::quote! {
-            #mk_int
+            #value
 
             #impl_int
 
             #[allow(dead_code)]
             #[allow(unused_qualifications)]
             const _: () = {
-                #impls
-
-                impl #ty {
-                    #impl_items
-                }
-
                 #generic
 
+                #enum_value_impls
+                #flag_friendships
                 #flag
             };
         };
@@ -131,43 +180,13 @@ impl Generator {
         return Ok(it);
     }
 
-    fn make_int(&self) -> TokenStream {
-        let el = &self.el;
-        let vl = &self.vl;
-
-        return quote! {
-            #[derive(Copy)]
-            #[derive_const(Clone)]
-            #[repr(transparent)]
-            pub struct #vl(#el);
-        };
-    }
-
-    fn ekran_impl_items(&self) -> TokenStream {
-        let stream = TokenStream::new();
-
-        if self.int_cfg.int.impl_fmt_hex_upper {
-            // foo
-        }
-
-        return stream;
-    }
-
-    fn ekran_impls(&self) -> TokenStream {
-        let stream = TokenStream::new();
-
-        if self.int_cfg.int.impl_fmt_hex_upper {
-            // foo
-        }
-
-        return stream;
-    }
-
-    fn gen_flag_generic(&self) -> TokenStream {
+    fn ekran_items(&self) -> TokenStream {
         let ty = &self.ty;
-        let vl = &self.vl;
+        let vl = &self.ty_value;
         let el = &self.el;
 
+        let all_bits = self.items.iter();
+        let konst = crate::runner::konst(self.cfg.int.flags.konst);
         return quote! {
             type Flag = #ty;
             type Value = #vl;
@@ -176,15 +195,15 @@ impl Generator {
                 index: usize,
             }
 
-            const impl core::iter::Iterator for IterItems {
+            #konst impl core::iter::Iterator for IterItems {
                 type Item = Flag;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    const ITER_ITEMS: &'static [Flag] = Flag::items();
-                    const MAX: usize = ITER_ITEMS.len();
+                    let items = Flag::items();
+                    let max = items.len();
 
-                    while self.index < MAX {
-                        let next = ITER_ITEMS[self.index];
+                    while self.index < max {
+                        let next = items[self.index];
                         self.index += 1;
                         return Some(next);
                     }
@@ -194,9 +213,9 @@ impl Generator {
 
                 #[inline(always)]
                 fn size_hint(&self) -> (usize, Option<usize>) {
-                    const MAX: usize = Flag::items().len();
+                    let max = Flag::items().len();
 
-                    return (MAX, Some(MAX));
+                    return (max, Some(max));
                 }
             }
 
@@ -205,17 +224,17 @@ impl Generator {
                 index: usize,
             }
 
-            const impl core::iter::Iterator for IterFlags {
+            #konst impl core::iter::Iterator for IterFlags {
                 type Item = Flag;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    const ITER_ITEMS: &'static [Flag] = Flag::items();
-                    const MAX: usize = ITER_ITEMS.len();
+                    let items = Flag::items();
+                    let max = items.len();
 
-                    while self.index < MAX {
-                        let next = ITER_ITEMS[self.index];
+                    while self.index < max {
+                        let next = items[self.index];
                         self.index += 1;
-                        if self.value.contains(next) {
+                        if self.value.contains_all(next.into_value()) {
                             self.value = self.value.without(next.into_value());
                             return Some(next);
                         }
@@ -236,15 +255,15 @@ impl Generator {
                 index: usize,
             }
 
-            const impl Iterator for IterValues {
+            #konst impl Iterator for IterValues {
                 type Item = Value;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    const ITER_ITEMS: &'static [Flag] = Flag::items();
-                    const MAX: usize = ITER_ITEMS.len();
+                    let items = Flag::items();
+                    let max = items.len();
 
-                    while self.index < MAX {
-                        let next = ITER_ITEMS[self.index].into_value();
+                    while self.index < max {
+                        let next = items[self.index].into_value();
                         self.index += 1;
                         if self.value.contains_all(next) {
                             self.value = self.value.without(next);
@@ -268,208 +287,192 @@ impl Generator {
                 }
             }
 
+            impl ::core::convert::From<Flag> for Value {
+                #[inline(always)]
+                fn from(flag: Flag) -> Self {
+                    return flag.into_value();
+                }
+            }
+
+            #konst impl ::core::ops::Not for Value {
+                type Output = Self;
+
+                #[inline(always)]
+                fn not(self) -> Self::Output {
+                    return self.complemented();
+                }
+            }
+
             impl Flag {
                 #[inline(always)]
                 #[must_use]
-                pub const fn raw(self) -> #el {
+                pub #konst fn raw(self) -> #el {
                     return self as #el;
                 }
 
                 #[inline(always)]
                 #[must_use]
-                pub const fn into_value(self) -> Value {
-                    return Value::of(self.raw());
+                pub #konst fn into_value(self) -> Value {
+                    return Value::from_bits_retain(self.raw());
                 }
 
-                //noinspection RsUnresolvedPath
                 #[must_use]
                 #[inline(always)]
-                pub const fn all() -> Value {
-                    return Value::all_unknown();
+                pub #konst fn all() -> Value {
+                    #[allow(clippy::unnecessary_cast)]
+                    return Value::from_bits_retain(0 as #el #(| (#ty::#all_bits as #el))*);
                 }
 
-                /// Yield a set of flags values.
-                ///
-                /// Each yielded flags value will correspond to a defined named flag.
                 #[must_use]
                 #[inline(always)]
-                pub const fn iter() -> impl Iterator<Item = Self> {
+                pub #konst fn iter() -> impl Iterator<Item = Self> {
                     return IterItems { index: 0 };
                 }
 
-                //noinspection RsUnresolvedPath
-                /// Yield a set of flags values.
-                ///
-                /// Each yielded flags value will correspond to a defined named flag.
                 #[must_use]
                 #[inline(always)]
-                pub const fn iter_values() -> impl Iterator<Item = Value> {
-                    return Value::all_known().iter();
-                }
-
-                // =========================================================================
-
-                #[must_use]
-                #[inline(always)]
-                pub const fn is_empty(self) -> bool {
-                    return self == Self::empty();
-                }
-
-                /// Whether any set bits in `other` are also set in `self`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn intersects(
-                    self,
-                    other: Value,
-                ) -> bool {
-                    return self.into_value().intersects(other);
+                pub #konst fn iter_values() -> impl Iterator<Item = Value> {
+                    return Value::all().iter();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub const fn contained_in(
-                    self,
-                    other: Self,
-                ) -> bool {
-                    return other.into_value().contains_all(self.into_value());
-                }
-
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn inserted(
-                    self,
-                    other: Self,
-                ) -> Value {
+                pub #konst fn inserted(self, other: Self) -> Value {
                     return self.into_value().inserted(other.into_value());
-                }
-
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `remove` won't truncate `other`, but the `!` operator will.
-                #[must_use]
-                #[inline(always)]
-                pub const fn removed(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self.into_value().removed(other.into_value());
-                }
-
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn toggled(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self.into_value().toggled(other.into_value());
-                }
-
-                /// Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn with(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self.into_value().with(other.into_value());
-                }
-
-                #[must_use]
-                #[inline(always)]
-                pub const fn without(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self.into_value().without(other.into_value());
-                }
-
-                #[inline(always)]
-                pub const fn unset(
-                    &mut self,
-                    other: Self,
-                ) {
-                    if *self == other {
-                        *self = Self::empty();
-                    }
-                }
-
-                #[must_use]
-                #[inline(always)]
-                pub const fn intersection_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return if self == other { self } else { Self::empty() };
-                }
-
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn union_with(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self.into_value().union_with(other.into_value());
-                }
-
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `difference` won't truncate `other`, but the `!` operator will.
-                #[must_use]
-                #[inline(always)]
-                pub const fn difference_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return if other.contained_in(self) {
-                        self
-                    }
-                    else {
-                        Self::empty()
-                    };
-                }
-
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn symmetric_difference_with(
-                    self,
-                    other: Self,
-                ) -> Value {
-                    return self
-                        .into_value()
-                        .symmetric_difference_with(other.into_value());
-                }
-
-                /// The bitwise negation (`!`) of the bits in `self`, truncating the result.
-                #[must_use]
-                #[inline(always)]
-                pub const fn complemented(self) -> Value {
-                    return self.into_value().complemented();
                 }
             }
 
             impl Value {
-                pub const fn from_name(name: &str) -> Option<Self> {
-                    return match Flag::from_name(name) {
-                        None => None,
-                        Some(it) => Some(it.into_value()),
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn bits(self) -> #el {
+                    return self.raw();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn from_bits_retain(bits: #el) -> Self {
+                    return Self::of(bits);
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn empty() -> Self {
+                    return Self::from_bits_retain(0);
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn all() -> Self {
+                    return Flag::all();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn all_named() -> Self {
+                    return Self::all();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn all_known() -> Self {
+                    return Self::all();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn all_unknown() -> Self {
+                    return Self::from_bits_retain(!Self::all().bits());
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn known_bits(self) -> #el {
+                    return self.bits() & Self::all().bits();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn unknown_bits(self) -> #el {
+                    return self.bits() & !Self::all().bits();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn into_known_bits(self) -> Self {
+                    return Self::from_bits_retain(self.known_bits());
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn into_unknown_bits(self) -> Self {
+                    return Self::from_bits_retain(self.unknown_bits());
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn contains_unknown_bits(self) -> bool {
+                    return self.unknown_bits() != 0;
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn from_bits(bits: #el) -> Option<Self> {
+                    let value = Self::from_bits_retain(bits);
+                    return if value.contains_unknown_bits() {
+                        None
+                    }
+                    else {
+                        Some(value)
                     };
                 }
 
-                pub const fn into_flag(self) -> Result<Flag, Self> {
-                    const ITEMS: &'static [Flag] = Flag::items();
-                    const MAX: usize = ITEMS.len();
+                #[inline(always)]
+                pub #konst fn try_as_known_bits_only(self) -> Result<Self, Self> {
+                    return if self.contains_unknown_bits() {
+                        Err(self)
+                    }
+                    else {
+                        Ok(self)
+                    };
+                }
 
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn from_bits_truncate(bits: #el) -> Self {
+                    return Self::from_bits_retain(bits).truncated();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn truncated_into_known_bits(self) -> Self {
+                    return self.truncated();
+                }
+
+                #[inline(always)]
+                pub #konst fn truncate_into_known_bits(&mut self) {
+                    self.truncate();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn from_name(name: &str) -> Option<Self> {
+                    return match Flag::from_name(name) {
+                        Some(flag) => Some(flag.into_value()),
+                        None => None,
+                    };
+                }
+
+                #[inline(always)]
+                pub #konst fn into_flag(self) -> Result<Flag, Self> {
+                    let items = Flag::items();
+                    let max = items.len();
                     let mut i = 0;
-                    while i < MAX {
-                        let it = &ITEMS[i];
-                        if it.into_value() == self {
-                            return Ok(*it);
+
+                    while i < max {
+                        let flag = items[i];
+                        if flag.into_value() == self {
+                            return Ok(flag);
                         }
                         i += 1;
                     }
@@ -477,383 +480,494 @@ impl Generator {
                     return Err(self);
                 }
 
-                // =========================================================================
-
-                /// Get a value with all bits unset.
                 #[must_use]
                 #[inline(always)]
-                pub const fn empty() -> Self {
-                    return Flag::empty().into_value();
-                }
-
-                /// Get a value with all known bits set.
-                #[must_use]
-                #[inline(always)]
-                pub const fn all_known() -> Self {
-                    return Flag::all();
-                }
-
-                /// Get a value with all unknown bits set.
-                #[must_use]
-                #[inline(always)]
-                pub const fn all_unknown() -> Self {
-                    return Self::all_known()._not();
-                }
-
-                // =========================================================================
-
-                /// Yield a set of contained flags values.
-                ///
-                /// Each yielded flags value will correspond to a defined named flag.
-                #[must_use]
-                #[inline(always)]
-                pub const fn iter_known_flags(self) -> impl Iterator<Item = Flag> {
+                pub #konst fn iter_known_flags(self) -> impl Iterator<Item = Flag> {
                     return IterFlags {
                         value: self,
                         index: 0,
                     };
                 }
 
-                /// Yield a set of contained flags values.
-                ///
-                /// Each yielded flags value will correspond to a defined named flag. Any unknown bits
-                /// will be yielded together as a final flags value.
                 #[must_use]
-                pub const fn iter(self) -> impl Iterator<Item = Self> {
+                #[inline(always)]
+                pub #konst fn iter(self) -> impl Iterator<Item = Self> {
                     return IterValues {
                         value: self,
                         index: 0,
                     };
                 }
 
-                #[inline(always)]
-                #[must_use]
-                pub const fn into_iter(self) -> impl Iterator<Item = Self> {
-                    return self.iter();
-                }
-
-                #[inline(always)]
-                #[must_use]
-                pub const fn into_iter_known_flags(
-                    self
-                ) -> impl Iterator<Item = Flag> {
-                    return self.iter_known_flags();
-                }
-
-                // =========================================================================
-
                 #[must_use]
                 #[inline(always)]
-                pub const fn into_known_bits(self) -> Self {
-                    return self & Self::all_known();
-                }
-
-                /// Get the unknown bits from a value.
-                #[must_use]
-                #[inline(always)]
-                pub const fn into_unknown_bits(self) -> Self {
-                    return self & Self::all_unknown();
-                }
-
-                /// This method will return `true` if any unknown bits are set.
-                #[must_use]
-                #[inline(always)]
-                pub const fn contains_unknown_bits(self) -> bool {
-                    return self != self.into_known_bits();
-                }
-
-                /// Convert from a bits value.
-                ///
-                /// This method will return `None` if any unknown bits are set.
-                #[inline(always)]
-                pub const fn try_as_known_bits_only(self) -> Result<Self, Self> {
-                    return if self.into_known_bits() == self {
-                        Ok(self)
-                    }
-                    else {
-                        Err(self)
-                    };
-                }
-
-                /// Convert from a bits value, unsetting any unknown bits.
-                #[must_use]
-                #[inline(always)]
-                pub const fn truncated_into_known_bits(self) -> Self {
-                    return self & Self::all_known();
-                }
-
-                /// Convert from a bits value, unsetting any unknown bits.
-                #[inline(always)]
-                pub const fn truncate_into_known_bits(&mut self) {
-                    *self = self.truncated_into_known_bits();
-                }
-
-                /// Whether all bits in this flags value are unset.
-                #[must_use]
-                #[inline(always)]
-                pub const fn is_empty(self) -> bool {
-                    return self == Self::empty();
-                }
-
-                /// Whether all known bits in this flags value are set.
-                #[must_use]
-                #[inline(always)]
-                pub const fn is_exactly_all_known_bits(self) -> bool {
-                    return self == Self::all_known();
-                }
-
-                /// Whether any set bits in `other` are also set in `self`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn intersects(
-                    self,
-                    other: Self,
-                ) -> bool {
-                    return (self & other) != Self::empty();
-                }
-
-                /// Whether all set bits in `other` are also set in `self`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn contains(
-                    self,
-                    other: Flag,
-                ) -> bool {
-                    return self.contains_all(other.into_value());
-                }
-
-                /// Whether all set bits in `other` are also set in `self`.
-                #[must_use]
-                #[inline(always)]
-                pub const fn contains_all(
-                    self,
-                    other: Self,
-                ) -> bool {
-                    return self & other == other;
+                pub fn iter_names(self) -> impl Iterator<Item = (&'static str, Self)> {
+                    return self
+                        .iter_known_flags()
+                        .map(|flag| (flag.name(), flag.into_value()));
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub const fn contains_any(
-                    self,
-                    other: Self,
-                ) -> bool {
-                    return self & other != Self::empty();
+                pub fn iter_defined_names() -> impl Iterator<Item = (&'static str, Self)> {
+                    return Flag::iter().map(|flag| (flag.name(), flag.into_value()));
                 }
 
-                /// Remove any unknown bits from the flags.
                 #[must_use]
                 #[inline(always)]
-                pub const fn truncated(self) -> Self {
-                    return self & Self::all_known();
+                pub fn iter_equal_names(self) -> impl Iterator<Item = &'static str> {
+                    return Flag::iter()
+                        .filter(move |flag| flag.into_value() == self)
+                        .map(|flag| flag.name());
                 }
 
-                /// Remove any unknown bits from the flags.
+                #[must_use]
                 #[inline(always)]
-                pub const fn truncate(&mut self) {
+                pub #konst fn is_empty(self) -> bool {
+                    return self.bits() == 0;
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn is_all(self) -> bool {
+                    return self.contains_all(Self::all());
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn is_exactly_all_known_bits(self) -> bool {
+                    return self == Self::all();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn intersects(self, other: Self) -> bool {
+                    return self.bits() & other.bits() != 0;
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub fn contains<T>(self, other: T) -> bool
+                where
+                    T: Into<Self>,
+                {
+                    return self.contains_all(other.into());
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn contains_all(self, other: Self) -> bool {
+                    return self.bits() & other.bits() == other.bits();
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn contains_any(self, other: Self) -> bool {
+                    return self.intersects(other);
+                }
+
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn truncated(self) -> Self {
+                    return Self::from_bits_retain(self.known_bits());
+                }
+
+                #[inline(always)]
+                pub #konst fn truncate(&mut self) {
                     *self = self.truncated();
                 }
 
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
                 #[must_use]
                 #[inline(always)]
-                pub const fn inserted(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self | other;
+                pub #konst fn inserted(self, other: Self) -> Self {
+                    return Self::from_bits_retain(self.bits() | other.bits());
                 }
 
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
                 #[inline(always)]
-                pub const fn insert(
-                    &mut self,
-                    other: Self,
-                ) {
+                pub #konst fn insert(&mut self, other: Self) {
                     *self = self.inserted(other);
                 }
 
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `remove` won't truncate `other`, but the `!` operator will.
                 #[must_use]
                 #[inline(always)]
-                pub const fn removed(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self & !other;
+                pub #konst fn removed(self, other: Self) -> Self {
+                    return Self::from_bits_retain(self.bits() & !other.bits());
                 }
 
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `remove` won't truncate `other`, but the `!` operator will.
                 #[inline(always)]
-                pub const fn remove(
-                    &mut self,
-                    other: Self,
-                ) {
+                pub #konst fn remove(&mut self, other: Self) {
                     *self = self.removed(other);
                 }
 
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
                 #[must_use]
                 #[inline(always)]
-                pub const fn toggled(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self ^ other;
+                pub #konst fn toggled(self, other: Self) -> Self {
+                    return Self::from_bits_retain(self.bits() ^ other.bits());
                 }
 
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
                 #[inline(always)]
-                pub const fn toggle(
-                    &mut self,
-                    other: Self,
-                ) {
+                pub #konst fn toggle(&mut self, other: Self) {
                     *self = self.toggled(other);
                 }
 
-                /// Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`.
-                #[must_use]
                 #[inline(always)]
-                pub const fn with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self | other;
+                pub #konst fn set(&mut self, other: Self, value: bool) {
+                    if value {
+                        self.insert(other);
+                    }
+                    else {
+                        self.remove(other);
+                    }
                 }
 
-                /// Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`.
                 #[inline(always)]
-                pub const fn set(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.with(other);
+                pub #konst fn clear(&mut self) {
+                    *self = Self::empty();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub const fn without(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self & (!other);
+                pub #konst fn with(self, other: Self) -> Self {
+                    return self.inserted(other);
                 }
 
-                #[inline(always)]
-                pub const fn unset(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.without(other);
-                }
-
-                /// The bitwise and (`&`) of the bits in `self` and `other`.
                 #[must_use]
                 #[inline(always)]
-                pub const fn intersection_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self & other;
+                pub #konst fn without(self, other: Self) -> Self {
+                    return self.removed(other);
                 }
 
-                /// The bitwise and (`&`) of the bits in `self` and `other`.
                 #[inline(always)]
-                pub const fn intersection(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.intersection_with(other);
+                pub #konst fn unset(&mut self, other: Self) {
+                    self.remove(other);
                 }
 
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
                 #[must_use]
                 #[inline(always)]
-                pub const fn union_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self | other;
+                pub #konst fn intersection(self, other: Self) -> Self {
+                    return Self::from_bits_retain(self.bits() & other.bits());
                 }
 
-                /// The bitwise or (`|`) of the bits in `self` and `other`.
-                #[inline(always)]
-                pub const fn union(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.union_with(other);
-                }
-
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `difference` won't truncate `other`, but the `!` operator will.
                 #[must_use]
                 #[inline(always)]
-                pub const fn difference_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self & (!other);
+                pub #konst fn union(self, other: Self) -> Self {
+                    return self.inserted(other);
                 }
 
-                /// The intersection of `self` with the complement of `other` (`&!`).
-                ///
-                /// This method is not equivalent to `self & !other` when `other` has unknown bits set.
-                /// `difference` won't truncate `other`, but the `!` operator will.
-                #[inline(always)]
-                pub const fn difference(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.difference_with(other);
-                }
-
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
                 #[must_use]
                 #[inline(always)]
-                pub const fn symmetric_difference_with(
-                    self,
-                    other: Self,
-                ) -> Self {
-                    return self ^ other;
+                pub #konst fn difference(self, other: Self) -> Self {
+                    return self.removed(other);
                 }
 
-                /// The bitwise exclusive-or (`^`) of the bits in `self` and `other`.
-                #[inline(always)]
-                pub const fn symmetric_difference(
-                    &mut self,
-                    other: Self,
-                ) {
-                    *self = self.symmetric_difference_with(other);
-                }
-
-                /// The bitwise negation (`!`) of the bits in `self`, truncating the result.
                 #[must_use]
                 #[inline(always)]
-                pub const fn complemented(self) -> Self {
-                    return !self;
+                pub #konst fn symmetric_difference(self, other: Self) -> Self {
+                    return self.toggled(other);
                 }
 
-                /// The bitwise negation (`!`) of the bits in `self`, truncating the result.
+                #[must_use]
                 #[inline(always)]
-                pub const fn complement(&mut self) {
+                pub #konst fn complemented(self) -> Self {
+                    return Self::from_bits_retain(!self.bits() & Self::all().bits());
+                }
+
+                #[inline(always)]
+                pub #konst fn complement(&mut self) {
                     *self = self.complemented();
                 }
             }
         };
     }
 
-    fn gen_flag_impl(&self) -> TokenStream {
+    fn ekran_flag_friendships(&self) -> TokenStream {
+        let el = &self.el;
+        let trait_seal = &self.trait_seal;
+        let trait_friend_make = &self.trait_friend_make;
+        let trait_friend_math = &self.trait_friend_math;
+        let trait_friend_bit = &self.trait_friend_bit;
+        let trait_friend_rel = &self.trait_friend_rel;
+        let fn_conv = format_ident!(
+            "conv_{}",
+            crate::runner::snake_case_of(&self.ty.to_string())
+        );
+        let (konst, bonst, _) =
+            crate::runner::konst_bonst_and_destruct(self.cfg.int.flags.konst);
+
+        let seal_impls = self
+            .cfg
+            .friends
+            .iter()
+            .map(|friendship| {
+                let ty = &friendship.ty;
+                let body = match &friendship.conv {
+                    Some(conv) if conv.is_ident("self") => quote! {
+                        let value: #el = *self;
+                        return value;
+                    },
+                    Some(conv) => quote! {
+                        return #conv(*self);
+                    },
+                    None => quote! {
+                        let value: #el = (*self).into();
+                        return value;
+                    },
+                };
+
+                return quote! {
+                    #konst impl #trait_seal for #ty {
+                        #[inline(always)]
+                        fn #fn_conv(&self) -> #el {
+                            #body
+                        }
+                    }
+                };
+            })
+            .collect::<Vec<_>>();
+
+        let mut marker_impls = Vec::<TokenStream>::new();
+        for friendship in &self.cfg.friends {
+            for level in &friendship.level {
+                for level in level.normalize() {
+                    let friend = match level {
+                        FriendshipLevel::Make => trait_friend_make,
+                        FriendshipLevel::Math => trait_friend_math,
+                        FriendshipLevel::Bit => trait_friend_bit,
+                        FriendshipLevel::Rel => trait_friend_rel,
+                        FriendshipLevel::Full | FriendshipLevel::None => {
+                            unreachable!()
+                        }
+                        FriendshipLevel::XCustom(custom) => {
+                            unimplemented!(
+                                "custom flag friendship level not implemented: {}",
+                                custom,
+                            )
+                        }
+                    };
+                    let ty = &friendship.ty;
+
+                    marker_impls.push(quote! {
+                        #konst impl #friend for #ty {}
+                    });
+                }
+            }
+        }
+
+        return quote! {
+            #(#seal_impls)*
+            #(#marker_impls)*
+
+            #konst trait #trait_seal {
+                fn #fn_conv(&self) -> #el;
+            }
+
+            #konst trait #trait_friend_make: #bonst #trait_seal {}
+            #konst trait #trait_friend_math: #bonst #trait_seal {}
+            #konst trait #trait_friend_bit: #bonst #trait_seal {}
+            #konst trait #trait_friend_rel: #bonst #trait_seal {}
+
+            #konst impl<T> #trait_seal for &T
+            where
+                T: #bonst #trait_seal,
+            {
+                #[inline(always)]
+                fn #fn_conv(&self) -> #el {
+                    return #trait_seal::#fn_conv(&**self);
+                }
+            }
+
+            #konst impl<T> #trait_seal for &mut T
+            where
+                T: #bonst #trait_seal,
+            {
+                #[inline(always)]
+                fn #fn_conv(&self) -> #el {
+                    return #trait_seal::#fn_conv(&**self);
+                }
+            }
+
+            #konst impl<T> #trait_friend_make for &T
+            where
+                T: #bonst #trait_friend_make,
+            {}
+
+            #konst impl<T> #trait_friend_make for &mut T
+            where
+                T: #bonst #trait_friend_make,
+            {}
+
+            #konst impl<T> #trait_friend_math for &T
+            where
+                T: #bonst #trait_friend_math,
+            {}
+
+            #konst impl<T> #trait_friend_math for &mut T
+            where
+                T: #bonst #trait_friend_math,
+            {}
+
+            #konst impl<T> #trait_friend_bit for &T
+            where
+                T: #bonst #trait_friend_bit,
+            {}
+
+            #konst impl<T> #trait_friend_bit for &mut T
+            where
+                T: #bonst #trait_friend_bit,
+            {}
+
+            #konst impl<T> #trait_friend_rel for &T
+            where
+                T: #bonst #trait_friend_rel,
+            {}
+
+            #konst impl<T> #trait_friend_rel for &mut T
+            where
+                T: #bonst #trait_friend_rel,
+            {}
+
+        };
+    }
+
+    fn ekran_enum_value_impls(&self) -> TokenStream {
+        let ty = &self.ty;
+        let value = &self.ty_value;
+        let konst = crate::runner::konst(self.cfg.int.flags.konst);
+        let trait_seal = &self.trait_seal;
+        let trait_friend_bit = &self.trait_friend_bit;
+        let fn_conv = format_ident!(
+            "conv_{}",
+            crate::runner::snake_case_of(&self.ty.to_string())
+        );
+        let (_, bonst, destruct) =
+            crate::runner::konst_bonst_and_destruct(self.cfg.int.flags.konst);
+        let mut stream = TokenStream::new();
+
+        if self.cfg.int.flags.impl_math_shr {
+            stream.extend(quote! {
+                #konst impl ::core::ops::Shr<usize> for #ty {
+                    type Output = #value;
+
+                    #[inline(always)]
+                    fn shr(self, rhs: usize) -> Self::Output {
+                        return self.into_value() >> rhs;
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_math_shl {
+            stream.extend(quote! {
+                #konst impl ::core::ops::Shl<usize> for #ty {
+                    type Output = #value;
+
+                    #[inline(always)]
+                    fn shl(self, rhs: usize) -> Self::Output {
+                        return self.into_value() << rhs;
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_math_and {
+            stream.extend(quote! {
+                #konst impl<T> ::core::ops::BitAnd<T> for #ty
+                where
+                    T: #bonst #trait_friend_bit #destruct,
+                {
+                    type Output = #value;
+
+                    #[inline(always)]
+                    fn bitand(self, rhs: T) -> Self::Output {
+                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        return self.into_value().intersection(
+                            #value::from_bits_retain(rhs)
+                        );
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_math_or {
+            stream.extend(quote! {
+                #konst impl<T> ::core::ops::BitOr<T> for #ty
+                where
+                    T: #bonst #trait_friend_bit #destruct,
+                {
+                    type Output = #value;
+
+                    #[inline(always)]
+                    fn bitor(self, rhs: T) -> Self::Output {
+                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        return self.into_value().union(
+                            #value::from_bits_retain(rhs)
+                        );
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_math_xor {
+            stream.extend(quote! {
+                #konst impl<T> ::core::ops::BitXor<T> for #ty
+                where
+                    T: #bonst #trait_friend_bit #destruct,
+                {
+                    type Output = #value;
+
+                    #[inline(always)]
+                    fn bitxor(self, rhs: T) -> Self::Output {
+                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        return self.into_value().symmetric_difference(
+                            #value::from_bits_retain(rhs)
+                        );
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_partial_eq {
+            stream.extend(quote! {
+                #konst impl ::core::cmp::PartialEq<#value> for #ty {
+                    #[inline(always)]
+                    fn eq(&self, rhs: &#value) -> bool {
+                        return self.raw() == rhs.raw();
+                    }
+                }
+            });
+        }
+
+        if self.cfg.int.flags.impl_partial_ord {
+            stream.extend(quote! {
+                #konst impl ::core::cmp::PartialOrd<#value> for #ty {
+                    #[inline(always)]
+                    fn partial_cmp(
+                        &self,
+                        rhs: &#value,
+                    ) -> ::core::option::Option<::core::cmp::Ordering> {
+                        return self.raw().partial_cmp(&rhs.raw());
+                    }
+                }
+            });
+        }
+
+        stream.extend(quote! {
+            #konst impl ::core::ops::Not for #ty {
+                type Output = #value;
+
+                #[inline(always)]
+                fn not(self) -> Self::Output {
+                    return self.into_value().complemented();
+                }
+            }
+        });
+
+        return stream;
+    }
+
+    fn ekran_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let items: &[Ident] = &self.items;
+        let konst = crate::runner::konst(self.cfg.int.flags.konst);
 
         let name_arms = items
             .into_iter()
@@ -880,7 +994,7 @@ impl Generator {
             impl #ty {
                 #[inline(always)]
                 #[must_use]
-                pub const fn name(self) -> &'static str {
+                pub #konst fn name(self) -> &'static str {
                     return match self {
                         #(#name_arms)*
                     };
@@ -888,7 +1002,7 @@ impl Generator {
 
                 #[inline(always)]
                 #[must_use]
-                pub const fn items() -> &'static [Self] {
+                pub #konst fn items() -> &'static [Self] {
                     const ITEMS: &'static [#ty] = &[#(#item_items),*];
 
                     return ITEMS;
@@ -896,7 +1010,7 @@ impl Generator {
 
                 #[inline]
                 #[must_use]
-                pub const fn from_name(name: &str) -> Option<Self> {
+                pub #konst fn from_name(name: &str) -> Option<Self> {
                     return match name {
                         #(#from_name_arms)*
 
@@ -904,6 +1018,27 @@ impl Generator {
                     };
                 }
             }
+        };
+    }
+
+    fn ekran_value_t(&self) -> TokenStream {
+        let ty_value = &self.ty_value;
+        let el = &self.el;
+        let derive_clone = if self.cfg.int.flags.konst {
+            quote! { #[derive_const(Clone)] }
+        }
+        else {
+            quote! { #[derive(Clone)] }
+        };
+
+        return match self.cfg.bit.make_value {
+            true => quote! {
+                #[derive(Copy)]
+                #derive_clone
+                #[repr(transparent)]
+                pub struct #ty_value(#el);
+            },
+            false => TokenStream::new(),
         };
     }
 }

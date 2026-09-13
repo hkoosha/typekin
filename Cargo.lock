@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "bitflags"
-version = "2.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -28,9 +22,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "3.0.3"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+checksum = "12df2e0110f65b775f769bb17ef989067a1d931b2eb822bd4346631eeada89f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -41,7 +35,6 @@ dependencies = [
 name = "typekin"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "proc-macro2",
  "quote",
  "syn",
@@ -50,12 +43,7 @@ dependencies = [
 
 [[package]]
 name = "typekin_testing"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
+version = "0.0.0"
 
 [[package]]
 name = "unicode-ident"

@@ -2,17 +2,19 @@
 name = "typekin"
 authors = ["Koosha H <git@koosha.io>"]
 license = "GPL-3.0-only"
-description = "new-type pattern with concept of Friends borrowed from c++"
+description = "new-type pattern with concept of Friends borrowed from c++, no-std and fully const"
 
 version.workspace = true
 edition.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 repository.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "typekin-unexpand"
@@ -21,21 +23,25 @@ path = "src/main.rs"
 [lib]
 proc-macro = true
 
+[features]
+default = []
+better-bin = ["syn/extra-traits"]
+
 [dependencies]
-#syn = { workspace = true }
-syn = { workspace = true, features = ["extra-traits"] }
+syn = { workspace = true }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
-
-bitflags = "2.13.1"
 
 [dev-dependencies]
 typekin_testing = { path = "../typekin_testing" }
 
 [[example]]
+name = "my_test"
+path = "examples/my_test.rs"
+
+[[example]]
 name = "my_u32"
 path = "examples/my_u32.rs"
-
 [[example]]
 name = "my_u32_exp"
 path = "examples/my_u32_exp.rs"
@@ -43,17 +49,9 @@ path = "examples/my_u32_exp.rs"
 [[example]]
 name = "my_u32_non_const"
 path = "examples/my_u32_non_const.rs"
-
 [[example]]
 name = "my_u32_non_const_exp"
 path = "examples/my_u32_non_const_exp.rs"
-
-[[example]]
-name = "my_thingy"
-path = "examples/my_thingy.rs"
-[[example]]
-name = "thingy_exp"
-path = "examples/my_thingy_exp.rs"
 
 [[example]]
 name = "my_flag"
@@ -61,3 +59,10 @@ path = "examples/my_flag.rs"
 [[example]]
 name = "flag_exp"
 path = "examples/my_flag_exp.rs"
+
+[[example]]
+name = "my_i128"
+path = "examples/my_i128.rs"
+[[example]]
+name = "my_i128_exp"
+path = "examples/my_i128_exp.rs"

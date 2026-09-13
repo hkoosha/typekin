@@ -1,8 +1,7 @@
-#![feature(const_trait_impl)]
+extern crate core;
 
 pub(crate) mod runner;
 pub(crate) mod type_friendship;
-pub(crate) mod value_ops;
 pub(crate) mod value_type;
 
 pub(crate) mod flag;

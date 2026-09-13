@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![feature(const_cmp)]
 #![feature(const_trait_impl)]
 #![feature(const_ops)]
@@ -7,29 +8,18 @@
 #![feature(derive_const)]
 
 mod subject {
-    use std::fmt::Formatter;
-
-    #[typekin::integral(friends = [u32(conv = self, level = [Full])])]
+    #[typekin::integral(friends = [i128(conv = self, level = [Full])])]
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]
-    pub struct MyU32(u32);
-
-    impl std::fmt::Display for MyU32 {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            write!(f, "MyU32({})", self.raw())
-        }
-    }
+    pub struct MyU32(i128);
 }
 
 type Subject = subject::MyU32;
 
 fn main() {
-    let lhs = 0b1101u32;
-    let rhs = 0b0110u32;
+    let lhs = 0b1101i128;
+    let rhs = 0b0110i128;
 
     let lhs = Subject::of(lhs);
     let rhs = Subject::of(rhs);

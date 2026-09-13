@@ -1,238 +1,395 @@
-AI Disclaimer: The code is handwritten so far, but the README is AI generated via
-the following command: 
-
-```
-Read this project and create comprehensive readme. This is crate for the new-type
-pattern, borrowing the concept of `friend classes` from c++.
-```
-
 # Typekin
 
-`typekin` is a Rust proc-macro crate for building **zero-cost newtypes** around
-integral primitives (`u8`..`u128`, `i8`..`i128`, `usize`, `isize`), with an API
-modeled after **C++'s `friend` declarations**.
+`typekin` is a proc-macro crate for generating following no\_std code:
 
-A newtype wrapping, say, a `u32` is normally an island: it doesn't compare, add,
-or convert with anything but itself, and you have to hand-write every `impl` to
-bridge it back to the outside world. `typekin` generates all of that boilerplate
-for you, and — like a C++ class granting `friend` access to hand-picked types —
-lets you explicitly declare which other types are "friends" of your newtype and
-what they're allowed to do with it (construct, compare, do arithmetic/bitwise
-ops with it, etc).
+- `#[typekin::integral]`: integer new-types with explicit interoperability
+- `#[typekin::bitflag]`: enum-backed flags plus a generated value type (modelled
+  after pkg:cargo/bitflags@2.13.1)
 
-Everything is generated at compile time via a single attribute macro,
-`#[typekin::integral(...)]`, applied to a single-field tuple struct.
+The generated code will always be zero-dependency and is fully no\_std, and
+everything is `const` by default. The dependency on typekin proc-macro itself
+can be also dropped via expanding the generated code (cargo-expand) and
+reformatting the output to a readable form via the `main.rs` in this macro.
 
-By default, the macro requires nightly Rust as it relies on const-trait-impl and
-related unstable features, but all const features can be turned off.
+The important rule is simple: The type only interoperates with the types listed
+in `friends = [...]`.
 
----
+This repository already contains some working examples:
 
-## Table of contents
+- `crates/typekin/examples/my_u32.rs`
+- `crates/typekin/examples/my_u32_non_const.rs`
+- `crates/typekin/examples/my_flag.rs`
 
-- [Concept: friends, not open access](#concept-friends-not-open-access)
-- [Quick start](#quick-start)
-- [What gets generated](#what-gets-generated)
-- [Friendship levels](#friendship-levels)
-- [Macro configuration](#macro-configuration)
-- [Requirements](#requirements)
-- [Development](#development)
-- [License](#license)
+AI Disclaimer: The code is handwritten, but the README is AI generated, check
+the AI prompts at the end.
 
----
+## Constness Status
 
-## Concept: friends, not open access
+By default, the generated code is **nightly-only** due to `const` features, but
+the `const impls` can be disabled with the proc-macro attribute, which makes the
+code valid in stable rust without any unstable features:
 
-In C++, a class can `friend` another class or function, granting it access to
-its private internals without opening those internals up to everyone.
+```
+without = [konst]
+```
 
-`typekin` brings the same idea to Rust newtypes. By default, a `typekin` newtype
-is sealed: nothing outside of it can construct it, compare it, or do arithmetic
-with it except itself. You then explicitly grant **friendship** to specific
-types (primitives or other `typekin` newtypes), at a chosen **level**, which
-decides what that friend is allowed to do:
+## `#[typekin::integral]`
 
-- Construct your type from theirs (`YourType::of(their_value)`).
-- Compare against your type (`==`, `<`, `>`, ...).
-- Do arithmetic with your type (`+`, `-`, `*`, `/`, `%`).
-- Do bitwise ops with your type (`&`, `|`, `^`, `!`).
+Applied to a single-field tuple struct over an integral primitive (and annotated
+with `#[repr(transparent)]`) turns into a bitflag very similar to
+how https://crates.io/crates/bitflags works, albeit separating individual flags
+as enum and keeping their combined values in a dedicated type.
 
-This is implemented under the hood with a sealed marker trait (`Seal`) plus
-per-capability marker traits (`FriendMake`, `FriendMathOps`, `FriendMathBit`,
-`FriendMathRel`) that only friended types implement — so the compiler enforces
-the friendship, there's no runtime cost, and non-friended types simply fail to
-type-check against your newtype.
-
-## Quick start
+### Demo
 
 ```rust
-// Enable the following nightly features, if building for const context.
-// #![feature(const_cmp)]
-// #![feature(const_trait_impl)]
-// #![feature(const_ops)]
-// #![feature(const_convert)]
-// #![feature(const_clone)]
-// #![feature(const_destruct)]
-
 #[typekin::integral(
-    friends = [u32],
-    with_const = false,
+  friends = [
+    u32,                   // Full friendship level
+    Money(level=Rel),      // Only math [rel]ational ops (comparison) are allowed
+    Foo(level=Custom)      // Custom relationship, does not add particular impl.
+    Bar(conv=Bar::thingy)  // If a type requires particular conversion logic,
+                           // and the default `Into` is not appropriate
+  ]
 )]
-pub struct Bar(u32);
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Amount(u32);
 
-#[typekin::integral(
-    friends = [
-        u32(conv = self, level = Full),
-        Bar(conv = Bar::raw, level = Full),
-    ],
-    with_const = false,
-)]
-pub struct Foo(u32);
+struct Bar(u64);
+impl Bar {
+    // Referenced by Bar friendship above. Must return the underlying type of
+    // Amount (i.e. u32):
+    // We could have also defined this on Amount
+    const fn calculate_thingy(it: &Self) -> u32 {
+        return it.0 * 2;
+    }
+}
 
 fn main() {
-    let foo = Foo::of(113u32);
-    let bar = Bar::of(100u32);
+    // Amount can be constructed directly from u32, since it's declared as a
+    // friend:
+    let a = Amount::of(10u32);
 
-    let sum: Foo = foo + bar;
-    assert!(sum > foo);
+    // Otherwise one must handle failures:
+    let b = Amount::try_make(20i32).unwrap();
 
-    assert_eq!(sum.raw(), 213);
+    assert_eq!(a + b, Amount::of(30));
+    assert_eq!((a + b).raw(), 30);
+    assert!(b > a);
 
-    let as_u64: u64 = bar.into();
-    assert_eq!(as_u64, 213u64);
+    // Since by default a fiend type is at `Full` level, mathematical operations
+    // are allowed:
+    assert_eq!(a + 5u32, Amount::of(15));
 
-    // Same thing, different syntax:
-    let as_u64: u64 = bar.into_u64();
-    assert_eq!(as_u64, 213u64);
+    let widened: u64 = a.into();
+    assert_eq!(widened, 10);
 
-    // into_u8 is not generated at all as the case is not safe.
-    // You get original value back as error if it fails.
-    let try_as_u8: Result<u8, Foo> = bar.try_into_u8();
-    assert!(try_as_u8.is_err());
+    // All widening casts have handy aliases:
+    assert_eq!(a.into_u128(), 10);
+
+    // But narrowing casts must be checked:
+    assert_eq!(a.try_into_u8(), Ok(10u8));
+    assert_eq!(a.try_into_i32(), Ok(10i32));
+
+    let money = Money::of(3u64);
+
+    // This will not compile, as Money is not a friend of Amount:
+    // let _ = amount + money;
+
+    // But this friendship is declared and compiles:
+    assert!(money < amount);
 }
 ```
 
-Here, `Bar` is declared as a friend at the `Full` level, meaning `Foo` can be
-constructed from a `Bar`, and arithmetic/relational/bitwise operators between
-`Foo` and `Bar` are all generated. Any type that is *not* declared a friend
-cannot be used to construct, compare, or operate on `Foo` — the sealed traits
-prevent it at compile time.
-
-## What gets generated
-
-For a struct such as `pub struct MyExample(u32);` annotated with
-`#[typekin::integral(...)]`, the macro generates (among other things):
-
-- `Debug`, `Clone`, `Copy`, `Eq`, `Ord` implementations.
-- `PartialEq<T>` / `PartialOrd<T>` for any friended `T` (via `FriendMathRel`).
-- `Into<T>` for every integral type the wrapped value safely widens into (e.g.
-  `u32` → `usize`, `u64`, `u128`, `i64`,
-  `i128`, ...).
-- `TryInto<T>` (fallible, checked) for every integral type it doesn't safely
-  widen into.
-- Arithmetic operators `Add`, `Sub`, `Mul`, `Div`, `Rem` (and their
-  `*Assign` counterparts) for any friended `T` (via `FriendMathOps`).
-- Bitwise operators `BitAnd`, `BitOr`, `BitXor`, `Not` (and `*Assign`
-  counterparts) for any friended `T` (via `FriendMathBit`).
-- `Shl<usize>` / `Shr<usize>` (and assign variants).
-- A `raw()` accessor returning the wrapped primitive.
-- An `of()` constructor generic over any friended type (via `FriendMake`).
-- `try_make(...)` / an internal `_make(...)` constructor, optionally routed
-  through a user-supplied validator function for fallible construction.
-- A compile-time layout assertion ensuring the newtype has the same size as its
-  wrapped primitive (i.e. it really is zero-cost).
-- The private sealed friendship machinery (`Seal`, `FriendMake`,
-  `FriendMathOps`, `FriendMathBit`, `FriendMathRel`) that backs all of the
-  above.
-
-Every one of these can be individually toggled off in the generator (see
-`crates/typekin/src/integral/maker.rs`), though the public, documented surface
-for doing so today is the `friends`/ `fn_get_raw`/`fn_validator`/ `konst`
-macro arguments described below.
-
-TODO: Not all these flags are exposed through the macro.
-
-## Friendship levels
-
-Each entry in `friends = [...]` names a friend type and, optionally, its
-friendship `level`. Levels are additive tiers of capability:
-
-| Level     | Grants                                           |
-|-----------|--------------------------------------------------|
-| `None`    | No friendship (the default if unspecified).      |
-| `Make`    | Can construct your type via `of(...)`.           |
-| `Rel`     | Can be compared (`==`, `<`, `>`, ...).           |
-| `Bit`     | Can do bitwise ops (`&`, `\|`, `^`, `!`).        |
-| `Math`    | Can do arithmetic ops (`+`, `-`, `*`, `/`, `%`). |
-| `MathRel` | `Math` + `Rel`.                                  |
-| `MathBit` | `Math` + `Bit`.                                  |
-| `Full`    | `Make` + `Math` + `Rel` + `Bit` (everything).    |
-
-Each friend entry also accepts a `conv` argument describing how to convert a
-value of the friend type into the newtype's wrapped element type:
-
-- `conv = self` — the friend type *is* the element type (or trivially derefs to
-  it), used as-is.
-- `conv = some::path::to::fn` — an arbitrary function/path used to perform the
-  conversion.
-- Omitted — defaults to using the value as-is.
+Some supported operations:
 
 ```rust
-#[typekin::integral(friends = [
-    u32(level = Full),
-    u16(level = Make),
-    OtherNewtype(level = MathRel, conv = OtherNewtype::raw),
-])]
-pub struct MyExample(u32);
+fn main() {
+    // Construction and conversion:
+    Amount::of(1u32);
+    Amount::try_make(1i32)?;
+    value.raw();
+    value.into_u64();
+    value.try_into_u8();
+
+    // Generated operators, when friendship allows them.
+    // A type is always friend of itself.
+    value + other;
+    value - other;
+    value * other;
+    value / other;
+    value % other;
+    value & other;
+    value | other;
+    value ^ other;
+    !value;
+    value << 1;
+    value >> 1;
+}
 ```
 
-## Macro configuration
+### Friendship is explicit
 
-`#[typekin::integral(...)]` accepts the following named arguments
-(comma-separated, order-independent):
+If a type is not listed in `friends`, it does not get to construct, compare
+with, or operate on your new-type.
 
-| Argument       | Type                   | Default     | Description                                                                                                                                |
-|----------------|------------------------|-------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `friends`      | `[FriendReq, ...]`     | `[]`        | List of friend declarations, see above.                                                                                                    |
-| `fn_get_raw`   | path of form `Self::x` | `Self::raw` | Name of the generated raw-value accessor.                                                                                                  |
-| `fn_validator` | path                   | none        | If set, construction (`of`, `try_make`) is routed through this validator; invalid values cause a panic (`_make`) or an `Err` (`try_make`). |
-| `konst`   | `bool`                 | `true`      | Whether generated impls are `const` (requires the unstable const-trait-impl features).                                                     |
+```rust
+#[typekin::integral(
+  friends = [u32(conv = self, level = [Full])],
+  without = [konst],
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Quantity(u32);
 
-The macro must be applied to a tuple struct with exactly one field whose type is
-one of the supported integral primitives.
+#[typekin::integral(
+  friends = [
+    u32(conv = self, level = [Make]),
+    Quantity(conv = Quantity::raw, level = [Rel]),
+  ],
+  without = [konst],
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Limit(u32);
 
-## Requirements
+fn main() {
+    let q = Quantity::of(5u32);
+    let l = Limit::of(8u32);
 
-This crate currently relies on several **unstable** Rust features for its
-default const mode (`with_const = true`):
+    // comparison is allowed because Limit friended Quantity at [Rel]
+    assert!(l > q);
 
-- `const_trait_impl`
-- `const_ops`
-- `const_cmp`
-- `const_convert`
-- `const_clone`
-- `const_destruct`
+    // Arithmetic is not, this will fail at compile time:
+    // let bad = l + q;
+}
+```
 
-You'll need a nightly toolchain and to enable these features in any crate that
-uses `#[typekin::integral(...)]` with its defaults (see the example
-in [Quick start](#quick-start)). Setting `with_const = false` avoids the need
-for these features at the cost of non-const generated code.
+### Validation
+
+Use `fn_validator` when raw values are not always valid.
+
+```rust
+const fn valid_port(
+    it: u16
+) -> bool {
+    it != 0
+}
+
+#[typekin::integral(
+  friends = [u16(conv = self, level = [Make, Rel])],
+  fn_validator = valid_port,
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Port(u16);
+
+fn main() {
+    assert_eq!(Port::try_make(8080), Ok(Port::of(8080u16)));
+
+    // You get same value back as error.
+    // Not having error messages is explicit design choice, to keep the types simple
+    // and encourage more meaningful and domain specific names (that is, one should
+    // typically grasp what's an allowed value from the name):
+    assert_eq!(Port::try_make(0), Err(0));
+
+    // Since we declared u16 as a friend on Make level, `of(u16)` is possible,
+    // but it still may panic due to the validator func.
+    let _ = Port::of(0u16);
+    panic!("unreachable");
+}
+```
+
+### Attribute shape
+
+The syntax you will most likely need looks like this:
+
+```rust
+#[typekin::integral(
+  friends = [
+    u32,                     // Full level by default
+    u64(level = [Bit]),      // Only bit operations allowed
+    Foo(conv = Foo::to_u32), // Full level, but custom value conversion
+  ],
+  
+  // One can rename default name to other than `raw()`.
+  fn_get_raw = Self::unwrap, 
+  
+  // If the type has a validator, in which case, infallible constructors
+  // are not exposed
+  fn_validator = is_valid,
+  
+  // Currently needed to build for stable rust
+  without = [konst],
+)]
+#[repr(transparent)]
+#[Derive(Copy, Clone)]
+struct Example(u32);
+```
+
+Friend levels used by the macro:
+
+```
+- Full: Shorthand for Make + Rel + Bit + Math
+- Rel
+- Bit
+- Math
+- Make
+- None
+- AnythingElse: Not used by Typekin, but available at type level for custom logic
+
+TODO: prevent feature clash, either use Custom(Anything) or prefix it with Custom
+```
+
+---
+
+## `#[typekin::bitflag]`
+
+It is modeled (and mostly copied) from pkg:cargo/bitflags@2.13.1, but with some
+different design decisions. Ihe macro is applied to a unit enum with an integral
+`repr`. The macro generates:
+
+- the enum you wrote
+- a value type, by default named as `<EnumName>Value`
+- flag/value helpers such as `name()`, `items()`, `from\_name()`, `contains()`,
+  `iter()`
+
+The enum is a bitwise and relational friend of its generated value type. Mixed
+bitwise operations (`Perm::Read | value`, `value | Perm::Read`) return
+`PermValue`; a combined bit pattern is never coerced back into the enum.
+Arithmetic friendship is intentionally not generated.
+
+`bitflag` also accepts its own `friends = [...]` list, independent from
+`integral = [friends = ...]`. These friends are available to enum-left bitwise
+operations, so `Perm::Read & friend` returns `PermValue`. The generated enum
+and value are registered automatically.
+
+### Example
+
+```rust
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typekin::bitflag]
+pub enum Perm {
+    None = 0,
+    Read = 0b001,
+    Write = 0b010,
+    Exec = 0b100,
+}
+
+fn main() {
+    let rw = Perm::Read.inserted(Perm::Write);
+
+    assert_eq!(rw.raw(), 0b011);
+    assert!(rw.contains(Perm::Read));
+    assert!(rw.contains(Perm::Write));
+    assert!(!rw.contains(Perm::Exec));
+
+    assert_eq!(Perm::from_name("Exec"), Some(Perm::Exec));
+    assert_eq!(Perm::Read.name(), "Read");
+
+    let names: Vec<_> = rw.iter_known_flags().map(Perm::name).collect();
+    assert_eq!(names, vec!["Read", "Write"]);
+
+    let raw = PermValue::try_make(0b111u8).unwrap();
+    assert!(raw.contains(Perm::Exec));
+}
+```
+
+### Unknown bits stay representable
+
+The generated value type is still an integral new-type, so raw bit patterns are
+kept even when they do not map to a named flag. For this to work, the named
+flags (i.e. enum variants) are separated from values (value bits).
+
+```rust
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typekin::bitflag(
+    // Anything inside this attribute is directly passed to typekin::integral
+  integral = [
+    friends = [u8],
+    without = [konst]
+  ]
+)]
+pub enum Mode {
+    None = 0,
+    A = 0b0001,
+    B = 0b0010,
+}
+
+fn main() {
+    let value = ModeValue::of(0b1000u8);
+
+    assert!(value.contains_unknown_bits());
+    assert_eq!(value.into_known_bits().raw(), 0);
+    assert_eq!(value.raw(), 0b1000);
+}
+```
+
+---
+
+## Const mode
+
+Const generation is on by default. Eventually when rust stabilizes all const
+features, the generated code will work on stable rust out of the box, but until
+then, enabling these features (as of writing) are required:
+
+```rust
+#![feature(const_cmp)]
+#![feature(const_trait_impl)]
+#![feature(const_ops)]
+#![feature(const_convert)]
+#![feature(const_clone)]
+#![feature(const_destruct)]
+#![feature(derive_const)]
+
+#[typekin::integral]
+#[repr(transparent)]
+#[derive(Copy)]
+#[derive_const(Clone)]
+pub struct Counter(u32);
+
+const START: Counter = Counter::of(10u32);
+const NEXT: Counter = START + 1u32;
+```
+
+But `const impl` can be skipped in favor of plain implementations, by disabling
+the const flag:
+
+```rust
+#[typekin::integral(
+  friends = [u32(conv = self, level = [Full])],
+  without = [konst],
+)]
+struct Foo;
+```
+
+---
 
 ## Development
 
-Common tasks are wired up via [`just`](https://github.com/casey/just):
-
 ```sh
-just build   # cargo fmt && cargo build
-just test    # cargo test
-just fmt     # cargo fmt
-just clean   # cargo clean
+just build
+just test
+just fmt
 
-# Regenerate crates/typekin/examples/my_u32_expanded.rs from my_u32.rs
-# (runs `cargo expand`, then pipes it through the typekin-unexpand binary).
+# regenerate expanded examples
 just u32
+just plain
+just flag
 ```
 
-## License
+## Development
 
-GPL-3, see the `license` field in `Cargo.toml`.
+```
+2026-08-01: Read this project and create comprehensive readme. This is crate for
+the new-type pattern, borrowing the concept of `friend classes` from c++.
+---
+2026-08-09: This project has evolved, rewrite the readme, and do not make it
+fluff or an ad. Just say what's important, and more importantly try to
+demonstrate with code example rather than text.                                                                                           
+NOTE: this version is manually modified, might have typos.
+```
+

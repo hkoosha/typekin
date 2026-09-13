@@ -2,9 +2,11 @@ use crate::runner;
 use crate::runner::MkErr;
 use proc_macro2::Ident;
 use std::collections::HashSet;
-use syn::ExprPath;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use syn::Path;
-use syn::parse::{Parse, ParseStream};
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub(crate) enum FriendshipLevel {
@@ -14,7 +16,7 @@ pub(crate) enum FriendshipLevel {
     Bit,
     Math,
     Full,
-    Custom(String),
+    XCustom(String),
 }
 
 impl FriendshipLevel {
@@ -28,10 +30,14 @@ impl FriendshipLevel {
         return set;
     }
 
-    pub(crate) fn to_set(self) -> HashSet<Self> {
-        let mut set = HashSet::with_capacity(1);
-        set.insert(self);
-        return set;
+    pub(crate) fn normalize(&self) -> HashSet<Self> {
+        match self {
+            Self::None => vec![],
+            Self::Full => vec![Self::Make, Self::Rel, Self::Bit, Self::Math],
+            _ => vec![self.clone()],
+        }
+        .into_iter()
+        .collect()
     }
 }
 
@@ -46,7 +52,12 @@ impl Parse for FriendshipLevel {
             "Bit" => Self::Bit,
             "Math" => Self::Math,
             "Full" => Self::Full,
-            custom => Self::Custom(custom.to_string()),
+            x_custom => {
+                if !x_custom.starts_with("X") {
+                    return ident.fail("custom level must start with `X`");
+                }
+                Self::XCustom(x_custom.to_string())
+            }
         };
 
         return Ok(it);
@@ -55,11 +66,20 @@ impl Parse for FriendshipLevel {
 
 // -------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct FriendReq {
     pub(crate) ty: Path,
     pub(crate) level: HashSet<FriendshipLevel>,
-    pub(crate) conv: Option<ExprPath>,
+    pub(crate) conv: Option<Path>,
+}
+
+impl Debug for FriendReq {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "FriendReq[{:?}]", self.level)
+    }
 }
 
 impl Parse for FriendReq {
@@ -67,7 +87,7 @@ impl Parse for FriendReq {
         let ty: Path = input.parse()?;
 
         let mut level = HashSet::<FriendshipLevel>::with_capacity(2);
-        let mut conv = None::<ExprPath>;
+        let mut conv = None::<Path>;
 
         runner::parse_optional_attributes(input, |name, span, stream| {
             match name {

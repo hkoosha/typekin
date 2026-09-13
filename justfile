@@ -1,5 +1,8 @@
 set shell := ["bash", "-e", "-u", "-o", "pipefail", "-c"]
 
+export RUST_BACKTRACE := '1'
+export RUSTFLAGS := '-Zmacro-backtrace'
+
 [group("z")]
 @def:
   just -l
@@ -32,6 +35,13 @@ u32-pretty: (z-pretty 'my_u32')
 u32: u32-expand u32-pretty fmt
 
 [group("example")]
+i128-expand: (z-expand 'my_i128')
+[group("example")]
+i128-pretty: (z-pretty 'my_i128')
+[group("example")]
+i128: i128-expand i128-pretty fmt
+
+[group("example")]
 plain-expand: (z-expand 'my_u32_non_const')
 [group("example")]
 plain-pretty: (z-pretty 'my_u32_non_const')
@@ -51,6 +61,9 @@ flag-expand: (z-expand 'my_flag')
 flag-pretty: (z-pretty 'my_flag')
 [group("example")]
 flag: flag-expand flag-pretty fmt
+
+all: u32 plain i128 flag
+  just fmt
 
 
 # ==============================================================================

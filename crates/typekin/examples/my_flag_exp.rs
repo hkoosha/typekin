@@ -10,20 +10,18 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 extern crate std;
-use typekin_testing::demo_u128;
 mod subject {
-    use std::fmt::{Display, Formatter};
     #[repr(u128)]
     #[derive(
+        :: core :: marker :: Copy,
         :: core :: hash :: Hash,
         :: core :: fmt :: Debug,
-        :: core :: marker :: Copy,
     )]
-    #[derive_const(::core::clone::Clone)]
-    #[derive_const(::core::cmp::Ord)]
-    #[derive_const(::core::cmp::PartialEq)]
     #[derive_const(::core::cmp::Eq)]
+    #[derive_const(::core::cmp::Ord)]
     #[derive_const(::core::cmp::PartialOrd)]
+    #[derive_const(::core::clone::Clone)]
+    #[derive_const(::core::cmp::PartialEq)]
     pub enum MyFlag {
         Z = 0,
         A = 10,
@@ -164,7 +162,7 @@ mod subject {
                 &mut self,
                 other: MyFlagValue,
             ) {
-                *self = self._and(other.0);
+                *self = self._bitand(other.0);
             }
         }
         const impl ::core::ops::AddAssign<MyFlagValue> for MyFlagValue {
@@ -218,7 +216,7 @@ mod subject {
                 &mut self,
                 other: MyFlagValue,
             ) {
-                *self = self._or(other.0);
+                *self = self._bitor(other.0);
             }
         }
         const impl ::core::cmp::Eq for MyFlagValue {}
@@ -231,42 +229,16 @@ mod subject {
                 return self.partial_cmp(other).unwrap();
             }
         }
-        if !(size_of::<MyFlagValue>() == size_of::<u128>()) {
+        if !(::core::mem::size_of::<MyFlagValue>()
+            == ::core::mem::size_of::<u128>())
+        {
             {
                 panic!("invalid memory layout: #ty(#el) != #el");
             };
         };
-        const impl<T> ::core::cmp::PartialEq<T> for MyFlagValue
-        where
-            T: [const] FriendMathRel + [const] ::core::marker::Destruct,
-        {
-            #[inline(always)]
-            fn eq(
-                &self,
-                rhs: &T,
-            ) -> bool {
-                let that = Seal::conv_my_flag_value(rhs);
-                return Self::raw(*self) == that;
-            }
-        }
-        const impl<T> ::core::cmp::PartialOrd<T> for MyFlagValue
-        where
-            T: [const] PartialEq<MyFlagValue>
-                + [const] FriendMathRel
-                + [const] ::core::marker::Destruct,
-        {
-            #[inline(always)]
-            fn partial_cmp(
-                &self,
-                rhs: &T,
-            ) -> ::core::option::Option<::core::cmp::Ordering> {
-                let that = Seal::conv_my_flag_value(rhs);
-                return Self::raw(*self).partial_cmp(&that);
-            }
-        }
         const impl<T> ::core::ops::Add<T> for MyFlagValue
         where
-            T: [const] FriendMathOps + [const] ::core::marker::Destruct,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -274,13 +246,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._add(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._add(it);
             }
         }
         const impl<T> ::core::ops::Sub<T> for MyFlagValue
         where
-            T: [const] FriendMathOps + [const] ::core::marker::Destruct,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -288,13 +260,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._sub(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._sub(it);
             }
         }
         const impl<T> ::core::ops::Mul<T> for MyFlagValue
         where
-            T: [const] FriendMathOps + [const] ::core::marker::Destruct,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -302,13 +274,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._mul(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._mul(it);
             }
         }
         const impl<T> ::core::ops::Div<T> for MyFlagValue
         where
-            T: [const] FriendMathOps + [const] ::core::marker::Destruct,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -316,13 +288,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._div(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._div(it);
             }
         }
         const impl<T> ::core::ops::Rem<T> for MyFlagValue
         where
-            T: [const] FriendMathOps + [const] ::core::marker::Destruct,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -330,13 +302,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._rem(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._rem(it);
             }
         }
         const impl<T> ::core::ops::BitAnd<T> for MyFlagValue
         where
-            T: [const] FriendMathBit + [const] ::core::marker::Destruct,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -344,13 +316,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._and(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._bitand(it);
             }
         }
         const impl<T> ::core::ops::BitOr<T> for MyFlagValue
         where
-            T: [const] FriendMathBit + [const] ::core::marker::Destruct,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -358,13 +330,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._or(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._bitor(it);
             }
         }
         const impl<T> ::core::ops::BitXor<T> for MyFlagValue
         where
-            T: [const] FriendMathBit + [const] ::core::marker::Destruct,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -372,25 +344,10 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_flag_value(&rhs);
-                return self._xor(that);
+                let it = Seal::conv_my_flag_value(&rhs);
+                return self._bitxor(it);
             }
         }
-        const impl ::core::ops::Not for MyFlagValue {
-            type Output = Self;
-            #[inline(always)]
-            fn not(self) -> Self::Output {
-                return self._not();
-            }
-        }
-        const trait Seal {
-            #[must_use]
-            fn conv_my_flag_value(&self) -> u128;
-        }
-        const trait FriendMake: [const] Seal {}
-        const trait FriendMathOps: [const] Seal {}
-        const trait FriendMathBit: [const] Seal {}
-        const trait FriendMathRel: [const] Seal {}
         const impl Seal for MyFlagValue {
             #[inline(always)]
             fn conv_my_flag_value(&self) -> u128 {
@@ -398,24 +355,13 @@ mod subject {
             }
         }
         const impl FriendMake for MyFlagValue {}
-        const impl FriendMathOps for MyFlagValue {}
-        const impl FriendMathBit for MyFlagValue {}
-        const impl FriendMathRel for MyFlagValue {}
-        const impl FriendMathOps for u128 {}
-        const impl FriendMathBit for u128 {}
-        const impl FriendMathRel for u128 {}
-        const impl FriendMake for u128 {}
-        const impl Seal for u128 {
-            #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
-                let it: u128 = *self;
-                return it;
-            }
-        }
+        const impl FriendMath for MyFlagValue {}
+        const impl FriendBit for MyFlagValue {}
+        const impl FriendRel for MyFlagValue {}
         impl ::core::fmt::Binary for MyFlagValue {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::Binary::fmt(&raw, f);
@@ -424,7 +370,7 @@ mod subject {
         impl ::core::fmt::Octal for MyFlagValue {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::Octal::fmt(&raw, f);
@@ -433,7 +379,7 @@ mod subject {
         impl ::core::fmt::LowerHex for MyFlagValue {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::LowerHex::fmt(&raw, f);
@@ -442,22 +388,100 @@ mod subject {
         impl ::core::fmt::UpperHex for MyFlagValue {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
+        const impl Seal for u128 {
+            #[inline(always)]
+            fn conv_my_flag_value(&self) -> u128 {
+                let it: u128 = (*self).into();
+                return it;
+            }
+        }
+        const impl Seal for MyFlag {
+            #[inline(always)]
+            fn conv_my_flag_value(&self) -> u128 {
+                return MyFlag::raw(*self);
+            }
+        }
+        const impl FriendMake for u128 {}
+        const impl FriendBit for u128 {}
+        const impl FriendMath for u128 {}
+        const impl FriendRel for u128 {}
+        const impl FriendBit for MyFlag {}
+        const impl FriendRel for MyFlag {}
+        const impl<T> ::core::cmp::PartialEq<T> for MyFlagValue
+        where
+            T: [const] FriendRel + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn eq(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_flag_value(rhs);
+                return lhs == rhs;
+            }
+        }
+        const impl<T> ::core::cmp::PartialOrd<T> for MyFlagValue
+        where
+            T: [const] FriendRel + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn partial_cmp(
+                &self,
+                rhs: &T,
+            ) -> ::core::option::Option<::core::cmp::Ordering> {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_flag_value(rhs);
+                return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
+            }
+        }
+        const trait Seal {
+            fn conv_my_flag_value(&self) -> u128;
+        }
+        const impl<T> Seal for &T
+        where
+            T: [const] Seal,
+        {
+            #[inline(always)]
+            fn conv_my_flag_value(&self) -> u128 {
+                return Seal::conv_my_flag_value(&**self);
+            }
+        }
+        const impl<T> Seal for &mut T
+        where
+            T: [const] Seal,
+        {
+            #[inline(always)]
+            fn conv_my_flag_value(&self) -> u128 {
+                return Seal::conv_my_flag_value(&**self);
+            }
+        }
+        const trait FriendMake: [const] Seal {}
+        const impl<T> FriendMake for &T where T: [const] FriendMake {}
+        const impl<T> FriendMake for &mut T where T: [const] FriendMake {}
+        const trait FriendMath: [const] Seal {}
+        const impl<T> FriendMath for &T where T: [const] FriendMath {}
+        const impl<T> FriendMath for &mut T where T: [const] FriendMath {}
+        const trait FriendBit: [const] Seal {}
+        const impl<T> FriendBit for &T where T: [const] FriendBit {}
+        const impl<T> FriendBit for &mut T where T: [const] FriendBit {}
+        const trait FriendRel: [const] Seal {}
+        const impl<T> FriendRel for &T where T: [const] FriendRel {}
+        const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
         impl MyFlagValue {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub const fn of<T, B>(it: B) -> MyFlagValue
+            pub const fn of<T>(it: T) -> MyFlagValue
             where
-                T: [const] FriendMake,
-                B: [const] ::core::borrow::Borrow<T>
-                    + [const] ::core::marker::Destruct,
+                T: [const] FriendMake + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_flag_value(it.borrow());
+                let this = Seal::conv_my_flag_value(&it);
                 return Self::_unchecked(this);
             }
             #[must_use]
@@ -469,7 +493,8 @@ mod subject {
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_u128(self) -> u128 {
-                return Self::raw(self) as u128;
+                let it = Self::raw(self);
+                return it as u128;
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -482,7 +507,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as usize;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -490,7 +515,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as isize;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -498,7 +523,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u8;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -506,7 +531,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u16;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -514,7 +539,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u32;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -522,7 +547,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u64;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -530,7 +555,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i8;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -538,7 +563,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i16;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -546,7 +571,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i32;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -554,7 +579,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i64;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -562,147 +587,113 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i128;
                 let s = t as u128;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _add(
-                self,
-                it: u128,
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this + it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs + rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _sub(
-                self,
-                it: u128,
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this - it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs - rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _mul(
-                self,
-                it: u128,
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this * it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs * rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _div(
-                self,
-                it: u128,
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this / it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs / rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _rem(
-                self,
-                it: u128,
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this % it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs % rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) const fn _xor(
-                self,
-                it: u128,
+            pub(self) const fn _bitxor(
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this ^ it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs ^ rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) const fn _and(
-                self,
-                it: u128,
+            pub(self) const fn _bitand(
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this & it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs & rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) const fn _or(
-                self,
-                it: u128,
+            pub(self) const fn _bitor(
+                &self,
+                rhs: u128,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this | it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs | rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _shr(
-                self,
-                it: usize,
+                &self,
+                count: usize,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this >> it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs >> count;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
             pub(self) const fn _shl(
-                self,
-                it: usize,
+                &self,
+                count: usize,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this << it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs << count;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) const fn _not(self) -> Self {
-                let this = Self::raw(self);
-                let result = !this;
-                return Self::_unchecked(result);
+            pub(self) const fn _not(&self) -> Self {
+                let lhs = Self::raw(*self);
+                let it = !lhs;
+                return Self::_unchecked(it);
             }
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
             pub(self) const fn _eq(
                 self,
-                it: u128,
+                rhs: u128,
             ) -> bool {
-                let this = Self::raw(self);
-                let result = this == it;
-                return result;
+                let lhs = Self::raw(self);
+                return lhs == rhs;
             }
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
-            pub(self) const fn _cmp(
+            pub(self) fn _cmp(
                 self,
-                it: u128,
+                rhs: u128,
             ) -> ::core::cmp::Ordering {
-                let this = Self::raw(self);
-                let result = ::core::cmp::PartialOrd::partial_cmp(&this, &it);
-                return result.unwrap();
+                let lhs = Self::raw(self);
+                return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs)
+                    .unwrap();
             }
             #[inline(always)]
             pub const fn try_make(it: u128) -> Result<Self, u128> {
@@ -718,7 +709,6 @@ mod subject {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
-        impl MyFlag {}
         type Flag = MyFlag;
         type Value = MyFlagValue;
         struct IterItems {
@@ -727,10 +717,10 @@ mod subject {
         const impl core::iter::Iterator for IterItems {
             type Item = Flag;
             fn next(&mut self) -> Option<Self::Item> {
-                const ITER_ITEMS: &'static [Flag] = Flag::items();
-                const MAX: usize = ITER_ITEMS.len();
-                while self.index < MAX {
-                    let next = ITER_ITEMS[self.index];
+                let items = Flag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index];
                     self.index += 1;
                     return Some(next);
                 }
@@ -738,8 +728,8 @@ mod subject {
             }
             #[inline(always)]
             fn size_hint(&self) -> (usize, Option<usize>) {
-                const MAX: usize = Flag::items().len();
-                return (MAX, Some(MAX));
+                let max = Flag::items().len();
+                return (max, Some(max));
             }
         }
         struct IterFlags {
@@ -749,12 +739,12 @@ mod subject {
         const impl core::iter::Iterator for IterFlags {
             type Item = Flag;
             fn next(&mut self) -> Option<Self::Item> {
-                const ITER_ITEMS: &'static [Flag] = Flag::items();
-                const MAX: usize = ITER_ITEMS.len();
-                while self.index < MAX {
-                    let next = ITER_ITEMS[self.index];
+                let items = Flag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index];
                     self.index += 1;
-                    if self.value.contains(next) {
+                    if self.value.contains_all(next.into_value()) {
                         self.value = self.value.without(next.into_value());
                         return Some(next);
                     }
@@ -774,10 +764,10 @@ mod subject {
         const impl Iterator for IterValues {
             type Item = Value;
             fn next(&mut self) -> Option<Self::Item> {
-                const ITER_ITEMS: &'static [Flag] = Flag::items();
-                const MAX: usize = ITER_ITEMS.len();
-                while self.index < MAX {
-                    let next = ITER_ITEMS[self.index].into_value();
+                let items = Flag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index].into_value();
                     self.index += 1;
                     if self.value.contains_all(next) {
                         self.value = self.value.without(next);
@@ -797,6 +787,19 @@ mod subject {
                 return (bound, Some(bound));
             }
         }
+        impl ::core::convert::From<Flag> for Value {
+            #[inline(always)]
+            fn from(flag: Flag) -> Self {
+                return flag.into_value();
+            }
+        }
+        const impl ::core::ops::Not for Value {
+            type Output = Self;
+            #[inline(always)]
+            fn not(self) -> Self::Output {
+                return self.complemented();
+            }
+        }
         impl Flag {
             #[inline(always)]
             #[must_use]
@@ -806,52 +809,30 @@ mod subject {
             #[inline(always)]
             #[must_use]
             pub const fn into_value(self) -> Value {
-                return Value::of(self.raw());
+                return Value::from_bits_retain(self.raw());
             }
             #[must_use]
             #[inline(always)]
             pub const fn all() -> Value {
-                return Value::all_unknown();
+                #[allow(clippy::unnecessary_cast)]
+                return Value::from_bits_retain(
+                    0 as u128
+                        | (MyFlag::Z as u128)
+                        | (MyFlag::A as u128)
+                        | (MyFlag::B as u128)
+                        | (MyFlag::C as u128),
+                );
             }
-            #[doc = r" Yield a set of flags values."]
-            #[doc = r""]
-            #[doc = r" Each yielded flags value will correspond to a defined named flag."]
             #[must_use]
             #[inline(always)]
             pub const fn iter() -> impl Iterator<Item = Self> {
                 return IterItems { index: 0 };
             }
-            #[doc = r" Yield a set of flags values."]
-            #[doc = r""]
-            #[doc = r" Each yielded flags value will correspond to a defined named flag."]
             #[must_use]
             #[inline(always)]
             pub const fn iter_values() -> impl Iterator<Item = Value> {
-                return Value::all_known().iter();
+                return Value::all().iter();
             }
-            #[must_use]
-            #[inline(always)]
-            pub const fn is_empty(self) -> bool {
-                return self == Self::empty();
-            }
-            #[doc = r" Whether any set bits in `other` are also set in `self`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn intersects(
-                self,
-                other: Value,
-            ) -> bool {
-                return self.into_value().intersects(other);
-            }
-            #[must_use]
-            #[inline(always)]
-            pub const fn contained_in(
-                self,
-                other: Self,
-            ) -> bool {
-                return other.into_value().contains_all(self.into_value());
-            }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
             #[must_use]
             #[inline(always)]
             pub const fn inserted(
@@ -860,146 +841,124 @@ mod subject {
             ) -> Value {
                 return self.into_value().inserted(other.into_value());
             }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `remove` won't truncate `other`, but the `!` operator will."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn removed(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().removed(other.into_value());
-            }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn toggled(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().toggled(other.into_value());
-            }
-            #[doc = r" Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn with(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().with(other.into_value());
-            }
-            #[must_use]
-            #[inline(always)]
-            pub const fn without(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().without(other.into_value());
-            }
-            #[inline(always)]
-            pub const fn unset(
-                &mut self,
-                other: Self,
-            ) {
-                if *self == other {
-                    *self = Self::empty();
-                }
-            }
-            #[must_use]
-            #[inline(always)]
-            pub const fn intersection_with(
-                self,
-                other: Self,
-            ) -> Self {
-                return if self == other { self } else { Self::empty() };
-            }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn union_with(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().union_with(other.into_value());
-            }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `difference` won't truncate `other`, but the `!` operator will."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn difference_with(
-                self,
-                other: Self,
-            ) -> Self {
-                return if other.contained_in(self) {
-                    self
-                }
-                else {
-                    Self::empty()
-                };
-            }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn symmetric_difference_with(
-                self,
-                other: Self,
-            ) -> Value {
-                return self
-                    .into_value()
-                    .symmetric_difference_with(other.into_value());
-            }
-            #[doc = r" The bitwise negation (`!`) of the bits in `self`, truncating the result."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn complemented(self) -> Value {
-                return self.into_value().complemented();
-            }
         }
         impl Value {
-            pub const fn from_name(name: &str) -> Option<Self> {
-                return match Flag::from_name(name) {
-                    None => None,
-                    Some(it) => Some(it.into_value()),
+            #[must_use]
+            #[inline(always)]
+            pub const fn bits(self) -> u128 {
+                return self.raw();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits_retain(bits: u128) -> Self {
+                return Self::of(bits);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn empty() -> Self {
+                return Self::from_bits_retain(0);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all() -> Self {
+                return Flag::all();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_named() -> Self {
+                return Self::all();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_known() -> Self {
+                return Self::all();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_unknown() -> Self {
+                return Self::from_bits_retain(!Self::all().bits());
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn known_bits(self) -> u128 {
+                return self.bits() & Self::all().bits();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn unknown_bits(self) -> u128 {
+                return self.bits() & !Self::all().bits();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn into_known_bits(self) -> Self {
+                return Self::from_bits_retain(self.known_bits());
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn into_unknown_bits(self) -> Self {
+                return Self::from_bits_retain(self.unknown_bits());
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn contains_unknown_bits(self) -> bool {
+                return self.unknown_bits() != 0;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits(bits: u128) -> Option<Self> {
+                let value = Self::from_bits_retain(bits);
+                return if value.contains_unknown_bits() {
+                    None
+                }
+                else {
+                    Some(value)
                 };
             }
+            #[inline(always)]
+            pub const fn try_as_known_bits_only(self) -> Result<Self, Self> {
+                return if self.contains_unknown_bits() {
+                    Err(self)
+                }
+                else {
+                    Ok(self)
+                };
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits_truncate(bits: u128) -> Self {
+                return Self::from_bits_retain(bits).truncated();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn truncated_into_known_bits(self) -> Self {
+                return self.truncated();
+            }
+            #[inline(always)]
+            pub const fn truncate_into_known_bits(&mut self) {
+                self.truncate();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_name(name: &str) -> Option<Self> {
+                return match Flag::from_name(name) {
+                    Some(flag) => Some(flag.into_value()),
+                    None => None,
+                };
+            }
+            #[inline(always)]
             pub const fn into_flag(self) -> Result<Flag, Self> {
-                const ITEMS: &'static [Flag] = Flag::items();
-                const MAX: usize = ITEMS.len();
+                let items = Flag::items();
+                let max = items.len();
                 let mut i = 0;
-                while i < MAX {
-                    let it = &ITEMS[i];
-                    if it.into_value() == self {
-                        return Ok(*it);
+                while i < max {
+                    let flag = items[i];
+                    if flag.into_value() == self {
+                        return Ok(flag);
                     }
                     i += 1;
                 }
                 return Err(self);
             }
-            #[doc = r" Get a value with all bits unset."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn empty() -> Self {
-                return Flag::empty().into_value();
-            }
-            #[doc = r" Get a value with all known bits set."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn all_known() -> Self {
-                return Flag::all();
-            }
-            #[doc = r" Get a value with all unknown bits set."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn all_unknown() -> Self {
-                return Self::all_known()._not();
-            }
-            #[doc = r" Yield a set of contained flags values."]
-            #[doc = r""]
-            #[doc = r" Each yielded flags value will correspond to a defined named flag."]
             #[must_use]
             #[inline(always)]
             pub const fn iter_known_flags(self) -> impl Iterator<Item = Flag> {
@@ -1008,107 +967,80 @@ mod subject {
                     index: 0,
                 };
             }
-            #[doc = r" Yield a set of contained flags values."]
-            #[doc = r""]
-            #[doc = r" Each yielded flags value will correspond to a defined named flag. Any unknown bits"]
-            #[doc = r" will be yielded together as a final flags value."]
             #[must_use]
+            #[inline(always)]
             pub const fn iter(self) -> impl Iterator<Item = Self> {
                 return IterValues {
                     value: self,
                     index: 0,
                 };
             }
-            #[inline(always)]
             #[must_use]
-            pub const fn into_iter(self) -> impl Iterator<Item = Self> {
-                return self.iter();
-            }
             #[inline(always)]
-            #[must_use]
-            pub const fn into_iter_known_flags(
+            pub fn iter_names(
                 self
-            ) -> impl Iterator<Item = Flag> {
-                return self.iter_known_flags();
+            ) -> impl Iterator<Item = (&'static str, Self)> {
+                return self
+                    .iter_known_flags()
+                    .map(|flag| (flag.name(), flag.into_value()));
             }
             #[must_use]
             #[inline(always)]
-            pub const fn into_known_bits(self) -> Self {
-                return self & Self::all_known();
+            pub fn iter_defined_names()
+            -> impl Iterator<Item = (&'static str, Self)> {
+                return Flag::iter()
+                    .map(|flag| (flag.name(), flag.into_value()));
             }
-            #[doc = r" Get the unknown bits from a value."]
             #[must_use]
             #[inline(always)]
-            pub const fn into_unknown_bits(self) -> Self {
-                return self & Self::all_unknown();
+            pub fn iter_equal_names(
+                self
+            ) -> impl Iterator<Item = &'static str> {
+                return Flag::iter()
+                    .filter(move |flag| flag.into_value() == self)
+                    .map(|flag| flag.name());
             }
-            #[doc = r" This method will return `true` if any unknown bits are set."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn contains_unknown_bits(self) -> bool {
-                return self != self.into_known_bits();
-            }
-            #[doc = r" Convert from a bits value."]
-            #[doc = r""]
-            #[doc = r" This method will return `None` if any unknown bits are set."]
-            #[inline(always)]
-            pub const fn try_as_known_bits_only(self) -> Result<Self, Self> {
-                return if self.into_known_bits() == self {
-                    Ok(self)
-                }
-                else {
-                    Err(self)
-                };
-            }
-            #[doc = r" Convert from a bits value, unsetting any unknown bits."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn truncated_into_known_bits(self) -> Self {
-                return self & Self::all_known();
-            }
-            #[doc = r" Convert from a bits value, unsetting any unknown bits."]
-            #[inline(always)]
-            pub const fn truncate_into_known_bits(&mut self) {
-                *self = self.truncated_into_known_bits();
-            }
-            #[doc = r" Whether all bits in this flags value are unset."]
             #[must_use]
             #[inline(always)]
             pub const fn is_empty(self) -> bool {
-                return self == Self::empty();
+                return self.bits() == 0;
             }
-            #[doc = r" Whether all known bits in this flags value are set."]
+            #[must_use]
+            #[inline(always)]
+            pub const fn is_all(self) -> bool {
+                return self.contains_all(Self::all());
+            }
             #[must_use]
             #[inline(always)]
             pub const fn is_exactly_all_known_bits(self) -> bool {
-                return self == Self::all_known();
+                return self == Self::all();
             }
-            #[doc = r" Whether any set bits in `other` are also set in `self`."]
             #[must_use]
             #[inline(always)]
             pub const fn intersects(
                 self,
                 other: Self,
             ) -> bool {
-                return (self & other) != Self::empty();
+                return self.bits() & other.bits() != 0;
             }
-            #[doc = r" Whether all set bits in `other` are also set in `self`."]
             #[must_use]
             #[inline(always)]
-            pub const fn contains(
+            pub fn contains<T>(
                 self,
-                other: Flag,
-            ) -> bool {
-                return self.contains_all(other.into_value());
+                other: T,
+            ) -> bool
+            where
+                T: Into<Self>,
+            {
+                return self.contains_all(other.into());
             }
-            #[doc = r" Whether all set bits in `other` are also set in `self`."]
             #[must_use]
             #[inline(always)]
             pub const fn contains_all(
                 self,
                 other: Self,
             ) -> bool {
-                return self & other == other;
+                return self.bits() & other.bits() == other.bits();
             }
             #[must_use]
             #[inline(always)]
@@ -1116,29 +1048,25 @@ mod subject {
                 self,
                 other: Self,
             ) -> bool {
-                return self & other != Self::empty();
+                return self.intersects(other);
             }
-            #[doc = r" Remove any unknown bits from the flags."]
             #[must_use]
             #[inline(always)]
             pub const fn truncated(self) -> Self {
-                return self & Self::all_known();
+                return Self::from_bits_retain(self.known_bits());
             }
-            #[doc = r" Remove any unknown bits from the flags."]
             #[inline(always)]
             pub const fn truncate(&mut self) {
                 *self = self.truncated();
             }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
             #[must_use]
             #[inline(always)]
             pub const fn inserted(
                 self,
                 other: Self,
             ) -> Self {
-                return self | other;
+                return Self::from_bits_retain(self.bits() | other.bits());
             }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
             #[inline(always)]
             pub const fn insert(
                 &mut self,
@@ -1146,22 +1074,14 @@ mod subject {
             ) {
                 *self = self.inserted(other);
             }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `remove` won't truncate `other`, but the `!` operator will."]
             #[must_use]
             #[inline(always)]
             pub const fn removed(
                 self,
                 other: Self,
             ) -> Self {
-                return self & !other;
+                return Self::from_bits_retain(self.bits() & !other.bits());
             }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `remove` won't truncate `other`, but the `!` operator will."]
             #[inline(always)]
             pub const fn remove(
                 &mut self,
@@ -1169,16 +1089,14 @@ mod subject {
             ) {
                 *self = self.removed(other);
             }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
             #[must_use]
             #[inline(always)]
             pub const fn toggled(
                 self,
                 other: Self,
             ) -> Self {
-                return self ^ other;
+                return Self::from_bits_retain(self.bits() ^ other.bits());
             }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
             #[inline(always)]
             pub const fn toggle(
                 &mut self,
@@ -1186,22 +1104,30 @@ mod subject {
             ) {
                 *self = self.toggled(other);
             }
-            #[doc = r" Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`."]
+            #[inline(always)]
+            pub const fn set(
+                &mut self,
+                other: Self,
+                value: bool,
+            ) {
+                if value {
+                    self.insert(other);
+                }
+                else {
+                    self.remove(other);
+                }
+            }
+            #[inline(always)]
+            pub const fn clear(&mut self) {
+                *self = Self::empty();
+            }
             #[must_use]
             #[inline(always)]
             pub const fn with(
                 self,
                 other: Self,
             ) -> Self {
-                return self | other;
-            }
-            #[doc = r" Call [`Self::insert`] when `value` is `true` or [`Self::remove`] when `value` is `false`."]
-            #[inline(always)]
-            pub const fn set(
-                &mut self,
-                other: Self,
-            ) {
-                *self = self.with(other);
+                return self.inserted(other);
             }
             #[must_use]
             #[inline(always)]
@@ -1209,101 +1135,201 @@ mod subject {
                 self,
                 other: Self,
             ) -> Self {
-                return self & (!other);
+                return self.removed(other);
             }
             #[inline(always)]
             pub const fn unset(
                 &mut self,
                 other: Self,
             ) {
-                *self = self.without(other);
+                self.remove(other);
             }
-            #[doc = r" The bitwise and (`&`) of the bits in `self` and `other`."]
             #[must_use]
-            #[inline(always)]
-            pub const fn intersection_with(
-                self,
-                other: Self,
-            ) -> Self {
-                return self & other;
-            }
-            #[doc = r" The bitwise and (`&`) of the bits in `self` and `other`."]
             #[inline(always)]
             pub const fn intersection(
-                &mut self,
-                other: Self,
-            ) {
-                *self = self.intersection_with(other);
-            }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn union_with(
                 self,
                 other: Self,
             ) -> Self {
-                return self | other;
+                return Self::from_bits_retain(self.bits() & other.bits());
             }
-            #[doc = r" The bitwise or (`|`) of the bits in `self` and `other`."]
+            #[must_use]
             #[inline(always)]
             pub const fn union(
-                &mut self,
-                other: Self,
-            ) {
-                *self = self.union_with(other);
-            }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `difference` won't truncate `other`, but the `!` operator will."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn difference_with(
                 self,
                 other: Self,
             ) -> Self {
-                return self & (!other);
+                return self.inserted(other);
             }
-            #[doc = r" The intersection of `self` with the complement of `other` (`&!`)."]
-            #[doc = r""]
-            #[doc = r" This method is not equivalent to `self & !other` when `other` has unknown bits set."]
-            #[doc = r" `difference` won't truncate `other`, but the `!` operator will."]
+            #[must_use]
             #[inline(always)]
             pub const fn difference(
-                &mut self,
-                other: Self,
-            ) {
-                *self = self.difference_with(other);
-            }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
-            #[must_use]
-            #[inline(always)]
-            pub const fn symmetric_difference_with(
                 self,
                 other: Self,
             ) -> Self {
-                return self ^ other;
+                return self.removed(other);
             }
-            #[doc = r" The bitwise exclusive-or (`^`) of the bits in `self` and `other`."]
+            #[must_use]
             #[inline(always)]
             pub const fn symmetric_difference(
-                &mut self,
+                self,
                 other: Self,
-            ) {
-                *self = self.symmetric_difference_with(other);
+            ) -> Self {
+                return self.toggled(other);
             }
-            #[doc = r" The bitwise negation (`!`) of the bits in `self`, truncating the result."]
             #[must_use]
             #[inline(always)]
             pub const fn complemented(self) -> Self {
-                return !self;
+                return Self::from_bits_retain(
+                    !self.bits() & Self::all().bits(),
+                );
             }
-            #[doc = r" The bitwise negation (`!`) of the bits in `self`, truncating the result."]
             #[inline(always)]
             pub const fn complement(&mut self) {
                 *self = self.complemented();
             }
         }
+        const impl ::core::ops::Shr<usize> for MyFlag {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn shr(
+                self,
+                rhs: usize,
+            ) -> Self::Output {
+                return self.into_value() >> rhs;
+            }
+        }
+        const impl ::core::ops::Shl<usize> for MyFlag {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn shl(
+                self,
+                rhs: usize,
+            ) -> Self::Output {
+                return self.into_value() << rhs;
+            }
+        }
+        const impl<T> ::core::ops::BitAnd<T> for MyFlag
+        where
+            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+        {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn bitand(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let rhs = BitSeal::conv_my_flag(&rhs);
+                return self
+                    .into_value()
+                    .intersection(MyFlagValue::from_bits_retain(rhs));
+            }
+        }
+        const impl<T> ::core::ops::BitOr<T> for MyFlag
+        where
+            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+        {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn bitor(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let rhs = BitSeal::conv_my_flag(&rhs);
+                return self
+                    .into_value()
+                    .union(MyFlagValue::from_bits_retain(rhs));
+            }
+        }
+        const impl<T> ::core::ops::BitXor<T> for MyFlag
+        where
+            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+        {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn bitxor(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let rhs = BitSeal::conv_my_flag(&rhs);
+                return self
+                    .into_value()
+                    .symmetric_difference(MyFlagValue::from_bits_retain(rhs));
+            }
+        }
+        const impl ::core::cmp::PartialEq<MyFlagValue> for MyFlag {
+            #[inline(always)]
+            fn eq(
+                &self,
+                rhs: &MyFlagValue,
+            ) -> bool {
+                return self.raw() == rhs.raw();
+            }
+        }
+        const impl ::core::cmp::PartialOrd<MyFlagValue> for MyFlag {
+            #[inline(always)]
+            fn partial_cmp(
+                &self,
+                rhs: &MyFlagValue,
+            ) -> ::core::option::Option<::core::cmp::Ordering> {
+                return self.raw().partial_cmp(&rhs.raw());
+            }
+        }
+        const impl ::core::ops::Not for MyFlag {
+            type Output = MyFlagValue;
+            #[inline(always)]
+            fn not(self) -> Self::Output {
+                return self.into_value().complemented();
+            }
+        }
+        const impl BitSeal for MyFlag {
+            #[inline(always)]
+            fn conv_my_flag(&self) -> u128 {
+                return MyFlag::raw(*self);
+            }
+        }
+        const impl BitSeal for MyFlagValue {
+            #[inline(always)]
+            fn conv_my_flag(&self) -> u128 {
+                return MyFlagValue::raw(*self);
+            }
+        }
+        const impl BitFriendRel for MyFlag {}
+        const impl BitFriendBit for MyFlag {}
+        const impl BitFriendBit for MyFlagValue {}
+        const impl BitFriendRel for MyFlagValue {}
+        const trait BitSeal {
+            fn conv_my_flag(&self) -> u128;
+        }
+        const trait BitFriendMake: [const] BitSeal {}
+        const trait BitFriendMath: [const] BitSeal {}
+        const trait BitFriendBit: [const] BitSeal {}
+        const trait BitFriendRel: [const] BitSeal {}
+        const impl<T> BitSeal for &T
+        where
+            T: [const] BitSeal,
+        {
+            #[inline(always)]
+            fn conv_my_flag(&self) -> u128 {
+                return BitSeal::conv_my_flag(&**self);
+            }
+        }
+        const impl<T> BitSeal for &mut T
+        where
+            T: [const] BitSeal,
+        {
+            #[inline(always)]
+            fn conv_my_flag(&self) -> u128 {
+                return BitSeal::conv_my_flag(&**self);
+            }
+        }
+        const impl<T> BitFriendMake for &T where T: [const] BitFriendMake {}
+        const impl<T> BitFriendMake for &mut T where T: [const] BitFriendMake {}
+        const impl<T> BitFriendMath for &T where T: [const] BitFriendMath {}
+        const impl<T> BitFriendMath for &mut T where T: [const] BitFriendMath {}
+        const impl<T> BitFriendBit for &T where T: [const] BitFriendBit {}
+        const impl<T> BitFriendBit for &mut T where T: [const] BitFriendBit {}
+        const impl<T> BitFriendRel for &T where T: [const] BitFriendRel {}
+        const impl<T> BitFriendRel for &mut T where T: [const] BitFriendRel {}
         impl MyFlag {
             #[inline(always)]
             #[must_use]
@@ -1342,23 +1368,20 @@ mod subject {
             return Self::Z;
         }
     }
-    impl Display for MyFlagValue {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            f.write_fmt(format_args!("MyFlagValue({0})", self.raw()))
-        }
-    }
 }
 type Subject = subject::MyFlag;
 type Value = subject::MyFlagValue;
 fn main() {
-    let lhs = 0b11000;
-    let rhs = 0b10100;
-    let demo = demo_u128(Value::of(lhs), rhs, |it| it.raw());
+    let lhs = Subject::A;
+    let rhs = Subject::B.into_value();
     {
-        print!("{0}\n", demo.print());
+        print!("{0:?}\n", (lhs & rhs) == (lhs & rhs));
+    };
+    {
+        print!("{0:?}\n", rhs & lhs);
+    };
+    {
+        print!("{0:?}\n", lhs & rhs);
     };
     for x in Subject::items() {
         {

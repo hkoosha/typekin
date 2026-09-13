@@ -8,17 +8,13 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-use typekin_testing::demo_u128;
-
 mod subject {
-    use std::fmt::{Display, Formatter};
-
     #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
     #[derive(Copy, Debug, Hash)]
     #[repr(u128)]
     #[typekin::bitflag(
         integral = [
-            friends = [u128] // Only for test utils.
+            friends = [u128, MyFlag(level=[Bit])] // Only for test utils.
         ],
     )]
     pub enum MyFlag {
@@ -35,26 +31,18 @@ mod subject {
             return Self::Z;
         }
     }
-
-    impl Display for MyFlagValue {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            write!(f, "MyFlagValue({})", self.raw())
-        }
-    }
 }
 
 type Subject = subject::MyFlag;
 type Value = subject::MyFlagValue;
 
 fn main() {
-    let lhs = 0b11000;
-    let rhs = 0b10100;
+    let lhs = Subject::A;
+    let rhs = Subject::B.into_value();
 
-    let demo = demo_u128(Value::of(lhs), rhs, |it| it.raw());
-    println!("{}", demo.print());
+    println!("{:?}", (lhs & rhs) == (lhs & rhs));
+    println!("{:?}", rhs & lhs);
+    println!("{:?}", lhs & rhs);
 
     for x in Subject::items() {
         println!("{}", x.name());

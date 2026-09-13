@@ -1,2 +1,3 @@
+pub(crate) mod cfg;
 pub(crate) mod driver;
-pub(self) mod maker;
+pub(crate) mod maker;

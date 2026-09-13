@@ -4,18 +4,16 @@ authors = ["Koosha H <git@koosha.io>"]
 license = "GPL-3.0-only"
 description = "test helpers for typekin crate"
 
-version.workspace = true
 edition.workspace = true
 homepage.workspace = true
-documentation.workspace = true
 repository.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
 
-[dependencies]
-syn = { workspace = true }
-quote = { workspace = true }
-proc-macro2 = { workspace = true }
+version = "0.0.0"
+publish = false
 
+[lints]
+workspace = true

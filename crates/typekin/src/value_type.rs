@@ -17,22 +17,6 @@ pub(crate) enum N {
     I128,
 }
 
-impl N {
-    pub(crate) fn fits_in(
-        &self,
-        other: &N,
-    ) -> bool {
-        return if self.is_signed() == other.is_signed() {
-            // Same signedness
-            self.bits() <= other.bits()
-        }
-        else {
-            // Otherwise, only unsigned may go to bigger signed
-            !self.is_signed() && self.bits() < other.bits()
-        };
-    }
-}
-
 const N_ITEMS: [N; 12] = [
     N::USIZ,
     N::ISIZ,
@@ -199,6 +183,7 @@ impl N {
 }
 
 impl N {
+    #[allow(unused, dead_code)]
     pub(crate) fn can_safe_cast_to(
         &self,
         to: Self,
@@ -493,29 +478,61 @@ const SAFE_U128: [N; 1] = [
 // =============================================================================
 
 #[allow(dead_code)]
-const CHCK_I008: [N; 1] = [
-    // N::USIZ,
+const CHCK_I008: [N; 6] = [
+    N::USIZ,
     // N::ISIZ,
-    // N::U008,
-    // N::U016,
-    // N::U032,
-    // N::U064,
-    // N::U128,
-    N::I008,
+    N::U008,
+    N::U016,
+    N::U032,
+    N::U064,
+    N::U128,
+    // N::I008,
     // N::I016,
     // N::I032,
     // N::I064,
     // N::I128,
 ];
 #[allow(dead_code)]
-const SAFE_I008: [N; 11] = [
-    N::USIZ,
+const SAFE_I008: [N; 6] = [
+    // N::USIZ,
     N::ISIZ,
+    // N::U008,
+    // N::U016,
+    // N::U032,
+    // N::U064,
+    // N::U128,
+    N::I008,
+    N::I016,
+    N::I032,
+    N::I064,
+    N::I128,
+];
+
+#[allow(dead_code)]
+const CHCK_I016_16: [N; 7] = [
+    N::USIZ,
+    // N::ISIZ,
     N::U008,
     N::U016,
     N::U032,
     N::U064,
     N::U128,
+    N::I008,
+    // N::I016,
+    // N::I032,
+    // N::I064,
+    // N::I128,
+];
+
+#[allow(dead_code)]
+const SAFE_I016_16: [N; 5] = [
+    // N::USIZ,
+    N::ISIZ,
+    // N::U008,
+    // N::U016,
+    // N::U032,
+    // N::U064,
+    // N::U128,
     // N::I008,
     N::I016,
     N::I032,
@@ -524,14 +541,52 @@ const SAFE_I008: [N; 11] = [
 ];
 
 #[allow(dead_code)]
-const CHCK_I016_16: [N; 4] = [
-    // N::USIZ,
+const CHCK_I016_32: [N; 7] = [
+    N::USIZ,
+    // N::ISIZ,
+    N::U008,
+    N::U016,
+    N::U032,
+    N::U064,
+    N::U128,
+    N::I008,
+    // N::I016,
+    // N::I032,
+    // N::I064,
+    // N::I128,
+];
+
+#[allow(dead_code)]
+const SAFE_I016_32: [N; 6] = [
+    N::USIZ,
+    N::ISIZ,
+    // N::U008,
+    N::U016,
+    N::U032,
+    N::U064,
+    N::U128,
+    // N::I008,
+    // N::I016,
+    // N::I032,
+    // N::I064,
+    // N::I128,
+];
+
+#[allow(dead_code)]
+const CHCK_I016_64: [N; 7] = CHCK_I016_32;
+
+#[allow(dead_code)]
+const SAFE_I016_64: [N; 6] = SAFE_I016_32;
+
+#[allow(dead_code)]
+const CHCK_I032_16: [N; 9] = [
+    N::USIZ,
     N::ISIZ,
     N::U008,
-    // N::U016,
-    // N::U032,
-    // N::U064,
-    // N::U128,
+    N::U016,
+    N::U032,
+    N::U064,
+    N::U128,
     N::I008,
     N::I016,
     // N::I032,
@@ -540,14 +595,14 @@ const CHCK_I016_16: [N; 4] = [
 ];
 
 #[allow(dead_code)]
-const SAFE_I016_16: [N; 8] = [
-    N::USIZ,
+const SAFE_I032_16: [N; 3] = [
+    // N::USIZ,
     // N::ISIZ,
     // N::U008,
-    N::U016,
-    N::U032,
-    N::U064,
-    N::U128,
+    // N::U016,
+    // N::U032,
+    // N::U064,
+    // N::U128,
     // N::I008,
     // N::I016,
     N::I032,
@@ -556,14 +611,14 @@ const SAFE_I016_16: [N; 8] = [
 ];
 
 #[allow(dead_code)]
-const CHCK_I016_32: [N; 3] = [
-    // N::USIZ,
+const CHCK_I032_32: [N; 8] = [
+    N::USIZ,
     // N::ISIZ,
     N::U008,
-    // N::U016,
-    // N::U032,
-    // N::U064,
-    // N::U128,
+    N::U016,
+    N::U032,
+    N::U064,
+    N::U128,
     N::I008,
     N::I016,
     // N::I032,
@@ -572,14 +627,14 @@ const CHCK_I016_32: [N; 3] = [
 ];
 
 #[allow(dead_code)]
-const SAFE_I016_32: [N; 9] = [
-    N::USIZ,
+const SAFE_I032_32: [N; 4] = [
+    // N::USIZ,
     N::ISIZ,
     // N::U008,
-    N::U016,
-    N::U032,
-    N::U064,
-    N::U128,
+    // N::U016,
+    // N::U032,
+    // N::U064,
+    // N::U128,
     // N::I008,
     // N::I016,
     N::I032,
@@ -588,20 +643,19 @@ const SAFE_I016_32: [N; 9] = [
 ];
 
 #[allow(dead_code)]
-const CHCK_I016_64: [N; 3] = CHCK_I016_32;
+const CHCK_I032_64: [N; 8] = CHCK_I032_32;
+#[allow(dead_code)]
+const SAFE_I032_64: [N; 4] = SAFE_I032_32;
 
 #[allow(dead_code)]
-const SAFE_I016_64: [N; 9] = SAFE_I016_32;
-
-#[allow(dead_code)]
-const CHCK_I032_16: [N; 7] = [
+const CHCK_I064_16: [N; 10] = [
     N::USIZ,
     N::ISIZ,
     N::U008,
     N::U016,
-    // N::U032,
-    // N::U064,
-    // N::U128,
+    N::U032,
+    N::U064,
+    N::U128,
     N::I008,
     N::I016,
     N::I032,
@@ -610,14 +664,14 @@ const CHCK_I032_16: [N; 7] = [
 ];
 
 #[allow(dead_code)]
-const SAFE_I032_16: [N; 5] = [
+const SAFE_I064_16: [N; 2] = [
     // N::USIZ,
     // N::ISIZ,
     // N::U008,
     // N::U016,
-    N::U032,
-    N::U064,
-    N::U128,
+    // N::U032,
+    // N::U064,
+    // N::U128,
     // N::I008,
     // N::I016,
     // N::I032,
@@ -626,14 +680,19 @@ const SAFE_I032_16: [N; 5] = [
 ];
 
 #[allow(dead_code)]
-const CHCK_I032_32: [N; 6] = [
-    // N::USIZ,
-    N::ISIZ,
+const CHCK_I064_32: [N; 10] = CHCK_I064_16;
+#[allow(dead_code)]
+const SAFE_I064_32: [N; 2] = SAFE_I064_16;
+
+#[allow(dead_code)]
+const CHCK_I064_64: [N; 9] = [
+    N::USIZ,
+    // N::ISIZ,
     N::U008,
     N::U016,
-    // N::U032,
-    // N::U064,
-    // N::U128,
+    N::U032,
+    N::U064,
+    N::U128,
     N::I008,
     N::I016,
     N::I032,
@@ -642,92 +701,18 @@ const CHCK_I032_32: [N; 6] = [
 ];
 
 #[allow(dead_code)]
-const SAFE_I032_32: [N; 6] = [
-    N::USIZ,
-    // N::ISIZ,
-    // N::U008,
-    // N::U016,
-    N::U032,
-    N::U064,
-    N::U128,
-    // N::I008,
-    // N::I016,
-    // N::I032,
-    N::I064,
-    N::I128,
-];
-
-#[allow(dead_code)]
-const CHCK_I032_64: [N; 6] = CHCK_I032_32;
-#[allow(dead_code)]
-const SAFE_I032_64: [N; 6] = SAFE_I032_32;
-
-#[allow(dead_code)]
-const CHCK_I064_16: [N; 9] = [
-    N::USIZ,
-    N::ISIZ,
-    N::U008,
-    N::U016,
-    N::U032,
-    // N::U064,
-    // N::U128,
-    N::I008,
-    N::I016,
-    N::I032,
-    N::I064,
-    // N::I128,
-];
-
-#[allow(dead_code)]
-const SAFE_I064_16: [N; 3] = [
+const SAFE_I064_64: [N; 3] = [
     // N::USIZ,
-    // N::ISIZ,
+    N::ISIZ,
     // N::U008,
     // N::U016,
     // N::U032,
-    N::U064,
-    N::U128,
-    // N::I008,
-    // N::I016,
-    // N::I032,
-    // N::I064,
-    N::I128,
-];
-
-#[allow(dead_code)]
-const CHCK_I064_32: [N; 9] = CHCK_I064_16;
-#[allow(dead_code)]
-const SAFE_I064_32: [N; 3] = SAFE_I064_16;
-
-#[allow(dead_code)]
-const CHCK_I064_64: [N; 8] = [
-    // N::USIZ,
-    N::ISIZ,
-    N::U008,
-    N::U016,
-    N::U032,
     // N::U064,
     // N::U128,
-    N::I008,
-    N::I016,
-    N::I032,
-    N::I064,
-    // N::I128,
-];
-
-#[allow(dead_code)]
-const SAFE_I064_64: [N; 4] = [
-    N::USIZ,
-    // N::ISIZ,
-    // N::U008,
-    // N::U016,
-    // N::U032,
-    N::U064,
-    N::U128,
     // N::I008,
     // N::I016,
     // N::I032,
-    // N::I064,
+    N::I064,
     N::I128,
 ];
 
@@ -739,12 +724,12 @@ const CHCK_I128: [N; 11] = [
     N::U016,
     N::U032,
     N::U064,
-    // N::U128,
+    N::U128,
     N::I008,
     N::I016,
     N::I032,
     N::I064,
-    N::I128,
+    // N::I128,
 ];
 
 #[allow(dead_code)]
@@ -755,12 +740,12 @@ const SAFE_I128: [N; 1] = [
     // N::U016,
     // N::U032,
     // N::U064,
-    N::U128,
+    // N::U128,
     // N::I008,
     // N::I016,
     // N::I032,
     // N::I064,
-    // N::I128,
+    N::I128,
 ];
 
 // =============================================================================
@@ -779,125 +764,125 @@ const SAFE_USIZ_32: [N; 6] = SAFE_U032_32;
 const SAFE_USIZ_64: [N; 4] = SAFE_U064_64;
 
 #[allow(dead_code)]
-const CHCK_ISIZ_16: [N; 4] = CHCK_I016_16;
+const CHCK_ISIZ_16: [N; 7] = CHCK_I016_16;
 #[allow(dead_code)]
-const CHCK_ISIZ_32: [N; 6] = CHCK_I032_32;
+const CHCK_ISIZ_32: [N; 8] = CHCK_I032_32;
 #[allow(dead_code)]
-const CHCK_ISIZ_64: [N; 8] = CHCK_I064_64;
+const CHCK_ISIZ_64: [N; 9] = CHCK_I064_64;
 #[allow(dead_code)]
-const SAFE_ISIZ_16: [N; 8] = SAFE_I016_16;
+const SAFE_ISIZ_16: [N; 5] = SAFE_I016_16;
 #[allow(dead_code)]
-const SAFE_ISIZ_32: [N; 6] = SAFE_I032_32;
+const SAFE_ISIZ_32: [N; 4] = SAFE_I032_32;
 #[allow(dead_code)]
-const SAFE_ISIZ_64: [N; 4] = SAFE_I064_64;
+const SAFE_ISIZ_64: [N; 3] = SAFE_I064_64;
 
 // =============================================================================
 
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const SAFE_I016: [N; 8] = SAFE_I016_16;
+const SAFE_I016: [N; 5] = SAFE_I016_16;
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const CHCK_I016: [N; 4] = CHCK_I016_16;
+const CHCK_I016: [N; 7] = CHCK_I016_16;
 
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const SAFE_I016: [N; 9] = SAFE_I016_32;
+const SAFE_I016: [N; 6] = SAFE_I016_32;
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const CHCK_I016: [N; 3] = CHCK_I016_32;
+const CHCK_I016: [N; 7] = CHCK_I016_32;
 
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const SAFE_I016: [N; 9] = SAFE_I016_64;
+const SAFE_I016: [N; 6] = SAFE_I016_64;
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const CHCK_I016: [N; 3] = CHCK_I016_64;
+const CHCK_I016: [N; 7] = CHCK_I016_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const SAFE_I032: [N; 5] = SAFE_I032_16;
+const SAFE_I032: [N; 3] = SAFE_I032_16;
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const CHCK_I032: [N; 7] = CHCK_I032_16;
+const CHCK_I032: [N; 9] = CHCK_I032_16;
 
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const SAFE_I032: [N; 6] = SAFE_I032_32;
+const SAFE_I032: [N; 4] = SAFE_I032_32;
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const CHCK_I032: [N; 6] = CHCK_I032_32;
+const CHCK_I032: [N; 8] = CHCK_I032_32;
 
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const SAFE_I032: [N; 6] = SAFE_I032_64;
+const SAFE_I032: [N; 4] = SAFE_I032_64;
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const CHCK_I032: [N; 6] = CHCK_I032_64;
+const CHCK_I032: [N; 8] = CHCK_I032_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const SAFE_I064: [N; 3] = SAFE_I064_16;
+const SAFE_I064: [N; 2] = SAFE_I064_16;
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const CHCK_I064: [N; 9] = CHCK_I064_16;
+const CHCK_I064: [N; 10] = CHCK_I064_16;
 
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const SAFE_I064: [N; 3] = SAFE_I064_32;
+const SAFE_I064: [N; 2] = SAFE_I064_32;
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const CHCK_I064: [N; 9] = CHCK_I064_32;
+const CHCK_I064: [N; 10] = CHCK_I064_32;
 
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const SAFE_I064: [N; 4] = SAFE_I064_64;
+const SAFE_I064: [N; 3] = SAFE_I064_64;
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const CHCK_I064: [N; 8] = CHCK_I064_64;
+const CHCK_I064: [N; 9] = CHCK_I064_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const SAFE_ISIZ: [N; 3] = SAFE_ISIZ_16;
+const SAFE_ISIZ: [N; 5] = SAFE_ISIZ_16;
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const CHCK_ISIZ: [N; 9] = CHCK_ISIZ_16;
+const CHCK_ISIZ: [N; 7] = CHCK_ISIZ_16;
 
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const SAFE_ISIZ: [N; 3] = SAFE_ISIZ_32;
+const SAFE_ISIZ: [N; 4] = SAFE_ISIZ_32;
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const CHCK_ISIZ: [N; 9] = CHCK_ISIZ_32;
+const CHCK_ISIZ: [N; 8] = CHCK_ISIZ_32;
 
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const SAFE_ISIZ: [N; 4] = SAFE_ISIZ_64;
+const SAFE_ISIZ: [N; 3] = SAFE_ISIZ_64;
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]
-const CHCK_ISIZ: [N; 8] = CHCK_ISIZ_64;
+const CHCK_ISIZ: [N; 9] = CHCK_ISIZ_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const SAFE_USIZ: [N; 3] = SAFE_USIZ_16;
+const SAFE_USIZ: [N; 8] = SAFE_USIZ_16;
 #[cfg(target_pointer_width = "16")]
 #[allow(dead_code)]
-const CHCK_USIZ: [N; 9] = CHCK_USIZ_16;
+const CHCK_USIZ: [N; 4] = CHCK_USIZ_16;
 
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const SAFE_USIZ: [N; 3] = SAFE_USIZ_32;
+const SAFE_USIZ: [N; 6] = SAFE_USIZ_32;
 #[cfg(target_pointer_width = "32")]
 #[allow(dead_code)]
-const CHCK_USIZ: [N; 9] = CHCK_USIZ_32;
+const CHCK_USIZ: [N; 6] = CHCK_USIZ_32;
 
 #[cfg(target_pointer_width = "64")]
 #[allow(dead_code)]

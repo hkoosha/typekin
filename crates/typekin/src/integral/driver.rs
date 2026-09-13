@@ -1,81 +1,17 @@
-use crate::integral::maker::Generator;
-pub(crate) use crate::integral::maker::IntegralFlags;
+use crate::integral::cfg::IntegralCfg;
+use crate::integral::maker::Maker;
 use crate::runner;
 use crate::runner::MkErr;
-use crate::type_friendship::FriendReq;
 use crate::value_type::N;
-use proc_macro2::Ident;
-use proc_macro2::TokenStream;
 use quote::quote;
-use syn::ExprPath;
 use syn::Fields;
-use syn::Path;
-use syn::Result;
 use syn::Type;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::parse_quote;
-
-#[derive(Default, Debug, Clone)]
-pub(crate) struct IntegralCfg {
-    pub(crate) int: Box<IntegralFlags>,
-    fn_get_raw: Option<ExprPath>,
-    pub(crate) fn_validator: Option<Path>,
-    pub(crate) friends: Vec<FriendReq>,
-}
-
-impl Parse for IntegralCfg {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut this = Self::default();
-
-        runner::parse_inner_attributes(input, |attr, span, rest| {
-            match attr {
-                "with" => this.int.parse_from(rest, true)?,
-                "without" => this.int.parse_from(rest, false)?,
-
-                "friends" => {
-                    this.friends = runner::list(rest)?.collect();
-                }
-
-                "fn_get_raw" => {
-                    this.fn_get_raw = Some(rest.parse()?);
-                }
-
-                "fn_validator" => {
-                    this.fn_validator = Some(rest.parse()?);
-                }
-
-                _ => return span.fail("unknown integral arg"),
-            };
-
-            return Ok(());
-        })?;
-
-        return Ok(this);
-    }
-}
-
-pub(crate) fn ekran(
-    ty: Ident,
-    el: Ident,
-    cfg: IntegralCfg,
-) -> Result<TokenStream> {
-    return Generator::new(
-        ty,
-        el,
-        cfg.int,
-        cfg.fn_get_raw.unwrap_or_else(|| parse_quote! { Self::raw }),
-        cfg.fn_validator,
-        cfg.friends,
-    )?
-    .ekran();
-}
 
 pub(crate) fn integral(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let args = syn::parse_macro_input!(attr as IntegralCfg);
+    let cfg = Box::new(syn::parse_macro_input!(attr as IntegralCfg));
     let item = syn::parse_macro_input!(item as syn::ItemStruct);
 
     return runner::ekran_catching(move || {
@@ -99,7 +35,16 @@ pub(crate) fn integral(
             return item.fail("expecting #[repr(transparent, ...)]");
         }
 
-        let stream = ekran(ty, el, args)?;
+        let it = Maker::new(ty, el, cfg)?.ekran()?;
+
+        let stream = quote::quote! {
+            #[allow(dead_code)]
+            #[allow(unused_qualifications)]
+            const _: () = {
+                #it
+            };
+        };
+
         return Ok(quote! { #item #stream });
     });
 }

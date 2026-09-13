@@ -2,14 +2,13 @@
 #![allow(clippy::needless_return)]
 
 extern crate std;
-use typekin_testing::demo_u128;
 mod subject {
-    use std::fmt::Formatter;
+    #[repr(transparent)]
     #[derive(
-        :: core :: clone :: Clone,
-        :: core :: cmp :: Ord,
         :: core :: fmt :: Debug,
         :: core :: marker :: Copy,
+        :: core :: cmp :: Ord,
+        :: core :: clone :: Clone,
         :: core :: cmp :: Eq,
     )]
     pub struct MyExample(u32);
@@ -52,6 +51,13 @@ mod subject {
                 return MyExample::into_i128(self);
             }
         }
+        impl TryInto<isize> for MyExample {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<isize, Self::Error> {
+                return MyExample::try_into_isize(self);
+            }
+        }
         impl TryInto<u8> for MyExample {
             type Error = ();
             #[inline(always)]
@@ -88,7 +94,7 @@ mod subject {
             }
         }
         impl ::core::ops::Shr<usize> for MyExample {
-            type Output = MyExample;
+            type Output = Self;
             #[inline(always)]
             fn shr(
                 self,
@@ -98,7 +104,7 @@ mod subject {
             }
         }
         impl ::core::ops::Shl<usize> for MyExample {
-            type Output = MyExample;
+            type Output = Self;
             #[inline(always)]
             fn shl(
                 self,
@@ -131,7 +137,7 @@ mod subject {
                 &mut self,
                 other: MyExample,
             ) {
-                *self = self._and(other.0);
+                *self = self._bitand(other.0);
             }
         }
         impl ::core::ops::AddAssign<MyExample> for MyExample {
@@ -185,43 +191,19 @@ mod subject {
                 &mut self,
                 other: MyExample,
             ) {
-                *self = self._or(other.0);
+                *self = self._bitor(other.0);
             }
         }
-        if !(size_of::<MyExample>() == size_of::<u32>()) {
+        if !(::core::mem::size_of::<MyExample>()
+            == ::core::mem::size_of::<u32>())
+        {
             {
                 panic!("invalid memory layout: #ty(#el) != #el");
             };
         }
-        impl<T> ::core::cmp::PartialEq<T> for MyExample
-        where
-            T: FriendMathRel,
-        {
-            #[inline(always)]
-            fn eq(
-                &self,
-                rhs: &T,
-            ) -> bool {
-                let that = Seal::conv_my_example(rhs);
-                return Self::raw(*self) == that;
-            }
-        }
-        impl<T> ::core::cmp::PartialOrd<T> for MyExample
-        where
-            T: PartialEq<MyExample> + FriendMathRel,
-        {
-            #[inline(always)]
-            fn partial_cmp(
-                &self,
-                rhs: &T,
-            ) -> Option<::core::cmp::Ordering> {
-                let that = Seal::conv_my_example(rhs);
-                return Self::raw(*self).partial_cmp(&that);
-            }
-        }
         impl<T> ::core::ops::Add<T> for MyExample
         where
-            T: FriendMathOps,
+            T: FriendMath,
         {
             type Output = Self;
             #[inline(always)]
@@ -229,13 +211,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._add(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._add(it);
             }
         }
         impl<T> ::core::ops::Sub<T> for MyExample
         where
-            T: FriendMathOps,
+            T: FriendMath,
         {
             type Output = Self;
             #[inline(always)]
@@ -243,13 +225,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._sub(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._sub(it);
             }
         }
         impl<T> ::core::ops::Mul<T> for MyExample
         where
-            T: FriendMathOps,
+            T: FriendMath,
         {
             type Output = Self;
             #[inline(always)]
@@ -257,13 +239,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._mul(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._mul(it);
             }
         }
         impl<T> ::core::ops::Div<T> for MyExample
         where
-            T: FriendMathOps,
+            T: FriendMath,
         {
             type Output = Self;
             #[inline(always)]
@@ -271,13 +253,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._div(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._div(it);
             }
         }
         impl<T> ::core::ops::Rem<T> for MyExample
         where
-            T: FriendMathOps,
+            T: FriendMath,
         {
             type Output = Self;
             #[inline(always)]
@@ -285,13 +267,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._rem(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._rem(it);
             }
         }
         impl<T> ::core::ops::BitAnd<T> for MyExample
         where
-            T: FriendMathBit,
+            T: FriendBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -299,13 +281,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._and(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._bitand(it);
             }
         }
         impl<T> ::core::ops::BitOr<T> for MyExample
         where
-            T: FriendMathBit,
+            T: FriendBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -313,13 +295,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._or(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._bitor(it);
             }
         }
         impl<T> ::core::ops::BitXor<T> for MyExample
         where
-            T: FriendMathBit,
+            T: FriendBit,
         {
             type Output = Self;
             #[inline(always)]
@@ -327,25 +309,17 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let that = Seal::conv_my_example(&rhs);
-                return self._xor(that);
+                let it = Seal::conv_my_example(&rhs);
+                return self._bitxor(it);
             }
         }
         impl ::core::ops::Not for MyExample {
-            type Output = MyExample;
+            type Output = Self;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
             }
         }
-        trait Seal {
-            #[must_use]
-            fn conv_my_example(&self) -> u32;
-        }
-        trait FriendMake: Seal {}
-        trait FriendMathOps: Seal {}
-        trait FriendMathBit: Seal {}
-        trait FriendMathRel: Seal {}
         impl Seal for MyExample {
             #[inline(always)]
             fn conv_my_example(&self) -> u32 {
@@ -353,24 +327,13 @@ mod subject {
             }
         }
         impl FriendMake for MyExample {}
-        impl FriendMathOps for MyExample {}
-        impl FriendMathBit for MyExample {}
-        impl FriendMathRel for MyExample {}
-        impl FriendMathOps for u32 {}
-        impl FriendMathBit for u32 {}
-        impl FriendMathRel for u32 {}
-        impl FriendMake for u32 {}
-        impl Seal for u32 {
-            #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                let it: u32 = *self;
-                return it;
-            }
-        }
+        impl FriendMath for MyExample {}
+        impl FriendBit for MyExample {}
+        impl FriendRel for MyExample {}
         impl ::core::fmt::Binary for MyExample {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::Binary::fmt(&raw, f);
@@ -379,7 +342,7 @@ mod subject {
         impl ::core::fmt::Octal for MyExample {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::Octal::fmt(&raw, f);
@@ -388,7 +351,7 @@ mod subject {
         impl ::core::fmt::LowerHex for MyExample {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::LowerHex::fmt(&raw, f);
@@ -397,21 +360,92 @@ mod subject {
         impl ::core::fmt::UpperHex for MyExample {
             fn fmt(
                 &self,
-                f: &mut core::fmt::Formatter<'_>,
+                f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 let raw = Self::raw(*self);
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
+        impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                let it: u32 = *self;
+                return it;
+            }
+        }
+        impl FriendBit for u32 {}
+        impl FriendMath for u32 {}
+        impl FriendRel for u32 {}
+        impl FriendMake for u32 {}
+        impl<T> ::core::cmp::PartialEq<T> for MyExample
+        where
+            T: FriendRel,
+        {
+            #[inline(always)]
+            fn eq(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_example(rhs);
+                return lhs == rhs;
+            }
+        }
+        impl<T> ::core::cmp::PartialOrd<T> for MyExample
+        where
+            T: FriendRel,
+        {
+            #[inline(always)]
+            fn partial_cmp(
+                &self,
+                rhs: &T,
+            ) -> Option<::core::cmp::Ordering> {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_example(rhs);
+                return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
+            }
+        }
+        trait Seal {
+            fn conv_my_example(&self) -> u32;
+        }
+        impl<T> Seal for &T
+        where
+            T: Seal,
+        {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return Seal::conv_my_example(&**self);
+            }
+        }
+        impl<T> Seal for &mut T
+        where
+            T: Seal,
+        {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return Seal::conv_my_example(&**self);
+            }
+        }
+        trait FriendMake: Seal {}
+        impl<T> FriendMake for &T where T: FriendMake {}
+        impl<T> FriendMake for &mut T where T: FriendMake {}
+        trait FriendMath: Seal {}
+        impl<T> FriendMath for &T where T: FriendMath {}
+        impl<T> FriendMath for &mut T where T: FriendMath {}
+        trait FriendBit: Seal {}
+        impl<T> FriendBit for &T where T: FriendBit {}
+        impl<T> FriendBit for &mut T where T: FriendBit {}
+        trait FriendRel: Seal {}
+        impl<T> FriendRel for &T where T: FriendRel {}
+        impl<T> FriendRel for &mut T where T: FriendRel {}
         impl MyExample {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub fn of<T, B>(it: B) -> MyExample
+            pub fn of<T>(it: T) -> MyExample
             where
                 T: FriendMake,
-                B: ::core::borrow::Borrow<T>,
             {
-                let this = Seal::conv_my_example(it.borrow());
+                let this = Seal::conv_my_example(&it);
                 return Self::_unchecked(this);
             }
             #[must_use]
@@ -423,37 +457,43 @@ mod subject {
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_usize(self) -> usize {
-                return Self::raw(self) as usize;
+                let it = Self::raw(self);
+                return it as usize;
             }
             #[must_use]
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_u32(self) -> u32 {
-                return Self::raw(self) as u32;
+                let it = Self::raw(self);
+                return it as u32;
             }
             #[must_use]
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_u64(self) -> u64 {
-                return Self::raw(self) as u64;
+                let it = Self::raw(self);
+                return it as u64;
             }
             #[must_use]
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_u128(self) -> u128 {
-                return Self::raw(self) as u128;
+                let it = Self::raw(self);
+                return it as u128;
             }
             #[must_use]
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_i64(self) -> i64 {
-                return Self::raw(self) as i64;
+                let it = Self::raw(self);
+                return it as i64;
             }
             #[must_use]
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
             pub const fn into_i128(self) -> i128 {
-                return Self::raw(self) as i128;
+                let it = Self::raw(self);
+                return it as i128;
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -491,7 +531,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as isize;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -499,7 +539,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u8;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -507,7 +547,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as u16;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && true { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -515,7 +555,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i8;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -523,7 +563,7 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i16;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
@@ -531,147 +571,113 @@ mod subject {
                 let r = Self::raw(self);
                 let t = r as i32;
                 let s = t as u32;
-                return if s == r { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _add(
-                self,
-                it: u32,
+            pub(self) const fn _add(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this + it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs + rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _sub(
-                self,
-                it: u32,
+            pub(self) const fn _sub(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this - it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs - rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _mul(
-                self,
-                it: u32,
+            pub(self) const fn _mul(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this * it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs * rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _div(
-                self,
-                it: u32,
+            pub(self) const fn _div(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this / it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs / rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _rem(
-                self,
-                it: u32,
+            pub(self) const fn _rem(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this % it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs % rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _xor(
-                self,
-                it: u32,
+            pub(self) const fn _bitxor(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this ^ it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs ^ rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _and(
-                self,
-                it: u32,
+            pub(self) const fn _bitand(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this & it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs & rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _or(
-                self,
-                it: u32,
+            pub(self) const fn _bitor(
+                &self,
+                rhs: u32,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this | it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs | rhs;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _shr(
-                self,
-                it: usize,
+            pub(self) const fn _shr(
+                &self,
+                count: usize,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this >> it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs >> count;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) fn _shl(
-                self,
-                it: usize,
+            pub(self) const fn _shl(
+                &self,
+                count: usize,
             ) -> Self {
-                let this = Self::raw(self);
-                let result = this << it;
-                return Self::_unchecked(result);
+                let lhs = Self::raw(*self);
+                let it = lhs << count;
+                return Self::_unchecked(it);
             }
-            #[must_use]
-            #[inline(always)]
-            #[doc(hidden)]
-            pub(self) const fn _not(self) -> Self {
-                let this = Self::raw(self);
-                let result = !this;
-                return Self::_unchecked(result);
+            pub(self) const fn _not(&self) -> Self {
+                let lhs = Self::raw(*self);
+                let it = !lhs;
+                return Self::_unchecked(it);
             }
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
             pub(self) const fn _eq(
                 self,
-                it: u32,
+                rhs: u32,
             ) -> bool {
-                let this = Self::raw(self);
-                let result = this == it;
-                return result;
+                let lhs = Self::raw(self);
+                return lhs == rhs;
             }
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
             pub(self) fn _cmp(
                 self,
-                it: u32,
+                rhs: u32,
             ) -> ::core::cmp::Ordering {
-                let this = Self::raw(self);
-                let result = ::core::cmp::PartialOrd::partial_cmp(&this, &it);
-                return result.unwrap();
+                let lhs = Self::raw(self);
+                return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs)
+                    .unwrap();
             }
             #[inline(always)]
             pub const fn try_make(it: u32) -> Result<Self, u32> {
@@ -684,21 +690,14 @@ mod subject {
             }
         }
     };
-    impl std::fmt::Display for MyExample {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            f.write_fmt(format_args!("MyExample({0})", self.raw()))
-        }
-    }
 }
 type Subject = subject::MyExample;
 fn main() {
     let lhs = 0b1101u32;
     let rhs = 0b0110u32;
-    let demo = demo_u128(Subject::of(lhs), rhs, |it| it.raw() as u128);
+    let lhs = Subject::of(lhs);
+    let rhs = Subject::of(rhs);
     {
-        print!("{0}\n", demo.print());
+        print!("{0:?}\n", lhs + rhs);
     };
 }

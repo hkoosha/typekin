@@ -1,22 +1,65 @@
-use crate::value_type::N;
-use proc_macro2::Ident;
-use proc_macro2::Span;
 use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span};
 use quote::quote;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::panic::UnwindSafe;
 use std::sync::Arc;
 use std::sync::Mutex;
+use syn::Attribute;
+use syn::Token;
+use syn::bracketed;
 use syn::meta::ParseNestedMeta;
-use syn::parse::{Parse, ParseBuffer, ParseStream};
+use syn::parenthesized;
+use syn::parse::Parse;
+use syn::parse::ParseBuffer;
+use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{Attribute, bracketed};
-use syn::{Token, parenthesized};
+
+pub(crate) trait Merge {
+    #[must_use]
+    fn merge(
+        self,
+        other: Self,
+    ) -> Self;
+}
+
+impl Merge for TokenStream {
+    fn merge(
+        mut self,
+        other: Self,
+    ) -> Self {
+        self.extend(other);
+        return self;
+    }
+}
+
+pub(crate) trait Merged {
+    type Output;
+
+    #[must_use]
+    fn merged(self) -> Self::Output;
+}
+
+impl<I> Merged for I
+where
+    I: Iterator<Item: Merge + Default>,
+{
+    type Output = I::Item;
+
+    fn merged(self) -> Self::Output {
+        return self
+            .reduce(|a, b| {
+                return a.merge(b);
+            })
+            .unwrap_or_default();
+    }
+}
 
 macro_rules! mk_flags {
     (
+        #[flag_default(bool=$def_bool:literal, str=$def_str:literal)]
         $(#[$meta:meta])*
         $vis:vis struct $name:ident {
             $(
@@ -42,13 +85,16 @@ macro_rules! mk_flags {
             $vis fn new() -> Self {
                 return Self {
                     $(
-                        $f_name: mk_flags!(@def, $f_typ, [$($f_def)?])
+                        $f_name: mk_flags!{
+                            @define,
+                            [$def_bool, $def_str],
+                            $f_typ,
+                            [$($f_def)?]
+                        }
                     ),*
                 };
             }
-        }
 
-        impl $name {
             $vis fn parse_from(
                 &mut self,
                 input: syn::parse::ParseStream,
@@ -306,27 +352,40 @@ macro_rules! mk_flags {
 
     };
 
-    (@defs, [
+    (@defines, [
         $( [$field:ident, $ty:ident, [ $( $def:expr )? ]] ),*
     ]) => {};
 
-    (@def, String, [$default:expr]) => {
+    (@define, [$def_bool:expr, $def_str:expr], String,    [$default:expr]) => {
         ::core::convert::Into::<String>::into($default)
     };
 
-    (@def, &str,   [$default:expr]) => {
+    (@define, [$def_bool:expr, $def_str:expr], String,    []) => {
+        ::core::convert::Into::<String>::into($def_str)
+    };
+
+    (@define, [$def_bool:expr, $def_str:expr], &str,      [$default:expr]) => {
         ::core::convert::Into::<String>::into($default)
     };
 
-    (@def, $ty:ident, [$default:expr]) => {
+    (@define, [$def_bool:expr, $def_str:expr], &str,      []) => {
+        ::core::convert::Into::<String>::into($def_str)
+    };
+
+    (@define, [$def_bool:expr, $def_str:expr], bool,      [$default:expr]) => {
         $default
     };
 
-    (@def, $ty:ident, []) => {
-        Default::default()
+    (@define, [$def_bool:expr, $def_str:expr], bool,      []) => {
+        ::core::convert::Into::<bool>::into($def_bool)
+    };
+
+    (@define, [$def_bool:expr, $def_str:expr], $typ:tt,   [$($ignore:tt)*]) => {
+        compile_error!("unknown flag type: {}", stringify!($typ))
     };
 }
 
+use crate::value_type::N;
 pub(crate) use mk_flags;
 
 pub(crate) fn list<T: Parse>(
@@ -355,24 +414,6 @@ pub(crate) fn unbracket(stream: ParseStream) -> syn::Result<ParseBuffer> {
     return Ok(content);
 }
 
-pub(crate) fn unparenthesized(stream: ParseStream) -> syn::Result<ParseBuffer> {
-    let content;
-    let _ = parenthesized!(content in stream);
-    return Ok(content);
-}
-
-fn for_repr(
-    attrs: &Vec<Attribute>,
-    mut exe: impl FnMut(ParseNestedMeta) -> syn::Result<()>,
-) -> syn::Result<()> {
-    attrs
-        .into_iter()
-        .filter(|it| it.path().is_ident("repr"))
-        .try_for_each(|it| it.parse_nested_meta(|meta| exe(meta)))?;
-
-    return Ok(());
-}
-
 pub(crate) fn find_repr_n(
     attrs: &Vec<Attribute>,
     span: impl Spanned,
@@ -399,6 +440,18 @@ pub(crate) fn find_repr_n(
     };
 }
 
+fn for_repr(
+    attrs: &Vec<Attribute>,
+    mut exe: impl FnMut(ParseNestedMeta) -> syn::Result<()>,
+) -> syn::Result<()> {
+    attrs
+        .into_iter()
+        .filter(|it| it.path().is_ident("repr"))
+        .try_for_each(|it| it.parse_nested_meta(|meta| exe(meta)))?;
+
+    return Ok(());
+}
+
 pub(crate) fn find_repr_transparent(
     attrs: &Vec<Attribute>
 ) -> syn::Result<bool> {
@@ -420,7 +473,7 @@ pub(crate) fn parse_inner_attributes(
 ) -> syn::Result<()> {
     let mut seen = HashSet::with_capacity(5);
 
-    let attr_span = input.span();
+    let span = input.span();
 
     while !input.is_empty() {
         let attr = {
@@ -434,7 +487,7 @@ pub(crate) fn parse_inner_attributes(
 
         input.parse::<Token![=]>()?;
 
-        on_attr(&attr, attr_span, &input)?;
+        on_attr(&attr, span, &input)?;
 
         seen.insert(attr);
 
@@ -454,8 +507,10 @@ pub(crate) fn parse_optional_attributes(
         return Ok(());
     }
 
-    let inner = unparenthesized(input)?;
-    return parse_inner_attributes(&inner, on_attr);
+    let content;
+    let _ = parenthesized!(content in input);
+
+    return parse_inner_attributes(&content, on_attr);
 }
 
 pub(crate) fn snake_case_of(it: &str) -> String {
@@ -484,10 +539,6 @@ pub(crate) fn snake_case_of(it: &str) -> String {
     }
 
     result
-}
-
-pub(crate) fn ident_of(it: N) -> Ident {
-    return Ident::new(it.rust_name(), Span::call_site());
 }
 
 pub(crate) trait MkErr: Spanned {
@@ -536,47 +587,29 @@ pub(crate) fn ekran_catching(
     .into();
 }
 
-pub(crate) struct Handy {
-    t_konst: TokenStream,
-    t_bonst: TokenStream,
-    t_destruct: TokenStream,
+pub(crate) fn konst(is_const: bool) -> Option<TokenStream> {
+    return match is_const {
+        true => Some(quote! { const }),
+        false => None,
+    };
 }
 
-impl Handy {
-    pub(crate) fn of(is_const: bool) -> Self {
-        return match is_const {
-            true => Self::of_const(),
-            false => Self::of_non_const(),
-        };
-    }
-
-    pub(crate) fn of_const() -> Self {
-        return Self {
-            t_konst: quote! { const },
-            t_bonst: quote! { [const] },
-            t_destruct: quote! { [const] ::core::marker::Destruct },
-        };
-    }
-
-    pub(crate) fn of_non_const() -> Self {
-        return Self {
-            t_konst: TokenStream::new(),
-            t_bonst: TokenStream::new(),
-            t_destruct: TokenStream::new(),
-        };
-    }
-
-    pub(crate) fn konst(&self) -> &TokenStream {
-        return &self.t_konst;
-    }
-
-    pub(crate) fn konst_bonst_destruct(
-        &self
-    ) -> (&TokenStream, &TokenStream, &TokenStream) {
-        return (&self.t_konst, &self.t_bonst, &self.t_destruct);
-    }
-
-    pub(crate) fn konst_bonst(&self) -> (&TokenStream, &TokenStream) {
-        return (&self.t_konst, &self.t_bonst);
-    }
+pub(crate) fn konst_bonst_and_destruct(
+    is_const: bool
+) -> (
+    Option<TokenStream>,
+    Option<TokenStream>,
+    Option<TokenStream>,
+) {
+    return (
+        konst(is_const),
+        match is_const {
+            true => Some(quote! { [const] }),
+            false => None,
+        },
+        match is_const {
+            true => Some(quote! { + [const] ::core::marker::Destruct }),
+            false => None,
+        },
+    );
 }

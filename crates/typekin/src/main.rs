@@ -1,21 +1,29 @@
 use quote::ToTokens;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::sync::LazyLock;
+use syn::Attribute;
+use syn::Expr;
+use syn::Item;
+use syn::ItemConst;
+use syn::ItemEnum;
+use syn::ItemImpl;
+use syn::ItemMod;
+use syn::ItemStruct;
+use syn::Meta;
+use syn::Path;
 use syn::PathSegment;
 use syn::ReturnType;
 use syn::Stmt;
 use syn::Token;
 use syn::Type;
 use syn::parse::Parser;
+use syn::parse_quote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::visit_mut::{VisitMut, visit_item_mod_mut};
-use syn::{Attribute, Item};
-use syn::{Expr, ItemImpl};
-use syn::{ItemConst, parse_quote};
-use syn::{ItemEnum, Path};
-use syn::{ItemMod, ItemStruct};
+use syn::visit_mut::VisitMut;
+use syn::visit_mut::visit_item_mod_mut;
 
 pub(crate) trait MkErr: Spanned {
     fn fail<T>(
@@ -65,17 +73,59 @@ enum Replaced {
 }
 
 impl Replaced {
+    // We'll commit some crime, good enough for this crate's purpose.
+    #[cfg(not(feature = "better-bin"))]
+    fn meta_eq(
+        lhs: &Meta,
+        rhs: &Meta,
+    ) -> bool {
+        // Crime
+        fn path_eq(
+            lhs: &Path,
+            rhs: &Path,
+        ) -> bool {
+            // Crime:
+            return lhs.segments.iter().zip(rhs.segments.iter()).all(
+                |(lhs, rhs)| {
+                    // More crime:
+                    lhs.arguments.is_none()
+                        && rhs.arguments.is_none()
+                        && lhs.ident == rhs.ident
+                },
+            );
+        }
+
+        return match (lhs, rhs) {
+            (Meta::Path(lhs), Meta::Path(rhs)) => path_eq(lhs, rhs),
+            (Meta::List(lhs), Meta::List(rhs)) => {
+                // Crime
+                lhs.tokens.to_string() == rhs.tokens.to_string()
+                    && path_eq(&lhs.path, &rhs.path)
+            }
+            (Meta::NameValue(_), Meta::NameValue(_)) => false,
+            _ => false,
+        };
+    }
+
+    #[cfg(feature = "better-bin")]
+    fn meta_eq(
+        lhs: &Meta,
+        rhs: &Meta,
+    ) -> bool {
+        return lhs == rhs;
+    }
+
     fn is_in(
         &self,
         attributes: &Vec<Attribute>,
     ) -> bool {
         if let Some((_, it)) = self.derive(false)
-            && attributes.contains(&it)
+            && attributes.iter().any(|m| Self::meta_eq(&m.meta, &it.meta))
         {
             return true;
         }
         if let Some((_, it)) = self.derive(true)
-            && attributes.contains(&it)
+            && attributes.iter().any(|m| Self::meta_eq(&m.meta, &it.meta))
         {
             return true;
         }
