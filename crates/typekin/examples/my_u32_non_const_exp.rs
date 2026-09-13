@@ -5,10 +5,10 @@ extern crate std;
 mod subject {
     #[repr(transparent)]
     #[derive(
-        :: core :: fmt :: Debug,
-        :: core :: marker :: Copy,
         :: core :: cmp :: Ord,
+        :: core :: fmt :: Debug,
         :: core :: clone :: Clone,
+        :: core :: marker :: Copy,
         :: core :: cmp :: Eq,
     )]
     pub struct MyExample(u32);

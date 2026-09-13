@@ -13,8 +13,8 @@ extern crate std;
 mod subject {
     #[repr(u128)]
     #[derive(
-        :: core :: marker :: Copy,
         :: core :: hash :: Hash,
+        :: core :: marker :: Copy,
         :: core :: fmt :: Debug,
     )]
     #[derive_const(::core::cmp::Eq)]
@@ -29,7 +29,7 @@ mod subject {
         C = 40,
     }
     #[repr(transparent)]
-    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
+    #[derive(:: core :: marker :: Copy, :: core :: fmt :: Debug)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyFlagValue(u128);
     #[allow(dead_code)]
@@ -407,12 +407,12 @@ mod subject {
                 return MyFlag::raw(*self);
             }
         }
-        const impl FriendMake for u128 {}
-        const impl FriendBit for u128 {}
         const impl FriendMath for u128 {}
+        const impl FriendBit for u128 {}
         const impl FriendRel for u128 {}
-        const impl FriendBit for MyFlag {}
+        const impl FriendMake for u128 {}
         const impl FriendRel for MyFlag {}
+        const impl FriendBit for MyFlag {}
         const impl<T> ::core::cmp::PartialEq<T> for MyFlagValue
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,
@@ -1295,8 +1295,8 @@ mod subject {
         }
         const impl BitFriendRel for MyFlag {}
         const impl BitFriendBit for MyFlag {}
-        const impl BitFriendBit for MyFlagValue {}
         const impl BitFriendRel for MyFlagValue {}
+        const impl BitFriendBit for MyFlagValue {}
         const trait BitSeal {
             fn conv_my_flag(&self) -> u128;
         }
