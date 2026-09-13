@@ -7,7 +7,6 @@ description = "test helpers for typekin crate"
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
