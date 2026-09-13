@@ -1,14 +1,13 @@
 [package]
 name = "typekin"
 authors = ["Koosha H <git@koosha.io>"]
-license = "GPL-3.0-only"
+license = "MIT"
 description = "new-type pattern with concept of Friends borrowed from c++, no-std and fully const"
 
 version.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true

@@ -5,13 +5,13 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2024"
 #authors = ["Koosha H <git@koosha.io>"]
 homepage = "https://koosha.io/typekin"
 repository = "https://gitlab.com/hkoosha/typekin"
 readme = "README.md"
-#license = "GPL-3.0-only"
+#license = "MIT"
 keywords = ["newtype", "derive", "invariant"]
 categories = ["data-structures"]
 rust-version = "1.97"
