@@ -1,0 +1,23 @@
+[package]
+name = "typekin_perf_must_fail"
+version = "0.0.0"
+publish = false
+
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+typekin_perf_types = { path = "../typekin_perf_types" }
+
+[[bin]]
+name = "typekin-perf-must-fail-fixture"
+path = "src/main.rs"
+test = false
+bench = false

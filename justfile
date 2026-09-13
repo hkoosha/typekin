@@ -83,3 +83,10 @@ z-pretty what:
   just prettify '{{ examples / what }}_exp.rs' > "$work" && \
   cp "$work" '{{ examples / what }}_exp.rs'
 
+
+fast-test:
+  CARGO_TARGET_DIR=/tmp/typekin_perf_ok_outer cargo +nightly test -p typekin_perf_ok & \
+  CARGO_TARGET_DIR=/tmp/typekin_perf_must_fail_outer cargo +nightly test -p typekin_perf_must_fail & \
+  CARGO_TARGET_DIR=/tmp/typekin_perf_types_outer cargo +nightly test -p typekin_perf_types & \
+  CARGO_TARGET_DIR=/tmp/typekin_outer cargo +nightly test -p typekin & \
+  wait

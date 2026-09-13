@@ -41,6 +41,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "typekin_perf_must_fail"
+version = "0.0.0"
+dependencies = [
+ "typekin_perf_types",
+]
+
+[[package]]
+name = "typekin_perf_ok"
+version = "0.0.0"
+dependencies = [
+ "typekin_perf_types",
+]
+
+[[package]]
+name = "typekin_perf_types"
+version = "0.0.0"
+dependencies = [
+ "typekin",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
