@@ -35,10 +35,6 @@ proc-macro2 = { workspace = true }
 typekin_testing = { path = "../typekin_testing" }
 
 [[example]]
-name = "my_test"
-path = "examples/my_test.rs"
-
-[[example]]
 name = "my_u32"
 path = "examples/my_u32.rs"
 [[example]]
