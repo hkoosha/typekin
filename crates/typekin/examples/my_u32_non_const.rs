@@ -1,7 +1,7 @@
 mod subject {
     #[typekin::integral(
         friends = [u32(conv = self, level = [Full])],
-        without = [konst]
+        konst = false
     )]
     #[derive(Copy, Clone)]
     #[repr(transparent)]

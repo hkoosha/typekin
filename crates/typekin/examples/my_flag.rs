@@ -14,6 +14,7 @@ mod subject {
     #[repr(u128)]
     #[typekin::bitflag(
         integral = [
+            konst = true,
             friends = [u128, MyFlag(level=[Bit])] // Only for test utils.
         ],
     )]

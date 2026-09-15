@@ -383,10 +383,10 @@ mod subject {
                 return it;
             }
         }
+        const impl FriendRel for u32 {}
         const impl FriendMake for u32 {}
         const impl FriendBit for u32 {}
         const impl FriendMath for u32 {}
-        const impl FriendRel for u32 {}
         const impl<T> ::core::cmp::PartialEq<T> for MyU32
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,

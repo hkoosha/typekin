@@ -9,7 +9,7 @@
 mod subject {
     use std::fmt::Formatter;
 
-    #[typekin::integral(friends = [u32(conv = self, level = [Full])])]
+    #[typekin::integral(konst = true, friends = [u32(conv = self, level = [Full])])]
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]

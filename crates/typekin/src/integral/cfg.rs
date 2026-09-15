@@ -12,7 +12,6 @@ mk_flags! {
     pub(crate) struct IntegralFlags {
         pub impl_range: bool = false,
 
-        pub konst: bool,
         pub assertions: bool,
 
         pub impl_debug: bool,
@@ -98,6 +97,7 @@ mk_flags! {
 #[derive(Default, Clone)]
 pub(crate) struct IntegralCfg {
     pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) konst: bool,
     pub(crate) fn_get_raw: Option<Path>,
     pub(crate) fn_validator: Option<Path>,
     pub(crate) friends: Vec<FriendReq>,
@@ -128,9 +128,14 @@ impl Debug for IntegralCfg {
 impl Parse for IntegralCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
+        let mut has_konst = false;
 
         runner::parse_inner_attributes(input, |attr, span, rest| {
             match attr {
+                "konst" => {
+                    this.konst = rest.parse::<syn::LitBool>()?.value;
+                    has_konst = true;
+                }
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
                 "friends" => this.friends = runner::list(rest)?.collect(),
@@ -142,6 +147,36 @@ impl Parse for IntegralCfg {
             return Ok(());
         })?;
 
+        if !has_konst {
+            return Err(syn::Error::new(
+                input.span(),
+                "missing required `konst` argument",
+            ));
+        }
+
         return Ok(this);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IntegralCfg;
+
+    #[test]
+    fn accepts_explicit_konst_values() {
+        let konst = syn::parse_str::<IntegralCfg>("konst = true")
+            .expect("explicit true konst should parse");
+        assert!(konst.konst);
+
+        let konst = syn::parse_str::<IntegralCfg>("konst = false")
+            .expect("explicit false konst should parse");
+        assert!(!konst.konst);
+    }
+
+    #[test]
+    fn rejects_missing_konst() {
+        let error = syn::parse_str::<IntegralCfg>("friends = [u8]")
+            .expect_err("konst must be explicit");
+        assert_eq!(error.to_string(), "missing required `konst` argument");
     }
 }

@@ -6,7 +6,7 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-#[typekin::integral]
+#[typekin::integral(konst = true)]
 #[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]

@@ -88,7 +88,7 @@ impl Maker {
             parse_quote! { #trait_seal::#fn_conv }
         };
         let (konst, bonst, destruct) =
-            runner::konst_bonst_and_destruct(self.cfg.flags.konst);
+            runner::konst_bonst_and_destruct(self.cfg.konst);
 
         let mut stream = TokenStream::new();
 
@@ -459,7 +459,7 @@ impl Maker {
         let fp_get_raw = &self.fp_get_raw;
 
         let (konst, bonst, destruct) =
-            runner::konst_bonst_and_destruct(self.cfg.flags.konst);
+            runner::konst_bonst_and_destruct(self.cfg.konst);
 
         let mut stream = TokenStream::new();
 

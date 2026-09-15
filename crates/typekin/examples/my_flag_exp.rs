@@ -13,14 +13,14 @@ extern crate std;
 mod subject {
     #[repr(u128)]
     #[derive(
+        :: core :: fmt :: Debug,
         :: core :: hash :: Hash,
         :: core :: marker :: Copy,
-        :: core :: fmt :: Debug,
     )]
-    #[derive_const(::core::cmp::Eq)]
-    #[derive_const(::core::cmp::Ord)]
     #[derive_const(::core::cmp::PartialOrd)]
+    #[derive_const(::core::cmp::Eq)]
     #[derive_const(::core::clone::Clone)]
+    #[derive_const(::core::cmp::Ord)]
     #[derive_const(::core::cmp::PartialEq)]
     pub enum MyFlag {
         Z = 0,
@@ -407,12 +407,12 @@ mod subject {
                 return MyFlag::raw(*self);
             }
         }
-        const impl FriendMath for u128 {}
-        const impl FriendBit for u128 {}
-        const impl FriendRel for u128 {}
         const impl FriendMake for u128 {}
-        const impl FriendRel for MyFlag {}
+        const impl FriendMath for u128 {}
+        const impl FriendRel for u128 {}
+        const impl FriendBit for u128 {}
         const impl FriendBit for MyFlag {}
+        const impl FriendRel for MyFlag {}
         const impl<T> ::core::cmp::PartialEq<T> for MyFlagValue
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,

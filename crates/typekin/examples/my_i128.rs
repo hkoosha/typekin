@@ -8,7 +8,7 @@
 #![feature(derive_const)]
 
 mod subject {
-    #[typekin::integral(friends = [i128(conv = self, level = [Full])])]
+    #[typekin::integral(konst = true, friends = [i128(conv = self, level = [Full])])]
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]

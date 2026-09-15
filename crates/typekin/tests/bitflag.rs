@@ -8,7 +8,7 @@ mod test {
         friends = [u8(conv = self, level = [Bit])],
         integral = [
             friends = [u8(conv = self, level = [Full])],
-            without = [konst]
+            konst = false,
         ],
     )]
     pub enum Permission {

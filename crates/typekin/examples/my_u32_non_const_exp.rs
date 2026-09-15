@@ -6,10 +6,10 @@ mod subject {
     #[repr(transparent)]
     #[derive(
         :: core :: cmp :: Ord,
-        :: core :: fmt :: Debug,
-        :: core :: clone :: Clone,
-        :: core :: marker :: Copy,
         :: core :: cmp :: Eq,
+        :: core :: fmt :: Debug,
+        :: core :: marker :: Copy,
+        :: core :: clone :: Clone,
     )]
     pub struct MyExample(u32);
     #[allow(dead_code)]
@@ -375,8 +375,8 @@ mod subject {
         }
         impl FriendBit for u32 {}
         impl FriendMath for u32 {}
-        impl FriendRel for u32 {}
         impl FriendMake for u32 {}
+        impl FriendRel for u32 {}
         impl<T> ::core::cmp::PartialEq<T> for MyExample
         where
             T: FriendRel,

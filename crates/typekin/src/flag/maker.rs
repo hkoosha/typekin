@@ -186,7 +186,7 @@ impl Maker {
         let el = &self.el;
 
         let all_bits = self.items.iter();
-        let konst = crate::runner::konst(self.cfg.int.flags.konst);
+        let konst = crate::runner::konst(self.cfg.int.konst);
         return quote! {
             type Flag = #ty;
             type Value = #vl;
@@ -691,7 +691,7 @@ impl Maker {
             crate::runner::snake_case_of(&self.ty.to_string())
         );
         let (konst, bonst, _) =
-            crate::runner::konst_bonst_and_destruct(self.cfg.int.flags.konst);
+            crate::runner::konst_bonst_and_destruct(self.cfg.int.konst);
 
         let seal_impls = self
             .cfg
@@ -831,7 +831,7 @@ impl Maker {
     fn ekran_enum_value_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let value = &self.ty_value;
-        let konst = crate::runner::konst(self.cfg.int.flags.konst);
+        let konst = crate::runner::konst(self.cfg.int.konst);
         let trait_seal = &self.trait_seal;
         let trait_friend_bit = &self.trait_friend_bit;
         let fn_conv = format_ident!(
@@ -839,7 +839,7 @@ impl Maker {
             crate::runner::snake_case_of(&self.ty.to_string())
         );
         let (_, bonst, destruct) =
-            crate::runner::konst_bonst_and_destruct(self.cfg.int.flags.konst);
+            crate::runner::konst_bonst_and_destruct(self.cfg.int.konst);
         let mut stream = TokenStream::new();
 
         if self.cfg.int.flags.impl_math_shr {
@@ -967,7 +967,7 @@ impl Maker {
     fn ekran_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let items: &[Ident] = &self.items;
-        let konst = crate::runner::konst(self.cfg.int.flags.konst);
+        let konst = crate::runner::konst(self.cfg.int.konst);
 
         let name_arms = items
             .into_iter()
@@ -1024,7 +1024,7 @@ impl Maker {
     fn ekran_value_t(&self) -> TokenStream {
         let ty_value = &self.ty_value;
         let el = &self.el;
-        let derive_clone = if self.cfg.int.flags.konst {
+        let derive_clone = if self.cfg.int.konst {
             quote! { #[derive_const(Clone)] }
         }
         else {

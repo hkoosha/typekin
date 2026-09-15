@@ -10,6 +10,7 @@ mod test {
     use core::cmp::Ordering;
 
     #[typekin::integral(
+        konst = true,
         friends = [u32(conv = self, level = [Full])]
     )]
     #[repr(transparent)]
@@ -17,6 +18,7 @@ mod test {
     struct Number(u32);
 
     #[typekin::integral(
+        konst = true,
         friends = [i32(conv = self, level = [Full])]
     )]
     #[repr(transparent)]
@@ -33,6 +35,7 @@ mod test {
     }
 
     #[typekin::integral(
+        konst = true,
         friends = [u8(conv = self, level = [Full])],
         fn_validator = is_even
     )]
@@ -41,6 +44,7 @@ mod test {
     struct Even(u8);
 
     #[typekin::integral(
+        konst = true,
         friends = [u16(conv = self, level = [Full])],
         fn_get_raw = Self::value
     )]

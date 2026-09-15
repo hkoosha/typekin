@@ -31,6 +31,7 @@ pub(crate) struct BitflagCfg {
 impl Parse for BitflagCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
+        let mut has_integral = false;
 
         runner::parse_inner_attributes(input, |attr, span, rest| {
             match attr {
@@ -40,7 +41,8 @@ impl Parse for BitflagCfg {
                 "integral" => {
                     this.int = Box::new(IntegralCfg::parse(
                         &runner::unbracket(&input)?,
-                    )?)
+                    )?);
+                    has_integral = true;
                 }
                 _ => return span.fail("unknown bitflag arg"),
             };
@@ -48,6 +50,37 @@ impl Parse for BitflagCfg {
             return Ok(());
         })?;
 
+        if !has_integral {
+            return Err(syn::Error::new(
+                input.span(),
+                "missing required `konst` argument in `integral = [...]`",
+            ));
+        }
+
         return Ok(this);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BitflagCfg;
+
+    #[test]
+    fn accepts_explicit_nested_konst() {
+        let config = syn::parse_str::<BitflagCfg>("integral = [konst = false]")
+            .expect("explicit nested konst should parse");
+        assert!(!config.int.konst);
+    }
+
+    #[test]
+    fn rejects_missing_konst() {
+        let error = match syn::parse_str::<BitflagCfg>("friends = [u8]") {
+            Ok(_) => panic!("konst must be explicit"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "missing required `konst` argument in `integral = [...]`",
+        );
     }
 }
