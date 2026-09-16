@@ -129,7 +129,7 @@ Generation of individual features can be disabled (check integral's
 [cfg][integral_cfg] and bitflag's [cfg][bitflag_cfg])
 
 [integral_cfg]: ./crates/typekin/src/integral/cfg.rs
-[bitflag_cfg]: ./crates/typekin/src/flag/cfg.rs
+[bitflag_cfg]: crates/typekin/src/bitflag/cfg.rs
 
 ```rust
 #[typekin::integral(

@@ -89,14 +89,14 @@ impl Parse for FriendReq {
         let mut level = HashSet::<FriendshipLevel>::with_capacity(2);
         let mut conv = None::<Path>;
 
-        runner::parse_optional_attributes(input, |name, span, stream| {
+        runner::parse_optional_attributes(input, |name, stream| {
             match name {
                 "level" => level = runner::list(stream)?.collect(),
                 "conv" => conv = Some(stream.parse()?),
-                _ => return span.fail("unknown arg"),
+                _ => return stream.span().fail("unknown arg"),
             }
 
-            return Ok(());
+            return Ok(true);
         })?;
 
         if level.contains(&FriendshipLevel::Full) {

@@ -13,14 +13,14 @@ extern crate std;
 mod subject {
     #[repr(u128)]
     #[derive(
-        :: core :: fmt :: Debug,
         :: core :: hash :: Hash,
         :: core :: marker :: Copy,
+        :: core :: fmt :: Debug,
     )]
-    #[derive_const(::core::cmp::PartialOrd)]
-    #[derive_const(::core::cmp::Eq)]
-    #[derive_const(::core::clone::Clone)]
     #[derive_const(::core::cmp::Ord)]
+    #[derive_const(::core::cmp::PartialOrd)]
+    #[derive_const(::core::clone::Clone)]
+    #[derive_const(::core::cmp::Eq)]
     #[derive_const(::core::cmp::PartialEq)]
     pub enum MyFlag {
         Z = 0,
@@ -31,94 +31,94 @@ mod subject {
     #[repr(transparent)]
     #[derive(:: core :: marker :: Copy, :: core :: fmt :: Debug)]
     #[derive_const(::core::clone::Clone)]
-    pub struct MyFlagValue(u128);
+    pub struct MyFlags(u128);
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
-        const impl ::core::convert::Into<u128> for MyFlagValue {
+        const impl ::core::convert::Into<u128> for MyFlags {
             #[inline(always)]
             fn into(self) -> u128 {
-                return MyFlagValue::into_u128(self);
+                return MyFlags::into_u128(self);
             }
         }
-        const impl ::core::convert::TryInto<usize> for MyFlagValue {
+        const impl ::core::convert::TryInto<usize> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<usize, Self::Error> {
-                return MyFlagValue::try_into_usize(self);
+                return MyFlags::try_into_usize(self);
             }
         }
-        const impl ::core::convert::TryInto<isize> for MyFlagValue {
+        const impl ::core::convert::TryInto<isize> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
-                return MyFlagValue::try_into_isize(self);
+                return MyFlags::try_into_isize(self);
             }
         }
-        const impl ::core::convert::TryInto<u8> for MyFlagValue {
+        const impl ::core::convert::TryInto<u8> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
-                return MyFlagValue::try_into_u8(self);
+                return MyFlags::try_into_u8(self);
             }
         }
-        const impl ::core::convert::TryInto<u16> for MyFlagValue {
+        const impl ::core::convert::TryInto<u16> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
-                return MyFlagValue::try_into_u16(self);
+                return MyFlags::try_into_u16(self);
             }
         }
-        const impl ::core::convert::TryInto<u32> for MyFlagValue {
+        const impl ::core::convert::TryInto<u32> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u32, Self::Error> {
-                return MyFlagValue::try_into_u32(self);
+                return MyFlags::try_into_u32(self);
             }
         }
-        const impl ::core::convert::TryInto<u64> for MyFlagValue {
+        const impl ::core::convert::TryInto<u64> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u64, Self::Error> {
-                return MyFlagValue::try_into_u64(self);
+                return MyFlags::try_into_u64(self);
             }
         }
-        const impl ::core::convert::TryInto<i8> for MyFlagValue {
+        const impl ::core::convert::TryInto<i8> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
-                return MyFlagValue::try_into_i8(self);
+                return MyFlags::try_into_i8(self);
             }
         }
-        const impl ::core::convert::TryInto<i16> for MyFlagValue {
+        const impl ::core::convert::TryInto<i16> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
-                return MyFlagValue::try_into_i16(self);
+                return MyFlags::try_into_i16(self);
             }
         }
-        const impl ::core::convert::TryInto<i32> for MyFlagValue {
+        const impl ::core::convert::TryInto<i32> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
-                return MyFlagValue::try_into_i32(self);
+                return MyFlags::try_into_i32(self);
             }
         }
-        const impl ::core::convert::TryInto<i64> for MyFlagValue {
+        const impl ::core::convert::TryInto<i64> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i64, Self::Error> {
-                return MyFlagValue::try_into_i64(self);
+                return MyFlags::try_into_i64(self);
             }
         }
-        const impl ::core::convert::TryInto<i128> for MyFlagValue {
+        const impl ::core::convert::TryInto<i128> for MyFlags {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i128, Self::Error> {
-                return MyFlagValue::try_into_i128(self);
+                return MyFlags::try_into_i128(self);
             }
         }
-        const impl ::core::ops::Shr<usize> for MyFlagValue {
+        const impl ::core::ops::Shr<usize> for MyFlags {
             type Output = Self;
             #[inline(always)]
             fn shr(
@@ -128,7 +128,7 @@ mod subject {
                 return self._shr(rhs);
             }
         }
-        const impl ::core::ops::Shl<usize> for MyFlagValue {
+        const impl ::core::ops::Shl<usize> for MyFlags {
             type Output = Self;
             #[inline(always)]
             fn shl(
@@ -138,7 +138,7 @@ mod subject {
                 return self._shl(rhs);
             }
         }
-        const impl ::core::ops::ShrAssign<usize> for MyFlagValue {
+        const impl ::core::ops::ShrAssign<usize> for MyFlags {
             #[inline(always)]
             fn shr_assign(
                 &mut self,
@@ -147,7 +147,7 @@ mod subject {
                 *self = self._shr(other);
             }
         }
-        const impl ::core::ops::ShlAssign<usize> for MyFlagValue {
+        const impl ::core::ops::ShlAssign<usize> for MyFlags {
             #[inline(always)]
             fn shl_assign(
                 &mut self,
@@ -156,71 +156,71 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        const impl ::core::ops::BitAndAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::BitAndAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn bitand_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._bitand(other.0);
             }
         }
-        const impl ::core::ops::AddAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::AddAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn add_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._add(other.0);
             }
         }
-        const impl ::core::ops::SubAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::SubAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn sub_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._sub(other.0);
             }
         }
-        const impl ::core::ops::MulAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::MulAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn mul_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._mul(other.0);
             }
         }
-        const impl ::core::ops::DivAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::DivAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn div_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._div(other.0);
             }
         }
-        const impl ::core::ops::RemAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::RemAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn rem_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._rem(other.0);
             }
         }
-        const impl ::core::ops::BitOrAssign<MyFlagValue> for MyFlagValue {
+        const impl ::core::ops::BitOrAssign<MyFlags> for MyFlags {
             #[inline(always)]
             fn bitor_assign(
                 &mut self,
-                other: MyFlagValue,
+                other: MyFlags,
             ) {
                 *self = self._bitor(other.0);
             }
         }
-        const impl ::core::cmp::Eq for MyFlagValue {}
-        const impl ::core::cmp::Ord for MyFlagValue {
+        const impl ::core::cmp::Eq for MyFlags {}
+        const impl ::core::cmp::Ord for MyFlags {
             #[inline(always)]
             fn cmp(
                 &self,
@@ -229,14 +229,14 @@ mod subject {
                 return self.partial_cmp(other).unwrap();
             }
         }
-        if !(::core::mem::size_of::<MyFlagValue>()
+        if !(::core::mem::size_of::<MyFlags>()
             == ::core::mem::size_of::<u128>())
         {
             {
                 panic!("invalid memory layout: #ty(#el) != #el");
             };
         };
-        const impl<T> ::core::ops::Add<T> for MyFlagValue
+        const impl<T> ::core::ops::Add<T> for MyFlags
         where
             T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
@@ -246,11 +246,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._add(it);
             }
         }
-        const impl<T> ::core::ops::Sub<T> for MyFlagValue
+        const impl<T> ::core::ops::Sub<T> for MyFlags
         where
             T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
@@ -260,11 +260,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._sub(it);
             }
         }
-        const impl<T> ::core::ops::Mul<T> for MyFlagValue
+        const impl<T> ::core::ops::Mul<T> for MyFlags
         where
             T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
@@ -274,11 +274,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._mul(it);
             }
         }
-        const impl<T> ::core::ops::Div<T> for MyFlagValue
+        const impl<T> ::core::ops::Div<T> for MyFlags
         where
             T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
@@ -288,11 +288,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._div(it);
             }
         }
-        const impl<T> ::core::ops::Rem<T> for MyFlagValue
+        const impl<T> ::core::ops::Rem<T> for MyFlags
         where
             T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
@@ -302,11 +302,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._rem(it);
             }
         }
-        const impl<T> ::core::ops::BitAnd<T> for MyFlagValue
+        const impl<T> ::core::ops::BitAnd<T> for MyFlags
         where
             T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
@@ -316,11 +316,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._bitand(it);
             }
         }
-        const impl<T> ::core::ops::BitOr<T> for MyFlagValue
+        const impl<T> ::core::ops::BitOr<T> for MyFlags
         where
             T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
@@ -330,11 +330,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._bitor(it);
             }
         }
-        const impl<T> ::core::ops::BitXor<T> for MyFlagValue
+        const impl<T> ::core::ops::BitXor<T> for MyFlags
         where
             T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
@@ -344,21 +344,21 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flag_value(&rhs);
+                let it = Seal::conv_my_flags(&rhs);
                 return self._bitxor(it);
             }
         }
-        const impl Seal for MyFlagValue {
+        const impl Seal for MyFlags {
             #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
+            fn conv_my_flags(&self) -> u128 {
                 return Self::raw(*self);
             }
         }
-        const impl FriendMake for MyFlagValue {}
-        const impl FriendMath for MyFlagValue {}
-        const impl FriendBit for MyFlagValue {}
-        const impl FriendRel for MyFlagValue {}
-        impl ::core::fmt::Binary for MyFlagValue {
+        const impl FriendMake for MyFlags {}
+        const impl FriendMath for MyFlags {}
+        const impl FriendBit for MyFlags {}
+        const impl FriendRel for MyFlags {}
+        impl ::core::fmt::Binary for MyFlags {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -367,7 +367,7 @@ mod subject {
                 return ::core::fmt::Binary::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::Octal for MyFlagValue {
+        impl ::core::fmt::Octal for MyFlags {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -376,7 +376,7 @@ mod subject {
                 return ::core::fmt::Octal::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::LowerHex for MyFlagValue {
+        impl ::core::fmt::LowerHex for MyFlags {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -385,7 +385,7 @@ mod subject {
                 return ::core::fmt::LowerHex::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::UpperHex for MyFlagValue {
+        impl ::core::fmt::UpperHex for MyFlags {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -396,14 +396,14 @@ mod subject {
         }
         const impl Seal for u128 {
             #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
+            fn conv_my_flags(&self) -> u128 {
                 let it: u128 = (*self).into();
                 return it;
             }
         }
         const impl Seal for MyFlag {
             #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
+            fn conv_my_flags(&self) -> u128 {
                 return MyFlag::raw(*self);
             }
         }
@@ -413,7 +413,7 @@ mod subject {
         const impl FriendBit for u128 {}
         const impl FriendBit for MyFlag {}
         const impl FriendRel for MyFlag {}
-        const impl<T> ::core::cmp::PartialEq<T> for MyFlagValue
+        const impl<T> ::core::cmp::PartialEq<T> for MyFlags
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,
         {
@@ -423,11 +423,11 @@ mod subject {
                 rhs: &T,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_flag_value(rhs);
+                let rhs = Seal::conv_my_flags(rhs);
                 return lhs == rhs;
             }
         }
-        const impl<T> ::core::cmp::PartialOrd<T> for MyFlagValue
+        const impl<T> ::core::cmp::PartialOrd<T> for MyFlags
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,
         {
@@ -437,20 +437,20 @@ mod subject {
                 rhs: &T,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_flag_value(rhs);
+                let rhs = Seal::conv_my_flags(rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
         const trait Seal {
-            fn conv_my_flag_value(&self) -> u128;
+            fn conv_my_flags(&self) -> u128;
         }
         const impl<T> Seal for &T
         where
             T: [const] Seal,
         {
             #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
-                return Seal::conv_my_flag_value(&**self);
+            fn conv_my_flags(&self) -> u128 {
+                return Seal::conv_my_flags(&**self);
             }
         }
         const impl<T> Seal for &mut T
@@ -458,8 +458,8 @@ mod subject {
             T: [const] Seal,
         {
             #[inline(always)]
-            fn conv_my_flag_value(&self) -> u128 {
-                return Seal::conv_my_flag_value(&**self);
+            fn conv_my_flags(&self) -> u128 {
+                return Seal::conv_my_flags(&**self);
             }
         }
         const trait FriendMake: [const] Seal {}
@@ -474,14 +474,14 @@ mod subject {
         const trait FriendRel: [const] Seal {}
         const impl<T> FriendRel for &T where T: [const] FriendRel {}
         const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
-        impl MyFlagValue {
+        impl MyFlags {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub const fn of<T>(it: T) -> MyFlagValue
+            pub const fn of<T>(it: T) -> MyFlags
             where
                 T: [const] FriendMake + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_flag_value(&it);
+                let this = Seal::conv_my_flags(&it);
                 return Self::_unchecked(this);
             }
             #[must_use]
@@ -710,7 +710,7 @@ mod subject {
     #[allow(unused_qualifications)]
     const _: () = {
         type Flag = MyFlag;
-        type Value = MyFlagValue;
+        type Value = MyFlags;
         struct IterItems {
             index: usize,
         }
@@ -1189,7 +1189,7 @@ mod subject {
             }
         }
         const impl ::core::ops::Shr<usize> for MyFlag {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn shr(
                 self,
@@ -1199,7 +1199,7 @@ mod subject {
             }
         }
         const impl ::core::ops::Shl<usize> for MyFlag {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn shl(
                 self,
@@ -1212,7 +1212,7 @@ mod subject {
         where
             T: [const] BitFriendBit + [const] ::core::marker::Destruct,
         {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn bitand(
                 self,
@@ -1221,30 +1221,28 @@ mod subject {
                 let rhs = BitSeal::conv_my_flag(&rhs);
                 return self
                     .into_value()
-                    .intersection(MyFlagValue::from_bits_retain(rhs));
+                    .intersection(MyFlags::from_bits_retain(rhs));
             }
         }
         const impl<T> ::core::ops::BitOr<T> for MyFlag
         where
             T: [const] BitFriendBit + [const] ::core::marker::Destruct,
         {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn bitor(
                 self,
                 rhs: T,
             ) -> Self::Output {
                 let rhs = BitSeal::conv_my_flag(&rhs);
-                return self
-                    .into_value()
-                    .union(MyFlagValue::from_bits_retain(rhs));
+                return self.into_value().union(MyFlags::from_bits_retain(rhs));
             }
         }
         const impl<T> ::core::ops::BitXor<T> for MyFlag
         where
             T: [const] BitFriendBit + [const] ::core::marker::Destruct,
         {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn bitxor(
                 self,
@@ -1253,29 +1251,29 @@ mod subject {
                 let rhs = BitSeal::conv_my_flag(&rhs);
                 return self
                     .into_value()
-                    .symmetric_difference(MyFlagValue::from_bits_retain(rhs));
+                    .symmetric_difference(MyFlags::from_bits_retain(rhs));
             }
         }
-        const impl ::core::cmp::PartialEq<MyFlagValue> for MyFlag {
+        const impl ::core::cmp::PartialEq<MyFlags> for MyFlag {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &MyFlagValue,
+                rhs: &MyFlags,
             ) -> bool {
                 return self.raw() == rhs.raw();
             }
         }
-        const impl ::core::cmp::PartialOrd<MyFlagValue> for MyFlag {
+        const impl ::core::cmp::PartialOrd<MyFlags> for MyFlag {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &MyFlagValue,
+                rhs: &MyFlags,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 return self.raw().partial_cmp(&rhs.raw());
             }
         }
         const impl ::core::ops::Not for MyFlag {
-            type Output = MyFlagValue;
+            type Output = MyFlags;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self.into_value().complemented();
@@ -1287,16 +1285,16 @@ mod subject {
                 return MyFlag::raw(*self);
             }
         }
-        const impl BitSeal for MyFlagValue {
+        const impl BitSeal for MyFlags {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
-                return MyFlagValue::raw(*self);
+                return MyFlags::raw(*self);
             }
         }
-        const impl BitFriendRel for MyFlag {}
         const impl BitFriendBit for MyFlag {}
-        const impl BitFriendRel for MyFlagValue {}
-        const impl BitFriendBit for MyFlagValue {}
+        const impl BitFriendRel for MyFlag {}
+        const impl BitFriendBit for MyFlags {}
+        const impl BitFriendRel for MyFlags {}
         const trait BitSeal {
             fn conv_my_flag(&self) -> u128;
         }
@@ -1370,7 +1368,7 @@ mod subject {
     }
 }
 type Subject = subject::MyFlag;
-type Value = subject::MyFlagValue;
+type Value = subject::MyFlags;
 fn main() {
     let lhs = Subject::A;
     let rhs = Subject::B.into_value();

@@ -1,5 +1,5 @@
-use crate::flag::cfg::BitflagCfg;
-use crate::flag::maker::Maker;
+use crate::bitflag::cfg::BitflagCfg;
+use crate::bitflag::maker::Maker;
 use crate::runner;
 use crate::runner::MkErr;
 use quote::quote;

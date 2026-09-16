@@ -13,6 +13,7 @@ mod subject {
     #[derive(Copy, Debug, Hash)]
     #[repr(u128)]
     #[typekin::bitflag(
+        value_name_suffix = "s",
         integral = [
             konst = true,
             friends = [u128, MyFlag(level=[Bit])] // Only for test utils.
@@ -35,7 +36,7 @@ mod subject {
 }
 
 type Subject = subject::MyFlag;
-type Value = subject::MyFlagValue;
+type Value = subject::MyFlags;
 
 fn main() {
     let lhs = Subject::A;

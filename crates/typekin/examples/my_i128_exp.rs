@@ -11,7 +11,7 @@
 extern crate std;
 mod subject {
     #[repr(transparent)]
-    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
+    #[derive(:: core :: marker :: Copy, :: core :: fmt :: Debug)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyU32(i128);
     #[allow(dead_code)]
@@ -389,10 +389,10 @@ mod subject {
                 return it;
             }
         }
+        const impl FriendRel for i128 {}
+        const impl FriendBit for i128 {}
         const impl FriendMake for i128 {}
         const impl FriendMath for i128 {}
-        const impl FriendBit for i128 {}
-        const impl FriendRel for i128 {}
         const impl<T> ::core::cmp::PartialEq<T> for MyU32
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,

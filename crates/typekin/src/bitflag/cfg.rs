@@ -1,8 +1,10 @@
 use crate::integral::cfg::IntegralCfg;
 use crate::runner;
-use crate::runner::{MkErr, mk_flags};
+use crate::runner::mk_flags;
 use crate::type_friendship::FriendReq;
-use syn::parse::{Parse, ParseStream};
+use syn::bracketed;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 
 mk_flags! {
     #[flag_default(bool=true, str="")]
@@ -10,6 +12,7 @@ mk_flags! {
     pub(crate) struct BitFlags {
         pub make_value: bool,
         pub impl_value: bool,
+
         pub value_name: String,
         pub value_name_suffix: String = "Value",
 
@@ -33,21 +36,38 @@ impl Parse for BitflagCfg {
         let mut this = Self::default();
         let mut has_integral = false;
 
-        runner::parse_inner_attributes(input, |attr, span, rest| {
+        runner::parse_inner_attributes(input, |attr, rest| {
             match attr {
                 "with" => this.bit.parse_from(rest, true)?,
                 "without" => this.bit.parse_from(rest, false)?,
                 "friends" => this.friends = runner::list(rest)?.collect(),
+                "value_name_suffix" => {
+                    let as_str: syn::LitStr = input.parse()?;
+                    if as_str.value().is_empty() {
+                        this.bit.value_name_suffix = "".to_string();
+                    }
+                    else {
+                        let as_idn: syn::Ident =
+                            syn::parse_str(&as_str.value())?;
+                        this.bit.value_name_suffix = as_idn.to_string();
+                    }
+                }
+                "value_name" => {
+                    let as_str: syn::LitStr = input.parse()?;
+                    let as_idn: syn::Ident = syn::parse_str(&as_str.value())?;
+                    this.bit.value_name = as_idn.to_string();
+                }
                 "integral" => {
-                    this.int = Box::new(IntegralCfg::parse(
-                        &runner::unbracket(&input)?,
-                    )?);
+                    let content;
+                    let _ = bracketed!(content in input);
+                    let cfg = IntegralCfg::parse(&content)?;
+                    this.int = Box::new(cfg);
                     has_integral = true;
                 }
-                _ => return span.fail("unknown bitflag arg"),
+                _ => {}
             };
 
-            return Ok(());
+            return Ok(true);
         })?;
 
         if !has_integral {

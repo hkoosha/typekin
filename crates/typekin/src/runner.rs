@@ -1,5 +1,6 @@
+use crate::value_type::N;
+use proc_macro2::Ident;
 use proc_macro2::TokenStream;
-use proc_macro2::{Ident, Span};
 use quote::quote;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -12,50 +13,9 @@ use syn::bracketed;
 use syn::meta::ParseNestedMeta;
 use syn::parenthesized;
 use syn::parse::Parse;
-use syn::parse::ParseBuffer;
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-
-pub(crate) trait Merge {
-    #[must_use]
-    fn merge(
-        self,
-        other: Self,
-    ) -> Self;
-}
-
-impl Merge for TokenStream {
-    fn merge(
-        mut self,
-        other: Self,
-    ) -> Self {
-        self.extend(other);
-        return self;
-    }
-}
-
-pub(crate) trait Merged {
-    type Output;
-
-    #[must_use]
-    fn merged(self) -> Self::Output;
-}
-
-impl<I> Merged for I
-where
-    I: Iterator<Item: Merge + Default>,
-{
-    type Output = I::Item;
-
-    fn merged(self) -> Self::Output {
-        return self
-            .reduce(|a, b| {
-                return a.merge(b);
-            })
-            .unwrap_or_default();
-    }
-}
 
 macro_rules! mk_flags {
     (
@@ -103,9 +63,12 @@ macro_rules! mk_flags {
                 let mut duplicated = Vec::with_capacity(0);
                 let mut attrs = std::collections::HashMap::with_capacity(128);
 
-                let input = $crate::runner::unbracket(input)?;
+                let stuff;
+                let _ = syn::bracketed!(stuff in input);
 
-                $crate::runner::split_comma::<syn::Ident>(&input)?
+                syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::
+                    parse_terminated(&stuff)?
+                    .into_iter()
                     .map(|it| (it.to_string(), it.span()))
                     .for_each(|(name, span)| {
                         let v = attrs.entry(name).or_insert((0usize, span));
@@ -130,7 +93,7 @@ macro_rules! mk_flags {
                     .map(|it| it.1)
                     .reduce(|a, b| a.join(b).expect("bad spans"))
                 {
-                    let err = "unknown flags";
+                    let err = "unknown flag";
                     return $crate::runner::MkErr::fail(&span, err);
                 };
 
@@ -381,11 +344,10 @@ macro_rules! mk_flags {
     };
 
     (@define, [$def_bool:expr, $def_str:expr], $typ:tt,   [$($ignore:tt)*]) => {
-        compile_error!("unknown flag type: {}", stringify!($typ))
+        compile_error!("unknown bitflag type: {}", stringify!($typ))
     };
 }
 
-use crate::value_type::N;
 pub(crate) use mk_flags;
 
 pub(crate) fn list<T: Parse>(
@@ -398,20 +360,6 @@ pub(crate) fn list<T: Parse>(
         Punctuated::<T, Token![,]>::parse_terminated(&content)?.into_iter();
 
     return Ok(items);
-}
-
-pub(crate) fn split_comma<T: Parse>(
-    stream: ParseStream
-) -> syn::Result<impl Iterator<Item = T>> {
-    return Ok(
-        Punctuated::<T, Token![,]>::parse_terminated(stream)?.into_iter()
-    );
-}
-
-pub(crate) fn unbracket(stream: ParseStream) -> syn::Result<ParseBuffer> {
-    let content;
-    let _ = bracketed!(content in stream);
-    return Ok(content);
 }
 
 pub(crate) fn find_repr_n(
@@ -469,11 +417,9 @@ pub(crate) fn find_repr_transparent(
 
 pub(crate) fn parse_inner_attributes(
     input: ParseStream,
-    mut on_attr: impl FnMut(&str, Span, ParseStream) -> syn::Result<()>,
+    mut on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
     let mut seen = HashSet::with_capacity(5);
-
-    let span = input.span();
 
     while !input.is_empty() {
         let attr = {
@@ -487,7 +433,16 @@ pub(crate) fn parse_inner_attributes(
 
         input.parse::<Token![=]>()?;
 
-        on_attr(&attr, span, &input)?;
+        let span = input.span();
+        match on_attr(&attr, &input) {
+            Ok(true) => {}
+            Ok(false) => {
+                return span.fail("unknown attribute");
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
 
         seen.insert(attr);
 
@@ -501,7 +456,7 @@ pub(crate) fn parse_inner_attributes(
 
 pub(crate) fn parse_optional_attributes(
     input: ParseStream,
-    on_attr: impl FnMut(&str, Span, ParseStream) -> syn::Result<()>,
+    on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
     if !input.peek(syn::token::Paren) {
         return Ok(());
@@ -541,17 +496,6 @@ pub(crate) fn snake_case_of(it: &str) -> String {
     result
 }
 
-pub(crate) trait MkErr: Spanned {
-    fn fail<T>(
-        &self,
-        msg: impl Display,
-    ) -> Result<T, syn::Error> {
-        return Err(syn::Error::new(self.span(), msg));
-    }
-}
-
-impl<T> MkErr for T where T: Spanned {}
-
 fn backtraced<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R, String> {
     let err = Arc::new(Mutex::new(None));
 
@@ -587,13 +531,6 @@ pub(crate) fn ekran_catching(
     .into();
 }
 
-pub(crate) fn konst(is_const: bool) -> Option<TokenStream> {
-    return match is_const {
-        true => Some(quote! { const }),
-        false => None,
-    };
-}
-
 pub(crate) fn konst_bonst_and_destruct(
     is_const: bool
 ) -> (
@@ -602,7 +539,10 @@ pub(crate) fn konst_bonst_and_destruct(
     Option<TokenStream>,
 ) {
     return (
-        konst(is_const),
+        match is_const {
+            true => Some(quote! { const }),
+            false => None,
+        },
         match is_const {
             true => Some(quote! { [const] }),
             false => None,
@@ -613,3 +553,58 @@ pub(crate) fn konst_bonst_and_destruct(
         },
     );
 }
+
+// ============================================================================
+
+pub(crate) trait Merge {
+    #[must_use]
+    fn merge(
+        self,
+        other: Self,
+    ) -> Self;
+}
+
+impl Merge for TokenStream {
+    fn merge(
+        mut self,
+        other: Self,
+    ) -> Self {
+        self.extend(other);
+        return self;
+    }
+}
+
+pub(crate) trait Merged {
+    type Output;
+
+    #[must_use]
+    fn merged(self) -> Self::Output;
+}
+
+impl<I> Merged for I
+where
+    I: Iterator<Item: Merge + Default>,
+{
+    type Output = I::Item;
+
+    fn merged(self) -> Self::Output {
+        return self
+            .reduce(|a, b| {
+                return a.merge(b);
+            })
+            .unwrap_or_default();
+    }
+}
+
+// -------------------------------------
+
+pub(crate) trait MkErr: Spanned {
+    fn fail<T>(
+        &self,
+        msg: impl Display,
+    ) -> Result<T, syn::Error> {
+        return Err(syn::Error::new(self.span(), msg));
+    }
+}
+
+impl<T> MkErr for T where T: Spanned {}

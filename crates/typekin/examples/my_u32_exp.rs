@@ -11,7 +11,7 @@ extern crate std;
 mod subject {
     use std::fmt::Formatter;
     #[repr(transparent)]
-    #[derive(:: core :: marker :: Copy, :: core :: fmt :: Debug)]
+    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyU32(u32);
     #[allow(dead_code)]
@@ -383,9 +383,9 @@ mod subject {
                 return it;
             }
         }
+        const impl FriendBit for u32 {}
         const impl FriendRel for u32 {}
         const impl FriendMake for u32 {}
-        const impl FriendBit for u32 {}
         const impl FriendMath for u32 {}
         const impl<T> ::core::cmp::PartialEq<T> for MyU32
         where

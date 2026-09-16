@@ -1,10 +1,12 @@
 use crate::runner;
-use crate::runner::{MkErr, mk_flags};
+use crate::runner::mk_flags;
 use crate::type_friendship::FriendReq;
 use quote::ToTokens;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use syn::Path;
-use syn::parse::{Parse, ParseStream};
+use syn::parse::Parse;
+use syn::parse::ParseStream;
 
 mk_flags! {
     #[flag_default(bool=true, str="")]
@@ -130,7 +132,7 @@ impl Parse for IntegralCfg {
         let mut this = Self::default();
         let mut has_konst = false;
 
-        runner::parse_inner_attributes(input, |attr, span, rest| {
+        runner::parse_inner_attributes(input, |attr, rest| {
             match attr {
                 "konst" => {
                     this.konst = rest.parse::<syn::LitBool>()?.value;
@@ -141,10 +143,15 @@ impl Parse for IntegralCfg {
                 "friends" => this.friends = runner::list(rest)?.collect(),
                 "fn_get_raw" => this.fn_get_raw = Some(rest.parse()?),
                 "fn_validator" => this.fn_validator = Some(rest.parse()?),
-                _ => return span.fail("unknown integral arg"),
+                it if it.starts_with("with_") => {
+                    this.flags.parse_from(rest, true)?
+                }
+                _ => {
+                    return Ok(false);
+                }
             };
 
-            return Ok(());
+            return Ok(true);
         })?;
 
         if !has_konst {

@@ -5,9 +5,9 @@ extern crate std;
 mod subject {
     #[repr(transparent)]
     #[derive(
+        :: core :: fmt :: Debug,
         :: core :: cmp :: Ord,
         :: core :: cmp :: Eq,
-        :: core :: fmt :: Debug,
         :: core :: marker :: Copy,
         :: core :: clone :: Clone,
     )]
@@ -373,9 +373,9 @@ mod subject {
                 return it;
             }
         }
+        impl FriendMake for u32 {}
         impl FriendBit for u32 {}
         impl FriendMath for u32 {}
-        impl FriendMake for u32 {}
         impl FriendRel for u32 {}
         impl<T> ::core::cmp::PartialEq<T> for MyExample
         where
