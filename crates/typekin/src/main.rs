@@ -74,7 +74,6 @@ enum Replaced {
 
 impl Replaced {
     // We'll commit some crime, good enough for this crate's purpose.
-    #[cfg(not(feature = "better-bin"))]
     fn meta_eq(
         lhs: &Meta,
         rhs: &Meta,
@@ -105,14 +104,6 @@ impl Replaced {
             (Meta::NameValue(_), Meta::NameValue(_)) => false,
             _ => false,
         };
-    }
-
-    #[cfg(feature = "better-bin")]
-    fn meta_eq(
-        lhs: &Meta,
-        rhs: &Meta,
-    ) -> bool {
-        return lhs == rhs;
     }
 
     fn is_in(

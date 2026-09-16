@@ -22,9 +22,9 @@ path = "src/main.rs"
 [lib]
 proc-macro = true
 
-[features]
-default = []
-better-bin = ["syn/extra-traits"]
+# [features]
+# default = []
+# better-bin = ["syn/extra-traits"]
 
 [dependencies]
 syn = { workspace = true }
