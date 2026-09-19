@@ -1,5 +1,9 @@
-use std::fmt::Display;
-use std::fmt::Formatter;
+#![allow(unused, dead_code)]
+
+use std::fmt::{
+    Display,
+    Formatter,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum N {
@@ -64,7 +68,6 @@ impl N {
         return &N_RUST_NAMES;
     }
 
-    #[allow(dead_code)]
     pub const fn len() -> usize {
         return Self::items().len();
     }
@@ -105,7 +108,6 @@ impl N {
         };
     }
 
-    #[allow(dead_code)]
     pub fn bits(&self) -> usize {
         return match self {
             N::USIZ => usize::BITS,
@@ -123,7 +125,22 @@ impl N {
         } as usize;
     }
 
-    #[allow(dead_code)]
+    pub fn bytes(&self) -> usize {
+        return self.bits() / 8;
+    }
+
+    pub fn words(&self) -> usize {
+        return self.bits() / 16;
+    }
+
+    pub fn dwords(&self) -> usize {
+        return self.bits() / 32;
+    }
+
+    pub fn qwords(&self) -> usize {
+        return self.bits() / 64;
+    }
+
     pub fn is_signed(&self) -> bool {
         return match self {
             N::USIZ => false,
@@ -141,7 +158,6 @@ impl N {
         };
     }
 
-    #[allow(dead_code)]
     pub fn safe_casts(&self) -> &[Self] {
         match self {
             N::USIZ => &SAFE_USIZ,
@@ -161,7 +177,6 @@ impl N {
         }
     }
 
-    #[allow(dead_code)]
     pub fn chck_casts(&self) -> &[Self] {
         match self {
             N::USIZ => &CHCK_USIZ,
@@ -183,7 +198,6 @@ impl N {
 }
 
 impl N {
-    #[allow(unused, dead_code)]
     pub(crate) fn can_safe_cast_to(
         &self,
         to: Self,
@@ -203,7 +217,6 @@ impl Display for N {
 
 // =============================================================================
 
-#[allow(dead_code)]
 const CHCK_U008: [N; 1] = [
     // N::USIZ,
     // N::ISIZ,
@@ -219,7 +232,6 @@ const CHCK_U008: [N; 1] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U008: [N; 11] = [
     N::USIZ,
     N::ISIZ,
@@ -235,7 +247,6 @@ const SAFE_U008: [N; 11] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U016_16: [N; 4] = [
     // N::USIZ,
     N::ISIZ,
@@ -251,7 +262,6 @@ const CHCK_U016_16: [N; 4] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U016_16: [N; 8] = [
     N::USIZ,
     // N::ISIZ,
@@ -267,7 +277,6 @@ const SAFE_U016_16: [N; 8] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U016_32: [N; 3] = [
     // N::USIZ,
     // N::ISIZ,
@@ -283,7 +292,6 @@ const CHCK_U016_32: [N; 3] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U016_32: [N; 9] = [
     N::USIZ,
     N::ISIZ,
@@ -299,13 +307,10 @@ const SAFE_U016_32: [N; 9] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U016_64: [N; 3] = CHCK_U016_32;
 
-#[allow(dead_code)]
 const SAFE_U016_64: [N; 9] = SAFE_U016_32;
 
-#[allow(dead_code)]
 const CHCK_U032_16: [N; 7] = [
     N::USIZ,
     N::ISIZ,
@@ -321,7 +326,6 @@ const CHCK_U032_16: [N; 7] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U032_16: [N; 5] = [
     // N::USIZ,
     // N::ISIZ,
@@ -337,7 +341,6 @@ const SAFE_U032_16: [N; 5] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U032_32: [N; 6] = [
     // N::USIZ,
     N::ISIZ,
@@ -353,7 +356,6 @@ const CHCK_U032_32: [N; 6] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U032_32: [N; 6] = [
     N::USIZ,
     // N::ISIZ,
@@ -369,12 +371,9 @@ const SAFE_U032_32: [N; 6] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U032_64: [N; 6] = CHCK_U032_32;
-#[allow(dead_code)]
 const SAFE_U032_64: [N; 6] = SAFE_U032_32;
 
-#[allow(dead_code)]
 const CHCK_U064_16: [N; 9] = [
     N::USIZ,
     N::ISIZ,
@@ -390,7 +389,6 @@ const CHCK_U064_16: [N; 9] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U064_16: [N; 3] = [
     // N::USIZ,
     // N::ISIZ,
@@ -406,12 +404,9 @@ const SAFE_U064_16: [N; 3] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U064_32: [N; 9] = CHCK_U064_16;
-#[allow(dead_code)]
 const SAFE_U064_32: [N; 3] = SAFE_U064_16;
 
-#[allow(dead_code)]
 const CHCK_U064_64: [N; 8] = [
     // N::USIZ,
     N::ISIZ,
@@ -427,7 +422,6 @@ const CHCK_U064_64: [N; 8] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U064_64: [N; 4] = [
     N::USIZ,
     // N::ISIZ,
@@ -443,7 +437,6 @@ const SAFE_U064_64: [N; 4] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_U128: [N; 11] = [
     N::USIZ,
     N::ISIZ,
@@ -459,7 +452,6 @@ const CHCK_U128: [N; 11] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_U128: [N; 1] = [
     // N::USIZ,
     // N::ISIZ,
@@ -477,7 +469,6 @@ const SAFE_U128: [N; 1] = [
 
 // =============================================================================
 
-#[allow(dead_code)]
 const CHCK_I008: [N; 6] = [
     N::USIZ,
     // N::ISIZ,
@@ -492,7 +483,6 @@ const CHCK_I008: [N; 6] = [
     // N::I064,
     // N::I128,
 ];
-#[allow(dead_code)]
 const SAFE_I008: [N; 6] = [
     // N::USIZ,
     N::ISIZ,
@@ -508,7 +498,6 @@ const SAFE_I008: [N; 6] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I016_16: [N; 7] = [
     N::USIZ,
     // N::ISIZ,
@@ -524,7 +513,6 @@ const CHCK_I016_16: [N; 7] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I016_16: [N; 5] = [
     // N::USIZ,
     N::ISIZ,
@@ -540,7 +528,6 @@ const SAFE_I016_16: [N; 5] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I016_32: [N; 7] = [
     N::USIZ,
     // N::ISIZ,
@@ -556,7 +543,6 @@ const CHCK_I016_32: [N; 7] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I016_32: [N; 6] = [
     N::USIZ,
     N::ISIZ,
@@ -572,13 +558,10 @@ const SAFE_I016_32: [N; 6] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I016_64: [N; 7] = CHCK_I016_32;
 
-#[allow(dead_code)]
 const SAFE_I016_64: [N; 6] = SAFE_I016_32;
 
-#[allow(dead_code)]
 const CHCK_I032_16: [N; 9] = [
     N::USIZ,
     N::ISIZ,
@@ -594,7 +577,6 @@ const CHCK_I032_16: [N; 9] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I032_16: [N; 3] = [
     // N::USIZ,
     // N::ISIZ,
@@ -610,7 +592,6 @@ const SAFE_I032_16: [N; 3] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I032_32: [N; 8] = [
     N::USIZ,
     // N::ISIZ,
@@ -626,7 +607,6 @@ const CHCK_I032_32: [N; 8] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I032_32: [N; 4] = [
     // N::USIZ,
     N::ISIZ,
@@ -642,12 +622,9 @@ const SAFE_I032_32: [N; 4] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I032_64: [N; 8] = CHCK_I032_32;
-#[allow(dead_code)]
 const SAFE_I032_64: [N; 4] = SAFE_I032_32;
 
-#[allow(dead_code)]
 const CHCK_I064_16: [N; 10] = [
     N::USIZ,
     N::ISIZ,
@@ -663,7 +640,6 @@ const CHCK_I064_16: [N; 10] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I064_16: [N; 2] = [
     // N::USIZ,
     // N::ISIZ,
@@ -679,12 +655,9 @@ const SAFE_I064_16: [N; 2] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I064_32: [N; 10] = CHCK_I064_16;
-#[allow(dead_code)]
 const SAFE_I064_32: [N; 2] = SAFE_I064_16;
 
-#[allow(dead_code)]
 const CHCK_I064_64: [N; 9] = [
     N::USIZ,
     // N::ISIZ,
@@ -700,7 +673,6 @@ const CHCK_I064_64: [N; 9] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I064_64: [N; 3] = [
     // N::USIZ,
     N::ISIZ,
@@ -716,7 +688,6 @@ const SAFE_I064_64: [N; 3] = [
     N::I128,
 ];
 
-#[allow(dead_code)]
 const CHCK_I128: [N; 11] = [
     N::USIZ,
     N::ISIZ,
@@ -732,7 +703,6 @@ const CHCK_I128: [N; 11] = [
     // N::I128,
 ];
 
-#[allow(dead_code)]
 const SAFE_I128: [N; 1] = [
     // N::USIZ,
     // N::ISIZ,
@@ -750,212 +720,152 @@ const SAFE_I128: [N; 1] = [
 
 // =============================================================================
 
-#[allow(dead_code)]
 const CHCK_USIZ_16: [N; 4] = CHCK_U016_16;
-#[allow(dead_code)]
 const CHCK_USIZ_32: [N; 6] = CHCK_U032_32;
-#[allow(dead_code)]
 const CHCK_USIZ_64: [N; 8] = CHCK_U064_64;
-#[allow(dead_code)]
 const SAFE_USIZ_16: [N; 8] = SAFE_U016_16;
-#[allow(dead_code)]
 const SAFE_USIZ_32: [N; 6] = SAFE_U032_32;
-#[allow(dead_code)]
 const SAFE_USIZ_64: [N; 4] = SAFE_U064_64;
 
-#[allow(dead_code)]
 const CHCK_ISIZ_16: [N; 7] = CHCK_I016_16;
-#[allow(dead_code)]
 const CHCK_ISIZ_32: [N; 8] = CHCK_I032_32;
-#[allow(dead_code)]
 const CHCK_ISIZ_64: [N; 9] = CHCK_I064_64;
-#[allow(dead_code)]
 const SAFE_ISIZ_16: [N; 5] = SAFE_I016_16;
-#[allow(dead_code)]
 const SAFE_ISIZ_32: [N; 4] = SAFE_I032_32;
-#[allow(dead_code)]
 const SAFE_ISIZ_64: [N; 3] = SAFE_I064_64;
 
 // =============================================================================
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_I016: [N; 5] = SAFE_I016_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_I016: [N; 7] = CHCK_I016_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_I016: [N; 6] = SAFE_I016_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_I016: [N; 7] = CHCK_I016_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_I016: [N; 6] = SAFE_I016_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_I016: [N; 7] = CHCK_I016_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_I032: [N; 3] = SAFE_I032_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_I032: [N; 9] = CHCK_I032_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_I032: [N; 4] = SAFE_I032_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_I032: [N; 8] = CHCK_I032_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_I032: [N; 4] = SAFE_I032_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_I032: [N; 8] = CHCK_I032_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_I064: [N; 2] = SAFE_I064_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_I064: [N; 10] = CHCK_I064_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_I064: [N; 2] = SAFE_I064_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_I064: [N; 10] = CHCK_I064_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_I064: [N; 3] = SAFE_I064_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_I064: [N; 9] = CHCK_I064_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_ISIZ: [N; 5] = SAFE_ISIZ_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_ISIZ: [N; 7] = CHCK_ISIZ_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_ISIZ: [N; 4] = SAFE_ISIZ_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_ISIZ: [N; 8] = CHCK_ISIZ_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_ISIZ: [N; 3] = SAFE_ISIZ_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_ISIZ: [N; 9] = CHCK_ISIZ_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_USIZ: [N; 8] = SAFE_USIZ_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_USIZ: [N; 4] = CHCK_USIZ_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_USIZ: [N; 6] = SAFE_USIZ_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_USIZ: [N; 6] = CHCK_USIZ_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_USIZ: [N; 4] = SAFE_USIZ_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_USIZ: [N; 8] = CHCK_USIZ_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_U016: [N; 8] = SAFE_U016_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_U016: [N; 4] = CHCK_U016_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_U016: [N; 9] = SAFE_U016_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_U016: [N; 3] = CHCK_U016_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_U016: [N; 9] = SAFE_U016_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_U016: [N; 3] = CHCK_U016_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_U032: [N; 5] = SAFE_U032_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_U032: [N; 7] = CHCK_U032_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_U032: [N; 6] = SAFE_U032_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_U032: [N; 6] = CHCK_U032_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_U032: [N; 6] = SAFE_U032_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_U032: [N; 6] = CHCK_U032_64;
 
 // ----
 
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const SAFE_U064: [N; 3] = SAFE_U064_16;
 #[cfg(target_pointer_width = "16")]
-#[allow(dead_code)]
 const CHCK_U064: [N; 9] = CHCK_U064_16;
 
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const SAFE_U064: [N; 3] = SAFE_U064_32;
 #[cfg(target_pointer_width = "32")]
-#[allow(dead_code)]
 const CHCK_U064: [N; 9] = CHCK_U064_32;
 
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const SAFE_U064: [N; 4] = SAFE_U064_64;
 #[cfg(target_pointer_width = "64")]
-#[allow(dead_code)]
 const CHCK_U064: [N; 8] = CHCK_U064_64;

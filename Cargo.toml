@@ -7,28 +7,13 @@ members = [
 [workspace.package]
 version = "0.8.0"
 edition = "2024"
-#authors = ["Koosha H <git@koosha.io>"]
+# authors = ["Koosha H <git@koosha.io>"]
 homepage = "https://koosha.io/project/typekin"
 repository = "https://gitlab.com/hkoosha/typekin"
 # license = "MIT"
-keywords = ["newtype", "derive", "invariant"]
+keywords = ["newtype", "derive", "invariant", "no_std"]
 categories = ["data-structures"]
 rust-version = "1.97"
-
-[profile.dev]
-lto = "off"
-split-debuginfo = "unpacked"
-codegen-units = 256
-incremental = true
-opt-level = 0
-debug = "full"
-
-[profile.dev.package."*"]
-split-debuginfo = "unpacked"
-codegen-units = 256
-incremental = true
-opt-level = 0
-debug = "full"
 
 [workspace.lints.clippy]
 needless_return = "allow"

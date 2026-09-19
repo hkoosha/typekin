@@ -7,32 +7,20 @@
 #![feature(derive_const)]
 
 mod subject {
-    #[typekin::integral(
-        konst = true,
-        friends = [MyFriend(conv=MyFriend::my_conv)],
-    )]
+    use std::fmt::Formatter;
+
+    #[typekin::integral(konst = true)]
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]
     pub struct MyU32(u32);
 
-    #[repr(transparent)]
-    #[derive(Copy)]
-    #[derive_const(Clone)]
-    pub struct MyFriend(u32);
-
-    impl MyFriend {
-        const fn my_conv(self) -> u32 {
-            return self.0 * 2;
-        }
-    }
-
     impl std::fmt::Display for MyU32 {
         fn fmt(
             &self,
-            f: &mut std::fmt::Formatter<'_>,
+            f: &mut Formatter<'_>,
         ) -> std::fmt::Result {
-            write!(f, "MyU16({})", self.raw())
+            write!(f, "MyU32({})", self.raw())
         }
     }
 }
@@ -47,4 +35,6 @@ fn main() {
     let rhs = Subject::of(rhs);
 
     println!("{:?}", lhs + rhs);
+
+    println!("{:?}", lhs.lo16());
 }

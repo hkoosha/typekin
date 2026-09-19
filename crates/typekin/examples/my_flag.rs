@@ -14,24 +14,13 @@ mod subject {
     #[repr(u128)]
     #[typekin::bitflag(
         value_name_suffix = "s",
-        integral = [
-            konst = true,
-            friends = [u128, MyFlag(level=[Bit])] // Only for test utils.
-        ],
+        integral = [konst = true],
     )]
     pub enum MyFlag {
         Z = 0,
         A = 10,
         B,
         C = 40,
-    }
-
-    impl MyFlag {
-        #[inline(always)]
-        #[must_use]
-        pub const fn empty() -> Self {
-            return Self::Z;
-        }
     }
 }
 

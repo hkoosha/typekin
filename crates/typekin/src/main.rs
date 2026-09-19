@@ -1,29 +1,38 @@
 use quote::ToTokens;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt::Display;
-use std::sync::LazyLock;
-use syn::Attribute;
-use syn::Expr;
-use syn::Item;
-use syn::ItemConst;
-use syn::ItemEnum;
-use syn::ItemImpl;
-use syn::ItemMod;
-use syn::ItemStruct;
-use syn::Meta;
-use syn::Path;
-use syn::PathSegment;
-use syn::ReturnType;
-use syn::Stmt;
-use syn::Token;
-use syn::Type;
-use syn::parse::Parser;
-use syn::parse_quote;
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
-use syn::visit_mut::VisitMut;
-use syn::visit_mut::visit_item_mod_mut;
+use std::{
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    fmt::Display,
+    io::Read,
+    sync::LazyLock,
+};
+use syn::{
+    Attribute,
+    Expr,
+    Item,
+    ItemConst,
+    ItemEnum,
+    ItemImpl,
+    ItemMod,
+    ItemStruct,
+    Meta,
+    Path,
+    PathSegment,
+    ReturnType,
+    Stmt,
+    Token,
+    Type,
+    parse::Parser,
+    parse_quote,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    visit_mut::{
+        VisitMut,
+        visit_item_mod_mut,
+    },
+};
 
 pub(crate) trait MkErr: Spanned {
     fn fail<T>(
@@ -36,10 +45,10 @@ pub(crate) trait MkErr: Spanned {
 
 impl<T> MkErr for T where T: Spanned {}
 
-const HEADER: &'static str = "// AUTO-GENERATED VIA typekin-unexpand, DO NOT MODIFY\n#![allow(clippy::needless_return)]";
+const HEADER: &'static str = "// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED\n#![allow(clippy::needless_return)]";
 
 static USE_REPLACEMENTS: LazyLock<
-    HashMap<&'static [&'static str], &'static str>,
+    BTreeMap<&'static [&'static str], &'static str>,
 > = LazyLock::new(|| {
     const KV: &[(&[&str], &str)] = &[
         (&["core"], "core"),
@@ -58,7 +67,7 @@ static USE_REPLACEMENTS: LazyLock<
     return KV.iter().map(|it| *it).collect();
 });
 
-#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Debug)]
 enum Replaced {
     Clone,
     CloneTrivial,
@@ -215,8 +224,8 @@ impl Replaced {
 
 #[derive(Default)]
 struct Undo {
-    konst: HashMap<String, HashSet<Replaced>>,
-    plain: HashMap<String, HashSet<Replaced>>,
+    konst: BTreeMap<String, BTreeSet<Replaced>>,
+    plain: BTreeMap<String, BTreeSet<Replaced>>,
 }
 
 impl Undo {
@@ -239,7 +248,7 @@ impl Undo {
                 false => &mut self.plain,
             }
             .entry(subject.ident.to_string())
-            .or_insert_with(HashSet::default)
+            .or_insert_with(BTreeSet::default)
             .insert(*replacement);
 
             false
@@ -255,6 +264,12 @@ impl Undo {
         konst: bool,
     ) -> bool {
         return match item {
+            Item::ExternCrate(syn::ItemExternCrate { ident, .. })
+                if ident == "std" =>
+            {
+                false
+            }
+
             Item::Impl(it) => self.should_retain_impl(it, konst),
 
             Item::Use(it) => !it
@@ -266,15 +281,6 @@ impl Undo {
         };
     }
 
-    fn chk_items(
-        &mut self,
-        items: &mut Vec<Item>,
-        konst: bool,
-    ) {
-        items.retain(|it| self.should_retain_item(it, konst));
-        self.delete_auto_impl(items);
-    }
-
     fn chk_statements(
         &mut self,
         items: &mut Vec<Stmt>,
@@ -283,20 +289,6 @@ impl Undo {
         items.retain(|it| match it {
             Stmt::Item(it) => self.should_retain_item(it, konst),
             _ => true,
-        });
-    }
-
-    fn chk_attrs(
-        &self,
-        attrs: &mut Vec<Attribute>,
-    ) {
-        attrs.retain(|attr| {
-            return !matches!(attr.style, syn::AttrStyle::Inner(_))
-                || !attr.path().is_ident("feature")
-                || !attr
-                    .parse_args::<syn::Ident>()
-                    .ok()
-                    .map_or(false, |i| i == "prelude_import");
         });
     }
 
@@ -421,8 +413,18 @@ impl VisitMut for Undo {
     ) {
         syn::visit_mut::visit_file_mut(self, f);
 
-        self.chk_attrs(&mut f.attrs);
-        self.chk_items(&mut f.items, false);
+        f.attrs.retain(|attr| {
+            return !matches!(attr.style, syn::AttrStyle::Inner(_))
+                || !attr.path().is_ident("feature")
+                || !attr
+                    .parse_args::<syn::Ident>()
+                    .ok()
+                    .map_or(false, |i| i == "prelude_import");
+        });
+
+        f.items.retain(|it| self.should_retain_item(it, false));
+
+        self.delete_auto_impl(&mut f.items);
     }
 
     fn visit_item_const_mut(
@@ -504,21 +506,21 @@ impl Redo {
         attrs: &mut Vec<Attribute>,
     ) {
         let plain = match self.undo.plain.get(&ident) {
-            None => HashMap::with_capacity(0),
+            None => BTreeMap::new(),
             Some(work) => work
                 .iter()
                 .filter(|it| !it.is_in(attrs))
                 .flat_map(|it| it.derive(false))
-                .collect::<HashMap<_, _>>(),
+                .collect::<BTreeMap<_, _>>(),
         };
 
         let konst = match self.undo.konst.get(&ident) {
-            None => HashMap::with_capacity(0),
+            None => BTreeMap::new(),
             Some(work) => work
                 .iter()
                 .filter(|it| !it.is_in(attrs))
                 .flat_map(|it| it.derive(true))
-                .collect::<HashMap<_, _>>(),
+                .collect::<BTreeMap<_, _>>(),
         };
 
         if plain.iter().any(|it| konst.contains_key(it.0))
@@ -643,8 +645,19 @@ fn main() {
 
     let input = std::env::args().nth(1).expect("missing arg: input_file");
 
-    let body = std::fs::read_to_string(&input).expect("failed to read");
-    let mut file = syn::parse_str(&body).expect("failed to parse input file");
+    let body = match input.as_str() {
+        "" => panic!("no input file"),
+        "-" => {
+            let mut body = vec![];
+            std::io::stdin()
+                .read_to_end(&mut body)
+                .expect("failed to read stdin");
+            String::from_utf8(body).expect("bad utf8")
+        }
+        input => std::fs::read_to_string(input).expect("failed to read"),
+    };
+
+    let mut file = syn::parse_str(&body).expect("failed to parse input");
 
     let mut undo = Undo::default();
     undo.visit_file_mut(&mut file);
@@ -652,7 +665,7 @@ fn main() {
     let mut redo = Redo { undo };
     redo.visit_file_mut(&mut file);
 
-    let text = file.to_token_stream().to_token_stream().to_string();
+    let text = file.to_token_stream().to_string();
 
     println!("{}\n\n{}", HEADER, text);
 }

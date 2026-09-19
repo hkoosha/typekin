@@ -1,7 +1,5 @@
-#![allow(dead_code)]
-
 #[cfg(test)]
-mod test {
+mod tests {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
@@ -18,15 +16,25 @@ mod test {
         Execute = 0b100,
     }
 
+    // =============================================================================
+
     #[test]
-    fn value_makes_from_borrowed_integral_friend() {
+    fn value_empty() {
+        let it = Thingy::empty();
+        assert_eq!(it.raw(), 0b0);
+    }
+
+    // =============================================================================
+
+    #[test]
+    fn value_from_borrowed_integral_friend() {
         let raw = 0b011u8;
         let it = ThingyValue::of(&raw);
         assert_eq!(it.raw(), raw);
     }
 
     #[test]
-    fn value_makes_from_mutably_borrowed_integral_friend() {
+    fn value_from_mutably_borrowed_integral_friend() {
         let mut raw = 0b011u8;
         let it = ThingyValue::of(&mut raw);
         assert_eq!(it.raw(), raw);
@@ -34,14 +42,14 @@ mod test {
     }
 
     #[test]
-    fn enum_left_bitwise_accepts_borrowed_generated_value_friend() {
+    fn enum_left_bitwise_borrowed_generated_value_friend() {
         let rhs = Thingy::WritersBlock.into_value();
         let it = Thingy::ReadThing | &rhs;
         assert_eq!(it.raw(), 0b011);
     }
 
     #[test]
-    fn enum_left_bitwise_accepts_mutably_borrowed_generated_value_friend() {
+    fn enum_left_bitwise_mutably_borrowed_generated_value_friend() {
         let mut rhs = Thingy::WritersBlock.into_value();
         let it = Thingy::ReadThing | &mut rhs;
         assert_eq!(it.raw(), 0b011);
@@ -49,22 +57,20 @@ mod test {
     }
 
     #[test]
-    fn enum_left_bitwise_accepts_borrowed_configured_friend() {
+    fn enum_left_bitwise_borrowed_configured_friend() {
         let rhs = 0b010u8;
         let it = Thingy::ReadThing | &rhs;
         assert_eq!(it.raw(), 0b011);
     }
 
     #[test]
-    fn value_left_bitwise_accepts_borrowed_generated_enum_friend() {
+    fn value_left_bitwise_borrowed_generated_enum_friend() {
         let value = Thingy::ReadThing.into_value();
         let it = value | &Thingy::WritersBlock;
         assert_eq!(it.raw(), 0b011);
     }
-}
 
-#[cfg(test)]
-mod cfg_test_value_type_name_suffix {
+    // =============================================================================
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
@@ -73,7 +79,7 @@ mod cfg_test_value_type_name_suffix {
             konst = false,
         ],
     )]
-    pub enum Thingy {
+    pub enum Thingy1 {
         FirstThing = 0,
         ReadThing = 0b001,
         WritersBlock = 0b010,
@@ -81,23 +87,22 @@ mod cfg_test_value_type_name_suffix {
     }
 
     #[test]
-    fn validate_flag_value_name_suffix() {
-        let _ = ThingyHolder::all();
+    fn value_name_suffix() {
+        let _ = Thingy1Holder::all();
     }
-}
 
-#[cfg(test)]
-mod cfg_test_value_type_name {
+    // =============================================================================
+
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
-        value_name = "Thingies",
+        value_name = "Thingies2",
         value_name_suffix = "",
         integral = [
             konst = false,
         ],
     )]
-    pub enum Thingy {
+    pub enum Thingy2 {
         FirstThing = 0,
         ReadThing = 0b001,
         WritersBlock = 0b010,
@@ -105,7 +110,7 @@ mod cfg_test_value_type_name {
     }
 
     #[test]
-    fn validate_flag_value_name() {
-        let _ = Thingies::all();
+    fn value_name() {
+        let _ = Thingies2::all();
     }
 }

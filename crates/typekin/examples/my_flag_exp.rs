@@ -1,4 +1,4 @@
-// AUTO-GENERATED VIA typekin-unexpand, DO NOT MODIFY
+// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED
 #![allow(clippy::needless_return)]
 #![allow(dead_code)]
 #![feature(const_clone)]
@@ -9,19 +9,18 @@
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
-extern crate std;
 mod subject {
     #[repr(u128)]
     #[derive(
+        :: core :: fmt :: Debug,
         :: core :: hash :: Hash,
         :: core :: marker :: Copy,
-        :: core :: fmt :: Debug,
     )]
-    #[derive_const(::core::cmp::Ord)]
-    #[derive_const(::core::cmp::PartialOrd)]
     #[derive_const(::core::clone::Clone)]
     #[derive_const(::core::cmp::Eq)]
+    #[derive_const(::core::cmp::Ord)]
     #[derive_const(::core::cmp::PartialEq)]
+    #[derive_const(::core::cmp::PartialOrd)]
     pub enum MyFlag {
         Z = 0,
         A = 10,
@@ -29,7 +28,7 @@ mod subject {
         C = 40,
     }
     #[repr(transparent)]
-    #[derive(:: core :: marker :: Copy, :: core :: fmt :: Debug)]
+    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyFlags(u128);
     #[allow(dead_code)]
@@ -156,67 +155,95 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        const impl ::core::ops::BitAndAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::BitAndAssign<T> for MyFlags
+        where
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn bitand_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._bitand(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._bitand(it);
             }
         }
-        const impl ::core::ops::AddAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::AddAssign<T> for MyFlags
+        where
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn add_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._add(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._add(it);
             }
         }
-        const impl ::core::ops::SubAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::SubAssign<T> for MyFlags
+        where
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn sub_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._sub(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._sub(it);
             }
         }
-        const impl ::core::ops::MulAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::MulAssign<T> for MyFlags
+        where
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn mul_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._mul(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._mul(it);
             }
         }
-        const impl ::core::ops::DivAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::DivAssign<T> for MyFlags
+        where
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn div_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._div(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._div(it);
             }
         }
-        const impl ::core::ops::RemAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::RemAssign<T> for MyFlags
+        where
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn rem_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._rem(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._rem(it);
             }
         }
-        const impl ::core::ops::BitOrAssign<MyFlags> for MyFlags {
+        const impl<T> ::core::ops::BitOrAssign<T> for MyFlags
+        where
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
+        {
             #[inline(always)]
             fn bitor_assign(
                 &mut self,
-                other: MyFlags,
+                rhs: T,
             ) {
-                *self = self._bitor(other.0);
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._bitor(it);
             }
         }
         const impl ::core::cmp::Eq for MyFlags {}
@@ -348,16 +375,25 @@ mod subject {
                 return self._bitxor(it);
             }
         }
+        const impl<T> ::core::ops::BitXorAssign<T> for MyFlags
+        where
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn bitxor_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_flags(&rhs);
+                *self = self._bitxor(it);
+            }
+        }
         const impl Seal for MyFlags {
             #[inline(always)]
             fn conv_my_flags(&self) -> u128 {
                 return Self::raw(*self);
             }
         }
-        const impl FriendMake for MyFlags {}
-        const impl FriendMath for MyFlags {}
-        const impl FriendBit for MyFlags {}
-        const impl FriendRel for MyFlags {}
         impl ::core::fmt::Binary for MyFlags {
             fn fmt(
                 &self,
@@ -394,25 +430,29 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl Seal for u128 {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                let it: u128 = (*self).into();
-                return it;
-            }
-        }
         const impl Seal for MyFlag {
             #[inline(always)]
             fn conv_my_flags(&self) -> u128 {
                 return MyFlag::raw(*self);
             }
         }
+        const impl Seal for u128 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                let it: u128 = *self;
+                return it;
+            }
+        }
+        const impl FriendRel for MyFlag {}
+        const impl FriendBit for MyFlag {}
         const impl FriendMake for u128 {}
-        const impl FriendMath for u128 {}
         const impl FriendRel for u128 {}
         const impl FriendBit for u128 {}
-        const impl FriendBit for MyFlag {}
-        const impl FriendRel for MyFlag {}
+        const impl FriendMath for u128 {}
+        const impl FriendMake for MyFlags {}
+        const impl FriendRel for MyFlags {}
+        const impl FriendBit for MyFlags {}
+        const impl FriendMath for MyFlags {}
         const impl<T> ::core::cmp::PartialEq<T> for MyFlags
         where
             T: [const] FriendRel + [const] ::core::marker::Destruct,
@@ -483,6 +523,10 @@ mod subject {
             {
                 let this = Seal::conv_my_flags(&it);
                 return Self::_unchecked(this);
+            }
+            #[inline(always)]
+            pub const fn make(it: u128) -> MyFlags {
+                return MyFlags::of(it);
             }
             #[must_use]
             #[inline(always)]
@@ -705,144 +749,202 @@ mod subject {
                 return Self(it);
             }
         }
-    };
-    #[allow(dead_code)]
-    #[allow(unused_qualifications)]
-    const _: () = {
-        type Flag = MyFlag;
-        type Value = MyFlags;
-        struct IterItems {
-            index: usize,
-        }
-        const impl core::iter::Iterator for IterItems {
-            type Item = Flag;
-            fn next(&mut self) -> Option<Self::Item> {
-                let items = Flag::items();
-                let max = items.len();
-                while self.index < max {
-                    let next = items[self.index];
-                    self.index += 1;
-                    return Some(next);
-                }
-                return None;
-            }
-            #[inline(always)]
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                let max = Flag::items().len();
-                return (max, Some(max));
-            }
-        }
-        struct IterFlags {
-            value: Value,
-            index: usize,
-        }
-        const impl core::iter::Iterator for IterFlags {
-            type Item = Flag;
-            fn next(&mut self) -> Option<Self::Item> {
-                let items = Flag::items();
-                let max = items.len();
-                while self.index < max {
-                    let next = items[self.index];
-                    self.index += 1;
-                    if self.value.contains_all(next.into_value()) {
-                        self.value = self.value.without(next.into_value());
-                        return Some(next);
-                    }
-                }
-                return None;
-            }
-            #[inline]
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                let bound = self.value.raw().count_ones() as usize;
-                return (bound, Some(bound));
-            }
-        }
-        pub struct IterValues {
-            value: Value,
-            index: usize,
-        }
-        const impl Iterator for IterValues {
-            type Item = Value;
-            fn next(&mut self) -> Option<Self::Item> {
-                let items = Flag::items();
-                let max = items.len();
-                while self.index < max {
-                    let next = items[self.index].into_value();
-                    self.index += 1;
-                    if self.value.contains_all(next) {
-                        self.value = self.value.without(next);
-                        return Some(next);
-                    }
-                }
-                if !self.value.is_empty() {
-                    let it = self.value;
-                    self.value = Self::Item::empty();
-                    return Some(it);
-                }
-                return None;
-            }
-            #[inline]
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                let bound = (self.value.raw().count_ones() + 1) as usize;
-                return (bound, Some(bound));
-            }
-        }
-        impl ::core::convert::From<Flag> for Value {
-            #[inline(always)]
-            fn from(flag: Flag) -> Self {
-                return flag.into_value();
-            }
-        }
-        const impl ::core::ops::Not for Value {
-            type Output = Self;
-            #[inline(always)]
-            fn not(self) -> Self::Output {
-                return self.complemented();
-            }
-        }
-        impl Flag {
-            #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        impl MyFlags {
             #[must_use]
-            pub const fn raw(self) -> u128 {
-                return self as u128;
-            }
             #[inline(always)]
-            #[must_use]
-            pub const fn into_value(self) -> Value {
-                return Value::from_bits_retain(self.raw());
+            pub const fn lo64(self) -> u64 {
+                return self.qword0();
             }
             #[must_use]
             #[inline(always)]
-            pub const fn all() -> Value {
-                #[allow(clippy::unnecessary_cast)]
-                return Value::from_bits_retain(
-                    0 as u128
-                        | (MyFlag::Z as u128)
-                        | (MyFlag::A as u128)
-                        | (MyFlag::B as u128)
-                        | (MyFlag::C as u128),
-                );
+            pub const fn hi64(self) -> u64 {
+                return self.qword1();
             }
             #[must_use]
             #[inline(always)]
-            pub const fn iter() -> impl Iterator<Item = Self> {
-                return IterItems { index: 0 };
+            pub const fn byte0(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 0usize)) & (0xFF as u128))
+                    as u8;
             }
             #[must_use]
             #[inline(always)]
-            pub const fn iter_values() -> impl Iterator<Item = Value> {
-                return Value::all().iter();
+            pub const fn byte1(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 1usize)) & (0xFF as u128))
+                    as u8;
             }
             #[must_use]
             #[inline(always)]
-            pub const fn inserted(
-                self,
-                other: Self,
-            ) -> Value {
-                return self.into_value().inserted(other.into_value());
+            pub const fn byte2(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 2usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte3(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 3usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte4(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 4usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte5(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 5usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte6(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 6usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte7(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 7usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte8(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 8usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte9(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 9usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte10(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 10usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte11(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 11usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte12(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 12usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte13(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 13usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte14(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 14usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn byte15(self) -> u8 {
+                return ((Self::raw(self) >> (8 * 15usize)) & (0xFF as u128))
+                    as u8;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word0(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 0usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word1(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 1usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word2(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 2usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word3(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 3usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word4(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 4usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word5(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 5usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word6(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 6usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn word7(self) -> u16 {
+                return ((Self::raw(self) >> (16 * 7usize)) & (0xFFFF as u128))
+                    as u16;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn dword0(self) -> u32 {
+                return ((Self::raw(self) >> (32 * 0usize))
+                    & (0xFFFFFFFF as u128)) as u32;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn dword1(self) -> u32 {
+                return ((Self::raw(self) >> (32 * 1usize))
+                    & (0xFFFFFFFF as u128)) as u32;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn dword2(self) -> u32 {
+                return ((Self::raw(self) >> (32 * 2usize))
+                    & (0xFFFFFFFF as u128)) as u32;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn dword3(self) -> u32 {
+                return ((Self::raw(self) >> (32 * 3usize))
+                    & (0xFFFFFFFF as u128)) as u32;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn qword0(self) -> u64 {
+                return ((Self::raw(self) >> (64 * 0usize))
+                    & (0xFFFFFFFFFFFFFFFF as u128))
+                    as u64;
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn qword1(self) -> u64 {
+                return ((Self::raw(self) >> (64 * 1usize))
+                    & (0xFFFFFFFFFFFFFFFF as u128))
+                    as u64;
             }
         }
-        impl Value {
+        impl MyFlags {
             #[must_use]
             #[inline(always)]
             pub const fn bits(self) -> u128 {
@@ -861,7 +963,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             pub const fn all() -> Self {
-                return Flag::all();
+                return MyFlag::all();
             }
             #[must_use]
             #[inline(always)]
@@ -901,7 +1003,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             pub const fn contains_unknown_bits(self) -> bool {
-                return self.unknown_bits() != 0;
+                return self.unknown_bits() != Self::empty().into();
             }
             #[must_use]
             #[inline(always)]
@@ -940,14 +1042,14 @@ mod subject {
             #[must_use]
             #[inline(always)]
             pub const fn from_name(name: &str) -> Option<Self> {
-                return match Flag::from_name(name) {
+                return match MyFlag::from_name(name) {
                     Some(flag) => Some(flag.into_value()),
                     None => None,
                 };
             }
             #[inline(always)]
-            pub const fn into_flag(self) -> Result<Flag, Self> {
-                let items = Flag::items();
+            pub const fn into_flag(self) -> Result<MyFlag, Self> {
+                let items = MyFlag::items();
                 let max = items.len();
                 let mut i = 0;
                 while i < max {
@@ -961,7 +1063,9 @@ mod subject {
             }
             #[must_use]
             #[inline(always)]
-            pub const fn iter_known_flags(self) -> impl Iterator<Item = Flag> {
+            pub const fn iter_known_flags(
+                self
+            ) -> impl Iterator<Item = MyFlag> {
                 return IterFlags {
                     value: self,
                     index: 0,
@@ -988,7 +1092,7 @@ mod subject {
             #[inline(always)]
             pub fn iter_defined_names()
             -> impl Iterator<Item = (&'static str, Self)> {
-                return Flag::iter()
+                return MyFlag::iter()
                     .map(|flag| (flag.name(), flag.into_value()));
             }
             #[must_use]
@@ -996,7 +1100,7 @@ mod subject {
             pub fn iter_equal_names(
                 self
             ) -> impl Iterator<Item = &'static str> {
-                return Flag::iter()
+                return MyFlag::iter()
                     .filter(move |flag| flag.into_value() == self)
                     .map(|flag| flag.name());
             }
@@ -1188,6 +1292,132 @@ mod subject {
                 *self = self.complemented();
             }
         }
+        impl ::core::convert::From<MyFlag> for MyFlags {
+            #[inline(always)]
+            fn from(flag: MyFlag) -> Self {
+                return flag.into_value();
+            }
+        }
+        const impl ::core::ops::Not for MyFlags {
+            type Output = Self;
+            #[inline(always)]
+            fn not(self) -> Self::Output {
+                return self.complemented();
+            }
+        }
+        impl MyFlag {
+            #[inline(always)]
+            #[must_use]
+            pub const fn name(self) -> &'static str {
+                return match self {
+                    MyFlag::Z => "Z",
+                    MyFlag::A => "A",
+                    MyFlag::B => "B",
+                    MyFlag::C => "C",
+                };
+            }
+            #[inline(always)]
+            #[must_use]
+            pub const fn items() -> &'static [Self] {
+                const ITEMS: &'static [MyFlag] =
+                    &[MyFlag::Z, MyFlag::A, MyFlag::B, MyFlag::C];
+                return ITEMS;
+            }
+            #[inline]
+            #[must_use]
+            pub const fn from_name(name: &str) -> Option<Self> {
+                return match name {
+                    "Z" => Some(MyFlag::Z),
+                    "A" => Some(MyFlag::A),
+                    "B" => Some(MyFlag::B),
+                    "C" => Some(MyFlag::C),
+                    _ => None,
+                };
+            }
+            #[inline(always)]
+            #[must_use]
+            pub const fn raw(self) -> u128 {
+                return self as u128;
+            }
+            #[inline(always)]
+            #[must_use]
+            pub const fn into_value(self) -> MyFlags {
+                return MyFlags::from_bits_retain(self.raw());
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all() -> MyFlags {
+                #[allow(clippy::unnecessary_cast)]
+                return MyFlags::from_bits_retain(
+                    0 as u128
+                        | (MyFlag::Z as u128)
+                        | (MyFlag::A as u128)
+                        | (MyFlag::B as u128)
+                        | (MyFlag::C as u128),
+                );
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn iter() -> impl Iterator<Item = Self> {
+                return IterItems { index: 0 };
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn iter_values() -> impl Iterator<Item = MyFlags> {
+                return MyFlags::all().iter();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn inserted(
+                self,
+                other: Self,
+            ) -> MyFlags {
+                return self.into_value().inserted(other.into_value());
+            }
+        }
+        impl MyFlag {
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits_retain(bits: u128) -> MyFlags {
+                return MyFlags::of(bits);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn empty() -> MyFlags {
+                return MyFlags::empty();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_named() -> MyFlags {
+                return MyFlags::all();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_known() -> MyFlags {
+                return MyFlags::all();
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn all_unknown() -> MyFlags {
+                return MyFlags::from_bits_retain(!MyFlags::all().bits());
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits(bits: u128) -> Option<MyFlags> {
+                return MyFlags::from_bits(bits);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn from_bits_truncate(bits: u128) -> MyFlags {
+                return MyFlags::from_bits_truncate(bits);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub fn iter_defined_names()
+            -> impl Iterator<Item = (&'static str, MyFlags)> {
+                return MyFlags::iter_defined_names();
+            }
+        }
         const impl ::core::ops::Shr<usize> for MyFlag {
             type Output = MyFlags;
             #[inline(always)]
@@ -1279,6 +1509,82 @@ mod subject {
                 return self.into_value().complemented();
             }
         }
+        struct IterItems {
+            index: usize,
+        }
+        const impl core::iter::Iterator for IterItems {
+            type Item = MyFlag;
+            fn next(&mut self) -> Option<Self::Item> {
+                let items = MyFlag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index];
+                    self.index += 1;
+                    return Some(next);
+                }
+                return None;
+            }
+            #[inline(always)]
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                let max = MyFlag::items().len();
+                return (max, Some(max));
+            }
+        }
+        struct IterFlags {
+            value: MyFlags,
+            index: usize,
+        }
+        const impl core::iter::Iterator for IterFlags {
+            type Item = MyFlag;
+            fn next(&mut self) -> Option<Self::Item> {
+                let items = MyFlag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index];
+                    self.index += 1;
+                    if self.value.contains_all(next.into_value()) {
+                        self.value = self.value.without(next.into_value());
+                        return Some(next);
+                    }
+                }
+                return None;
+            }
+            #[inline]
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                let bound = self.value.raw().count_ones() as usize;
+                return (bound, Some(bound));
+            }
+        }
+        pub struct IterValues {
+            value: MyFlags,
+            index: usize,
+        }
+        const impl Iterator for IterValues {
+            type Item = MyFlags;
+            fn next(&mut self) -> Option<Self::Item> {
+                let items = MyFlag::items();
+                let max = items.len();
+                while self.index < max {
+                    let next = items[self.index].into_value();
+                    self.index += 1;
+                    if self.value.contains_all(next) {
+                        self.value = self.value.without(next);
+                        return Some(next);
+                    }
+                }
+                if !self.value.is_empty() {
+                    let it = self.value;
+                    self.value = Self::Item::empty();
+                    return Some(it);
+                }
+                return None;
+            }
+            #[inline]
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                let bound = (self.value.raw().count_ones() + 1) as usize;
+                return (bound, Some(bound));
+            }
+        }
         const impl BitSeal for MyFlag {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
@@ -1291,10 +1597,10 @@ mod subject {
                 return MyFlags::raw(*self);
             }
         }
-        const impl BitFriendBit for MyFlag {}
         const impl BitFriendRel for MyFlag {}
-        const impl BitFriendBit for MyFlags {}
+        const impl BitFriendBit for MyFlag {}
         const impl BitFriendRel for MyFlags {}
+        const impl BitFriendBit for MyFlags {}
         const trait BitSeal {
             fn conv_my_flag(&self) -> u128;
         }
@@ -1328,44 +1634,7 @@ mod subject {
         const impl<T> BitFriendBit for &mut T where T: [const] BitFriendBit {}
         const impl<T> BitFriendRel for &T where T: [const] BitFriendRel {}
         const impl<T> BitFriendRel for &mut T where T: [const] BitFriendRel {}
-        impl MyFlag {
-            #[inline(always)]
-            #[must_use]
-            pub const fn name(self) -> &'static str {
-                return match self {
-                    MyFlag::Z => "Z",
-                    MyFlag::A => "A",
-                    MyFlag::B => "B",
-                    MyFlag::C => "C",
-                };
-            }
-            #[inline(always)]
-            #[must_use]
-            pub const fn items() -> &'static [Self] {
-                const ITEMS: &'static [MyFlag] =
-                    &[MyFlag::Z, MyFlag::A, MyFlag::B, MyFlag::C];
-                return ITEMS;
-            }
-            #[inline]
-            #[must_use]
-            pub const fn from_name(name: &str) -> Option<Self> {
-                return match name {
-                    "Z" => Some(MyFlag::Z),
-                    "A" => Some(MyFlag::A),
-                    "B" => Some(MyFlag::B),
-                    "C" => Some(MyFlag::C),
-                    _ => None,
-                };
-            }
-        }
     };
-    impl MyFlag {
-        #[inline(always)]
-        #[must_use]
-        pub const fn empty() -> Self {
-            return Self::Z;
-        }
-    }
 }
 type Subject = subject::MyFlag;
 type Value = subject::MyFlags;

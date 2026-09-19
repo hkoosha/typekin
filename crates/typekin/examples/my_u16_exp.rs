@@ -1,98 +1,100 @@
 // AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED
 #![allow(clippy::needless_return)]
-
+#![feature(const_cmp)]
+#![feature(const_trait_impl)]
+#![feature(const_ops)]
+#![feature(const_convert)]
+#![feature(const_clone)]
+#![feature(const_destruct)]
+#![feature(derive_const)]
 mod subject {
+    use std::fmt::Formatter;
     #[repr(transparent)]
-    #[derive(
-        :: core :: clone :: Clone,
-        :: core :: cmp :: Eq,
-        :: core :: cmp :: Ord,
-        :: core :: fmt :: Debug,
-        :: core :: marker :: Copy,
-    )]
-    pub struct MyExample(u32);
+    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
+    #[derive_const(::core::clone::Clone)]
+    pub struct MyU32(u32);
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
-        impl Into<usize> for MyExample {
+        const impl ::core::convert::Into<usize> for MyU32 {
             #[inline(always)]
             fn into(self) -> usize {
-                return MyExample::into_usize(self);
+                return MyU32::into_usize(self);
             }
         }
-        impl Into<u32> for MyExample {
+        const impl ::core::convert::Into<u32> for MyU32 {
             #[inline(always)]
             fn into(self) -> u32 {
-                return MyExample::into_u32(self);
+                return MyU32::into_u32(self);
             }
         }
-        impl Into<u64> for MyExample {
+        const impl ::core::convert::Into<u64> for MyU32 {
             #[inline(always)]
             fn into(self) -> u64 {
-                return MyExample::into_u64(self);
+                return MyU32::into_u64(self);
             }
         }
-        impl Into<u128> for MyExample {
+        const impl ::core::convert::Into<u128> for MyU32 {
             #[inline(always)]
             fn into(self) -> u128 {
-                return MyExample::into_u128(self);
+                return MyU32::into_u128(self);
             }
         }
-        impl Into<i64> for MyExample {
+        const impl ::core::convert::Into<i64> for MyU32 {
             #[inline(always)]
             fn into(self) -> i64 {
-                return MyExample::into_i64(self);
+                return MyU32::into_i64(self);
             }
         }
-        impl Into<i128> for MyExample {
+        const impl ::core::convert::Into<i128> for MyU32 {
             #[inline(always)]
             fn into(self) -> i128 {
-                return MyExample::into_i128(self);
+                return MyU32::into_i128(self);
             }
         }
-        impl TryInto<isize> for MyExample {
+        const impl ::core::convert::TryInto<isize> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<isize, Self::Error> {
-                return MyExample::try_into_isize(self);
+            fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
+                return MyU32::try_into_isize(self);
             }
         }
-        impl TryInto<u8> for MyExample {
+        const impl ::core::convert::TryInto<u8> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<u8, Self::Error> {
-                return MyExample::try_into_u8(self);
+            fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
+                return MyU32::try_into_u8(self);
             }
         }
-        impl TryInto<u16> for MyExample {
+        const impl ::core::convert::TryInto<u16> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<u16, Self::Error> {
-                return MyExample::try_into_u16(self);
+            fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
+                return MyU32::try_into_u16(self);
             }
         }
-        impl TryInto<i8> for MyExample {
+        const impl ::core::convert::TryInto<i8> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<i8, Self::Error> {
-                return MyExample::try_into_i8(self);
+            fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
+                return MyU32::try_into_i8(self);
             }
         }
-        impl TryInto<i16> for MyExample {
+        const impl ::core::convert::TryInto<i16> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<i16, Self::Error> {
-                return MyExample::try_into_i16(self);
+            fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
+                return MyU32::try_into_i16(self);
             }
         }
-        impl TryInto<i32> for MyExample {
+        const impl ::core::convert::TryInto<i32> for MyU32 {
             type Error = ();
             #[inline(always)]
-            fn try_into(self) -> Result<i32, Self::Error> {
-                return MyExample::try_into_i32(self);
+            fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
+                return MyU32::try_into_i32(self);
             }
         }
-        impl ::core::ops::Shr<usize> for MyExample {
+        const impl ::core::ops::Shr<usize> for MyU32 {
             type Output = Self;
             #[inline(always)]
             fn shr(
@@ -102,7 +104,7 @@ mod subject {
                 return self._shr(rhs);
             }
         }
-        impl ::core::ops::Shl<usize> for MyExample {
+        const impl ::core::ops::Shl<usize> for MyU32 {
             type Output = Self;
             #[inline(always)]
             fn shl(
@@ -112,7 +114,7 @@ mod subject {
                 return self._shl(rhs);
             }
         }
-        impl ::core::ops::ShrAssign<usize> for MyExample {
+        const impl ::core::ops::ShrAssign<usize> for MyU32 {
             #[inline(always)]
             fn shr_assign(
                 &mut self,
@@ -121,7 +123,7 @@ mod subject {
                 *self = self._shr(other);
             }
         }
-        impl ::core::ops::ShlAssign<usize> for MyExample {
+        const impl ::core::ops::ShlAssign<usize> for MyU32 {
             #[inline(always)]
             fn shl_assign(
                 &mut self,
@@ -130,107 +132,115 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        impl<T> ::core::ops::BitAndAssign<T> for MyExample
+        const impl<T> ::core::ops::BitAndAssign<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitand_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._bitand(it);
             }
         }
-        impl<T> ::core::ops::AddAssign<T> for MyExample
+        const impl<T> ::core::ops::AddAssign<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn add_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._add(it);
             }
         }
-        impl<T> ::core::ops::SubAssign<T> for MyExample
+        const impl<T> ::core::ops::SubAssign<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn sub_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._sub(it);
             }
         }
-        impl<T> ::core::ops::MulAssign<T> for MyExample
+        const impl<T> ::core::ops::MulAssign<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn mul_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._mul(it);
             }
         }
-        impl<T> ::core::ops::DivAssign<T> for MyExample
+        const impl<T> ::core::ops::DivAssign<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn div_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._div(it);
             }
         }
-        impl<T> ::core::ops::RemAssign<T> for MyExample
+        const impl<T> ::core::ops::RemAssign<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn rem_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._rem(it);
             }
         }
-        impl<T> ::core::ops::BitOrAssign<T> for MyExample
+        const impl<T> ::core::ops::BitOrAssign<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitor_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._bitor(it);
             }
         }
-        if !(::core::mem::size_of::<MyExample>()
-            == ::core::mem::size_of::<u32>())
-        {
+        const impl ::core::cmp::Eq for MyU32 {}
+        const impl ::core::cmp::Ord for MyU32 {
+            #[inline(always)]
+            fn cmp(
+                &self,
+                other: &Self,
+            ) -> ::core::cmp::Ordering {
+                return self.partial_cmp(other).unwrap();
+            }
+        }
+        if !(::core::mem::size_of::<MyU32>() == ::core::mem::size_of::<u32>()) {
             {
                 panic!("invalid memory layout: #ty(#el) != #el");
             };
         };
-        impl<T> ::core::ops::Add<T> for MyExample
+        const impl<T> ::core::ops::Add<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -238,13 +248,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._add(it);
             }
         }
-        impl<T> ::core::ops::Sub<T> for MyExample
+        const impl<T> ::core::ops::Sub<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -252,13 +262,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._sub(it);
             }
         }
-        impl<T> ::core::ops::Mul<T> for MyExample
+        const impl<T> ::core::ops::Mul<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -266,13 +276,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._mul(it);
             }
         }
-        impl<T> ::core::ops::Div<T> for MyExample
+        const impl<T> ::core::ops::Div<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -280,13 +290,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._div(it);
             }
         }
-        impl<T> ::core::ops::Rem<T> for MyExample
+        const impl<T> ::core::ops::Rem<T> for MyU32
         where
-            T: FriendMath,
+            T: [const] FriendMath + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -294,13 +304,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._rem(it);
             }
         }
-        impl<T> ::core::ops::BitAnd<T> for MyExample
+        const impl<T> ::core::ops::BitAnd<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -308,13 +318,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._bitand(it);
             }
         }
-        impl<T> ::core::ops::BitOr<T> for MyExample
+        const impl<T> ::core::ops::BitOr<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -322,13 +332,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._bitor(it);
             }
         }
-        impl<T> ::core::ops::BitXor<T> for MyExample
+        const impl<T> ::core::ops::BitXor<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -336,37 +346,37 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 return self._bitxor(it);
             }
         }
-        impl<T> ::core::ops::BitXorAssign<T> for MyExample
+        const impl<T> ::core::ops::BitXorAssign<T> for MyU32
         where
-            T: FriendBit,
+            T: [const] FriendBit + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitxor_assign(
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(&rhs);
+                let it = Seal::conv_my_u32(&rhs);
                 *self = self._bitxor(it);
             }
         }
-        impl ::core::ops::Not for MyExample {
+        const impl ::core::ops::Not for MyU32 {
             type Output = Self;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
             }
         }
-        impl Seal for MyExample {
+        const impl Seal for MyU32 {
             #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
+            fn conv_my_u32(&self) -> u32 {
                 return Self::raw(*self);
             }
         }
-        impl ::core::fmt::Binary for MyExample {
+        impl ::core::fmt::Binary for MyU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -375,7 +385,7 @@ mod subject {
                 return ::core::fmt::Binary::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::Octal for MyExample {
+        impl ::core::fmt::Octal for MyU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -384,7 +394,7 @@ mod subject {
                 return ::core::fmt::Octal::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::LowerHex for MyExample {
+        impl ::core::fmt::LowerHex for MyU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -393,7 +403,7 @@ mod subject {
                 return ::core::fmt::LowerHex::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::UpperHex for MyExample {
+        impl ::core::fmt::UpperHex for MyU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -402,24 +412,24 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        impl Seal for u32 {
+        const impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
+            fn conv_my_u32(&self) -> u32 {
                 let it: u32 = *self;
                 return it;
             }
         }
-        impl FriendMake for MyExample {}
-        impl FriendRel for MyExample {}
-        impl FriendBit for MyExample {}
-        impl FriendMath for MyExample {}
-        impl FriendMake for u32 {}
-        impl FriendRel for u32 {}
-        impl FriendBit for u32 {}
-        impl FriendMath for u32 {}
-        impl<T> ::core::cmp::PartialEq<T> for MyExample
+        const impl FriendMake for MyU32 {}
+        const impl FriendRel for MyU32 {}
+        const impl FriendBit for MyU32 {}
+        const impl FriendMath for MyU32 {}
+        const impl FriendMake for u32 {}
+        const impl FriendRel for u32 {}
+        const impl FriendBit for u32 {}
+        const impl FriendMath for u32 {}
+        const impl<T> ::core::cmp::PartialEq<T> for MyU32
         where
-            T: FriendRel,
+            T: [const] FriendRel + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn eq(
@@ -427,70 +437,70 @@ mod subject {
                 rhs: &T,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_example(rhs);
+                let rhs = Seal::conv_my_u32(rhs);
                 return lhs == rhs;
             }
         }
-        impl<T> ::core::cmp::PartialOrd<T> for MyExample
+        const impl<T> ::core::cmp::PartialOrd<T> for MyU32
         where
-            T: FriendRel,
+            T: [const] FriendRel + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn partial_cmp(
                 &self,
                 rhs: &T,
-            ) -> Option<::core::cmp::Ordering> {
+            ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_example(rhs);
+                let rhs = Seal::conv_my_u32(rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        trait Seal {
-            fn conv_my_example(&self) -> u32;
+        const trait Seal {
+            fn conv_my_u32(&self) -> u32;
         }
-        impl<T> Seal for &T
+        const impl<T> Seal for &T
         where
-            T: Seal,
+            T: [const] Seal,
         {
             #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                return Seal::conv_my_example(&**self);
+            fn conv_my_u32(&self) -> u32 {
+                return Seal::conv_my_u32(&**self);
             }
         }
-        impl<T> Seal for &mut T
+        const impl<T> Seal for &mut T
         where
-            T: Seal,
+            T: [const] Seal,
         {
             #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                return Seal::conv_my_example(&**self);
+            fn conv_my_u32(&self) -> u32 {
+                return Seal::conv_my_u32(&**self);
             }
         }
-        trait FriendMake: Seal {}
-        impl<T> FriendMake for &T where T: FriendMake {}
-        impl<T> FriendMake for &mut T where T: FriendMake {}
-        trait FriendMath: Seal {}
-        impl<T> FriendMath for &T where T: FriendMath {}
-        impl<T> FriendMath for &mut T where T: FriendMath {}
-        trait FriendBit: Seal {}
-        impl<T> FriendBit for &T where T: FriendBit {}
-        impl<T> FriendBit for &mut T where T: FriendBit {}
-        trait FriendRel: Seal {}
-        impl<T> FriendRel for &T where T: FriendRel {}
-        impl<T> FriendRel for &mut T where T: FriendRel {}
-        impl MyExample {
+        const trait FriendMake: [const] Seal {}
+        const impl<T> FriendMake for &T where T: [const] FriendMake {}
+        const impl<T> FriendMake for &mut T where T: [const] FriendMake {}
+        const trait FriendMath: [const] Seal {}
+        const impl<T> FriendMath for &T where T: [const] FriendMath {}
+        const impl<T> FriendMath for &mut T where T: [const] FriendMath {}
+        const trait FriendBit: [const] Seal {}
+        const impl<T> FriendBit for &T where T: [const] FriendBit {}
+        const impl<T> FriendBit for &mut T where T: [const] FriendBit {}
+        const trait FriendRel: [const] Seal {}
+        const impl<T> FriendRel for &T where T: [const] FriendRel {}
+        const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
+        impl MyU32 {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub fn of<T>(it: T) -> MyExample
+            pub const fn of<T>(it: T) -> MyU32
             where
-                T: FriendMake,
+                T: [const] FriendMake + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_example(&it);
+                let this = Seal::conv_my_u32(&it);
                 return Self::_unchecked(this);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> MyExample {
-                return MyExample::of(it);
+            pub const fn make(it: u32) -> MyU32 {
+                return MyU32::of(it);
             }
             #[must_use]
             #[inline(always)]
@@ -734,7 +744,7 @@ mod subject {
             }
         }
         #[allow(clippy::unnecessary_cast)]
-        impl MyExample {
+        impl MyU32 {
             #[must_use]
             #[inline(always)]
             pub const fn lo16(self) -> u16 {
@@ -789,8 +799,16 @@ mod subject {
             }
         }
     };
+    impl std::fmt::Display for MyU32 {
+        fn fmt(
+            &self,
+            f: &mut Formatter<'_>,
+        ) -> std::fmt::Result {
+            f.write_fmt(format_args!("MyU32({0})", self.raw()))
+        }
+    }
 }
-type Subject = subject::MyExample;
+type Subject = subject::MyU32;
 fn main() {
     let lhs = 0b1101u32;
     let rhs = 0b0110u32;
@@ -798,5 +816,8 @@ fn main() {
     let rhs = Subject::of(rhs);
     {
         print!("{0:?}\n", lhs + rhs);
+    };
+    {
+        print!("{0:?}\n", lhs.lo16());
     };
 }

@@ -28,29 +28,44 @@ quote = { workspace = true }
 proc-macro2 = { workspace = true }
 
 [[example]]
+name = "my_plain"
+path = "examples/my_plain.rs"
+[[example]]
+name = "my_plain_exp"
+path = "examples/my_plain_exp.rs"
+[[example]]
+name = "my_u16"
+path = "examples/my_u16.rs"
+[[example]]
+name = "my_u16_exp"
+path = "examples/my_u16_exp.rs"
+[[example]]
 name = "my_u32"
 path = "examples/my_u32.rs"
 [[example]]
 name = "my_u32_exp"
 path = "examples/my_u32_exp.rs"
-
 [[example]]
 name = "my_u32_non_const"
 path = "examples/my_u32_non_const.rs"
 [[example]]
 name = "my_u32_non_const_exp"
 path = "examples/my_u32_non_const_exp.rs"
-
 [[example]]
 name = "my_flag"
 path = "examples/my_flag.rs"
 [[example]]
 name = "flag_exp"
 path = "examples/my_flag_exp.rs"
-
 [[example]]
 name = "my_i128"
 path = "examples/my_i128.rs"
 [[example]]
 name = "my_i128_exp"
 path = "examples/my_i128_exp.rs"
+[[example]]
+name = "my_friend"
+path = "examples/my_friend.rs"
+[[example]]
+name = "my_friend_exp"
+path = "examples/my_friend_exp.rs"

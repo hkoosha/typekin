@@ -1,14 +1,243 @@
-use crate::integral::cfg::IntegralCfg;
-use crate::runner;
-use crate::runner::Merged;
-use crate::type_friendship::FriendshipLevel;
-use crate::value_type::N;
-use proc_macro2::Ident;
-use proc_macro2::TokenStream;
-use quote::format_ident;
-use quote::quote;
-use syn::Path;
-use syn::parse_quote;
+use crate::{
+    runner::{
+        self,
+        Merged,
+        MkErr,
+        mk_flags,
+    },
+    type_friendship::{
+        FriendReq,
+        FriendshipLevel,
+    },
+    value_type::N,
+};
+
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
+use quote::{
+    ToTokens,
+    format_ident,
+    quote,
+};
+use syn::{
+    Fields,
+    Path,
+    Type,
+    parse::{
+        Parse,
+        ParseStream,
+    },
+    parse_quote,
+};
+
+use std::fmt::{
+    Debug,
+    Formatter,
+};
+
+pub(crate) fn integral(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let cfg = Box::new(syn::parse_macro_input!(attr as IntegralCfg));
+    let item = syn::parse_macro_input!(item as syn::ItemStruct);
+
+    return runner::ekran_catching(move || {
+        let ty = item.ident.clone();
+
+        let el = if let Fields::Unnamed(fields) = &item.fields
+            && fields.unnamed.len() == 1
+            && let Type::Path(field) = &fields.unnamed[0].ty
+            && let Some(id) = field.path.get_ident()
+            && N::rust_names().contains(&id.to_string().as_str())
+        {
+            id.clone()
+        }
+        else {
+            return item.fail(
+                "expected a tuple struct with exactly one field of primitive integral type",
+            );
+        };
+
+        if !runner::find_repr_transparent(&item.attrs)? {
+            return item.fail("expecting #[repr(transparent, ...)]");
+        }
+
+        let it = Maker::new(ty, el, cfg)?.ekran()?;
+
+        let stream = quote::quote! {
+            #[allow(dead_code)]
+            #[allow(unused_qualifications)]
+            const _: () = {
+                #it
+            };
+        };
+
+        return Ok(quote! { #item #stream });
+    });
+}
+
+mk_flags! {
+    #[flag_default(bool=true, str="")]
+    #[derive(Debug, Clone)]
+    pub(crate) struct IntegralFlags {
+        pub impl_range: bool = false,
+
+        pub auto_of_raw: bool,
+        pub assertions: bool,
+        pub bit_access: bool,
+
+        pub impl_debug: bool,
+        pub impl_eq: bool,
+        pub impl_fmt_binary: bool,
+        pub impl_fmt_hex_lower: bool,
+        pub impl_fmt_hex_upper: bool,
+        pub impl_fmt_octal: bool,
+        pub impl_into: bool,
+        pub impl_ord: bool,
+        pub impl_partial_eq: bool,
+        pub impl_partial_ord: bool,
+        pub impl_try_into: bool,
+
+        pub impl_assign_add: bool,
+        pub impl_assign_and: bool,
+        pub impl_assign_div: bool,
+        pub impl_assign_mul: bool,
+        pub impl_assign_or: bool,
+        pub impl_assign_rem: bool,
+        pub impl_assign_shl: bool,
+        pub impl_assign_shr: bool,
+        pub impl_assign_sub: bool,
+        pub impl_math_add: bool,
+        pub impl_math_and: bool,
+        pub impl_math_div: bool,
+        pub impl_math_mul: bool,
+        pub impl_math_not: bool,
+        pub impl_math_or: bool,
+        pub impl_math_rem: bool,
+        pub impl_math_shl: bool,
+        pub impl_math_shr: bool,
+        pub impl_math_sub: bool,
+        pub impl_math_xor: bool,
+
+        pub impl_friends: bool,
+        pub impl_self_friend_make: bool,
+        pub impl_self_friend_math_bit: bool,
+        pub impl_self_friend_math_ops: bool,
+        pub impl_self_friend_math_rel: bool,
+        pub impl_friend_seal: bool,
+        pub impl_friendzone_friend_make: bool,
+        pub impl_friendzone_friend_math_bit: bool,
+        pub impl_friendzone_friend_math_ops: bool,
+        pub impl_friendzone_friend_math_rel: bool,
+        pub impl_friendzone_seal: bool,
+
+        pub fn_conv_into: bool,
+        pub fn_conv_of: bool,
+        pub fn_conv_raw: bool,
+        pub fn_conv_try_into_checked: bool,
+        pub fn_conv_try_into_unchecked: bool,
+        pub fn_make_checked: bool,
+        pub fn_make_checked_try: bool,
+        pub fn_make_unchecked: bool,
+        pub fn_make_unchecked_try: bool,
+        pub fn_math_add: bool,
+        pub fn_math_and: bool,
+        pub fn_math_div: bool,
+        pub fn_math_mul: bool,
+        pub fn_math_not: bool,
+        pub fn_math_or: bool,
+        pub fn_math_rem: bool,
+        pub fn_math_shl: bool,
+        pub fn_math_shr: bool,
+        pub fn_math_sub: bool,
+        pub fn_math_xor: bool,
+        pub fn_op_cmp: bool,
+        pub fn_op_eq: bool,
+
+        pub trait_seal: String = "Seal",
+        pub trait_friend_make: String = "FriendMake",
+        pub trait_friend_math: String = "FriendMath",
+        pub trait_friend_bit: String = "FriendBit",
+        pub trait_friend_rel: String = "FriendRel",
+
+        pub fn_make: String = "make",
+
+        pub fn_prefix_seal: String = "into_",
+        pub fp_unchecked: String = "Self::_unchecked",
+    }
+}
+
+#[derive(Default, Clone)]
+pub(crate) struct IntegralCfg {
+    pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) konst: bool,
+    pub(crate) fn_get_raw: Option<Path>,
+    pub(crate) fn_validator: Option<Path>,
+    pub(crate) friends: Vec<FriendReq>,
+}
+
+impl Debug for IntegralCfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "IntegralCfg[int: {:?}, friends: {:?}, fn_get_raw: {}, fn_validator: {}",
+            self.flags,
+            self.friends,
+            self.fn_get_raw
+                .as_ref()
+                .map(|it| it.to_token_stream().to_string())
+                .unwrap_or_default(),
+            self.fn_validator
+                .as_ref()
+                .map(|it| it.to_token_stream().to_string())
+                .unwrap_or_default(),
+        )
+    }
+}
+
+impl Parse for IntegralCfg {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut this = Self::default();
+        let mut has_konst = false;
+
+        runner::parse_inner_attributes(input, |attr, rest| {
+            match attr {
+                "konst" => {
+                    this.konst = rest.parse::<syn::LitBool>()?.value;
+                    has_konst = true;
+                }
+                "with" => this.flags.parse_from(rest, true)?,
+                "without" => this.flags.parse_from(rest, false)?,
+                "friends" => this.friends = runner::list(rest)?.collect(),
+                "fn_get_raw" => this.fn_get_raw = Some(rest.parse()?),
+                "fn_validator" => this.fn_validator = Some(rest.parse()?),
+                it if it.starts_with("with_") => {
+                    this.flags.parse_from(rest, true)?
+                }
+                _ => {
+                    return Ok(false);
+                }
+            };
+
+            return Ok(true);
+        })?;
+
+        if !has_konst {
+            return Err(syn::Error::new(
+                input.span(),
+                "missing required `konst` argument",
+            ));
+        }
+
+        return Ok(this);
+    }
+}
 
 pub(crate) struct Maker {
     repr: N,
@@ -34,7 +263,9 @@ impl Maker {
         el: Ident,
         cfg: Box<IntegralCfg>,
     ) -> syn::Result<Self> {
-        let it = Self {
+        let cfg = Self::preprocess_cfg(cfg);
+
+        let mut this = Self {
             trait_seal: format_ident!("{}", cfg.flags.trait_seal),
             trait_friend_bit: format_ident!("{}", cfg.flags.trait_friend_bit),
             trait_friend_make: format_ident!("{}", cfg.flags.trait_friend_make),
@@ -59,12 +290,92 @@ impl Maker {
             cfg,
         };
 
-        return Ok(it);
+        this.fix_friendship();
+
+        return Ok(this);
+    }
+
+    fn preprocess_cfg(mut cfg: Box<IntegralCfg>) -> Box<IntegralCfg> {
+        cfg.friends.sort();
+
+        if cfg.flags.auto_of_raw && cfg.fn_validator.is_some() {
+            cfg.flags.auto_of_raw = false;
+        }
+
+        return cfg;
+    }
+
+    fn fix_friendship(&mut self) {
+        let xty = &self.ty;
+        let xel = &self.el;
+
+        self.cfg.friends.sort();
+
+        for (ty, to_el, is_always_valid) in [
+            (xty, Some(parse_quote! { #xty::raw }), true),
+            (
+                xel,
+                Some(parse_quote! { self }),
+                self.cfg.fn_validator.is_none(),
+            ),
+        ] {
+            if let Some(already) =
+                self.cfg.friends.iter_mut().find(|it| it.ty.is_ident(ty))
+            {
+                if is_always_valid && self.cfg.flags.impl_self_friend_make {
+                    already.level.insert(FriendshipLevel::Make);
+                }
+
+                if self.cfg.flags.impl_self_friend_math_ops {
+                    already.level.insert(FriendshipLevel::Math);
+                }
+                if self.cfg.flags.impl_self_friend_math_rel {
+                    already.level.insert(FriendshipLevel::Rel);
+                }
+                if self.cfg.flags.impl_self_friend_math_bit {
+                    already.level.insert(FriendshipLevel::Bit);
+                }
+
+                if already.conv.is_none() && to_el.is_some() {
+                    already.conv = to_el;
+                }
+            }
+            else {
+                let mut levels = vec![];
+
+                if is_always_valid && self.cfg.flags.impl_self_friend_make {
+                    levels.push(FriendshipLevel::Make);
+                }
+
+                if self.cfg.flags.impl_self_friend_math_ops {
+                    levels.push(FriendshipLevel::Math)
+                }
+                if self.cfg.flags.impl_self_friend_math_rel {
+                    levels.push(FriendshipLevel::Rel)
+                }
+                if self.cfg.flags.impl_self_friend_math_bit {
+                    levels.push(FriendshipLevel::Bit)
+                }
+
+                let self_friendship = FriendReq::new(
+                    Path::from(ty.clone()),
+                    levels.into_iter().collect(),
+                    to_el,
+                );
+
+                self.cfg.friends.push(self_friendship);
+            }
+        }
+    }
+
+    pub(crate) fn make_impl_range(&self) -> TokenStream {
+        unimplemented!("range");
     }
 
     pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
         let impls = self.ekran_impls()?;
         let items = self.ekran_items();
+        let bit_access = self.ekran_bit_access_items();
 
         let ty = &self.ty;
         return Ok(quote::quote! {
@@ -72,6 +383,11 @@ impl Maker {
 
             impl #ty {
                 #items
+            }
+
+            #[allow(clippy::unnecessary_cast)]
+            impl #ty {
+                #bit_access
             }
         });
     }
@@ -82,6 +398,7 @@ impl Maker {
         let fp_unchecked = &self.fp_unchecked;
         let fp_get_raw = &self.fp_get_raw;
         let fn_get_raw = &fp_get_raw.segments.last().unwrap().ident;
+        let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
         let fp_friend_conv: Path = {
             let trait_seal = &self.trait_seal;
             let fn_conv = &self.fn_conv;
@@ -105,6 +422,16 @@ impl Maker {
                 {
                     let this = #fp_friend_conv(&it);
                     return #fp_unchecked(this);
+                }
+            };
+            stream.extend(it);
+        }
+
+        if self.cfg.flags.auto_of_raw {
+            let it = quote! {
+                #[inline(always)]
+                pub #konst fn #fn_make(it: #el) -> #ty {
+                    return #ty::of(it);
                 }
             };
             stream.extend(it);
@@ -575,13 +902,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_and {
             let it = quote! {
-                #konst impl ::core::ops::BitAndAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::BitAndAssign<T> for #ty
+                where T: #bonst #trait_friend_bit #destruct
+                {
                     #[inline(always)]
                     fn bitand_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._bitand(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._bitand(it);
                     }
                 }
             };
@@ -591,13 +921,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_add {
             let it = quote! {
-                #konst impl ::core::ops::AddAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::AddAssign<T> for #ty
+                where T: #bonst #trait_friend_math #destruct
+                {
                     #[inline(always)]
                     fn add_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._add(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._add(it);
                     }
                 }
             };
@@ -607,13 +940,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_sub {
             let it = quote! {
-                #konst impl ::core::ops::SubAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::SubAssign<T> for #ty
+                where T: #bonst #trait_friend_math #destruct
+                {
                     #[inline(always)]
                     fn sub_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._sub(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._sub(it);
                     }
                 }
             };
@@ -623,13 +959,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_mul {
             let it = quote! {
-                #konst impl ::core::ops::MulAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::MulAssign<T> for #ty
+                where T: #bonst #trait_friend_math #destruct
+                {
                     #[inline(always)]
                     fn mul_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._mul(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._mul(it);
                     }
                 }
             };
@@ -639,13 +978,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_div {
             let it = quote! {
-                #konst impl ::core::ops::DivAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::DivAssign<T> for #ty
+                where T: #bonst #trait_friend_math #destruct
+                {
                     #[inline(always)]
                     fn div_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._div(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._div(it);
                     }
                 }
             };
@@ -655,13 +997,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_rem {
             let it = quote! {
-                #konst impl ::core::ops::RemAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::RemAssign<T> for #ty
+                where T: #bonst #trait_friend_math #destruct
+                {
                     #[inline(always)]
                     fn rem_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._rem(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._rem(it);
                     }
                 }
             };
@@ -671,13 +1016,16 @@ impl Maker {
 
         if self.cfg.flags.impl_assign_or {
             let it = quote! {
-                #konst impl ::core::ops::BitOrAssign<#ty> for #ty {
+                #konst impl<T> ::core::ops::BitOrAssign<T> for #ty
+                where T: #bonst #trait_friend_bit #destruct
+                {
                     #[inline(always)]
                     fn bitor_assign(
                         &mut self,
-                        other: #ty,
+                        rhs: T,
                     ) {
-                        *self = self._bitor(other.0);
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._bitor(it);
                     }
                 }
             };
@@ -893,6 +1241,19 @@ impl Maker {
                         return self._bitxor(it);
                     }
                 }
+
+                #konst impl<T> ::core::ops::BitXorAssign<T> for #ty
+                where T: #bonst #trait_friend_bit #destruct
+                {
+                    #[inline(always)]
+                    fn bitxor_assign(
+                        &mut self,
+                        rhs: T,
+                    ) {
+                        let it = #fp_friend_conv(&rhs);
+                        *self = self._bitxor(it);
+                    }
+                }
             };
             stream.extend(it);
         }
@@ -919,34 +1280,6 @@ impl Maker {
                         return #fp_get_raw(*self);
                     }
                 }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friend_make {
-            let it = quote! {
-                #konst impl #trait_friend_make for #ty {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friend_math_ops {
-            let it = quote! {
-                #konst impl #trait_friend_math for #ty {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friend_math_bit {
-            let it = quote! {
-                #konst impl #trait_friend_bit for #ty {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friend_math_rel {
-            let it = quote! {
-                #konst impl #trait_friend_rel for #ty {}
             };
             stream.extend(it);
         }
@@ -1011,11 +1344,12 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_friend {
+        if self.cfg.flags.impl_friends {
             let seal_impls = self
                 .cfg
                 .friends
                 .iter()
+                .filter(|it| !it.ty.is_ident(ty))
                 .map(|it| {
                     let whom = &it.ty;
                     let body = match &it.conv {
@@ -1064,7 +1398,7 @@ impl Maker {
                                     "custom friendship level not implemented: {}",
                                     custom,
                                 )
-                            },
+                            }
                         })
                         .map(|level| (&it.ty, level))
                 })
@@ -1217,7 +1551,149 @@ impl Maker {
         return Ok(stream);
     }
 
-    fn make_impl_range(&self) -> TokenStream {
-        unimplemented!("range");
+    pub(crate) fn ekran_bit_access_items(&self) -> TokenStream {
+        let fp_get_raw = &self.fp_get_raw;
+        let el = &self.el;
+
+        if !self.cfg.flags.bit_access || self.repr.is_signed() {
+            return TokenStream::new();
+        }
+
+        let bytes = (0..self.repr.bytes())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("byte{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u8 {
+                        return ((#fp_get_raw(self) >> (8 * #i)) & (0xFF as #el)) as u8;
+                    }
+                };
+            })
+            .merged();
+
+        let words = (0..self.repr.words())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("word{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u16 {
+                        return ((#fp_get_raw(self) >> (16 * #i)) & (0xFFFF as #el)) as u16;
+                    }
+                };
+            })
+            .merged();
+
+        let dwords = (0..self.repr.dwords())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("dword{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u32 {
+                        return ((#fp_get_raw(self) >> (32 * #i)) & (0xFFFFFFFF as #el)) as u32;
+                    }
+                };
+            })
+            .merged();
+
+        let qwords = (0..self.repr.qwords())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("qword{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u64 {
+                        return ((#fp_get_raw(self) >> (64 * #i)) & (0xFFFFFFFFFFFFFFFF as #el)) as u64;
+                    }
+                };
+            })
+            .merged();
+
+        let halved = match self.repr {
+            N::U016 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo8(self) -> u8 {
+                        return self.byte0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi8(self) -> u8 {
+                        return self.byte1();
+                    }
+                }
+            }
+
+            N::U032 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo16(self) -> u16 {
+                        return self.word0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi16(self) -> u16 {
+                        return self.word1();
+                    }
+                }
+            }
+
+            N::U064 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo32(self) -> u32 {
+                        return self.dword0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi32(self) -> u32 {
+                        return self.dword1();
+                    }
+                }
+            }
+
+            N::U128 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo64(self) -> u64 {
+                        return self.qword0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi64(self) -> u64 {
+                        return self.qword1();
+                    }
+                }
+            }
+
+            // N::USIZ => {}
+            _ => TokenStream::new(),
+        };
+
+        return quote! {
+            #halved
+
+            #bytes
+
+            #words
+
+            #dwords
+
+            #qwords
+        };
     }
 }

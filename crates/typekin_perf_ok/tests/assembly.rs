@@ -2,9 +2,15 @@ use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 const FIXTURE_BIN: &str = "typekin-perf-ok-fixture";
 const BUILD_PROFILE: &str = "release";

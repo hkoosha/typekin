@@ -1,8 +1,5 @@
 mod subject {
-    #[typekin::integral(
-        friends = [u32(conv = self, level = [Full])],
-        konst = false
-    )]
+    #[typekin::integral(konst = false)]
     #[derive(Copy, Clone)]
     #[repr(transparent)]
     pub struct MyExample(u32);

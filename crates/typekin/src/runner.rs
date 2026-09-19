@@ -1,21 +1,32 @@
 use crate::value_type::N;
-use proc_macro2::Ident;
-use proc_macro2::TokenStream;
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
 use quote::quote;
-use std::collections::HashSet;
-use std::fmt::Display;
-use std::panic::UnwindSafe;
-use std::sync::Arc;
-use std::sync::Mutex;
-use syn::Attribute;
-use syn::Token;
-use syn::bracketed;
-use syn::meta::ParseNestedMeta;
-use syn::parenthesized;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
+
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    panic::UnwindSafe,
+    sync::{
+        Arc,
+        Mutex,
+    },
+};
+use syn::{
+    Attribute,
+    Token,
+    bracketed,
+    meta::ParseNestedMeta,
+    parenthesized,
+    parse::{
+        Parse,
+        ParseStream,
+    },
+    punctuated::Punctuated,
+    spanned::Spanned,
+};
 
 macro_rules! mk_flags {
     (
@@ -61,7 +72,7 @@ macro_rules! mk_flags {
                 value_if_seen: bool,
             ) -> syn::Result<()> {
                 let mut duplicated = Vec::with_capacity(0);
-                let mut attrs = std::collections::HashMap::with_capacity(128);
+                let mut attrs = std::collections::BTreeMap::new();
 
                 let stuff;
                 let _ = syn::bracketed!(stuff in input);
@@ -496,7 +507,9 @@ pub(crate) fn snake_case_of(it: &str) -> String {
     result
 }
 
-fn backtraced<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R, String> {
+pub(crate) fn ekran_catching(
+    f: impl FnOnce() -> syn::Result<TokenStream> + UnwindSafe
+) -> proc_macro::TokenStream {
     let err = Arc::new(Mutex::new(None));
 
     let err0 = err.clone();
@@ -506,29 +519,23 @@ fn backtraced<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R, String> {
         err0.lock().unwrap().replace(text);
     }));
 
-    let result = std::panic::catch_unwind(f);
-
+    let result = std::panic::catch_unwind(|| {
+        f().unwrap_or_else(|it| it.to_compile_error().into())
+    });
     let _ = std::panic::take_hook();
 
-    return result.map_err(|_| err.lock().unwrap().take().unwrap());
-}
-
-pub(crate) fn ekran_catching(
-    f: impl FnOnce() -> syn::Result<TokenStream> + UnwindSafe
-) -> proc_macro::TokenStream {
-    return backtraced(|| {
-        f().unwrap_or_else(|it| it.to_compile_error().into())
-    })
-    .map_err(|mut it| {
-        let remove = "disabled backtrace\n";
-        if it.ends_with(remove) {
-            it.truncate(it.len() - remove.len());
-        }
-        return it;
-    })
-    .map_err(|it| quote::quote! { compile_error!(#it); })
-    .unwrap_or_else(|it| it.into())
-    .into();
+    return result
+        .map_err(|_| err.lock().unwrap().take().unwrap())
+        .map_err(|mut it| {
+            let remove = "disabled backtrace\n";
+            if it.ends_with(remove) {
+                it.truncate(it.len() - remove.len());
+            }
+            return it;
+        })
+        .map_err(|it| quote::quote! { compile_error!(#it); })
+        .unwrap_or_else(|it| it.into())
+        .into();
 }
 
 pub(crate) fn konst_bonst_and_destruct(

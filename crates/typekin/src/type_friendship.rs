@@ -1,14 +1,27 @@
-use crate::runner;
-use crate::runner::MkErr;
+use crate::{
+    runner,
+    runner::MkErr,
+};
 use proc_macro2::Ident;
-use std::collections::HashSet;
-use std::fmt::Debug;
-use std::fmt::Formatter;
-use syn::Path;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+use quote::ToTokens;
+use std::cmp::Ordering;
+use std::{
+    collections::BTreeSet,
+    fmt::{
+        Debug,
+        Formatter,
+    },
+};
+use syn::{
+    Path,
+    parse::{
+        Parse,
+        ParseStream,
+    },
+};
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum FriendshipLevel {
     None,
     Make,
@@ -20,8 +33,8 @@ pub(crate) enum FriendshipLevel {
 }
 
 impl FriendshipLevel {
-    fn default_level() -> HashSet<Self> {
-        let mut set = HashSet::with_capacity(4);
+    fn default_level() -> BTreeSet<Self> {
+        let mut set = BTreeSet::new();
 
         for it in [Self::Make, Self::Rel, Self::Bit, Self::Math] {
             set.insert(it);
@@ -30,7 +43,7 @@ impl FriendshipLevel {
         return set;
     }
 
-    pub(crate) fn normalize(&self) -> HashSet<Self> {
+    pub(crate) fn normalize(&self) -> BTreeSet<Self> {
         match self {
             Self::None => vec![],
             Self::Full => vec![Self::Make, Self::Rel, Self::Bit, Self::Math],
@@ -68,9 +81,54 @@ impl Parse for FriendshipLevel {
 
 #[derive(Clone)]
 pub(crate) struct FriendReq {
+    repr: String,
     pub(crate) ty: Path,
-    pub(crate) level: HashSet<FriendshipLevel>,
+    pub(crate) level: BTreeSet<FriendshipLevel>,
     pub(crate) conv: Option<Path>,
+}
+
+impl FriendReq {
+    pub(crate) fn new(
+        ty: Path,
+        level: BTreeSet<FriendshipLevel>,
+        conv: Option<Path>,
+    ) -> Self {
+        return Self {
+            repr: ty.to_token_stream().to_string(),
+            ty,
+            conv,
+            level,
+        };
+    }
+}
+
+impl Eq for FriendReq {}
+
+impl PartialOrd for FriendReq {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for FriendReq {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        return self.repr == other.repr;
+    }
+}
+
+impl Ord for FriendReq {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
+        return self.repr.cmp(&other.repr);
+    }
 }
 
 impl Debug for FriendReq {
@@ -86,7 +144,7 @@ impl Parse for FriendReq {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let ty: Path = input.parse()?;
 
-        let mut level = HashSet::<FriendshipLevel>::with_capacity(2);
+        let mut level = BTreeSet::<FriendshipLevel>::new();
         let mut conv = None::<Path>;
 
         runner::parse_optional_attributes(input, |name, stream| {
@@ -110,7 +168,7 @@ impl Parse for FriendReq {
 
         level.remove(&FriendshipLevel::None);
 
-        let it = FriendReq { ty, conv, level };
+        let it = FriendReq::new(ty, level, conv);
 
         return Ok(it);
     }
