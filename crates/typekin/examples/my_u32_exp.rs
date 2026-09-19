@@ -9,7 +9,7 @@
 #![feature(derive_const)]
 mod subject {
     #[repr(transparent)]
-    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
+    #[derive(::core::fmt::Debug, ::core::marker::Copy)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyU32(u32);
     #[allow(dead_code)]
@@ -809,7 +809,7 @@ mod subject {
         }
     };
     #[repr(transparent)]
-    #[derive(:: core :: marker :: Copy)]
+    #[derive(::core::marker::Copy)]
     #[derive_const(::core::clone::Clone)]
     pub struct MyFriend(u32);
     impl MyFriend {

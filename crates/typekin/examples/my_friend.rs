@@ -6,9 +6,8 @@
     PageData(conv=PageData::to_header, level=[Full]),
 ])]
 struct PageHeader(u32);
-
-//          0b00000101_10101010_00000000_11111111;
-// FORMAT:  ^...ID...^ ^......STATE....^ ^.DATA.^
+// VALUE:   0b00000000_00000000_00000000_00000000;
+// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -52,7 +51,7 @@ fn main() {
     header |= data;
 
     let expected = 0b00000101_10101010_00000000_11111111;
-    //               ^..ID..^ ^......STATE....^ ^.DATA.^
+    // FORMAT:     ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 
     assert_eq!(header.raw(), expected);
 }
