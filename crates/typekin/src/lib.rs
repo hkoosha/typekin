@@ -1,8 +1,8 @@
 pub(crate) mod runner;
-pub(crate) mod type_friendship;
 pub(crate) mod value_type;
 
 pub(crate) mod bitflag;
+pub(crate) mod friendship;
 pub(crate) mod integral;
 
 #[cfg(test)]
@@ -27,4 +27,20 @@ pub fn bitflag(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     return bitflag::bitflag(attr, item);
+}
+
+#[proc_macro_attribute]
+pub fn friendship(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    return friendship::friendship(attr, item);
+}
+
+#[proc_macro_attribute]
+pub fn constructor(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    return friendship::constructor(attr, item);
 }

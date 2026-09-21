@@ -1,9 +1,18 @@
+#![feature(const_clone)]
+#![feature(const_cmp)]
+#![feature(const_convert)]
+#![feature(const_destruct)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(derive_const)]
+
 #[repr(transparent)]
-#[derive(Copy, Clone)]
-#[typekin::integral(konst = false, friends = [
-    PageId(conv=id_to_header, level=[Full]),
-    PageState(conv=state_to_header, level=[Full]),
-    PageData(conv=PageData::to_header, level=[Full]),
+#[derive(Copy)]
+#[derive_const(Clone)]
+#[typekin::integral(konst = true, friends = [
+    PageId(conv=id_to_header, cap=[Make, Math, Bit, Relation]),
+    PageState(conv=state_to_header, cap=[Make, Math, Bit, Relation]),
+    PageData(conv=PageData::to_header, cap=[Make, Math, Bit, Relation]),
 ])]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;
@@ -21,18 +30,18 @@ struct PageState(u8);
 #[derive(Copy, Clone)]
 struct PageData(u8);
 
-fn id_to_header(it: PageId) -> u32 {
+const fn id_to_header(it: PageId) -> u32 {
     let bits = it.0 as u32;
     return bits << 24;
 }
 
-fn state_to_header(it: PageState) -> u32 {
+const fn state_to_header(it: PageState) -> u32 {
     let bits = it.0 as u32;
     return bits << 8;
 }
 
 impl PageData {
-    fn to_header(self) -> u32 {
+    const fn to_header(self) -> u32 {
         return self.0 as u32;
     }
 }
@@ -45,7 +54,7 @@ fn main() {
     // While id, state & data all have value of 0b1111, they will not overwrite
     // each other; because their friendship relationship guards how they are
     // cast into a PageHeader before being bit-or-ed into header:
-    let mut header = PageHeader::of(0);
+    let mut header = PageHeader::make(0);
     header |= id;
     header |= state;
     header |= data;

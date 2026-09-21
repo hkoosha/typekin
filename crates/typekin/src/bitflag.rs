@@ -1,4 +1,9 @@
 use crate::{
+    friendship::{
+        Protocol,
+        ProtocolFriend,
+        cfg::Friend,
+    },
     integral::{
         self,
         IntegralCfg,
@@ -8,12 +13,9 @@ use crate::{
         MkErr,
         mk_flags,
     },
-    type_friendship::{
-        FriendReq,
-        FriendshipLevel,
-    },
     value_type::N,
 };
+use std::collections::BTreeSet;
 
 use proc_macro2::{
     Ident,
@@ -25,7 +27,6 @@ use quote::{
 };
 use syn::{
     Fields,
-    Path,
     bracketed,
     parse::{
         Parse,
@@ -68,19 +69,13 @@ mk_flags! {
         pub impl_value: bool,
 
         pub value_name: String,
-        pub value_name_suffix: String = "Value",
-
-        pub trait_seal: String = "BitSeal",
-        pub trait_friend_make: String = "BitFriendMake",
-        pub trait_friend_math: String = "BitFriendMath",
-        pub trait_friend_bit: String = "BitFriendBit",
-        pub trait_friend_rel: String = "BitFriendRel",
+        pub suffix: String = "Value",
     }
 }
 
 #[derive(Default)]
 pub(crate) struct BitflagCfg {
-    pub(crate) friends: Vec<FriendReq>,
+    pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
     pub(crate) int: Box<IntegralCfg>,
 }
@@ -88,21 +83,25 @@ pub(crate) struct BitflagCfg {
 impl Parse for BitflagCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
-        let mut has_integral = false;
+        let mut has_konst = false;
 
         runner::parse_inner_attributes(input, |attr, rest| {
             match attr {
+                "konst" => {
+                    this.int.konst = rest.parse::<syn::LitBool>()?.value;
+                    has_konst = true;
+                }
                 "with" => this.bit.parse_from(rest, true)?,
                 "without" => this.bit.parse_from(rest, false)?,
                 "friends" => this.friends = runner::list(rest)?.collect(),
-                "value_name_suffix" => {
+                "suffix" => {
                     let as_str: syn::LitStr = input.parse()?;
                     if as_str.value().is_empty() {
-                        this.bit.value_name_suffix = "".to_string();
+                        this.bit.suffix = "".to_string();
                     }
                     else {
                         let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                        this.bit.value_name_suffix = as_idn.to_string();
+                        this.bit.suffix = as_idn.to_string();
                     }
                 }
                 "value_name" => {
@@ -115,7 +114,7 @@ impl Parse for BitflagCfg {
                     let _ = bracketed!(content in input);
                     let cfg = IntegralCfg::parse(&content)?;
                     this.int = Box::new(cfg);
-                    has_integral = true;
+                    has_konst = true;
                 }
                 _ => {}
             };
@@ -123,10 +122,10 @@ impl Parse for BitflagCfg {
             return Ok(true);
         })?;
 
-        if !has_integral {
+        if !has_konst {
             return Err(syn::Error::new(
                 input.span(),
-                "missing required `konst` argument in `integral = [...]`",
+                "missing required `konst` argument",
             ));
         }
 
@@ -138,13 +137,6 @@ pub(crate) struct Maker {
     el: Ident,
     ty: Ident,
     vl: Ident,
-
-    trait_seal: Ident,
-    trait_friend_make: Ident,
-    trait_friend_math: Ident,
-    trait_friend_bit: Ident,
-    trait_friend_rel: Ident,
-
     cfg: Box<BitflagCfg>,
     items: Vec<Ident>,
 }
@@ -157,22 +149,12 @@ impl Maker {
         items: Vec<Ident>,
     ) -> Self {
         let mut this = Self {
-            vl: match (
-                cfg.bit.value_name.as_str(),
-                cfg.bit.value_name_suffix.as_str(),
-            ) {
+            vl: match (cfg.bit.value_name.as_str(), cfg.bit.suffix.as_str()) {
                 ("", "") => format_ident!("{}Value", ty),
                 ("", suffix) => format_ident!("{}{}", ty, suffix),
                 (prefix, "") => format_ident!("{}", prefix),
                 (prefix, suffix) => format_ident!("{}{}", prefix, suffix),
             },
-
-            trait_seal: format_ident!("{}", cfg.bit.trait_seal),
-            trait_friend_make: format_ident!("{}", cfg.bit.trait_friend_make),
-            trait_friend_math: format_ident!("{}", cfg.bit.trait_friend_math),
-            trait_friend_bit: format_ident!("{}", cfg.bit.trait_friend_bit),
-            trait_friend_rel: format_ident!("{}", cfg.bit.trait_friend_rel),
-
             el: format_ident!("{}", repr.rust_name()),
             ty: ty.clone(),
             cfg,
@@ -189,74 +171,33 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
 
-        self.cfg.friends.sort();
-
-        for (f_ty, f_conv) in [
-            (ty, parse_quote! { #ty::raw }),
-            (vl, parse_quote! { #vl::raw }),
-        ] {
-            if let Some(friendship) =
-                self.cfg.friends.iter_mut().find(|it| it.ty.is_ident(f_ty))
-            {
-                friendship.level.insert(FriendshipLevel::Rel);
-                friendship.level.insert(FriendshipLevel::Bit);
-                friendship.conv = Some(f_conv);
-            }
-            else {
-                self.cfg.friends.push(FriendReq::new(
-                    Path::from(f_ty.clone()),
-                    [FriendshipLevel::Rel, FriendshipLevel::Bit]
-                        .into_iter()
-                        .collect(),
-                    Some(f_conv),
-                ));
-            }
+        // enum :: enum, Make & Bit & Cmp.
+        {
+            let req = Friend::from(ty);
+            let mut req = self.cfg.friends.take(&req).unwrap_or(req);
+            req.capabilities.insert(format_ident!("Cmp"));
+            req.capabilities.insert(format_ident!("Bit"));
+            req.capabilities.insert(format_ident!("Make"));
+            req.conv = Some(parse_quote! { #ty::raw });
+            assert!(self.cfg.friends.insert(req));
         }
 
-        if self.cfg.bit.impl_value {
-            if !self.cfg.int.friends.iter().any(|it| {
-                it.level.contains(&FriendshipLevel::Make)
-                    && it.ty.is_ident(&self.el)
-            }) {
-                if let Some(friendship) = self
-                    .cfg
-                    .int
-                    .friends
-                    .iter_mut()
-                    .find(|it| it.ty.is_ident(&self.el))
-                {
-                    friendship.level.insert(FriendshipLevel::Make);
-                }
-                else {
-                    self.cfg.int.friends.push(FriendReq::new(
-                        Path::from(self.el.clone()),
-                        FriendshipLevel::Make.normalize(),
-                        None,
-                    ))
-                }
-            }
-
-            if let Some(friendship) = self
-                .cfg
-                .int
-                .friends
-                .iter_mut()
-                .find(|it| it.ty.is_ident(ty))
-            {
-                friendship.level.insert(FriendshipLevel::Rel);
-                friendship.level.insert(FriendshipLevel::Bit);
-                friendship.conv = Some(parse_quote! { #ty::raw });
-            }
-            else {
-                self.cfg.int.friends.push(FriendReq::new(
-                    Path::from(ty.clone()),
-                    [FriendshipLevel::Rel, FriendshipLevel::Bit]
-                        .into_iter()
-                        .collect(),
-                    Some(parse_quote! { #ty::raw }),
-                ));
-            }
+        // enum :: value, Make & Bit.
+        {
+            let req = Friend::from(vl);
+            let mut req = self.cfg.friends.take(&req).unwrap_or(req);
+            req.capabilities.insert(format_ident!("Bit"));
+            req.capabilities.insert(format_ident!("Make"));
+            req.conv = Some(parse_quote! { #vl::raw });
+            assert!(self.cfg.friends.insert(req));
         }
+
+        // value :: enum, Make & Bit.
+        self.cfg.int.add_friend(
+            ty,
+            [format_ident!("Bit"), format_ident!("Make")],
+            parse_quote! { #ty::raw },
+        );
     }
 
     pub(crate) fn ekran(self) -> syn::Result<TokenStream> {
@@ -267,7 +208,7 @@ impl Maker {
         let ty_impl = self.ekran_ty_impl();
         let ty_impls = self.ekran_ty_impls();
         let iter_impl = self.ekran_iter();
-        let friends = self.ekran_friendship();
+        let friends = self.ekran_friendship()?;
 
         let impl_int = match self.cfg.bit.impl_value {
             false => TokenStream::new(),
@@ -330,15 +271,22 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let (konst, _, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
+
+        let raw = self
+            .cfg
+            .int
+            .get_raw
+            .as_ref()
+            .map(|it| quote! { #it })
+            .unwrap_or_else(|| quote! { #vl::raw });
 
         return quote! {
             impl #vl {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn bits(self) -> #el {
-                    return self.raw();
+                    return #raw(self);
                 }
 
                 #[must_use]
@@ -674,8 +622,7 @@ impl Maker {
     fn ekran_vl_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let (konst, _, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
 
         return quote! {
             impl ::core::convert::From<#ty> for #vl {
@@ -702,8 +649,7 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let (konst, _, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
 
         return quote! {
             impl #ty {
@@ -763,8 +709,7 @@ impl Maker {
         let vl = &self.vl;
         let el = &self.el;
         let all_bits = self.items.iter();
-        let (konst, _, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
 
         let name_arms = self
             .items
@@ -861,14 +806,19 @@ impl Maker {
     fn ekran_ty_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let value = &self.vl;
-        let trait_seal = &self.trait_seal;
-        let trait_friend_bit = &self.trait_friend_bit;
+        let seal = format_ident!("FlagSeal");
+        let bit_capability = format_ident!("FlagBit");
         let fn_conv = format_ident!(
             "conv_{}",
             runner::snake_case_of(&self.ty.to_string())
         );
-        let (konst, bonst, destruct) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let destruct = runner::destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
+
+        let cond_seal = {
+            let bonst = runner::konst(self.cfg.int.konst);
+            quote! { #bonst #seal }
+        };
 
         let mut stream = TokenStream::new();
 
@@ -902,13 +852,13 @@ impl Maker {
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
                 where
-                    T: #bonst #trait_friend_bit #destruct,
+                    T: #bit_capability + #cond_seal #destruct,
                 {
                     type Output = #value;
 
                     #[inline(always)]
                     fn bitand(self, rhs: T) -> Self::Output {
-                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(&rhs);
                         return self.into_value().intersection(
                             #value::from_bits_retain(rhs)
                         );
@@ -921,13 +871,13 @@ impl Maker {
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
                 where
-                    T: #bonst #trait_friend_bit #destruct,
+                    T: #bit_capability + #cond_seal #destruct,
                 {
                     type Output = #value;
 
                     #[inline(always)]
                     fn bitor(self, rhs: T) -> Self::Output {
-                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(&rhs);
                         return self.into_value().union(
                             #value::from_bits_retain(rhs)
                         );
@@ -940,13 +890,13 @@ impl Maker {
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
                 where
-                    T: #bonst #trait_friend_bit #destruct,
+                    T: #bit_capability + #cond_seal #destruct,
                 {
                     type Output = #value;
 
                     #[inline(always)]
                     fn bitxor(self, rhs: T) -> Self::Output {
-                        let rhs = #trait_seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(&rhs);
                         return self.into_value().symmetric_difference(
                             #value::from_bits_retain(rhs)
                         );
@@ -999,8 +949,14 @@ impl Maker {
     fn ekran_iter(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let (konst, _, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst);
+        let raw = self
+            .cfg
+            .int
+            .get_raw
+            .as_ref()
+            .map(|it| quote! { #it })
+            .unwrap_or_else(|| quote! { #vl::raw });
 
         return quote! {
             struct IterItems {
@@ -1057,7 +1013,7 @@ impl Maker {
 
                 #[inline]
                 fn size_hint(&self) -> (usize, Option<usize>) {
-                    let bound = self.value.raw().count_ones() as usize;
+                    let bound = #raw(self.value).count_ones() as usize;
                     return (bound, Some(bound));
                 }
             }
@@ -1094,159 +1050,74 @@ impl Maker {
 
                 #[inline]
                 fn size_hint(&self) -> (usize, Option<usize>) {
-                    let bound = (self.value.raw().count_ones() + 1) as usize;
+                    let bound = (#raw(self.value).count_ones() + 1) as usize;
                     return (bound, Some(bound));
                 }
             }
         };
     }
 
-    fn ekran_friendship(&self) -> TokenStream {
-        let el = &self.el;
-        let trait_seal = &self.trait_seal;
-        let trait_friend_make = &self.trait_friend_make;
-        let trait_friend_math = &self.trait_friend_math;
-        let trait_friend_bit = &self.trait_friend_bit;
-        let trait_friend_rel = &self.trait_friend_rel;
-        let fn_conv = format_ident!(
-            "conv_{}",
-            runner::snake_case_of(&self.ty.to_string())
-        );
-        let (konst, bonst, _) =
-            runner::konst_bonst_and_destruct(self.cfg.int.konst);
-
-        let seal_impls = self
+    fn ekran_friendship(&self) -> syn::Result<TokenStream> {
+        let relation_ident = &self.el;
+        let relation: syn::Type = parse_quote! { #relation_ident };
+        let friends = self
             .cfg
             .friends
             .iter()
-            .map(|friendship| {
-                let ty = &friendship.ty;
-                let body = match &friendship.conv {
+            .map(|friend| {
+                let Some(ty) = friend.ty.clone()
+                else {
+                    return Ok(None);
+                };
+                let capabilities = friend
+                    .capabilities
+                    .iter()
+                    .map(|it| format_ident!("Flag{}", it))
+                    .collect::<BTreeSet<_>>();
+                let relation = &self.el;
+                let conversion = match &friend.conv {
                     Some(conv) if conv.is_ident("self") => quote! {
-                        let value: #el = *self;
-                        return value;
+                        let relation: #relation = *self;
+                        return relation;
                     },
                     Some(conv) => quote! {
                         return #conv(*self);
                     },
                     None => quote! {
-                        let value: #el = (*self).into();
-                        return value;
+                        let relation: #relation = (*self).into();
+                        return relation;
                     },
                 };
 
-                return quote! {
-                    #konst impl #trait_seal for #ty {
-                        #[inline(always)]
-                        fn #fn_conv(&self) -> #el {
-                            #body
-                        }
-                    }
-                };
+                return Ok(Some(ProtocolFriend {
+                    ty,
+                    capabilities,
+                    conversion: Some(conversion),
+                }));
             })
-            .collect::<Vec<_>>();
+            .collect::<syn::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
-        let mut marker_impls = Vec::<TokenStream>::new();
-        for friendship in &self.cfg.friends {
-            for level in &friendship.level {
-                for level in level.normalize() {
-                    let friend = match level {
-                        FriendshipLevel::Make => trait_friend_make,
-                        FriendshipLevel::Math => trait_friend_math,
-                        FriendshipLevel::Bit => trait_friend_bit,
-                        FriendshipLevel::Rel => trait_friend_rel,
-                        FriendshipLevel::Full | FriendshipLevel::None => {
-                            unreachable!()
-                        }
-                        FriendshipLevel::XCustom(custom) => {
-                            unimplemented!(
-                                "custom flag friendship level not implemented: {}",
-                                custom,
-                            )
-                        }
-                    };
-                    let ty = &friendship.ty;
-
-                    marker_impls.push(quote! {
-                        #konst impl #friend for #ty {}
-                    });
-                }
-            }
-        }
-
-        return quote! {
-            #(#seal_impls)*
-            #(#marker_impls)*
-
-            #konst trait #trait_seal {
-                fn #fn_conv(&self) -> #el;
-            }
-
-            #konst trait #trait_friend_make: #bonst #trait_seal {}
-            #konst trait #trait_friend_math: #bonst #trait_seal {}
-            #konst trait #trait_friend_bit: #bonst #trait_seal {}
-            #konst trait #trait_friend_rel: #bonst #trait_seal {}
-
-            #konst impl<T> #trait_seal for &T
-            where
-                T: #bonst #trait_seal,
-            {
-                #[inline(always)]
-                fn #fn_conv(&self) -> #el {
-                    return #trait_seal::#fn_conv(&**self);
-                }
-            }
-
-            #konst impl<T> #trait_seal for &mut T
-            where
-                T: #bonst #trait_seal,
-            {
-                #[inline(always)]
-                fn #fn_conv(&self) -> #el {
-                    return #trait_seal::#fn_conv(&**self);
-                }
-            }
-
-            #konst impl<T> #trait_friend_make for &T
-            where
-                T: #bonst #trait_friend_make,
-            {}
-
-            #konst impl<T> #trait_friend_make for &mut T
-            where
-                T: #bonst #trait_friend_make,
-            {}
-
-            #konst impl<T> #trait_friend_math for &T
-            where
-                T: #bonst #trait_friend_math,
-            {}
-
-            #konst impl<T> #trait_friend_math for &mut T
-            where
-                T: #bonst #trait_friend_math,
-            {}
-
-            #konst impl<T> #trait_friend_bit for &T
-            where
-                T: #bonst #trait_friend_bit,
-            {}
-
-            #konst impl<T> #trait_friend_bit for &mut T
-            where
-                T: #bonst #trait_friend_bit,
-            {}
-
-            #konst impl<T> #trait_friend_rel for &T
-            where
-                T: #bonst #trait_friend_rel,
-            {}
-
-            #konst impl<T> #trait_friend_rel for &mut T
-            where
-                T: #bonst #trait_friend_rel,
-            {}
-
-        };
+        return Ok(crate::friendship::emit_protocol(Protocol {
+            target: self.ty.clone(),
+            relation,
+            seal: format_ident!("FlagSeal"),
+            conversion: format_ident!(
+                "conv_{}",
+                runner::snake_case_of(&self.ty.to_string())
+            ),
+            capabilities: vec![
+                format_ident!("FlagMake"),
+                format_ident!("FlagMath"),
+                format_ident!("FlagBit"),
+                format_ident!("FlagCmp"),
+            ],
+            friends,
+            emit_seal: true,
+            target_conversion: None,
+            konst: self.cfg.int.konst,
+        }));
     }
 }

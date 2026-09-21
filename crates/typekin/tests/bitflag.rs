@@ -3,9 +3,9 @@ mod tests {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
-        friends = [u8(conv = self, level = [Bit])],
+        friends = [u8(conv = self, cap = [Bit])],
         integral = [
-            friends = [u8(conv = self, level = [Full])],
+            friends = [u8(conv = self, cap = [Make, Math, Bit, Relation])],
             konst = false,
         ],
     )]
@@ -73,12 +73,7 @@ mod tests {
     // =============================================================================
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
-    #[typekin::bitflag(
-        value_name_suffix = "Holder",
-        integral = [
-            konst = false,
-        ],
-    )]
+    #[typekin::bitflag(suffix = "Holder", konst = false)]
     pub enum Thingy1 {
         FirstThing = 0,
         ReadThing = 0b001,
@@ -87,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    fn value_name_suffix() {
+    fn suffix() {
         let _ = Thingy1Holder::all();
     }
 
@@ -97,7 +92,7 @@ mod tests {
     #[repr(u8)]
     #[typekin::bitflag(
         value_name = "Thingies2",
-        value_name_suffix = "",
+        suffix = "",
         integral = [
             konst = false,
         ],

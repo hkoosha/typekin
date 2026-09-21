@@ -16,6 +16,122 @@ mod subject {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
+        const trait Seal {
+            fn conv_my_plain(&self) -> i64;
+        }
+        const trait Make: [const] Seal {}
+        const trait Math: [const] Seal {}
+        const trait Bit: [const] Seal {}
+        const trait Relation: [const] Seal {}
+        const impl Seal for MyPlain {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return Self::raw(*self);
+            }
+        }
+        const impl Bit for MyPlain {}
+        const impl Make for MyPlain {}
+        const impl Math for MyPlain {}
+        const impl Relation for MyPlain {}
+        const impl Seal for i32 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for i32 {}
+        const impl Seal for i64 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Bit for i64 {}
+        const impl Make for i64 {}
+        const impl Math for i64 {}
+        const impl Relation for i64 {}
+        const impl Seal for i8 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for i8 {}
+        const impl Seal for isize {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for isize {}
+        const impl Seal for u16 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for u16 {}
+        const impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for u32 {}
+        const impl Seal for u8 {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return *self as i64;
+            }
+        }
+        const impl Make for u8 {}
+        const impl<T> Seal for &T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return Seal::conv_my_plain(&**self);
+            }
+        }
+        const impl<T> Seal for &mut T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_plain(&self) -> i64 {
+                return Seal::conv_my_plain(&**self);
+            }
+        }
+        const impl<T> Make for &T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Make for &mut T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &mut T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
+        const impl<T> Bit for &mut T where
+            T: [const] Bit + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &mut T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
         const impl ::core::convert::Into<isize> for MyPlain {
             #[inline(always)]
             fn into(self) -> isize {
@@ -137,7 +253,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAndAssign<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitand_assign(
@@ -150,7 +266,7 @@ mod subject {
         }
         const impl<T> ::core::ops::AddAssign<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn add_assign(
@@ -163,7 +279,7 @@ mod subject {
         }
         const impl<T> ::core::ops::SubAssign<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn sub_assign(
@@ -176,7 +292,7 @@ mod subject {
         }
         const impl<T> ::core::ops::MulAssign<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn mul_assign(
@@ -189,7 +305,7 @@ mod subject {
         }
         const impl<T> ::core::ops::DivAssign<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn div_assign(
@@ -202,7 +318,7 @@ mod subject {
         }
         const impl<T> ::core::ops::RemAssign<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn rem_assign(
@@ -215,7 +331,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOrAssign<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitor_assign(
@@ -244,7 +360,7 @@ mod subject {
         };
         const impl<T> ::core::ops::Add<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -258,7 +374,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Sub<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -272,7 +388,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Mul<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -286,7 +402,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Div<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -300,7 +416,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Rem<T> for MyPlain
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -314,7 +430,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAnd<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -328,7 +444,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOr<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -342,7 +458,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXor<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -356,7 +472,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXorAssign<T> for MyPlain
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitxor_assign(
@@ -372,12 +488,6 @@ mod subject {
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
-            }
-        }
-        const impl Seal for MyPlain {
-            #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Self::raw(*self);
             }
         }
         impl ::core::fmt::Binary for MyPlain {
@@ -416,24 +526,9 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl Seal for i64 {
-            #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                let it: i64 = *self;
-                return it;
-            }
-        }
-        const impl FriendMake for MyPlain {}
-        const impl FriendRel for MyPlain {}
-        const impl FriendBit for MyPlain {}
-        const impl FriendMath for MyPlain {}
-        const impl FriendMake for i64 {}
-        const impl FriendRel for i64 {}
-        const impl FriendBit for i64 {}
-        const impl FriendMath for i64 {}
         const impl<T> ::core::cmp::PartialEq<T> for MyPlain
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn eq(
@@ -447,7 +542,7 @@ mod subject {
         }
         const impl<T> ::core::cmp::PartialOrd<T> for MyPlain
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn partial_cmp(
@@ -459,45 +554,12 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        const trait Seal {
-            fn conv_my_plain(&self) -> i64;
-        }
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Seal::conv_my_plain(&**self);
-            }
-        }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Seal::conv_my_plain(&**self);
-            }
-        }
-        const trait FriendMake: [const] Seal {}
-        const impl<T> FriendMake for &T where T: [const] FriendMake {}
-        const impl<T> FriendMake for &mut T where T: [const] FriendMake {}
-        const trait FriendMath: [const] Seal {}
-        const impl<T> FriendMath for &T where T: [const] FriendMath {}
-        const impl<T> FriendMath for &mut T where T: [const] FriendMath {}
-        const trait FriendBit: [const] Seal {}
-        const impl<T> FriendBit for &T where T: [const] FriendBit {}
-        const impl<T> FriendBit for &mut T where T: [const] FriendBit {}
-        const trait FriendRel: [const] Seal {}
-        const impl<T> FriendRel for &T where T: [const] FriendRel {}
-        const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
         impl MyPlain {
             #[inline(always)]
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyPlain
             where
-                T: [const] FriendMake + [const] ::core::marker::Destruct,
+                T: Make + [const] Seal + [const] ::core::marker::Destruct,
             {
                 let this = Seal::conv_my_plain(&it);
                 return Self::_unchecked(this);

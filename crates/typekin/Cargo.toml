@@ -69,3 +69,9 @@ path = "examples/my_friend.rs"
 [[example]]
 name = "my_friend_exp"
 path = "examples/my_friend_exp.rs"
+[[example]]
+name = "my_friendship"
+path = "examples/my_friendship.rs"
+[[example]]
+name = "my_friendship_exp"
+path = "examples/my_friendship_exp.rs"

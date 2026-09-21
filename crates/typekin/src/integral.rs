@@ -1,16 +1,18 @@
 use crate::{
+    friendship::{
+        Protocol,
+        ProtocolFriend,
+        cfg::Friend,
+    },
     runner::{
         self,
         Merged,
         MkErr,
         mk_flags,
     },
-    type_friendship::{
-        FriendReq,
-        FriendshipLevel,
-    },
     value_type::N,
 };
+use std::collections::BTreeSet;
 
 use proc_macro2::{
     Ident,
@@ -157,15 +159,8 @@ mk_flags! {
         pub fn_op_cmp: bool,
         pub fn_op_eq: bool,
 
-        pub trait_seal: String = "Seal",
-        pub trait_friend_make: String = "FriendMake",
-        pub trait_friend_math: String = "FriendMath",
-        pub trait_friend_bit: String = "FriendBit",
-        pub trait_friend_rel: String = "FriendRel",
-
         pub fn_make: String = "make",
 
-        pub fn_prefix_seal: String = "into_",
         pub fp_unchecked: String = "Self::_unchecked",
     }
 }
@@ -174,9 +169,24 @@ mk_flags! {
 pub(crate) struct IntegralCfg {
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) konst: bool,
-    pub(crate) fn_get_raw: Option<Path>,
-    pub(crate) fn_validator: Option<Path>,
-    pub(crate) friends: Vec<FriendReq>,
+    pub(crate) get_raw: Option<Path>,
+    pub(crate) validator: Option<Path>,
+    pub(crate) friends: BTreeSet<Friend>,
+}
+
+impl IntegralCfg {
+    pub(crate) fn add_friend(
+        &mut self,
+        ty: &Ident,
+        capabilities: impl IntoIterator<Item = Ident>,
+        conv: Path,
+    ) {
+        let req = Friend::from(ty);
+        let mut req = self.friends.take(&req).unwrap_or(req);
+        req.capabilities.extend(capabilities);
+        req.conv = Some(conv);
+        assert!(self.friends.insert(req));
+    }
 }
 
 impl Debug for IntegralCfg {
@@ -186,14 +196,14 @@ impl Debug for IntegralCfg {
     ) -> std::fmt::Result {
         write!(
             f,
-            "IntegralCfg[int: {:?}, friends: {:?}, fn_get_raw: {}, fn_validator: {}",
+            "IntegralCfg[int: {:?}, friends: {:?}, get_raw: {}, validator: {}",
             self.flags,
             self.friends,
-            self.fn_get_raw
+            self.get_raw
                 .as_ref()
                 .map(|it| it.to_token_stream().to_string())
                 .unwrap_or_default(),
-            self.fn_validator
+            self.validator
                 .as_ref()
                 .map(|it| it.to_token_stream().to_string())
                 .unwrap_or_default(),
@@ -214,9 +224,24 @@ impl Parse for IntegralCfg {
                 }
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
-                "friends" => this.friends = runner::list(rest)?.collect(),
-                "fn_get_raw" => this.fn_get_raw = Some(rest.parse()?),
-                "fn_validator" => this.fn_validator = Some(rest.parse()?),
+                "friends" => {
+                    let friends =
+                        runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
+                    for friend in &friends {
+                        for capability in &friend.capabilities {
+                            if !matches!(
+                                capability.to_string().as_str(),
+                                "Make" | "Math" | "Bit" | "Relation"
+                            ) {
+                                return capability
+                                    .fail("unknown integral capability");
+                            }
+                        }
+                    }
+                    this.friends = friends;
+                }
+                "get_raw" => this.get_raw = Some(rest.parse()?),
+                "validator" => this.validator = Some(rest.parse()?),
                 it if it.starts_with("with_") => {
                     this.flags.parse_from(rest, true)?
                 }
@@ -229,10 +254,7 @@ impl Parse for IntegralCfg {
         })?;
 
         if !has_konst {
-            return Err(syn::Error::new(
-                input.span(),
-                "missing required `konst` argument",
-            ));
+            return input.span().fail("missing required `konst` argument");
         }
 
         return Ok(this);
@@ -266,15 +288,15 @@ impl Maker {
         let cfg = Self::preprocess_cfg(cfg);
 
         let mut this = Self {
-            trait_seal: format_ident!("{}", cfg.flags.trait_seal),
-            trait_friend_bit: format_ident!("{}", cfg.flags.trait_friend_bit),
-            trait_friend_make: format_ident!("{}", cfg.flags.trait_friend_make),
-            trait_friend_math: format_ident!("{}", cfg.flags.trait_friend_math),
-            trait_friend_rel: format_ident!("{}", cfg.flags.trait_friend_rel),
+            trait_seal: format_ident!("Seal"),
+            trait_friend_bit: format_ident!("Bit"),
+            trait_friend_make: format_ident!("Make"),
+            trait_friend_math: format_ident!("Math"),
+            trait_friend_rel: format_ident!("Relation"),
 
             fp_unchecked: syn::parse_str(&cfg.flags.fp_unchecked)?,
             fp_get_raw: cfg
-                .fn_get_raw
+                .get_raw
                 .clone()
                 .unwrap_or_else(|| parse_quote! { Self::raw }),
             fn_conv: format_ident!(
@@ -296,9 +318,7 @@ impl Maker {
     }
 
     fn preprocess_cfg(mut cfg: Box<IntegralCfg>) -> Box<IntegralCfg> {
-        cfg.friends.sort();
-
-        if cfg.flags.auto_of_raw && cfg.fn_validator.is_some() {
+        if cfg.flags.auto_of_raw && cfg.validator.is_some() {
             cfg.flags.auto_of_raw = false;
         }
 
@@ -306,66 +326,160 @@ impl Maker {
     }
 
     fn fix_friendship(&mut self) {
-        let xty = &self.ty;
-        let xel = &self.el;
+        let target = &self.ty;
+        let relation = &self.el;
+        let validated = self.cfg.validator.is_some();
+        let has_make = self.cfg.flags.impl_self_friend_make;
 
-        self.cfg.friends.sort();
-
-        for (ty, to_el, is_always_valid) in [
-            (xty, Some(parse_quote! { #xty::raw }), true),
+        for (needle, conversion, is_validated) in [
             (
-                xel,
+                Friend::from(target),
+                Some(parse_quote! { #target::raw }),
+                false,
+            ),
+            (
+                Friend::from(relation),
                 Some(parse_quote! { self }),
-                self.cfg.fn_validator.is_none(),
+                validated,
             ),
         ] {
-            if let Some(already) =
-                self.cfg.friends.iter_mut().find(|it| it.ty.is_ident(ty))
-            {
-                if is_always_valid && self.cfg.flags.impl_self_friend_make {
-                    already.level.insert(FriendshipLevel::Make);
-                }
+            let mut friend = self.cfg.friends.take(&needle).unwrap_or(needle);
 
-                if self.cfg.flags.impl_self_friend_math_ops {
-                    already.level.insert(FriendshipLevel::Math);
-                }
-                if self.cfg.flags.impl_self_friend_math_rel {
-                    already.level.insert(FriendshipLevel::Rel);
-                }
-                if self.cfg.flags.impl_self_friend_math_bit {
-                    already.level.insert(FriendshipLevel::Bit);
-                }
-
-                if already.conv.is_none() && to_el.is_some() {
-                    already.conv = to_el;
-                }
+            if friend.conv.is_none() {
+                friend.conv = conversion;
             }
-            else {
-                let mut levels = vec![];
 
-                if is_always_valid && self.cfg.flags.impl_self_friend_make {
-                    levels.push(FriendshipLevel::Make);
-                }
-
-                if self.cfg.flags.impl_self_friend_math_ops {
-                    levels.push(FriendshipLevel::Math)
-                }
-                if self.cfg.flags.impl_self_friend_math_rel {
-                    levels.push(FriendshipLevel::Rel)
-                }
-                if self.cfg.flags.impl_self_friend_math_bit {
-                    levels.push(FriendshipLevel::Bit)
-                }
-
-                let self_friendship = FriendReq::new(
-                    Path::from(ty.clone()),
-                    levels.into_iter().collect(),
-                    to_el,
-                );
-
-                self.cfg.friends.push(self_friendship);
+            if !is_validated && has_make {
+                friend.capabilities.insert(format_ident!("Make"));
             }
+
+            if self.cfg.flags.impl_self_friend_math_ops {
+                friend.capabilities.insert(format_ident!("Math"));
+            }
+
+            if self.cfg.flags.impl_self_friend_math_rel {
+                friend.capabilities.insert(format_ident!("Relation"));
+            }
+
+            if self.cfg.flags.impl_self_friend_math_bit {
+                friend.capabilities.insert(format_ident!("Bit"));
+            }
+
+            assert!(self.cfg.friends.insert(friend));
         }
+
+        if !validated && has_make {
+            N::items()
+                .into_iter()
+                .filter(|it| {
+                    **it != self.repr && it.can_safe_cast_to(self.repr)
+                })
+                .map(|it| format_ident!("{}", it.rust_name()))
+                .map(|ty| Friend::from(&ty))
+                .for_each(|friend| {
+                    let mut friend =
+                        self.cfg.friends.take(&friend).unwrap_or(friend);
+                    friend.capabilities.insert(format_ident!("Make"));
+                    assert!(self.cfg.friends.insert(friend));
+                });
+        }
+    }
+
+    fn ekran_friendship(&self) -> TokenStream {
+        let target = self.ty.clone();
+        let relation_ident = &self.el;
+        let relation: Type = parse_quote! { #relation_ident };
+        let seal = self.trait_seal.clone();
+        let conversion = self.fn_conv.clone();
+        let fp_get_raw = &self.fp_get_raw;
+        let target_conversion = self.cfg.flags.impl_friend_seal.then(|| {
+            quote! {
+                return #fp_get_raw(*self);
+            }
+        });
+        let capabilities = [
+            (
+                self.cfg.flags.impl_friendzone_friend_make,
+                self.trait_friend_make.clone(),
+            ),
+            (
+                self.cfg.flags.impl_friendzone_friend_math_ops,
+                self.trait_friend_math.clone(),
+            ),
+            (
+                self.cfg.flags.impl_friendzone_friend_math_bit,
+                self.trait_friend_bit.clone(),
+            ),
+            (
+                self.cfg.flags.impl_friendzone_friend_math_rel,
+                self.trait_friend_rel.clone(),
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, capability)| enabled.then_some(capability))
+        .collect();
+        let friends = match self.cfg.flags.impl_friends {
+            false => vec![],
+            true => self
+                .cfg
+                .friends
+                .iter()
+                .filter_map(|friend| {
+                    let ty = friend.ty.as_ref()?;
+                    let is_raw = ty.get_ident().is_some_and(|ident| {
+                        N::of(ident.to_string()).is_some()
+                    });
+                    let conversion = if ty.is_ident(&self.ty) {
+                        None
+                    }
+                    else if is_raw {
+                        let relation = &self.el;
+                        Some(quote! {
+                            return *self as #relation;
+                        })
+                    }
+                    else {
+                        match &friend.conv {
+                            Some(conv) if conv.is_ident("self") => {
+                                let relation = &self.el;
+                                Some(quote! {
+                                    let relation: #relation = *self;
+                                    return relation;
+                                })
+                            }
+                            Some(conv) => Some(quote! {
+                                return #conv(*self);
+                            }),
+                            None => {
+                                let relation = &self.el;
+                                Some(quote! {
+                                    let relation: #relation = (*self).into();
+                                    return relation;
+                                })
+                            }
+                        }
+                    };
+
+                    Some(ProtocolFriend {
+                        ty: ty.clone(),
+                        capabilities: friend.capabilities.clone(),
+                        conversion,
+                    })
+                })
+                .collect(),
+        };
+
+        return crate::friendship::emit_protocol(Protocol {
+            target,
+            relation,
+            seal,
+            conversion,
+            capabilities,
+            friends,
+            emit_seal: self.cfg.flags.impl_friendzone_seal,
+            target_conversion,
+            konst: self.cfg.konst,
+        });
     }
 
     pub(crate) fn make_impl_range(&self) -> TokenStream {
@@ -397,28 +511,34 @@ impl Maker {
         let el = &self.el;
         let fp_unchecked = &self.fp_unchecked;
         let fp_get_raw = &self.fp_get_raw;
-        let fn_get_raw = &fp_get_raw.segments.last().unwrap().ident;
-        let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
-        let fp_friend_conv: Path = {
-            let trait_seal = &self.trait_seal;
-            let fn_conv = &self.fn_conv;
-            parse_quote! { #trait_seal::#fn_conv }
-        };
-        let (konst, bonst, destruct) =
-            runner::konst_bonst_and_destruct(self.cfg.konst);
 
         let mut stream = TokenStream::new();
 
         if self.cfg.flags.fn_conv_of {
+            let konst = runner::konst(self.cfg.konst);
+            let bonst = runner::bonst(self.cfg.konst);
+            let destruct = runner::destruct(self.cfg.konst);
+            let trait_seal = &self.trait_seal;
             let what = &self.trait_friend_make;
+
+            let fp_friend_conv = {
+                let trait_seal = &self.trait_seal;
+                let fn_conv = &self.fn_conv;
+                quote! { #trait_seal::#fn_conv }
+            };
+
+            let cond_seal = quote! { #bonst #trait_seal };
+
+            let fn_of = format_ident!("of");
+
             let it = quote! {
                 #[inline(always)]
                 #[allow(private_bounds)]
-                pub #konst fn of<T>(
+                pub #konst fn #fn_of<T>(
                     it: T,
                 ) -> #ty
                 where
-                    T: #bonst #what #destruct,
+                    T: #what + #cond_seal #destruct,
                 {
                     let this = #fp_friend_conv(&it);
                     return #fp_unchecked(this);
@@ -428,6 +548,8 @@ impl Maker {
         }
 
         if self.cfg.flags.auto_of_raw {
+            let konst = runner::konst(self.cfg.konst);
+            let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn #fn_make(it: #el) -> #ty {
@@ -438,10 +560,12 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_conv_raw {
+            let get_raw = &fp_get_raw.segments.last().unwrap().ident;
+
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
-                pub const fn #fn_get_raw(self) -> #el {
+                pub const fn #get_raw(self) -> #el {
                     return self.0;
                 }
             };
@@ -711,8 +835,9 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_make_unchecked_try
-            && let Some(validator) = &self.cfg.fn_validator
+            && let Some(validator) = &self.cfg.validator
         {
+            let konst = runner::konst(self.cfg.konst);
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_make(it: #el) -> Result<Self, #el> {
@@ -727,7 +852,7 @@ impl Maker {
             stream.extend(it);
         }
         else if self.cfg.flags.fn_make_checked_try
-            && self.cfg.fn_validator.is_none()
+            && self.cfg.validator.is_none()
         {
             let it = quote! {
                 #[inline(always)]
@@ -739,7 +864,7 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_make_unchecked
-            && let Some(validator) = &self.cfg.fn_validator
+            && let Some(validator) = &self.cfg.validator
         {
             let it = quote! {
                 #[must_use]
@@ -755,8 +880,7 @@ impl Maker {
             };
             stream.extend(it);
         }
-        else if self.cfg.flags.fn_make_checked
-            && self.cfg.fn_validator.is_none()
+        else if self.cfg.flags.fn_make_checked && self.cfg.validator.is_none()
         {
             let it = quote! {
                 #[must_use]
@@ -775,20 +899,25 @@ impl Maker {
         let ty = &self.ty;
         let el = &self.el;
 
-        let trait_friend_make = &self.trait_friend_make;
         let trait_friend_bit = &self.trait_friend_bit;
         let trait_friend_math = &self.trait_friend_math;
         let trait_friend_rel = &self.trait_friend_rel;
         let trait_seal = &self.trait_seal;
 
         let fn_conv = &self.fn_conv;
-        let fp_friend_conv: Path = parse_quote! { #trait_seal::#fn_conv };
+        let fp_friend_conv = quote! { #trait_seal::#fn_conv };
         let fp_get_raw = &self.fp_get_raw;
 
-        let (konst, bonst, destruct) =
-            runner::konst_bonst_and_destruct(self.cfg.konst);
+        let konst = runner::konst(self.cfg.konst);
+        let destruct = runner::destruct(self.cfg.konst);
+
+        let cond_seal = {
+            let bonst = runner::bonst(self.cfg.konst);
+            quote! { #bonst #trait_seal }
+        };
 
         let mut stream = TokenStream::new();
+        stream.extend(self.ekran_friendship());
 
         if self.cfg.flags.impl_into {
             let it = N::items()
@@ -903,7 +1032,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_and {
             let it = quote! {
                 #konst impl<T> ::core::ops::BitAndAssign<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn bitand_assign(
@@ -922,7 +1051,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_add {
             let it = quote! {
                 #konst impl<T> ::core::ops::AddAssign<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn add_assign(
@@ -941,7 +1070,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_sub {
             let it = quote! {
                 #konst impl<T> ::core::ops::SubAssign<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn sub_assign(
@@ -960,7 +1089,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_mul {
             let it = quote! {
                 #konst impl<T> ::core::ops::MulAssign<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn mul_assign(
@@ -979,7 +1108,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_div {
             let it = quote! {
                 #konst impl<T> ::core::ops::DivAssign<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn div_assign(
@@ -998,7 +1127,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_rem {
             let it = quote! {
                 #konst impl<T> ::core::ops::RemAssign<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn rem_assign(
@@ -1017,7 +1146,7 @@ impl Maker {
         if self.cfg.flags.impl_assign_or {
             let it = quote! {
                 #konst impl<T> ::core::ops::BitOrAssign<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn bitor_assign(
@@ -1085,7 +1214,7 @@ impl Maker {
         if self.cfg.flags.impl_math_add {
             let it = quote! {
                 #konst impl<T> ::core::ops::Add<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1105,7 +1234,7 @@ impl Maker {
         if self.cfg.flags.impl_math_sub {
             let it = quote! {
                 #konst impl<T> ::core::ops::Sub<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1125,7 +1254,7 @@ impl Maker {
         if self.cfg.flags.impl_math_mul {
             let it = quote! {
                 #konst impl<T> ::core::ops::Mul<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1146,7 +1275,7 @@ impl Maker {
         if self.cfg.flags.impl_math_div {
             let it = quote! {
                 #konst impl<T> ::core::ops::Div<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1167,7 +1296,7 @@ impl Maker {
         if self.cfg.flags.impl_math_rem {
             let it = quote! {
                 #konst impl<T> ::core::ops::Rem<T> for #ty
-                where T: #bonst #trait_friend_math #destruct
+                where T: #trait_friend_math + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1188,7 +1317,7 @@ impl Maker {
         if self.cfg.flags.impl_math_and {
             let it = quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1208,7 +1337,7 @@ impl Maker {
         if self.cfg.flags.impl_math_or {
             let it = quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1228,7 +1357,7 @@ impl Maker {
         if self.cfg.flags.impl_math_xor {
             let it = quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     type Output = Self;
 
@@ -1243,7 +1372,7 @@ impl Maker {
                 }
 
                 #konst impl<T> ::core::ops::BitXorAssign<T> for #ty
-                where T: #bonst #trait_friend_bit #destruct
+                where T: #trait_friend_bit + #cond_seal #destruct
                 {
                     #[inline(always)]
                     fn bitxor_assign(
@@ -1266,18 +1395,6 @@ impl Maker {
                     #[inline(always)]
                     fn not(self) -> Self::Output {
                         return self._not();
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friend_seal {
-            let it = quote! {
-                #konst impl #trait_seal for #ty {
-                    #[inline(always)]
-                    fn #fn_conv(&self) -> #el {
-                        return #fp_get_raw(*self);
                     }
                 }
             };
@@ -1344,78 +1461,11 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_friends {
-            let seal_impls = self
-                .cfg
-                .friends
-                .iter()
-                .filter(|it| !it.ty.is_ident(ty))
-                .map(|it| {
-                    let whom = &it.ty;
-                    let body = match &it.conv {
-                        Some(conv) if conv.is_ident("self") => quote! {
-                            let it: #el = *self;
-                            return it;
-                        },
-                        Some(conv) => quote! {
-                            return #conv(*self);
-                        },
-                        None => quote! {
-                            let it: #el = (*self).into();
-                            return it;
-                        },
-                    };
-
-                    quote! {
-                        #konst impl #trait_seal for #whom {
-                            #[inline(always)]
-                            fn #fn_conv(&self) -> #el {
-                                #body
-                            }
-                        }
-                    }
-                })
-                .merged();
-            stream.extend(seal_impls);
-
-            let marker_impls = self
-                .cfg
-                .friends
-                .iter()
-                .flat_map(|it| {
-                    it.level
-                        .iter()
-                        .flat_map(|level| level.normalize().into_iter())
-                        .map(|level| match level {
-                            FriendshipLevel::Make => trait_friend_make,
-                            FriendshipLevel::Rel => trait_friend_rel,
-                            FriendshipLevel::Bit => trait_friend_bit,
-                            FriendshipLevel::Math => trait_friend_math,
-                            FriendshipLevel::Full => unreachable!(),
-                            FriendshipLevel::None => unreachable!(),
-                            FriendshipLevel::XCustom(custom) => {
-                                unimplemented!(
-                                    "custom friendship level not implemented: {}",
-                                    custom,
-                                )
-                            }
-                        })
-                        .map(|level| (&it.ty, level))
-                })
-                .map(|(whom, what)| {
-                    quote! {
-                        #konst impl #what for #whom {}
-                    }
-                })
-                .merged();
-            stream.extend(marker_impls);
-        }
-
         if self.cfg.flags.impl_partial_eq {
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialEq<T> for #ty
                 where
-                    T: #bonst #trait_friend_rel #destruct,
+                    T: #trait_friend_rel + #cond_seal #destruct,
                 {
                     #[inline(always)]
                     fn eq(
@@ -1435,7 +1485,7 @@ impl Maker {
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
                 where
-                    T: #bonst #trait_friend_rel #destruct,
+                    T: #trait_friend_rel + #cond_seal #destruct,
                 {
                     #[inline(always)]
                     fn partial_cmp(
@@ -1447,103 +1497,6 @@ impl Maker {
                         return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
                     }
                 }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friendzone_seal {
-            let it = quote! {
-                #konst trait #trait_seal {
-                    fn #fn_conv(&self) -> #el;
-                }
-
-                #konst impl<T> #trait_seal for &T
-                where
-                    T: #bonst #trait_seal,
-                {
-                    #[inline(always)]
-                    fn #fn_conv(&self) -> #el {
-                        return #trait_seal::#fn_conv(&**self);
-                    }
-                }
-
-                #konst impl<T> #trait_seal for &mut T
-                where
-                    T: #bonst #trait_seal,
-                {
-                    #[inline(always)]
-                    fn #fn_conv(&self) -> #el {
-                        return #trait_seal::#fn_conv(&**self);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friendzone_friend_make {
-            let it = quote! {
-                #konst trait #trait_friend_make : #bonst #trait_seal {}
-
-                #konst impl<T> #trait_friend_make for &T
-                where
-                    T: #bonst #trait_friend_make,
-                {}
-
-                #konst impl<T> #trait_friend_make for &mut T
-                where
-                    T: #bonst #trait_friend_make,
-                {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friendzone_friend_math_ops {
-            let it = quote! {
-                #konst trait #trait_friend_math : #bonst #trait_seal {}
-
-                #konst impl<T> #trait_friend_math for &T
-                where
-                    T: #bonst #trait_friend_math,
-                {}
-
-                #konst impl<T> #trait_friend_math for &mut T
-                where
-                    T: #bonst #trait_friend_math,
-                {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friendzone_friend_math_bit {
-            let it = quote! {
-                #konst trait #trait_friend_bit : #bonst #trait_seal {}
-
-                #konst impl<T> #trait_friend_bit for &T
-                where
-                    T: #bonst #trait_friend_bit,
-                {}
-
-                #konst impl<T> #trait_friend_bit for &mut T
-                where
-                    T: #bonst #trait_friend_bit,
-                {}
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.impl_friendzone_friend_math_rel {
-            let it = quote! {
-                #konst trait #trait_friend_rel : #bonst #trait_seal {}
-
-                #konst impl<T> #trait_friend_rel for &T
-                where
-                    T: #bonst #trait_friend_rel,
-                {}
-
-                #konst impl<T> #trait_friend_rel for &mut T
-                where
-                    T: #bonst #trait_friend_rel,
-                {}
             };
             stream.extend(it);
         }

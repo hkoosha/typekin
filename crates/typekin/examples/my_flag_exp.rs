@@ -34,6 +34,130 @@ mod subject {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
+        const trait Seal {
+            fn conv_my_flags(&self) -> u128;
+        }
+        const trait Make: [const] Seal {}
+        const trait Math: [const] Seal {}
+        const trait Bit: [const] Seal {}
+        const trait Relation: [const] Seal {}
+        const impl Seal for MyFlags {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return Self::raw(*self);
+            }
+        }
+        const impl Seal for MyFlag {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return MyFlag::raw(*self);
+            }
+        }
+        const impl Bit for MyFlag {}
+        const impl Make for MyFlag {}
+        const impl Bit for MyFlags {}
+        const impl Make for MyFlags {}
+        const impl Math for MyFlags {}
+        const impl Relation for MyFlags {}
+        const impl Seal for i16 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for i16 {}
+        const impl Seal for u128 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Bit for u128 {}
+        const impl Make for u128 {}
+        const impl Math for u128 {}
+        const impl Relation for u128 {}
+        const impl Seal for u16 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for u16 {}
+        const impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for u32 {}
+        const impl Seal for u64 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for u64 {}
+        const impl Seal for u8 {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for u8 {}
+        const impl Seal for usize {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return *self as u128;
+            }
+        }
+        const impl Make for usize {}
+        const impl<T> Seal for &T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return Seal::conv_my_flags(&**self);
+            }
+        }
+        const impl<T> Seal for &mut T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_flags(&self) -> u128 {
+                return Seal::conv_my_flags(&**self);
+            }
+        }
+        const impl<T> Make for &T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Make for &mut T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &mut T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
+        const impl<T> Bit for &mut T where
+            T: [const] Bit + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &mut T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
         const impl ::core::convert::Into<u128> for MyFlags {
             #[inline(always)]
             fn into(self) -> u128 {
@@ -157,7 +281,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAndAssign<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitand_assign(
@@ -170,7 +294,7 @@ mod subject {
         }
         const impl<T> ::core::ops::AddAssign<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn add_assign(
@@ -183,7 +307,7 @@ mod subject {
         }
         const impl<T> ::core::ops::SubAssign<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn sub_assign(
@@ -196,7 +320,7 @@ mod subject {
         }
         const impl<T> ::core::ops::MulAssign<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn mul_assign(
@@ -209,7 +333,7 @@ mod subject {
         }
         const impl<T> ::core::ops::DivAssign<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn div_assign(
@@ -222,7 +346,7 @@ mod subject {
         }
         const impl<T> ::core::ops::RemAssign<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn rem_assign(
@@ -235,7 +359,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOrAssign<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitor_assign(
@@ -265,7 +389,7 @@ mod subject {
         };
         const impl<T> ::core::ops::Add<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -279,7 +403,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Sub<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -293,7 +417,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Mul<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -307,7 +431,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Div<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -321,7 +445,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Rem<T> for MyFlags
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -335,7 +459,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAnd<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -349,7 +473,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOr<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -363,7 +487,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXor<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -377,7 +501,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXorAssign<T> for MyFlags
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitxor_assign(
@@ -386,12 +510,6 @@ mod subject {
             ) {
                 let it = Seal::conv_my_flags(&rhs);
                 *self = self._bitxor(it);
-            }
-        }
-        const impl Seal for MyFlags {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Self::raw(*self);
             }
         }
         impl ::core::fmt::Binary for MyFlags {
@@ -430,32 +548,9 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl Seal for MyFlag {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return MyFlag::raw(*self);
-            }
-        }
-        const impl Seal for u128 {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                let it: u128 = *self;
-                return it;
-            }
-        }
-        const impl FriendRel for MyFlag {}
-        const impl FriendBit for MyFlag {}
-        const impl FriendMake for u128 {}
-        const impl FriendRel for u128 {}
-        const impl FriendBit for u128 {}
-        const impl FriendMath for u128 {}
-        const impl FriendMake for MyFlags {}
-        const impl FriendRel for MyFlags {}
-        const impl FriendBit for MyFlags {}
-        const impl FriendMath for MyFlags {}
         const impl<T> ::core::cmp::PartialEq<T> for MyFlags
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn eq(
@@ -469,7 +564,7 @@ mod subject {
         }
         const impl<T> ::core::cmp::PartialOrd<T> for MyFlags
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn partial_cmp(
@@ -481,45 +576,12 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        const trait Seal {
-            fn conv_my_flags(&self) -> u128;
-        }
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Seal::conv_my_flags(&**self);
-            }
-        }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Seal::conv_my_flags(&**self);
-            }
-        }
-        const trait FriendMake: [const] Seal {}
-        const impl<T> FriendMake for &T where T: [const] FriendMake {}
-        const impl<T> FriendMake for &mut T where T: [const] FriendMake {}
-        const trait FriendMath: [const] Seal {}
-        const impl<T> FriendMath for &T where T: [const] FriendMath {}
-        const impl<T> FriendMath for &mut T where T: [const] FriendMath {}
-        const trait FriendBit: [const] Seal {}
-        const impl<T> FriendBit for &T where T: [const] FriendBit {}
-        const impl<T> FriendBit for &mut T where T: [const] FriendBit {}
-        const trait FriendRel: [const] Seal {}
-        const impl<T> FriendRel for &T where T: [const] FriendRel {}
-        const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
         impl MyFlags {
             #[inline(always)]
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyFlags
             where
-                T: [const] FriendMake + [const] ::core::marker::Destruct,
+                T: Make + [const] Seal + [const] ::core::marker::Destruct,
             {
                 let this = Seal::conv_my_flags(&it);
                 return Self::_unchecked(this);
@@ -948,7 +1010,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             pub const fn bits(self) -> u128 {
-                return self.raw();
+                return MyFlags::raw(self);
             }
             #[must_use]
             #[inline(always)]
@@ -1440,7 +1502,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAnd<T> for MyFlag
         where
-            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+            T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
         {
             type Output = MyFlags;
             #[inline(always)]
@@ -1448,7 +1510,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = BitSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(&rhs);
                 return self
                     .into_value()
                     .intersection(MyFlags::from_bits_retain(rhs));
@@ -1456,7 +1518,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOr<T> for MyFlag
         where
-            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+            T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
         {
             type Output = MyFlags;
             #[inline(always)]
@@ -1464,13 +1526,13 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = BitSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(&rhs);
                 return self.into_value().union(MyFlags::from_bits_retain(rhs));
             }
         }
         const impl<T> ::core::ops::BitXor<T> for MyFlag
         where
-            T: [const] BitFriendBit + [const] ::core::marker::Destruct,
+            T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
         {
             type Output = MyFlags;
             #[inline(always)]
@@ -1478,7 +1540,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = BitSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(&rhs);
                 return self
                     .into_value()
                     .symmetric_difference(MyFlags::from_bits_retain(rhs));
@@ -1551,7 +1613,7 @@ mod subject {
             }
             #[inline]
             fn size_hint(&self) -> (usize, Option<usize>) {
-                let bound = self.value.raw().count_ones() as usize;
+                let bound = MyFlags::raw(self.value).count_ones() as usize;
                 return (bound, Some(bound));
             }
         }
@@ -1581,59 +1643,85 @@ mod subject {
             }
             #[inline]
             fn size_hint(&self) -> (usize, Option<usize>) {
-                let bound = (self.value.raw().count_ones() + 1) as usize;
+                let bound =
+                    (MyFlags::raw(self.value).count_ones() + 1) as usize;
                 return (bound, Some(bound));
             }
         }
-        const impl BitSeal for MyFlag {
+        const trait FlagSeal {
+            fn conv_my_flag(&self) -> u128;
+        }
+        const trait FlagMake: [const] FlagSeal {}
+        const trait FlagMath: [const] FlagSeal {}
+        const trait FlagBit: [const] FlagSeal {}
+        const trait FlagCmp: [const] FlagSeal {}
+        const impl FlagSeal for MyFlag {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
                 return MyFlag::raw(*self);
             }
         }
-        const impl BitSeal for MyFlags {
+        const impl FlagBit for MyFlag {}
+        const impl FlagCmp for MyFlag {}
+        const impl FlagMake for MyFlag {}
+        const impl FlagSeal for MyFlags {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
                 return MyFlags::raw(*self);
             }
         }
-        const impl BitFriendRel for MyFlag {}
-        const impl BitFriendBit for MyFlag {}
-        const impl BitFriendRel for MyFlags {}
-        const impl BitFriendBit for MyFlags {}
-        const trait BitSeal {
-            fn conv_my_flag(&self) -> u128;
-        }
-        const trait BitFriendMake: [const] BitSeal {}
-        const trait BitFriendMath: [const] BitSeal {}
-        const trait BitFriendBit: [const] BitSeal {}
-        const trait BitFriendRel: [const] BitSeal {}
-        const impl<T> BitSeal for &T
+        const impl FlagBit for MyFlags {}
+        const impl FlagMake for MyFlags {}
+        const impl<T> FlagSeal for &T
         where
-            T: [const] BitSeal,
+            T: [const] FlagSeal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
-                return BitSeal::conv_my_flag(&**self);
+                return FlagSeal::conv_my_flag(&**self);
             }
         }
-        const impl<T> BitSeal for &mut T
+        const impl<T> FlagSeal for &mut T
         where
-            T: [const] BitSeal,
+            T: [const] FlagSeal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn conv_my_flag(&self) -> u128 {
-                return BitSeal::conv_my_flag(&**self);
+                return FlagSeal::conv_my_flag(&**self);
             }
         }
-        const impl<T> BitFriendMake for &T where T: [const] BitFriendMake {}
-        const impl<T> BitFriendMake for &mut T where T: [const] BitFriendMake {}
-        const impl<T> BitFriendMath for &T where T: [const] BitFriendMath {}
-        const impl<T> BitFriendMath for &mut T where T: [const] BitFriendMath {}
-        const impl<T> BitFriendBit for &T where T: [const] BitFriendBit {}
-        const impl<T> BitFriendBit for &mut T where T: [const] BitFriendBit {}
-        const impl<T> BitFriendRel for &T where T: [const] BitFriendRel {}
-        const impl<T> BitFriendRel for &mut T where T: [const] BitFriendRel {}
+        const impl<T> FlagMake for &T where
+            T: [const] FlagMake + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagMake for &mut T where
+            T: [const] FlagMake + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagMath for &T where
+            T: [const] FlagMath + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagMath for &mut T where
+            T: [const] FlagMath + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagBit for &T where
+            T: [const] FlagBit + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagBit for &mut T where
+            T: [const] FlagBit + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagCmp for &T where
+            T: [const] FlagCmp + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> FlagCmp for &mut T where
+            T: [const] FlagCmp + [const] ::core::marker::Destruct
+        {
+        }
     };
 }
 type Subject = subject::MyFlag;

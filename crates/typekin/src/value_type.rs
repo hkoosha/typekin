@@ -1,10 +1,5 @@
 #![allow(unused, dead_code)]
 
-use std::fmt::{
-    Display,
-    Formatter,
-};
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum N {
     USIZ,
@@ -203,15 +198,6 @@ impl N {
         to: Self,
     ) -> bool {
         return self.safe_casts().contains(&to);
-    }
-}
-
-impl Display for N {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(f, "{}", self.typekin_name())
     }
 }
 

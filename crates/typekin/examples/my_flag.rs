@@ -13,7 +13,7 @@ mod subject {
     #[derive(Copy, Debug, Hash)]
     #[repr(u128)]
     #[typekin::bitflag(
-        value_name_suffix = "s",
+        suffix = "s",
         integral = [konst = true],
     )]
     pub enum MyFlag {

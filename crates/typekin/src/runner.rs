@@ -17,6 +17,7 @@ use std::{
 use syn::{
     Attribute,
     Token,
+    Visibility,
     bracketed,
     meta::ParseNestedMeta,
     parenthesized,
@@ -427,28 +428,41 @@ pub(crate) fn find_repr_transparent(
 }
 
 pub(crate) fn parse_inner_attributes(
-    input: ParseStream,
+    stream: ParseStream,
     mut on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
     let mut seen = HashSet::with_capacity(5);
 
-    while !input.is_empty() {
+    while !stream.is_empty() {
         let attr = {
-            let key: Ident = input.parse()?;
-            let it = key.to_string();
-            if seen.contains(&it) {
-                return key.fail("duplicated arg");
+            let here = stream.span();
+
+            let it = if stream.peek(Token![_]) {
+                let _: Token![_] = stream.parse()?;
+                "_".to_string()
             }
+            else if stream.peek(Token![mod]) {
+                let _: Token![mod] = stream.parse()?;
+                "mod".to_string()
+            }
+            else {
+                let key: Ident = stream.parse()?;
+                key.to_string()
+            };
+
+            if seen.contains(&it) {
+                return here.fail("duplicated arg");
+            }
+
             it
         };
 
-        input.parse::<Token![=]>()?;
+        stream.parse::<Token![=]>()?;
 
-        let span = input.span();
-        match on_attr(&attr, &input) {
+        match on_attr(&attr, &stream) {
             Ok(true) => {}
             Ok(false) => {
-                return span.fail("unknown attribute");
+                return stream.span().fail("unknown attribute");
             }
             Err(err) => {
                 return Err(err);
@@ -457,8 +471,8 @@ pub(crate) fn parse_inner_attributes(
 
         seen.insert(attr);
 
-        if !input.is_empty() {
-            input.parse::<Token![,]>()?;
+        if !stream.is_empty() {
+            stream.parse::<Token![,]>()?;
         }
     }
 
@@ -538,27 +552,78 @@ pub(crate) fn ekran_catching(
         .into();
 }
 
-pub(crate) fn konst_bonst_and_destruct(
-    is_const: bool
-) -> (
-    Option<TokenStream>,
-    Option<TokenStream>,
-    Option<TokenStream>,
-) {
-    return (
-        match is_const {
-            true => Some(quote! { const }),
-            false => None,
-        },
-        match is_const {
-            true => Some(quote! { [const] }),
-            false => None,
-        },
-        match is_const {
-            true => Some(quote! { + [const] ::core::marker::Destruct }),
-            false => None,
-        },
-    );
+pub(crate) fn bonst(is_const: bool) -> Option<TokenStream> {
+    return match is_const {
+        true => Some(quote! { [const] }),
+        false => None,
+    };
+}
+
+pub(crate) fn konst(is_const: bool) -> Option<TokenStream> {
+    return match is_const {
+        true => Some(quote! { const }),
+        false => None,
+    };
+}
+
+pub(crate) fn destruct(is_const: bool) -> Option<TokenStream> {
+    return match is_const {
+        true => Some(quote! { + [const] ::core::marker::Destruct }),
+        false => None,
+    };
+}
+
+pub(crate) fn pop_attr(
+    attrs: &mut Vec<Attribute>,
+    name: &str,
+) -> syn::Result<Option<Attribute>> {
+    let indexes = attrs
+        .iter()
+        .enumerate()
+        .filter_map(|(index, attr)| {
+            attr.path()
+                .segments
+                .last()
+                .filter(|segment| segment.ident == name)
+                .map(|_| index)
+        })
+        .collect::<Vec<_>>();
+
+    let Some(index) = indexes.first().copied()
+    else {
+        return Ok(None);
+    };
+
+    if let Some(duplicate) = indexes.get(1) {
+        return attrs[*duplicate].span().fail("duplicated attribute");
+    }
+
+    return Ok(Some(attrs.remove(index)));
+}
+
+pub(crate) fn get_concrete_type(
+    item: &mut syn::Item
+) -> syn::Result<(&Ident, &Visibility, &mut Vec<Attribute>)> {
+    const MSG: &str = "friendship only supports struct, enum, and union targets that have no generics";
+
+    let (target, visibility, attrs, generics) = match item {
+        syn::Item::Struct(item) => {
+            (&item.ident, &item.vis, &mut item.attrs, &item.generics)
+        }
+        syn::Item::Enum(item) => {
+            (&item.ident, &item.vis, &mut item.attrs, &item.generics)
+        }
+        syn::Item::Union(item) => {
+            (&item.ident, &item.vis, &mut item.attrs, &item.generics)
+        }
+        _ => return item.span().fail(MSG),
+    };
+
+    if !generics.params.is_empty() || generics.where_clause.is_some() {
+        return item.span().fail(MSG);
+    }
+
+    return Ok((target, visibility, attrs));
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 set shell := ["bash", "-e", "-u", "-o", "pipefail", "-c"]
 
-export RUST_BACKTRACE := '1'
+export RUST_BACKTRACE := 'full'
 export RUSTFLAGS := '-Zmacro-backtrace'
 
 [group("z")]
@@ -30,6 +30,11 @@ alias run := prettify
 friend-expand: (z-expand 'my_friend')
 [group("example")]
 friend: friend-expand fmt
+
+[group("example")]
+friendship-expand: (z-expand 'my_friendship')
+[group("example")]
+friendship: friendship-expand fmt
 
 [group("example")]
 u32-expand: (z-expand 'my_u32')
@@ -66,7 +71,7 @@ plain-expand: (z-expand 'my_plain')
 [group("example")]
 plain: plain-expand fmt
 
-all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand fmt
+all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand fmt
   just fmt
 
 
@@ -78,7 +83,7 @@ examples := 'crates' / 'typekin' / 'examples'
 z-expand what:
   touch '{{ examples / what }}_exp.rs'
   work="$(mktemp)" && \
-  cargo -q expand --ugly --color never --package typekin --example '{{ what }}' > "$work" && \
+  cargo -q expand --ugly --package typekin --example '{{ what }}' > "$work" && \
   cp "$work" '{{ examples / what }}_exp.rs'
   work="$(mktemp)" && \
   just prettify '{{ examples / what }}_exp.rs' > "$work" && \

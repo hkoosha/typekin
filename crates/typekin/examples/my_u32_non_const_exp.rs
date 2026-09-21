@@ -14,6 +14,80 @@ mod subject {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
+        trait Seal {
+            fn conv_my_example(&self) -> u32;
+        }
+        trait Make: Seal {}
+        trait Math: Seal {}
+        trait Bit: Seal {}
+        trait Relation: Seal {}
+        impl Seal for MyExample {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return Self::raw(*self);
+            }
+        }
+        impl Bit for MyExample {}
+        impl Make for MyExample {}
+        impl Math for MyExample {}
+        impl Relation for MyExample {}
+        impl Seal for i16 {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        impl Make for i16 {}
+        impl Seal for u16 {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        impl Make for u16 {}
+        impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        impl Bit for u32 {}
+        impl Make for u32 {}
+        impl Math for u32 {}
+        impl Relation for u32 {}
+        impl Seal for u8 {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        impl Make for u8 {}
+        impl<T> Seal for &T
+        where
+            T: Seal,
+        {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return Seal::conv_my_example(&**self);
+            }
+        }
+        impl<T> Seal for &mut T
+        where
+            T: Seal,
+        {
+            #[inline(always)]
+            fn conv_my_example(&self) -> u32 {
+                return Seal::conv_my_example(&**self);
+            }
+        }
+        impl<T> Make for &T where T: Make {}
+        impl<T> Make for &mut T where T: Make {}
+        impl<T> Math for &T where T: Math {}
+        impl<T> Math for &mut T where T: Math {}
+        impl<T> Bit for &T where T: Bit {}
+        impl<T> Bit for &mut T where T: Bit {}
+        impl<T> Relation for &T where T: Relation {}
+        impl<T> Relation for &mut T where T: Relation {}
         impl Into<usize> for MyExample {
             #[inline(always)]
             fn into(self) -> usize {
@@ -132,7 +206,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitAndAssign<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             #[inline(always)]
             fn bitand_assign(
@@ -145,7 +219,7 @@ mod subject {
         }
         impl<T> ::core::ops::AddAssign<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             #[inline(always)]
             fn add_assign(
@@ -158,7 +232,7 @@ mod subject {
         }
         impl<T> ::core::ops::SubAssign<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             #[inline(always)]
             fn sub_assign(
@@ -171,7 +245,7 @@ mod subject {
         }
         impl<T> ::core::ops::MulAssign<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             #[inline(always)]
             fn mul_assign(
@@ -184,7 +258,7 @@ mod subject {
         }
         impl<T> ::core::ops::DivAssign<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             #[inline(always)]
             fn div_assign(
@@ -197,7 +271,7 @@ mod subject {
         }
         impl<T> ::core::ops::RemAssign<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             #[inline(always)]
             fn rem_assign(
@@ -210,7 +284,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitOrAssign<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             #[inline(always)]
             fn bitor_assign(
@@ -230,7 +304,7 @@ mod subject {
         };
         impl<T> ::core::ops::Add<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -244,7 +318,7 @@ mod subject {
         }
         impl<T> ::core::ops::Sub<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -258,7 +332,7 @@ mod subject {
         }
         impl<T> ::core::ops::Mul<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -272,7 +346,7 @@ mod subject {
         }
         impl<T> ::core::ops::Div<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -286,7 +360,7 @@ mod subject {
         }
         impl<T> ::core::ops::Rem<T> for MyExample
         where
-            T: FriendMath,
+            T: Math + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -300,7 +374,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitAnd<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -314,7 +388,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitOr<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -328,7 +402,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitXor<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             type Output = Self;
             #[inline(always)]
@@ -342,7 +416,7 @@ mod subject {
         }
         impl<T> ::core::ops::BitXorAssign<T> for MyExample
         where
-            T: FriendBit,
+            T: Bit + Seal,
         {
             #[inline(always)]
             fn bitxor_assign(
@@ -358,12 +432,6 @@ mod subject {
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
-            }
-        }
-        impl Seal for MyExample {
-            #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                return Self::raw(*self);
             }
         }
         impl ::core::fmt::Binary for MyExample {
@@ -402,24 +470,9 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        impl Seal for u32 {
-            #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                let it: u32 = *self;
-                return it;
-            }
-        }
-        impl FriendMake for MyExample {}
-        impl FriendRel for MyExample {}
-        impl FriendBit for MyExample {}
-        impl FriendMath for MyExample {}
-        impl FriendMake for u32 {}
-        impl FriendRel for u32 {}
-        impl FriendBit for u32 {}
-        impl FriendMath for u32 {}
         impl<T> ::core::cmp::PartialEq<T> for MyExample
         where
-            T: FriendRel,
+            T: Relation + Seal,
         {
             #[inline(always)]
             fn eq(
@@ -433,7 +486,7 @@ mod subject {
         }
         impl<T> ::core::cmp::PartialOrd<T> for MyExample
         where
-            T: FriendRel,
+            T: Relation + Seal,
         {
             #[inline(always)]
             fn partial_cmp(
@@ -445,45 +498,12 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        trait Seal {
-            fn conv_my_example(&self) -> u32;
-        }
-        impl<T> Seal for &T
-        where
-            T: Seal,
-        {
-            #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                return Seal::conv_my_example(&**self);
-            }
-        }
-        impl<T> Seal for &mut T
-        where
-            T: Seal,
-        {
-            #[inline(always)]
-            fn conv_my_example(&self) -> u32 {
-                return Seal::conv_my_example(&**self);
-            }
-        }
-        trait FriendMake: Seal {}
-        impl<T> FriendMake for &T where T: FriendMake {}
-        impl<T> FriendMake for &mut T where T: FriendMake {}
-        trait FriendMath: Seal {}
-        impl<T> FriendMath for &T where T: FriendMath {}
-        impl<T> FriendMath for &mut T where T: FriendMath {}
-        trait FriendBit: Seal {}
-        impl<T> FriendBit for &T where T: FriendBit {}
-        impl<T> FriendBit for &mut T where T: FriendBit {}
-        trait FriendRel: Seal {}
-        impl<T> FriendRel for &T where T: FriendRel {}
-        impl<T> FriendRel for &mut T where T: FriendRel {}
         impl MyExample {
             #[inline(always)]
             #[allow(private_bounds)]
             pub fn of<T>(it: T) -> MyExample
             where
-                T: FriendMake,
+                T: Make + Seal,
             {
                 let this = Seal::conv_my_example(&it);
                 return Self::_unchecked(this);

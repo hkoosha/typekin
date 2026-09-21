@@ -1,4 +1,7 @@
-use quote::ToTokens;
+use quote::{
+    ToTokens,
+    quote,
+};
 use std::{
     collections::{
         BTreeMap,
@@ -26,6 +29,7 @@ use syn::{
     Type,
     parse::Parser,
     parse_quote,
+    parse_str,
     punctuated::Punctuated,
     spanned::Spanned,
     visit_mut::{
@@ -33,17 +37,6 @@ use syn::{
         visit_item_mod_mut,
     },
 };
-
-pub(crate) trait MkErr: Spanned {
-    fn fail<T>(
-        &self,
-        msg: impl Display,
-    ) -> Result<T, syn::Error> {
-        return Err(syn::Error::new(self.span(), msg));
-    }
-}
-
-impl<T> MkErr for T where T: Spanned {}
 
 const HEADER: &'static str = "// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED\n#![allow(clippy::needless_return)]";
 
@@ -66,6 +59,17 @@ static USE_REPLACEMENTS: LazyLock<
 
     return KV.iter().map(|it| *it).collect();
 });
+
+pub(crate) trait MkErr: Spanned {
+    fn fail<T>(
+        &self,
+        msg: impl Display,
+    ) -> Result<T, syn::Error> {
+        return Err(syn::Error::new(self.span(), msg));
+    }
+}
+
+impl<T> MkErr for T where T: Spanned {}
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Debug)]
 enum Replaced {
@@ -222,10 +226,47 @@ impl Replaced {
     }
 }
 
-#[derive(Default)]
 struct Undo {
     konst: BTreeMap<String, BTreeSet<Replaced>>,
     plain: BTreeMap<String, BTreeSet<Replaced>>,
+    assert_arm_tpl: String,
+}
+
+impl Default for Undo {
+    fn default() -> Self {
+        let assert_tpl: Expr = parse_quote! {
+             match (&__PLACEHOLDER_LEFT__, &__PLACEHOLDER_RIGHT__) {
+                (left_val, right_val) => {
+                    if !(*left_val == *right_val) {
+                        let kind = ::core::panicking::AssertKind::Eq;
+                        ::core::panicking::assert_failed(
+                            kind,
+                            &*left_val,
+                            &*right_val,
+                            None,
+                        );
+                    }
+                }
+            }
+        };
+
+        let assert_arm_tpl = if let Expr::Match(mut it) = assert_tpl {
+            it.arms.pop().unwrap()
+        }
+        else {
+            unreachable!();
+        }
+        .to_token_stream()
+        .to_string()
+        // Forgive me.
+        .replace("None ,)", "None)");
+
+        return Self {
+            konst: BTreeMap::new(),
+            plain: BTreeMap::new(),
+            assert_arm_tpl,
+        };
+    }
 }
 
 impl Undo {
@@ -365,9 +406,26 @@ impl VisitMut for Undo {
     ) {
         syn::visit_mut::visit_expr_mut(self, it);
 
+        // Unexpand assert_eq!(FOO, BAR);
+        if let Expr::Block(b) = it
+            && b.block.stmts.len() == 1
+            && let Stmt::Expr(s, _) = &b.block.stmts[0]
+            && let Expr::Match(m) = s
+            && m.arms.len() == 1
+            && let Expr::Tuple(pat) = &*m.expr
+            && pat.elems.len() == 2
+            && m.arms[0].to_token_stream().to_string() == self.assert_arm_tpl
+        {
+            let lhs = &pat.elems[0];
+            let rhs = &pat.elems[1];
+            *it = syn::parse2(quote! {
+                assert_eq!(#lhs, #rhs)
+            })
+            .unwrap();
+        }
         // Unexpand panic!().
         // DOES NOT MATCH ON RESOLVED PATH, MATCHES BY STRING!
-        if let Expr::Call(call) = it
+        else if let Expr::Call(call) = it
             && let Expr::Path(p) = &*call.func
             && let Some(Expr::Macro(m)) = call.args.first()
             && m.mac.path.is_ident("format_args")
@@ -384,10 +442,9 @@ impl VisitMut for Undo {
             let inner = &m.mac.tokens;
             *it = syn::parse_quote! { panic!(#inner) };
         }
-
-        // Unexpand panic!().
+        // Unexpand println!().
         // DOES NOT MATCH ON RESOLVED PATH, MATCHES BY STRING!
-        if let Expr::Call(call) = it
+        else if let Expr::Call(call) = it
             && let Expr::Path(p) = &*call.func
             && let Some(Expr::Macro(m)) = call.args.first()
             && m.mac.path.is_ident("format_args")
@@ -657,7 +714,7 @@ fn main() {
         input => std::fs::read_to_string(input).expect("failed to read"),
     };
 
-    let mut file = syn::parse_str(&body).expect("failed to parse input");
+    let mut file = parse_str(&body).expect("failed to parse input");
 
     let mut undo = Undo::default();
     undo.visit_file_mut(&mut file);

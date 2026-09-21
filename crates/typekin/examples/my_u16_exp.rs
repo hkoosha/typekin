@@ -16,6 +16,101 @@ mod subject {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     const _: () = {
+        const trait Seal {
+            fn conv_my_u32(&self) -> u32;
+        }
+        const trait Make: [const] Seal {}
+        const trait Math: [const] Seal {}
+        const trait Bit: [const] Seal {}
+        const trait Relation: [const] Seal {}
+        const impl Seal for MyU32 {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return Self::raw(*self);
+            }
+        }
+        const impl Bit for MyU32 {}
+        const impl Make for MyU32 {}
+        const impl Math for MyU32 {}
+        const impl Relation for MyU32 {}
+        const impl Seal for i16 {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        const impl Make for i16 {}
+        const impl Seal for u16 {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        const impl Make for u16 {}
+        const impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        const impl Bit for u32 {}
+        const impl Make for u32 {}
+        const impl Math for u32 {}
+        const impl Relation for u32 {}
+        const impl Seal for u8 {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return *self as u32;
+            }
+        }
+        const impl Make for u8 {}
+        const impl<T> Seal for &T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return Seal::conv_my_u32(&**self);
+            }
+        }
+        const impl<T> Seal for &mut T
+        where
+            T: [const] Seal + [const] ::core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn conv_my_u32(&self) -> u32 {
+                return Seal::conv_my_u32(&**self);
+            }
+        }
+        const impl<T> Make for &T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Make for &mut T where
+            T: [const] Make + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Math for &mut T where
+            T: [const] Math + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
+        const impl<T> Bit for &mut T where
+            T: [const] Bit + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
+        const impl<T> Relation for &mut T where
+            T: [const] Relation + [const] ::core::marker::Destruct
+        {
+        }
         const impl ::core::convert::Into<usize> for MyU32 {
             #[inline(always)]
             fn into(self) -> usize {
@@ -134,7 +229,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAndAssign<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitand_assign(
@@ -147,7 +242,7 @@ mod subject {
         }
         const impl<T> ::core::ops::AddAssign<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn add_assign(
@@ -160,7 +255,7 @@ mod subject {
         }
         const impl<T> ::core::ops::SubAssign<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn sub_assign(
@@ -173,7 +268,7 @@ mod subject {
         }
         const impl<T> ::core::ops::MulAssign<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn mul_assign(
@@ -186,7 +281,7 @@ mod subject {
         }
         const impl<T> ::core::ops::DivAssign<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn div_assign(
@@ -199,7 +294,7 @@ mod subject {
         }
         const impl<T> ::core::ops::RemAssign<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn rem_assign(
@@ -212,7 +307,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOrAssign<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitor_assign(
@@ -240,7 +335,7 @@ mod subject {
         };
         const impl<T> ::core::ops::Add<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -254,7 +349,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Sub<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -268,7 +363,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Mul<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -282,7 +377,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Div<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -296,7 +391,7 @@ mod subject {
         }
         const impl<T> ::core::ops::Rem<T> for MyU32
         where
-            T: [const] FriendMath + [const] ::core::marker::Destruct,
+            T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -310,7 +405,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitAnd<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -324,7 +419,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitOr<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -338,7 +433,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXor<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             type Output = Self;
             #[inline(always)]
@@ -352,7 +447,7 @@ mod subject {
         }
         const impl<T> ::core::ops::BitXorAssign<T> for MyU32
         where
-            T: [const] FriendBit + [const] ::core::marker::Destruct,
+            T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn bitxor_assign(
@@ -368,12 +463,6 @@ mod subject {
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
-            }
-        }
-        const impl Seal for MyU32 {
-            #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Self::raw(*self);
             }
         }
         impl ::core::fmt::Binary for MyU32 {
@@ -412,24 +501,9 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl Seal for u32 {
-            #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                let it: u32 = *self;
-                return it;
-            }
-        }
-        const impl FriendMake for MyU32 {}
-        const impl FriendRel for MyU32 {}
-        const impl FriendBit for MyU32 {}
-        const impl FriendMath for MyU32 {}
-        const impl FriendMake for u32 {}
-        const impl FriendRel for u32 {}
-        const impl FriendBit for u32 {}
-        const impl FriendMath for u32 {}
         const impl<T> ::core::cmp::PartialEq<T> for MyU32
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn eq(
@@ -443,7 +517,7 @@ mod subject {
         }
         const impl<T> ::core::cmp::PartialOrd<T> for MyU32
         where
-            T: [const] FriendRel + [const] ::core::marker::Destruct,
+            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
         {
             #[inline(always)]
             fn partial_cmp(
@@ -455,45 +529,12 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        const trait Seal {
-            fn conv_my_u32(&self) -> u32;
-        }
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Seal::conv_my_u32(&**self);
-            }
-        }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal,
-        {
-            #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Seal::conv_my_u32(&**self);
-            }
-        }
-        const trait FriendMake: [const] Seal {}
-        const impl<T> FriendMake for &T where T: [const] FriendMake {}
-        const impl<T> FriendMake for &mut T where T: [const] FriendMake {}
-        const trait FriendMath: [const] Seal {}
-        const impl<T> FriendMath for &T where T: [const] FriendMath {}
-        const impl<T> FriendMath for &mut T where T: [const] FriendMath {}
-        const trait FriendBit: [const] Seal {}
-        const impl<T> FriendBit for &T where T: [const] FriendBit {}
-        const impl<T> FriendBit for &mut T where T: [const] FriendBit {}
-        const trait FriendRel: [const] Seal {}
-        const impl<T> FriendRel for &T where T: [const] FriendRel {}
-        const impl<T> FriendRel for &mut T where T: [const] FriendRel {}
         impl MyU32 {
             #[inline(always)]
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyU32
             where
-                T: [const] FriendMake + [const] ::core::marker::Destruct,
+                T: Make + [const] Seal + [const] ::core::marker::Destruct,
             {
                 let this = Seal::conv_my_u32(&it);
                 return Self::_unchecked(this);
