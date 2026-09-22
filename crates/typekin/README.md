@@ -291,3 +291,8 @@ Use `konst = false` to generate plain implementations instead:
 #[derive(Copy, Clone)]
 struct Counter(u32);
 ```
+
+Once all required features are stabilized, `konst = true` will be the default
+unless the caller opts out via `konst = false`. This will not be a breaking
+change as currently the macros force all callers to explicitly specify the
+constness flag.
