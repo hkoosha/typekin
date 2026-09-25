@@ -606,6 +606,8 @@ pub(crate) fn get_concrete_type(
 ) -> syn::Result<(&Ident, &Visibility, &mut Vec<Attribute>)> {
     const MSG: &str = "friendship only supports struct, enum, and union targets that have no generics";
 
+    let span = item.span();
+
     let (target, visibility, attrs, generics) = match item {
         syn::Item::Struct(item) => {
             (&item.ident, &item.vis, &mut item.attrs, &item.generics)
@@ -616,11 +618,11 @@ pub(crate) fn get_concrete_type(
         syn::Item::Union(item) => {
             (&item.ident, &item.vis, &mut item.attrs, &item.generics)
         }
-        _ => return item.span().fail(MSG),
+        _ => return span.fail(MSG),
     };
 
     if !generics.params.is_empty() || generics.where_clause.is_some() {
-        return item.span().fail(MSG);
+        return span.fail(MSG);
     }
 
     return Ok((target, visibility, attrs));
