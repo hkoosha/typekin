@@ -25,7 +25,7 @@ use syn::{
         Parse,
         ParseStream,
     },
-    punctuated::Punctuated, 
+    punctuated::Punctuated,
     spanned::Spanned,
 };
 
