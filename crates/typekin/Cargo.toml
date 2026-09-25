@@ -15,10 +15,6 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
-[[bin]]
-name = "typekin-unexpand"
-path = "src/main.rs"
-
 [lib]
 proc-macro = true
 

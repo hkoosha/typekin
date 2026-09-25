@@ -12,10 +12,7 @@ mod subject {
     #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
     #[derive(Copy, Debug, Hash)]
     #[repr(u128)]
-    #[typekin::bitflag(
-        suffix = "s",
-        integral = [konst = true],
-    )]
+    #[typekin::bitflag(konst = true, suffix = "s")]
     pub enum MyFlag {
         Z = 0,
         A = 10,

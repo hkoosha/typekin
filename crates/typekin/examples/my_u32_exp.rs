@@ -1,5 +1,3 @@
-// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED
-#![allow(clippy::needless_return)]
 #![feature(const_cmp)]
 #![feature(const_trait_impl)]
 #![feature(const_ops)]
@@ -7,13 +5,16 @@
 #![feature(const_clone)]
 #![feature(const_destruct)]
 #![feature(derive_const)]
+
 mod subject {
     #[repr(transparent)]
-    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
-    #[derive_const(::core::clone::Clone)]
+    #[derive(Copy)]
+    #[derive_const(Clone)]
     pub struct MyU32(u32);
+
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
+    #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
             fn conv_my_u32(&self) -> u32;
@@ -323,6 +324,14 @@ mod subject {
                 *self = self._bitor(it);
             }
         }
+        impl ::core::fmt::Debug for MyU32 {
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                ::core::write!(f, "MyU32({})", self.0)
+            }
+        }
         const impl ::core::cmp::Eq for MyU32 {}
         const impl ::core::cmp::Ord for MyU32 {
             #[inline(always)]
@@ -334,9 +343,7 @@ mod subject {
             }
         }
         if !(::core::mem::size_of::<MyU32>() == ::core::mem::size_of::<u32>()) {
-            {
-                panic!("invalid memory layout: #ty(#el) != #el");
-            };
+            panic!("invalid memory layout: #ty(#el) != #el");
         };
         const impl<T> ::core::ops::Add<T> for MyU32
         where
@@ -597,81 +604,119 @@ mod subject {
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_usize(self) -> Result<usize, ()> {
-                return Ok(Self::raw(self) as usize);
+            pub const fn try_into_usize(
+                self
+            ) -> ::core::result::Result<usize, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as usize);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u32(self) -> Result<u32, ()> {
-                return Ok(Self::raw(self) as u32);
+            pub const fn try_into_u32(self) -> ::core::result::Result<u32, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as u32);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u64(self) -> Result<u64, ()> {
-                return Ok(Self::raw(self) as u64);
+            pub const fn try_into_u64(self) -> ::core::result::Result<u64, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as u64);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u128(self) -> Result<u128, ()> {
-                return Ok(Self::raw(self) as u128);
+            pub const fn try_into_u128(
+                self
+            ) -> ::core::result::Result<u128, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as u128);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i64(self) -> Result<i64, ()> {
-                return Ok(Self::raw(self) as i64);
+            pub const fn try_into_i64(self) -> ::core::result::Result<i64, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as i64);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i128(self) -> Result<i128, ()> {
-                return Ok(Self::raw(self) as i128);
+            pub const fn try_into_i128(
+                self
+            ) -> ::core::result::Result<i128, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as i128);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_isize(self) -> Result<isize, ()> {
+            pub const fn try_into_isize(
+                self
+            ) -> ::core::result::Result<isize, ()> {
                 let r = Self::raw(self);
                 let t = r as isize;
                 let s = t as u32;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u8(self) -> Result<u8, ()> {
+            pub const fn try_into_u8(self) -> ::core::result::Result<u8, ()> {
                 let r = Self::raw(self);
                 let t = r as u8;
                 let s = t as u32;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u16(self) -> Result<u16, ()> {
+            pub const fn try_into_u16(self) -> ::core::result::Result<u16, ()> {
                 let r = Self::raw(self);
                 let t = r as u16;
                 let s = t as u32;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i8(self) -> Result<i8, ()> {
+            pub const fn try_into_i8(self) -> ::core::result::Result<i8, ()> {
                 let r = Self::raw(self);
                 let t = r as i8;
                 let s = t as u32;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i16(self) -> Result<i16, ()> {
+            pub const fn try_into_i16(self) -> ::core::result::Result<i16, ()> {
                 let r = Self::raw(self);
                 let t = r as i16;
                 let s = t as u32;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i32(self) -> Result<i32, ()> {
+            pub const fn try_into_i32(self) -> ::core::result::Result<i32, ()> {
                 let r = Self::raw(self);
                 let t = r as i32;
                 let s = t as u32;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             pub(self) const fn _add(
                 &self,
@@ -845,31 +890,36 @@ mod subject {
             }
         }
     };
+
     #[repr(transparent)]
-    #[derive(:: core :: marker :: Copy)]
-    #[derive_const(::core::clone::Clone)]
+    #[derive(Copy)]
+    #[derive_const(Clone)]
     pub struct MyFriend(u32);
+
     impl MyFriend {
         const fn my_conv(self) -> u32 {
             return self.0 * 2;
         }
     }
+
     impl std::fmt::Display for MyU32 {
         fn fmt(
             &self,
             f: &mut std::fmt::Formatter<'_>,
         ) -> std::fmt::Result {
-            f.write_fmt(format_args!("MyU16({0})", self.raw()))
+            write!(f, "MyU16({})", self.raw())
         }
     }
 }
+
 type Subject = subject::MyU32;
+
 fn main() {
     let lhs = 0b1101u32;
     let rhs = 0b0110u32;
+
     let lhs = Subject::of(lhs);
     let rhs = Subject::of(rhs);
-    {
-        print!("{0:?}\n", lhs + rhs);
-    };
+
+    println!("{:?}", lhs + rhs);
 }

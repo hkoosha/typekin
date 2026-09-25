@@ -1,5 +1,3 @@
-// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED
-#![allow(clippy::needless_return)]
 #![feature(const_clone)]
 #![feature(const_cmp)]
 #![feature(const_convert)]
@@ -7,12 +5,15 @@
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
+
+#[derive(Copy)]
+#[derive_const(Clone)]
 #[repr(transparent)]
-#[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
-#[derive_const(::core::clone::Clone)]
 struct PageHeader(u32);
+
 #[allow(dead_code)]
 #[allow(unused_qualifications)]
+#[allow(clippy::unnecessary_cast)]
 const _: () = {
     const trait Seal {
         fn conv_page_header(&self) -> u32;
@@ -346,6 +347,14 @@ const _: () = {
             *self = self._bitor(it);
         }
     }
+    impl ::core::fmt::Debug for PageHeader {
+        fn fmt(
+            &self,
+            f: &mut ::core::fmt::Formatter<'_>,
+        ) -> ::core::fmt::Result {
+            ::core::write!(f, "PageHeader({})", self.0)
+        }
+    }
     const impl ::core::cmp::Eq for PageHeader {}
     const impl ::core::cmp::Ord for PageHeader {
         #[inline(always)]
@@ -358,9 +367,7 @@ const _: () = {
     }
     if !(::core::mem::size_of::<PageHeader>() == ::core::mem::size_of::<u32>())
     {
-        {
-            panic!("invalid memory layout: #ty(#el) != #el");
-        };
+        panic!("invalid memory layout: #ty(#el) != #el");
     };
     const impl<T> ::core::ops::Add<T> for PageHeader
     where
@@ -621,81 +628,111 @@ const _: () = {
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_usize(self) -> Result<usize, ()> {
-            return Ok(Self::raw(self) as usize);
+        pub const fn try_into_usize(self) -> ::core::result::Result<usize, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as usize);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u32(self) -> Result<u32, ()> {
-            return Ok(Self::raw(self) as u32);
+        pub const fn try_into_u32(self) -> ::core::result::Result<u32, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as u32);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u64(self) -> Result<u64, ()> {
-            return Ok(Self::raw(self) as u64);
+        pub const fn try_into_u64(self) -> ::core::result::Result<u64, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as u64);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u128(self) -> Result<u128, ()> {
-            return Ok(Self::raw(self) as u128);
+        pub const fn try_into_u128(self) -> ::core::result::Result<u128, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as u128);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i64(self) -> Result<i64, ()> {
-            return Ok(Self::raw(self) as i64);
+        pub const fn try_into_i64(self) -> ::core::result::Result<i64, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as i64);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i128(self) -> Result<i128, ()> {
-            return Ok(Self::raw(self) as i128);
+        pub const fn try_into_i128(self) -> ::core::result::Result<i128, ()> {
+            return ::core::result::Result::Ok(Self::raw(self) as i128);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_isize(self) -> Result<isize, ()> {
+        pub const fn try_into_isize(self) -> ::core::result::Result<isize, ()> {
             let r = Self::raw(self);
             let t = r as isize;
             let s = t as u32;
-            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+            return if s == r && t >= 0 {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u8(self) -> Result<u8, ()> {
+        pub const fn try_into_u8(self) -> ::core::result::Result<u8, ()> {
             let r = Self::raw(self);
             let t = r as u8;
             let s = t as u32;
-            return if s == r && true { Ok(t) } else { Err(()) };
+            return if s == r && true {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u16(self) -> Result<u16, ()> {
+        pub const fn try_into_u16(self) -> ::core::result::Result<u16, ()> {
             let r = Self::raw(self);
             let t = r as u16;
             let s = t as u32;
-            return if s == r && true { Ok(t) } else { Err(()) };
+            return if s == r && true {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i8(self) -> Result<i8, ()> {
+        pub const fn try_into_i8(self) -> ::core::result::Result<i8, ()> {
             let r = Self::raw(self);
             let t = r as i8;
             let s = t as u32;
-            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+            return if s == r && t >= 0 {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i16(self) -> Result<i16, ()> {
+        pub const fn try_into_i16(self) -> ::core::result::Result<i16, ()> {
             let r = Self::raw(self);
             let t = r as i16;
             let s = t as u32;
-            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+            return if s == r && t >= 0 {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i32(self) -> Result<i32, ()> {
+        pub const fn try_into_i32(self) -> ::core::result::Result<i32, ()> {
             let r = Self::raw(self);
             let t = r as i32;
             let s = t as u32;
-            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+            return if s == r && t >= 0 {
+                ::core::result::Result::Ok(t)
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
         }
         pub(self) const fn _add(
             &self,
@@ -864,36 +901,52 @@ const _: () = {
         }
     }
 };
+// VALUE:   0b00000000_00000000_00000000_00000000;
+// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
+
 #[repr(transparent)]
-#[derive(:: core :: clone :: Clone, :: core :: marker :: Copy)]
+#[derive(Copy, Clone)]
 struct PageId(u8);
+
 #[repr(transparent)]
-#[derive(:: core :: clone :: Clone, :: core :: marker :: Copy)]
+#[derive(Copy, Clone)]
 struct PageState(u8);
+
 #[repr(transparent)]
-#[derive(:: core :: clone :: Clone, :: core :: marker :: Copy)]
+#[derive(Copy, Clone)]
 struct PageData(u8);
+
 const fn id_to_header(it: PageId) -> u32 {
     let bits = it.0 as u32;
     return bits << 24;
 }
+
 const fn state_to_header(it: PageState) -> u32 {
     let bits = it.0 as u32;
     return bits << 8;
 }
+
 impl PageData {
     const fn to_header(self) -> u32 {
         return self.0 as u32;
     }
 }
+
 fn main() {
     let id = PageId(0b0000_0101);
     let state = PageState(0b1010_1010);
     let data = PageData(0b1111_1111);
+
+    // While id, state & data all have value of 0b1111, they will not overwrite
+    // each other; because their friendship relationship guards how they are
+    // cast into a PageHeader before being bit-or-ed into header:
     let mut header = PageHeader::make(0);
     header |= id;
     header |= state;
     header |= data;
+
     let expected = 0b00000101_10101010_00000000_11111111;
-    assert_eq!(&header.raw(), &expected);
+    // FORMAT:     ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
+
+    assert_eq!(header.raw(), expected);
 }

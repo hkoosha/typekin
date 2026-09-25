@@ -19,10 +19,8 @@ test:
 build: fmt
   cargo build
 
-alias run := prettify
-@prettify file:
-  cargo -q run -qp typekin -- '{{ file }}'
-
+init:
+  cargo install expandem
 
 # --------------------------------------
 
@@ -71,23 +69,26 @@ plain-expand: (z-expand 'my_plain')
 [group("example")]
 plain: plain-expand fmt
 
-all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand fmt
+[parallel]
+all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand
   just fmt
-
 
 # ==============================================================================
 
 examples := 'crates' / 'typekin' / 'examples'
 
 [group("z")]
-z-expand what:
-  touch '{{ examples / what }}_exp.rs'
-  work="$(mktemp)" && \
-  cargo -q expand --ugly --package typekin --example '{{ what }}' > "$work" && \
-  cp "$work" '{{ examples / what }}_exp.rs'
-  work="$(mktemp)" && \
-  just prettify '{{ examples / what }}_exp.rs' > "$work" && \
-  cp "$work" '{{ examples / what }}_exp.rs'
+z-expand what: (
+    zz-expand 
+    examples / (what + '.rs')
+    examples / (what + '_exp.rs')
+  )
+
+[group("z")]
+zz-expand from to:
+  rm -rf '{{ to }}'
+  touch '{{ to }}'
+  expandem '{{ from }}' 'typekin::**' > '{{ to }}'
 
 fast-test:
   CARGO_TARGET_DIR=/tmp/typekin_perf_ok_outer cargo +nightly test -p typekin_perf_ok & \

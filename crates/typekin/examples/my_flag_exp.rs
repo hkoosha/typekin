@@ -1,5 +1,3 @@
-// AUTO-GENERATED VIA typekin-unexpand, ANY MANUAL MODIFICATIONS WILL BE LOST IF THE CODE IS RE-GENERATED
-#![allow(clippy::needless_return)]
 #![allow(dead_code)]
 #![feature(const_clone)]
 #![feature(const_cmp)]
@@ -9,30 +7,25 @@
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
+
 mod subject {
+    #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
+    #[derive(Copy, Debug, Hash)]
     #[repr(u128)]
-    #[derive(
-        :: core :: fmt :: Debug,
-        :: core :: hash :: Hash,
-        :: core :: marker :: Copy,
-    )]
-    #[derive_const(::core::clone::Clone)]
-    #[derive_const(::core::cmp::Eq)]
-    #[derive_const(::core::cmp::Ord)]
-    #[derive_const(::core::cmp::PartialEq)]
-    #[derive_const(::core::cmp::PartialOrd)]
     pub enum MyFlag {
         Z = 0,
         A = 10,
         B,
         C = 40,
     }
+    #[derive(Copy)]
+    #[derive_const(Clone)]
     #[repr(transparent)]
-    #[derive(:: core :: fmt :: Debug, :: core :: marker :: Copy)]
-    #[derive_const(::core::clone::Clone)]
     pub struct MyFlags(u128);
+
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
+    #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
             fn conv_my_flags(&self) -> u128;
@@ -370,6 +363,14 @@ mod subject {
                 *self = self._bitor(it);
             }
         }
+        impl ::core::fmt::Debug for MyFlags {
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                ::core::write!(f, "MyFlags({})", self.0)
+            }
+        }
         const impl ::core::cmp::Eq for MyFlags {}
         const impl ::core::cmp::Ord for MyFlags {
             #[inline(always)]
@@ -383,9 +384,7 @@ mod subject {
         if !(::core::mem::size_of::<MyFlags>()
             == ::core::mem::size_of::<u128>())
         {
-            {
-                panic!("invalid memory layout: #ty(#el) != #el");
-            };
+            panic!("invalid memory layout: #ty(#el) != #el");
         };
         const impl<T> ::core::ops::Add<T> for MyFlags
         where
@@ -604,96 +603,159 @@ mod subject {
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u128(self) -> Result<u128, ()> {
-                return Ok(Self::raw(self) as u128);
+            pub const fn try_into_u128(
+                self
+            ) -> ::core::result::Result<u128, ()> {
+                return ::core::result::Result::Ok(Self::raw(self) as u128);
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_usize(self) -> Result<usize, ()> {
+            pub const fn try_into_usize(
+                self
+            ) -> ::core::result::Result<usize, ()> {
                 let r = Self::raw(self);
                 let t = r as usize;
                 let s = t as u128;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_isize(self) -> Result<isize, ()> {
+            pub const fn try_into_isize(
+                self
+            ) -> ::core::result::Result<isize, ()> {
                 let r = Self::raw(self);
                 let t = r as isize;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u8(self) -> Result<u8, ()> {
+            pub const fn try_into_u8(self) -> ::core::result::Result<u8, ()> {
                 let r = Self::raw(self);
                 let t = r as u8;
                 let s = t as u128;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u16(self) -> Result<u16, ()> {
+            pub const fn try_into_u16(self) -> ::core::result::Result<u16, ()> {
                 let r = Self::raw(self);
                 let t = r as u16;
                 let s = t as u128;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u32(self) -> Result<u32, ()> {
+            pub const fn try_into_u32(self) -> ::core::result::Result<u32, ()> {
                 let r = Self::raw(self);
                 let t = r as u32;
                 let s = t as u128;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_u64(self) -> Result<u64, ()> {
+            pub const fn try_into_u64(self) -> ::core::result::Result<u64, ()> {
                 let r = Self::raw(self);
                 let t = r as u64;
                 let s = t as u128;
-                return if s == r && true { Ok(t) } else { Err(()) };
+                return if s == r && true {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i8(self) -> Result<i8, ()> {
+            pub const fn try_into_i8(self) -> ::core::result::Result<i8, ()> {
                 let r = Self::raw(self);
                 let t = r as i8;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i16(self) -> Result<i16, ()> {
+            pub const fn try_into_i16(self) -> ::core::result::Result<i16, ()> {
                 let r = Self::raw(self);
                 let t = r as i16;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i32(self) -> Result<i32, ()> {
+            pub const fn try_into_i32(self) -> ::core::result::Result<i32, ()> {
                 let r = Self::raw(self);
                 let t = r as i32;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i64(self) -> Result<i64, ()> {
+            pub const fn try_into_i64(self) -> ::core::result::Result<i64, ()> {
                 let r = Self::raw(self);
                 let t = r as i64;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             #[inline(always)]
             #[allow(clippy::unnecessary_cast)]
-            pub const fn try_into_i128(self) -> Result<i128, ()> {
+            pub const fn try_into_i128(
+                self
+            ) -> ::core::result::Result<i128, ()> {
                 let r = Self::raw(self);
                 let t = r as i128;
                 let s = t as u128;
-                return if s == r && t >= 0 { Ok(t) } else { Err(()) };
+                return if s == r && t >= 0 {
+                    ::core::result::Result::Ok(t)
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
             }
             pub(self) const fn _add(
                 &self,
@@ -1393,7 +1455,7 @@ mod subject {
                     "A" => Some(MyFlag::A),
                     "B" => Some(MyFlag::B),
                     "C" => Some(MyFlag::C),
-                    _ => None,
+                    _ => ::core::option::Option::None,
                 };
             }
             #[inline(always)]
@@ -1724,23 +1786,19 @@ mod subject {
         }
     };
 }
+
 type Subject = subject::MyFlag;
 type Value = subject::MyFlags;
+
 fn main() {
     let lhs = Subject::A;
     let rhs = Subject::B.into_value();
-    {
-        print!("{0:?}\n", (lhs & rhs) == (lhs & rhs));
-    };
-    {
-        print!("{0:?}\n", rhs & lhs);
-    };
-    {
-        print!("{0:?}\n", lhs & rhs);
-    };
+
+    println!("{:?}", (lhs & rhs) == (lhs & rhs));
+    println!("{:?}", rhs & lhs);
+    println!("{:?}", lhs & rhs);
+
     for x in Subject::items() {
-        {
-            print!("{0}\n", x.name());
-        };
+        println!("{}", x.name());
     }
 }

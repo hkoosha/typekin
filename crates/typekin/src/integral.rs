@@ -46,7 +46,7 @@ pub(crate) fn integral(
     let cfg = Box::new(syn::parse_macro_input!(attr as IntegralCfg));
     let item = syn::parse_macro_input!(item as syn::ItemStruct);
 
-    return runner::ekran_catching(move || {
+    return runner::catching(move || {
         let ty = item.ident.clone();
 
         let el = if let Fields::Unnamed(fields) = &item.fields
@@ -72,6 +72,7 @@ pub(crate) fn integral(
         let stream = quote::quote! {
             #[allow(dead_code)]
             #[allow(unused_qualifications)]
+            #[allow(clippy::unnecessary_cast)]
             const _: () = {
                 #it
             };
@@ -186,6 +187,53 @@ impl IntegralCfg {
         req.capabilities.extend(capabilities);
         req.conv = Some(conv);
         assert!(self.friends.insert(req));
+    }
+
+    pub(crate) fn parse_with_konst(
+        input: ParseStream,
+        konst: bool,
+    ) -> syn::Result<Self> {
+        let mut this = Self::default();
+        this.konst = konst;
+
+        runner::parse_inner_attributes(input, |attr, rest| {
+            match attr {
+                "konst" => {
+                    return attr
+                        .fail("constness is specified in multiple places");
+                }
+                "with" => this.flags.parse_from(rest, true)?,
+                "without" => this.flags.parse_from(rest, false)?,
+                "friends" => {
+                    let friends =
+                        runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
+                    for friend in &friends {
+                        for capability in &friend.capabilities {
+                            if !matches!(
+                                capability.to_string().as_str(),
+                                "Make" | "Math" | "Bit" | "Relation"
+                            ) {
+                                return capability
+                                    .fail("unknown integral capability");
+                            }
+                        }
+                    }
+                    this.friends = friends;
+                }
+                "get_raw" => this.get_raw = Some(rest.parse()?),
+                "validator" => this.validator = Some(rest.parse()?),
+                it if it.starts_with("with_") => {
+                    this.flags.parse_from(rest, true)?
+                }
+                _ => {
+                    return Ok(false);
+                }
+            };
+
+            return Ok(true);
+        })?;
+
+        return Ok(this);
     }
 }
 

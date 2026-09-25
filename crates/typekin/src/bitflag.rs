@@ -43,7 +43,7 @@ pub(crate) fn bitflag(
     let cfg = Box::new(syn::parse_macro_input!(attr as BitflagCfg));
     let item = syn::parse_macro_input!(item as syn::ItemEnum);
 
-    return runner::ekran_catching(move || {
+    return runner::catching(move || {
         let repr = runner::find_repr_n(&item.attrs, item.span())?;
         let ty = item.ident.clone();
         let items = item.variants.iter().map(|it| it.ident.clone()).collect();
@@ -83,44 +83,52 @@ pub(crate) struct BitflagCfg {
 impl Parse for BitflagCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
+        let mut is_konst = false;
         let mut has_konst = false;
 
-        runner::parse_inner_attributes(input, |attr, rest| {
-            match attr {
-                "konst" => {
-                    this.int.konst = rest.parse::<syn::LitBool>()?.value;
-                    has_konst = true;
-                }
-                "with" => this.bit.parse_from(rest, true)?,
-                "without" => this.bit.parse_from(rest, false)?,
-                "friends" => this.friends = runner::list(rest)?.collect(),
-                "suffix" => {
-                    let as_str: syn::LitStr = input.parse()?;
-                    if as_str.value().is_empty() {
-                        this.bit.suffix = "".to_string();
+        runner::parse_inner_attributes_with_extra(
+            input,
+            |attr, rest| {
+                match attr {
+                    "konst" => {
+                        has_konst = true;
+                        is_konst = rest.parse::<syn::LitBool>()?.value
                     }
-                    else {
+                    "with" => this.bit.parse_from(rest, true)?,
+                    "without" => this.bit.parse_from(rest, false)?,
+                    "friends" => this.friends = runner::list(rest)?.collect(),
+                    "suffix" => {
+                        let as_str: syn::LitStr = input.parse()?;
+                        if as_str.value().is_empty() {
+                            this.bit.suffix = "".to_string();
+                        }
+                        else {
+                            let as_idn: Ident =
+                                syn::parse_str(&as_str.value())?;
+                            this.bit.suffix = as_idn.to_string();
+                        }
+                    }
+                    "value_name" => {
+                        let as_str: syn::LitStr = input.parse()?;
                         let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                        this.bit.suffix = as_idn.to_string();
+                        this.bit.value_name = as_idn.to_string();
                     }
-                }
-                "value_name" => {
-                    let as_str: syn::LitStr = input.parse()?;
-                    let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                    this.bit.value_name = as_idn.to_string();
-                }
-                "integral" => {
-                    let content;
-                    let _ = bracketed!(content in input);
-                    let cfg = IntegralCfg::parse(&content)?;
-                    this.int = Box::new(cfg);
-                    has_konst = true;
-                }
-                _ => {}
-            };
+                    _ => {}
+                };
 
-            return Ok(true);
-        })?;
+                return Ok(true);
+            },
+            // Turns out, this wasn't even need.
+            // TODO cleanup the mess.
+            Some("integral"),
+            |_, rest| {
+                let content;
+                let _ = bracketed!(content in rest);
+                let cfg = IntegralCfg::parse_with_konst(&content, false)?;
+                this.int = Box::new(cfg);
+                return Ok(true);
+            },
+        )?;
 
         if !has_konst {
             return Err(syn::Error::new(
@@ -128,6 +136,7 @@ impl Parse for BitflagCfg {
                 "missing required `konst` argument",
             ));
         }
+        this.int.konst = is_konst;
 
         return Ok(this);
     }
@@ -222,6 +231,7 @@ impl Maker {
 
             #[allow(dead_code)]
             #[allow(unused_qualifications)]
+            #[allow(clippy::unnecessary_cast)]
             const _: () = {
                 #impl_int
 

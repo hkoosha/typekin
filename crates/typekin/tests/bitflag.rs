@@ -3,10 +3,10 @@ mod tests {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
+        konst = false,
         friends = [u8(conv = self, cap = [Bit])],
         integral = [
             friends = [u8(conv = self, cap = [Make, Math, Bit, Relation])],
-            konst = false,
         ],
     )]
     pub enum Thingy {
@@ -90,13 +90,7 @@ mod tests {
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
-    #[typekin::bitflag(
-        value_name = "Thingies2",
-        suffix = "",
-        integral = [
-            konst = false,
-        ],
-    )]
+    #[typekin::bitflag(value_name = "Thingies2", suffix = "", konst = false)]
     pub enum Thingy2 {
         FirstThing = 0,
         ReadThing = 0b001,

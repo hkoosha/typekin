@@ -440,7 +440,7 @@ pub(crate) fn friendship(
     let friendship = syn::parse_macro_input!(attr as Cfg);
     let mut item = syn::parse_macro_input!(item as syn::Item);
 
-    return runner::ekran_catching(move || {
+    return runner::catching(move || {
         let (_, _, attr) = runner::get_concrete_type(&mut item)?;
 
         let constructor = runner::pop_attr(attr, "constructor")?
@@ -458,7 +458,7 @@ pub(crate) fn constructor(
     let constructor = syn::parse_macro_input!(attr as MakeCfg);
     let mut item = syn::parse_macro_input!(item as syn::Item);
 
-    return runner::ekran_catching(move || {
+    return runner::catching(move || {
         let (_, _, attr) = runner::get_concrete_type(&mut item)?;
 
         let friendship =
