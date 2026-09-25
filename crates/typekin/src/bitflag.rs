@@ -83,52 +83,11 @@ pub(crate) struct BitflagCfg {
 impl Parse for BitflagCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
-        let mut is_konst = false;
         let mut has_konst = false;
 
-        runner::parse_inner_attributes_with_extra(
-            input,
-            |attr, rest| {
-                match attr {
-                    "konst" => {
-                        has_konst = true;
-                        is_konst = rest.parse::<syn::LitBool>()?.value
-                    }
-                    "with" => this.bit.parse_from(rest, true)?,
-                    "without" => this.bit.parse_from(rest, false)?,
-                    "friends" => this.friends = runner::list(rest)?.collect(),
-                    "suffix" => {
-                        let as_str: syn::LitStr = input.parse()?;
-                        if as_str.value().is_empty() {
-                            this.bit.suffix = "".to_string();
-                        }
-                        else {
-                            let as_idn: Ident =
-                                syn::parse_str(&as_str.value())?;
-                            this.bit.suffix = as_idn.to_string();
-                        }
-                    }
-                    "value_name" => {
-                        let as_str: syn::LitStr = input.parse()?;
-                        let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                        this.bit.value_name = as_idn.to_string();
-                    }
-                    _ => {}
-                };
-
-                return Ok(true);
-            },
-            // Turns out, this wasn't even need.
-            // TODO cleanup the mess.
-            Some("integral"),
-            |_, rest| {
-                let content;
-                let _ = bracketed!(content in rest);
-                let cfg = IntegralCfg::parse_with_konst(&content, false)?;
-                this.int = Box::new(cfg);
-                return Ok(true);
-            },
-        )?;
+        runner::parse_inner_attributes(input, |attr, rest| {
+            return this.parse_attr(&mut has_konst, attr, rest);
+        })?;
 
         if !has_konst {
             return Err(syn::Error::new(
@@ -136,9 +95,56 @@ impl Parse for BitflagCfg {
                 "missing required `konst` argument",
             ));
         }
-        this.int.konst = is_konst;
 
         return Ok(this);
+    }
+}
+
+impl BitflagCfg {
+    fn parse_attr(
+        self: &mut Self,
+        has_konst: &mut bool,
+        attr: &str,
+        rest: ParseStream,
+    ) -> syn::Result<bool> {
+        match attr {
+            "konst" => {
+                *has_konst = true;
+                self.int.konst = rest.parse::<syn::LitBool>()?.value;
+            }
+            "with" => self.bit.parse_from(rest, true)?,
+            "without" => self.bit.parse_from(rest, false)?,
+            "friends" => self.friends = runner::list(rest)?.collect(),
+            "suffix" => {
+                let as_str: syn::LitStr = rest.parse()?;
+                if as_str.value().is_empty() {
+                    self.bit.suffix = "".to_string();
+                }
+                else {
+                    let as_idn: Ident = syn::parse_str(&as_str.value())?;
+                    self.bit.suffix = as_idn.to_string();
+                }
+            }
+            "integral" => {
+                let content;
+                let _ = bracketed!(content in rest);
+
+                let cfg = IntegralCfg::parse_with_konst(&content, true)?;
+                let konst = self.int.konst;
+                self.int = Box::new(cfg);
+                self.int.konst = konst;
+
+                return Ok(true);
+            }
+            "value_name" => {
+                let as_str: syn::LitStr = rest.parse()?;
+                let as_idn: Ident = syn::parse_str(&as_str.value())?;
+                self.bit.value_name = as_idn.to_string();
+            }
+            _ => {}
+        };
+
+        return Ok(true);
     }
 }
 

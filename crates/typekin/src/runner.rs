@@ -25,7 +25,7 @@ use syn::{
         Parse,
         ParseStream,
     },
-    punctuated::Punctuated,
+    punctuated::Punctuated, 
     spanned::Spanned,
 };
 
@@ -428,11 +428,9 @@ pub(crate) fn find_repr_transparent(
 }
 
 // TODO cleanup the mess...
-pub(crate) fn parse_inner_attributes_with_extra(
+pub(crate) fn parse_inner_attributes(
     stream: ParseStream,
     mut on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
-    extra: Option<&str>,
-    mut on_attr_extra: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
     let mut seen = HashSet::with_capacity(5);
 
@@ -462,22 +460,11 @@ pub(crate) fn parse_inner_attributes_with_extra(
 
         stream.parse::<Token![=]>()?;
 
-        if extra.is_some_and(|extra| extra == attr) {
-            match on_attr_extra(&attr, &stream) {
-                Ok(true) => {}
-                Ok(false) => return stream.span().fail("unknown attribute"),
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        }
-        else {
-            match on_attr(&attr, &stream) {
-                Ok(true) => {}
-                Ok(false) => return stream.span().fail("unknown attribute"),
-                Err(err) => {
-                    return Err(err);
-                }
+        match on_attr(&attr, &stream) {
+            Ok(true) => {}
+            Ok(false) => return stream.span().fail("unknown attribute"),
+            Err(err) => {
+                return Err(err);
             }
         }
 
@@ -489,18 +476,6 @@ pub(crate) fn parse_inner_attributes_with_extra(
     }
 
     return Ok(());
-}
-
-pub(crate) fn parse_inner_attributes(
-    stream: ParseStream,
-    on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
-) -> syn::Result<()> {
-    return parse_inner_attributes_with_extra(
-        stream,
-        on_attr,
-        None,
-        |_, _| unreachable!(),
-    );
 }
 
 pub(crate) fn parse_optional_attributes(
