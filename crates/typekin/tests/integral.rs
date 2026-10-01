@@ -33,14 +33,38 @@ mod tests {
         return value % 2 == 0;
     }
 
+    const fn is_not_fifty(value: u8) -> bool {
+        return value != 50;
+    }
+
+    const fn accepts_ranged(_: u8) -> bool {
+        return true;
+    }
+
     #[typekin::integral(
             konst = true,
             friends = [u8(conv = self, cap = [Make, Math, Bit, Relation])],
-            validator = is_even
+            valid = [is_even, is_not_fifty],
+            in = 2..=100,
         )]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct Even(u8);
+
+    #[typekin::integral(
+            konst = true,
+            friends = [u8(conv = self, cap = [Make, Math, Bit, Relation])],
+            in = 2..=4 + 8..10,
+            valid = accepts_ranged,
+        )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct Ranged(u8);
+
+    const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
+        Ok(number) => number,
+        Err(_) => panic!("valid ranged number rejected"),
+    };
 
     #[typekin::integral(
             konst = true,
@@ -161,6 +185,40 @@ mod tests {
     #[test]
     fn try_make_rejects_invalidated_value() {
         assert_eq!(Even::try_make(23), Err(23));
+    }
+
+    #[test]
+    fn try_make_rejects_second_callback() {
+        assert_eq!(Even::try_make(50), Err(50));
+    }
+
+    #[test]
+    fn try_make_rejects_even_value_outside_configured_ranges() {
+        assert_eq!(Even::try_make(102), Err(102));
+    }
+
+    #[test]
+    fn range_validation_accepts_each_configured_interval() {
+        assert_eq!(Ranged::try_make(2).map(Ranged::raw), Ok(2));
+        assert_eq!(Ranged::try_make(4).map(Ranged::raw), Ok(4));
+        assert_eq!(Ranged::try_make(8).map(Ranged::raw), Ok(8));
+        assert_eq!(Ranged::try_make(9).map(Ranged::raw), Ok(9));
+        assert_eq!(Ranged::try_make(1), Err(1));
+        assert_eq!(Ranged::try_make(5), Err(5));
+        assert_eq!(Ranged::try_make(10), Err(10));
+    }
+
+    #[test]
+    fn range_validation_is_const() {
+        assert_eq!(RANGED_NUMBER.raw(), 3);
+    }
+
+    #[test]
+    fn range_validation_checks_friended_construction_and_math() {
+        assert!(std::panic::catch_unwind(|| Ranged::of(5u8)).is_err());
+
+        let value = Ranged::try_make(4).unwrap();
+        assert!(std::panic::catch_unwind(|| value + 1u8).is_err());
     }
 
     #[test]

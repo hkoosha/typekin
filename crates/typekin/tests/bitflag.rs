@@ -16,12 +16,22 @@ mod tests {
         Execute = 0b100,
     }
 
+    const THINGY_READ_VALUE: ThingyValue = ThingyValue::ReadThing;
+
     // =============================================================================
 
     #[test]
     fn value_empty() {
         let it = Thingy::empty();
         assert_eq!(it.raw(), 0b0);
+    }
+
+    #[test]
+    fn value_named_constants_match_enum_variants() {
+        assert_eq!(THINGY_READ_VALUE.raw(), Thingy::ReadThing.raw());
+        assert_eq!(ThingyValue::FirstThing.raw(), Thingy::FirstThing.raw());
+        assert_eq!(ThingyValue::WritersBlock.raw(), Thingy::WritersBlock.raw());
+        assert_eq!(ThingyValue::Execute.raw(), Thingy::Execute.raw());
     }
 
     // =============================================================================
@@ -73,7 +83,11 @@ mod tests {
     // =============================================================================
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
-    #[typekin::bitflag(suffix = "Holder", konst = false)]
+    #[typekin::bitflag(
+        suffix = "Holder",
+        konst = false,
+        integral = [in = 0..=7],
+    )]
     pub enum Thingy1 {
         FirstThing = 0,
         ReadThing = 0b001,
@@ -83,7 +97,17 @@ mod tests {
 
     #[test]
     fn suffix() {
-        let _ = Thingy1Holder::all();
+        let all = Thingy1Holder::all();
+        assert_eq!(all.raw(), 0b111);
+        assert_eq!(Thingy1Holder::Execute.raw(), Thingy1::Execute.raw());
+    }
+
+    #[test]
+    fn nested_integral_ranges_reject_invalid_bits() {
+        assert!(
+            std::panic::catch_unwind(|| Thingy1::from_bits_retain(0b1000))
+                .is_err()
+        );
     }
 
     // =============================================================================
@@ -101,5 +125,6 @@ mod tests {
     #[test]
     fn value_name() {
         let _ = Thingies2::all();
+        assert_eq!(Thingies2::ReadThing.raw(), Thingy2::ReadThing.raw());
     }
 }

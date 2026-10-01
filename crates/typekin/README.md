@@ -93,7 +93,7 @@ unpleasant API to use and choosing typekin's for the use case would be
 questionable in the first place.
 
 This only affects types that do not accept all values in the underlying type's
-domain. For instance, if a custom validator fn is provided to reject any u32
+domain. For instance, if a custom callback fn is provided to reject any u32
 less than 3:
 
 ```rust
@@ -101,7 +101,7 @@ less than 3:
 #[derive(Copy, Clone)]
 #[typekin::integral(
   konst = false,
-  validator = Self::is_gte_3,
+  valid = Self::is_gte_3,
 )]
 struct Foo(usize);
 
@@ -162,14 +162,15 @@ fn main() {
 
 ### Validation
 
-Use `validator` when raw values are not always valid.
+Place each constraint at the macro root. `valid` accepts either one callback
+path or a comma-separated list in brackets; every listed callback must return `true`.
 
 ```rust
 const fn valid_port(it: u16) -> bool { it != 0 }
 
 #[typekin::integral(
   konst = false,
-  validator = valid_port,
+  valid = valid_port,
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -181,6 +182,25 @@ fn main() {
     // A rejected checked construction returns the raw value.
     assert_eq!(Port::try_make(0), Err(0));
 }
+```
+
+`in` accepts either one Rust range expression or a `+`-separated union:
+`in = 1..=1023 + 49_152..=65_535`. Commas are reserved for ANDed lists, so
+they are not valid range separators. `in` and `valid` conditions are ANDed;
+generated construction and enabled mathematical or bitwise operations reject
+values that fail them.
+
+```rust
+#[typekin::integral(
+  konst = false,
+  in = 1..=1023 + 49_152..=65_535,
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Port(u16);
+
+assert_eq!(Port::try_make(443).map(Port::raw), Ok(443));
+assert_eq!(Port::try_make(1024), Err(1024));
 ```
 
 ### Configuration
@@ -199,7 +219,7 @@ integral's [cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
   ],
 
   get_raw = Self::unwrap, // Use an existing accessor instead of generated `raw()`
-  validator = is_valid,   // Reject invalid raw values in checked construction
+  valid = is_valid, // Reject invalid raw values in checked construction
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -218,6 +238,11 @@ Apply `bitflag` to a unit enum with an integral `repr`. It generates the enum, a
 helpers such as `name()`, `items()`, `from_name()`, and `contains()`. It is
 modeled after [bitflag](https://crates.io/crates/bitflag), but with a different
 implementation.
+
+Every enum variant is mirrored as a same-named associated constant on its
+generated `{Enum}Value` type.
+They are constructed through generated integral validation, so each enum
+discriminant must be valid.
 
 `konst` is required and forwarded to `integral` for the generated value type.
 Write it directly as `konst = true` or `konst = false`; use `integral = [...]`

@@ -446,6 +446,10 @@ pub(crate) fn parse_inner_attributes(
                 let _: Token![mod] = stream.parse()?;
                 "mod".to_string()
             }
+            else if stream.peek(Token![in]) {
+                let _: Token![in] = stream.parse()?;
+                "in".to_string()
+            }
             else {
                 let key: Ident = stream.parse()?;
                 key.to_string()

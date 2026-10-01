@@ -14,6 +14,75 @@ mod test {
     }
 
     #[test]
+    fn accepts_root_validation_attributes() {
+        let config = syn::parse_str::<IntegralCfg>(
+            "konst = false, valid = is_even, in = 1..=4",
+        )
+        .expect("root validation attributes should parse");
+
+        assert_eq!(config.validation.callbacks.len(), 1);
+        assert_eq!(config.validation.ranges.len(), 1);
+        assert!(config.has_validation());
+    }
+
+    #[test]
+    fn accepts_root_validation_lists() {
+        let config = syn::parse_str::<IntegralCfg>(
+            "konst = false, valid = [is_even, is_not_fifty], in = [1..=4 + 8..10 + ..=0]",
+        )
+        .expect("root validation lists should parse");
+
+        assert_eq!(config.validation.callbacks.len(), 2);
+        assert_eq!(config.validation.ranges.len(), 3);
+    }
+
+    #[test]
+    fn accepts_unbracketed_root_in_union_with_valid_callback() {
+        let config = syn::parse_str::<IntegralCfg>(
+            "konst = false, in = 1..2 + 6..8, valid = foo",
+        )
+        .expect(
+            "an unbracketed root in union with a valid callback should parse",
+        );
+
+        assert_eq!(config.validation.callbacks.len(), 1);
+        assert_eq!(config.validation.ranges.len(), 2);
+    }
+
+    #[test]
+    fn rejects_non_in_validation() {
+        let error = syn::parse_str::<IntegralCfg>("konst = false, in = [1]")
+            .expect_err("in validation needs range expressions");
+
+        assert_eq!(error.to_string(), "invalid range definition");
+    }
+
+    #[test]
+    fn rejects_comma_separated_ranges() {
+        syn::parse_str::<IntegralCfg>("konst = false, in = [1..2, 3..4]")
+            .expect_err("multiple ranges use + separators");
+    }
+
+    #[test]
+    fn rejects_legacy_validation_attributes() {
+        let callback =
+            syn::parse_str::<IntegralCfg>("konst = false, callback = is_valid")
+                .expect_err("valid is the validation callback key");
+        assert_eq!(callback.to_string(), "unknown attribute");
+
+        let range =
+            syn::parse_str::<IntegralCfg>("konst = false, range = 1..2")
+                .expect_err("in is the range constraint key");
+        assert_eq!(range.to_string(), "unknown attribute");
+
+        let validator = syn::parse_str::<IntegralCfg>(
+            "konst = false, validator = is_valid",
+        )
+        .expect_err("valid is the validation callback key");
+        assert_eq!(validator.to_string(), "unknown attribute");
+    }
+
+    #[test]
     fn rejects_missing_konst() {
         let error = syn::parse_str::<IntegralCfg>("friends = [u8]")
             .expect_err("konst must be explicit");
@@ -88,7 +157,7 @@ mod test {
         assert!(!maker.ekran_items().to_string().contains("fn make"));
 
         let mut cfg = IntegralCfg::default();
-        cfg.validator = Some(syn::parse_quote!(is_valid));
+        cfg.validation.callbacks = vec![syn::parse_quote!(is_valid)];
         let maker = crate::integral::Maker::new(
             syn::parse_quote!(Number),
             syn::parse_quote!(u32),

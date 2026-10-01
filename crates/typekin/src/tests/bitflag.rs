@@ -38,14 +38,14 @@ mod test {
     #[test]
     fn accepts_friend_capabilities_and_rejects_levels() {
         let config = syn::parse_str::<BitflagCfg>(
-            "friends = [u8(conv = self, cap = [Bit])], integral = [konst = false]",
+            "konst = false, friends = [u8(conv = self, cap = [Bit])], integral = []",
         )
         .expect("bitflag capabilities should parse");
         let friend = config.friends.iter().next().unwrap();
         assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
 
         let level = match syn::parse_str::<BitflagCfg>(
-            "friends = [u8(conv = self, level = [Bit])], integral = [konst = false]",
+            "konst = false, friends = [u8(conv = self, level = [Bit])], integral = []",
         ) {
             Ok(_) => panic!("levels were replaced by capabilities"),
             Err(error) => error,

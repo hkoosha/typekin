@@ -1,22 +1,10 @@
-use crate::{
-    friendship::{
-        Protocol,
-        ProtocolFriend,
-        cfg::Friend,
-    },
-    runner::{
-        self,
-        Merged,
-        MkErr,
-        mk_flags,
-    },
-    value_type::N,
-};
+use crate::value_type::N;
 use std::collections::BTreeSet;
 
 use proc_macro2::{
     Ident,
     TokenStream,
+    TokenTree,
 };
 use quote::{
     ToTokens,
@@ -24,9 +12,13 @@ use quote::{
     quote,
 };
 use syn::{
+    Expr,
+    ExprRange,
     Fields,
     Path,
+    Token,
     Type,
+    bracketed,
     parse::{
         Parse,
         ParseStream,
@@ -34,6 +26,17 @@ use syn::{
     parse_quote,
 };
 
+use crate::friendship::cfg::Friend;
+use crate::friendship::{
+    Protocol,
+    ProtocolFriend,
+};
+use crate::runner;
+use crate::runner::{
+    Merged,
+    MkErr,
+    mk_flags,
+};
 use std::fmt::{
     Debug,
     Formatter,
@@ -167,11 +170,96 @@ mk_flags! {
 }
 
 #[derive(Default, Clone)]
+pub(crate) struct ValidationCfg {
+    pub(crate) callbacks: Vec<Path>,
+    pub(crate) ranges: Vec<ExprRange>,
+}
+
+impl ValidationCfg {
+    pub(crate) fn has_validation(&self) -> bool {
+        return !self.callbacks.is_empty() || !self.ranges.is_empty();
+    }
+
+    fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
+        if input.peek(syn::token::Bracket) {
+            return Ok(runner::list::<Path>(input)?.collect());
+        }
+
+        return Ok(vec![input.parse()?]);
+    }
+
+    fn parse_ranges(input: ParseStream) -> syn::Result<Vec<ExprRange>> {
+        let tokens = if input.peek(syn::token::Bracket) {
+            let content;
+            let _ = bracketed!(content in input);
+            content.parse()?
+        }
+        else {
+            let mut tokens = TokenStream::new();
+
+            while !input.is_empty() && !input.peek(Token![,]) {
+                let token: TokenTree = input.parse()?;
+                tokens.extend([token]);
+            }
+
+            tokens
+        };
+
+        return Self::parse_range_union(tokens);
+    }
+
+    fn parse_range_union(tokens: TokenStream) -> syn::Result<Vec<ExprRange>> {
+        let mut ranges = vec![];
+        let mut range = TokenStream::new();
+
+        for token in tokens {
+            if matches!(&token, TokenTree::Punct(it) if it.as_char() == '+') {
+                ranges.push(Self::parse_range_tokens(range)?);
+                range = TokenStream::new();
+            }
+            else {
+                range.extend([token]);
+            }
+        }
+
+        ranges.push(Self::parse_range_tokens(range)?);
+        return Ok(ranges);
+    }
+
+    fn parse_range_tokens(tokens: TokenStream) -> syn::Result<ExprRange> {
+        return Self::parse_range(syn::parse2(tokens)?);
+    }
+
+    fn parse_range(expr: Expr) -> syn::Result<ExprRange> {
+        return match expr {
+            Expr::Range(range) if range.attrs.is_empty() => Ok(range),
+            expr => expr.fail("invalid range definition"),
+        };
+    }
+
+    fn parse_attr(
+        &mut self,
+        attr: &str,
+        input: ParseStream,
+    ) -> syn::Result<bool> {
+        match attr {
+            "valid" => {
+                self.callbacks = Self::parse_callbacks(input)?;
+            }
+            "in" => self.ranges = Self::parse_ranges(input)?,
+            _ => return Ok(false),
+        };
+
+        return Ok(true);
+    }
+}
+
+#[derive(Default, Clone)]
 pub(crate) struct IntegralCfg {
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) konst: bool,
     pub(crate) get_raw: Option<Path>,
-    pub(crate) validator: Option<Path>,
+    pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
 }
 
@@ -189,6 +277,10 @@ impl IntegralCfg {
         assert!(self.friends.insert(req));
     }
 
+    pub(crate) fn has_validation(&self) -> bool {
+        return self.validation.has_validation();
+    }
+
     pub(crate) fn parse_with_konst(
         input: ParseStream,
         konst: bool,
@@ -197,6 +289,10 @@ impl IntegralCfg {
         this.konst = konst;
 
         runner::parse_inner_attributes(input, |attr, rest| {
+            if this.validation.parse_attr(attr, rest)? {
+                return Ok(true);
+            }
+
             match attr {
                 "konst" => {
                     return attr
@@ -221,7 +317,6 @@ impl IntegralCfg {
                     this.friends = friends;
                 }
                 "get_raw" => this.get_raw = Some(rest.parse()?),
-                "validator" => this.validator = Some(rest.parse()?),
                 it if it.starts_with("with_") => {
                     this.flags.parse_from(rest, true)?
                 }
@@ -244,17 +339,15 @@ impl Debug for IntegralCfg {
     ) -> std::fmt::Result {
         write!(
             f,
-            "IntegralCfg[int: {:?}, friends: {:?}, get_raw: {}, validator: {}",
+            "IntegralCfg[int: {:?}, friends: {:?}, get_raw: {}, callbacks: {}, ranges: {}]",
             self.flags,
             self.friends,
             self.get_raw
                 .as_ref()
                 .map(|it| it.to_token_stream().to_string())
                 .unwrap_or_default(),
-            self.validator
-                .as_ref()
-                .map(|it| it.to_token_stream().to_string())
-                .unwrap_or_default(),
+            self.validation.callbacks.len(),
+            self.validation.ranges.len(),
         )
     }
 }
@@ -265,6 +358,10 @@ impl Parse for IntegralCfg {
         let mut has_konst = false;
 
         runner::parse_inner_attributes(input, |attr, rest| {
+            if this.validation.parse_attr(attr, rest)? {
+                return Ok(true);
+            }
+
             match attr {
                 "konst" => {
                     this.konst = rest.parse::<syn::LitBool>()?.value;
@@ -289,7 +386,6 @@ impl Parse for IntegralCfg {
                     this.friends = friends;
                 }
                 "get_raw" => this.get_raw = Some(rest.parse()?),
-                "validator" => this.validator = Some(rest.parse()?),
                 it if it.starts_with("with_") => {
                     this.flags.parse_from(rest, true)?
                 }
@@ -366,17 +462,74 @@ impl Maker {
     }
 
     fn preprocess_cfg(mut cfg: Box<IntegralCfg>) -> Box<IntegralCfg> {
-        if cfg.flags.auto_of_raw && cfg.validator.is_some() {
+        if cfg.flags.auto_of_raw && cfg.has_validation() {
             cfg.flags.auto_of_raw = false;
         }
 
         return cfg;
     }
 
+    fn range_condition(
+        range: &ExprRange,
+        value: &TokenStream,
+    ) -> TokenStream {
+        let lower = range.start.as_ref().map(|start| {
+            return quote! { #value >= (#start) };
+        });
+        let upper = range.end.as_ref().map(|end| {
+            return match &range.limits {
+                syn::RangeLimits::HalfOpen(_) => {
+                    quote! { #value < (#end) }
+                }
+                syn::RangeLimits::Closed(_) => {
+                    quote! { #value <= (#end) }
+                }
+            };
+        });
+
+        return match (lower, upper) {
+            (None, None) => quote! { true },
+            (Some(lower), None) => quote! { #lower },
+            (None, Some(upper)) => quote! { #upper },
+            (Some(lower), Some(upper)) => {
+                quote! { (#lower) && (#upper) }
+            }
+        };
+    }
+
+    fn validation_condition(
+        &self,
+        value: &TokenStream,
+    ) -> TokenStream {
+        let callbacks = self
+            .cfg
+            .validation
+            .callbacks
+            .iter()
+            .map(|callback| quote! { #callback(#value) })
+            .reduce(|left, right| quote! { (#left) && (#right) });
+        let ranges = self
+            .cfg
+            .validation
+            .ranges
+            .iter()
+            .map(|range| Self::range_condition(range, value))
+            .reduce(|left, right| quote! { (#left) || (#right) });
+
+        return match (callbacks, ranges) {
+            (Some(callbacks), Some(ranges)) => {
+                quote! { (#callbacks) && (#ranges) }
+            }
+            (Some(callbacks), None) => quote! { #callbacks },
+            (None, Some(ranges)) => quote! { #ranges },
+            (None, None) => quote! { true },
+        };
+    }
+
     fn fix_friendship(&mut self) {
         let target = &self.ty;
         let relation = &self.el;
-        let validated = self.cfg.validator.is_some();
+        let validated = self.cfg.has_validation();
         let has_make = self.cfg.flags.impl_self_friend_make;
 
         for (needle, conversion, is_validated) in [
@@ -882,14 +1035,14 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fn_make_unchecked_try
-            && let Some(validator) = &self.cfg.validator
-        {
+        if self.cfg.flags.fn_make_unchecked_try && self.cfg.has_validation() {
             let konst = runner::konst(self.cfg.konst);
+            let value = quote! { it };
+            let validation = self.validation_condition(&value);
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_make(it: #el) -> Result<Self, #el> {
-                    return if #validator(it) {
+                    return if #validation {
                         return ::core::result::Result::Ok(Self(it));
                     }
                     else {
@@ -900,7 +1053,7 @@ impl Maker {
             stream.extend(it);
         }
         else if self.cfg.flags.fn_make_checked_try
-            && self.cfg.validator.is_none()
+            && !self.cfg.has_validation()
         {
             let it = quote! {
                 #[inline(always)]
@@ -911,14 +1064,14 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fn_make_unchecked
-            && let Some(validator) = &self.cfg.validator
-        {
+        if self.cfg.flags.fn_make_unchecked && self.cfg.has_validation() {
+            let value = quote! { it };
+            let validation = self.validation_condition(&value);
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
                 pub(self) const fn _unchecked(it: #el) -> Self {
-                    if #validator(it) {
+                    if #validation {
                         return Self(it);
                     }
                     else {
@@ -928,8 +1081,7 @@ impl Maker {
             };
             stream.extend(it);
         }
-        else if self.cfg.flags.fn_make_checked && self.cfg.validator.is_none()
-        {
+        else if self.cfg.flags.fn_make_checked && !self.cfg.has_validation() {
             let it = quote! {
                 #[must_use]
                 #[inline(always)]

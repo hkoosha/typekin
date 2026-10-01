@@ -297,8 +297,31 @@ impl Maker {
             .map(|it| quote! { #it })
             .unwrap_or_else(|| quote! { #vl::raw });
 
+        let from_bits = if self.cfg.int.has_validation() {
+            quote! {
+                match Self::try_make(bits) {
+                    ::core::result::Result::Ok(value) => value,
+                    ::core::result::Result::Err(_) => {
+                        ::core::panic!("invalid value")
+                    }
+                }
+            }
+        }
+        else {
+            quote! { Self::of(bits) }
+        };
+
+        let named_values = self.items.iter().map(|it| {
+            return quote! {
+                #[allow(non_upper_case_globals)]
+                pub const #it: Self = Self::_unchecked(#ty::#it as #el);
+            };
+        });
+
         return quote! {
             impl #vl {
+                #(#named_values)*
+
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn bits(self) -> #el {
@@ -308,7 +331,7 @@ impl Maker {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn from_bits_retain(bits: #el) -> Self {
-                    return Self::of(bits);
+                    return #from_bits;
                 }
 
                 #[must_use]
@@ -667,12 +690,19 @@ impl Maker {
         let el = &self.el;
         let konst = runner::konst(self.cfg.int.konst);
 
+        let from_bits = if self.cfg.int.has_validation() {
+            quote! { #vl::from_bits_retain(bits) }
+        }
+        else {
+            quote! { #vl::of(bits) }
+        };
+
         return quote! {
             impl #ty {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn from_bits_retain(bits: #el) -> #vl {
-                    return #vl::of(bits);
+                    return #from_bits;
                 }
 
                 #[must_use]
