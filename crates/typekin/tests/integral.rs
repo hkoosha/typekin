@@ -162,6 +162,14 @@ mod tests {
     }
 
     #[test]
+    fn exposes_underlying_reference_with_as_ref() {
+        let it = My32::make(23);
+        let raw: &u32 = it.as_ref();
+
+        assert_eq!(*raw, 23);
+    }
+
+    #[test]
     fn exposes_configured_raw_value() {
         assert_eq!(CustomRaw::make(23).value(), 23);
     }

@@ -90,6 +90,7 @@ mk_flags! {
     #[derive(Debug, Clone)]
     pub(crate) struct IntegralFlags {
         pub impl_range: bool = false,
+        pub impl_as_ref: bool,
 
         pub auto_of_raw: bool,
         pub assertions: bool,
@@ -1118,6 +1119,18 @@ impl Maker {
 
         let mut stream = TokenStream::new();
         stream.extend(self.ekran_friendship());
+
+        if self.cfg.flags.impl_as_ref {
+            let it = quote! {
+                impl ::core::convert::AsRef<#el> for #ty {
+                    #[inline(always)]
+                    fn as_ref(&self) -> &#el {
+                        return &self.0;
+                    }
+                }
+            };
+            stream.extend(it);
+        }
 
         if self.cfg.flags.impl_into {
             let it = N::items()
