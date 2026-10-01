@@ -141,18 +141,11 @@ mod tests {
     }
 
     #[test]
-    fn makes_from_borrowed_friend() {
+    fn makes_from_owned_friend() {
         let value = 23u32;
-        let it = My32::of(&value);
-        assert_eq!(it.raw(), value);
-    }
+        let it = My32::of(value);
 
-    #[test]
-    fn makes_from_mutably_borrowed_friend() {
-        let mut value = 23u32;
-        let it = My32::of(&mut value);
         assert_eq!(it.raw(), value);
-        assert_eq!(value, 23);
     }
 
     #[test]
@@ -544,25 +537,6 @@ mod tests {
         let mut value = it;
         value >>= 1;
         assert_eq!(value.raw(), 23);
-    }
-
-    #[test]
-    fn compares_for_equality_with_friend() {
-        let it = My32::make(23);
-        assert_eq!(it, 23);
-    }
-
-    #[test]
-    fn compares_for_equality_with_borrowed_friend() {
-        let value = 23u32;
-        let it = My32::make(23);
-        assert_eq!(it, &value);
-    }
-
-    #[test]
-    fn compares_for_partial_order_with_friend() {
-        let it = My32::make(23);
-        assert!(it < 24);
     }
 
     #[test]

@@ -181,7 +181,9 @@ impl ValidationCfg {
         return !self.callbacks.is_empty() || !self.ranges.is_empty();
     }
 
-    fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
+    pub(crate) fn parse_callbacks(
+        input: ParseStream
+    ) -> syn::Result<Vec<Path>> {
         if input.peek(syn::token::Bracket) {
             return Ok(runner::list::<Path>(input)?.collect());
         }
@@ -305,6 +307,12 @@ impl IntegralCfg {
                     let friends =
                         runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
                     for friend in &friends {
+                        if friend.trusted {
+                            return Err(syn::Error::new(
+                                rest.span(),
+                                "trusted friends are only supported by text Make",
+                            ));
+                        }
                         for capability in &friend.capabilities {
                             if !matches!(
                                 capability.to_string().as_str(),
@@ -374,6 +382,12 @@ impl Parse for IntegralCfg {
                     let friends =
                         runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
                     for friend in &friends {
+                        if friend.trusted {
+                            return Err(syn::Error::new(
+                                rest.span(),
+                                "trusted friends are only supported by text Make",
+                            ));
+                        }
                         for capability in &friend.capabilities {
                             if !matches!(
                                 capability.to_string().as_str(),
@@ -596,7 +610,7 @@ impl Maker {
         let fp_get_raw = &self.fp_get_raw;
         let target_conversion = self.cfg.flags.impl_friend_seal.then(|| {
             quote! {
-                return #fp_get_raw(*self);
+                return #fp_get_raw(self);
             }
         });
         let capabilities = [
@@ -637,7 +651,7 @@ impl Maker {
                     else if is_raw {
                         let relation = &self.el;
                         Some(quote! {
-                            return *self as #relation;
+                            return self as #relation;
                         })
                     }
                     else {
@@ -645,17 +659,17 @@ impl Maker {
                             Some(conv) if conv.is_ident("self") => {
                                 let relation = &self.el;
                                 Some(quote! {
-                                    let relation: #relation = *self;
+                                    let relation: #relation = self;
                                     return relation;
                                 })
                             }
                             Some(conv) => Some(quote! {
-                                return #conv(*self);
+                                return #conv(self);
                             }),
                             None => {
                                 let relation = &self.el;
                                 Some(quote! {
-                                    let relation: #relation = (*self).into();
+                                    let relation: #relation = self.into();
                                     return relation;
                                 })
                             }
@@ -742,7 +756,7 @@ impl Maker {
                 where
                     T: #what + #cond_seal #destruct,
                 {
-                    let this = #fp_friend_conv(&it);
+                    let this = #fp_friend_conv(it);
                     return #fp_unchecked(this);
                 }
             };
@@ -1102,7 +1116,6 @@ impl Maker {
 
         let trait_friend_bit = &self.trait_friend_bit;
         let trait_friend_math = &self.trait_friend_math;
-        let trait_friend_rel = &self.trait_friend_rel;
         let trait_seal = &self.trait_seal;
 
         let fn_conv = &self.fn_conv;
@@ -1252,7 +1265,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._bitand(it);
                     }
                 }
@@ -1271,7 +1284,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._add(it);
                     }
                 }
@@ -1290,7 +1303,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._sub(it);
                     }
                 }
@@ -1309,7 +1322,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._mul(it);
                     }
                 }
@@ -1328,7 +1341,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._div(it);
                     }
                 }
@@ -1347,7 +1360,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._rem(it);
                     }
                 }
@@ -1366,7 +1379,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._bitor(it);
                     }
                 }
@@ -1436,7 +1449,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._add(it);
                     }
                 }
@@ -1456,7 +1469,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._sub(it);
                     }
                 }
@@ -1476,7 +1489,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._mul(it);
                     }
                 }
@@ -1497,7 +1510,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._div(it);
                     }
                 }
@@ -1518,7 +1531,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._rem(it);
                     }
                 }
@@ -1539,7 +1552,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._bitand(it);
                     }
                 }
@@ -1559,7 +1572,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._bitor(it);
                     }
                 }
@@ -1579,7 +1592,7 @@ impl Maker {
                         self,
                         rhs: T,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         return self._bitxor(it);
                     }
                 }
@@ -1592,7 +1605,7 @@ impl Maker {
                         &mut self,
                         rhs: T,
                     ) {
-                        let it = #fp_friend_conv(&rhs);
+                        let it = #fp_friend_conv(rhs);
                         *self = self._bitxor(it);
                     }
                 }
@@ -1676,17 +1689,14 @@ impl Maker {
 
         if self.cfg.flags.impl_partial_eq {
             let it = quote! {
-                #konst impl<T> ::core::cmp::PartialEq<T> for #ty
-                where
-                    T: #trait_friend_rel + #cond_seal #destruct,
-                {
+                #konst impl ::core::cmp::PartialEq for #ty {
                     #[inline(always)]
                     fn eq(
                         &self,
-                        rhs: &T,
+                        rhs: &Self,
                     ) -> bool {
                         let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_friend_conv(rhs);
+                        let rhs = #fp_get_raw(*rhs);
                         return lhs == rhs;
                     }
                 }
@@ -1696,17 +1706,14 @@ impl Maker {
 
         if self.cfg.flags.impl_partial_ord {
             let it = quote! {
-                #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
-                where
-                    T: #trait_friend_rel + #cond_seal #destruct,
-                {
+                #konst impl ::core::cmp::PartialOrd for #ty {
                     #[inline(always)]
                     fn partial_cmp(
                         &self,
-                        rhs: &T,
+                        rhs: &Self,
                     ) -> ::core::option::Option<::core::cmp::Ordering> {
                         let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_friend_conv(rhs);
+                        let rhs = #fp_get_raw(*rhs);
                         return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
                     }
                 }

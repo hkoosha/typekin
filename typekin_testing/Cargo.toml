@@ -1,0 +1,20 @@
+[package]
+edition = "2024"
+name = "typekin_perf_must_fail"
+version = "0.0.0"
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "typekin-perf-must-fail-fixture"
+path = "src/typekin-perf-must-fail-fixture.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "typekin-perf-ok-fixture"
+path = "src/typekin-perf-ok-fixture.rs"
+test = false
+bench = false

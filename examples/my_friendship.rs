@@ -35,7 +35,7 @@ mod folks {
         }
     }
 
-    pub(super) fn executor_parts(it: &ExecXX) -> (u64, u8) {
+    pub(super) fn executor_parts(it: ExecXX) -> (u64, u8) {
         return (PRETTY | ((it.id as u64) << 32), 0b10_100);
     }
 }
@@ -101,7 +101,7 @@ mod sample {
             };
         }
 
-        fn convert_me(it: &Self) -> (u64, u8) {
+        fn convert_me(it: Self) -> (u64, u8) {
             return (it.id, it.access);
         }
     }
@@ -121,12 +121,12 @@ mod sample {
     }
 
     impl Reader {
-        fn parts(&self) -> (u64, u8) {
+        fn parts(self) -> (u64, u8) {
             return (PRETTY | ((self.id as u64) << 16), 0b10_001);
         }
     }
 
-    fn writer_parts(it: &Writer) -> (u64, u8) {
+    fn writer_parts(it: Writer) -> (u64, u8) {
         return (PRETTY | it.id as u64, 0b10_010);
     }
 

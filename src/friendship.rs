@@ -43,6 +43,7 @@ pub(crate) mod cfg {
         pub(crate) ty: Option<Path>,
         pub(crate) conv: Option<Path>,
         pub(crate) capabilities: BTreeSet<Ident>,
+        pub(crate) trusted: bool,
     }
 
     impl Parse for Friend {
@@ -57,6 +58,7 @@ pub(crate) mod cfg {
 
             let mut conv = None;
             let mut capabilities = None;
+            let mut trusted = false;
             runner::parse_optional_attributes(input, |name, stream| {
                 match name {
                     "conv" => conv = Some(stream.parse()?),
@@ -64,6 +66,9 @@ pub(crate) mod cfg {
                         capabilities = Some(
                             runner::list(stream)?.collect::<BTreeSet<_>>(),
                         );
+                    }
+                    "trusted" => {
+                        trusted = stream.parse::<syn::LitBool>()?.value
                     }
                     _ => return Ok(false),
                 };
@@ -79,6 +84,7 @@ pub(crate) mod cfg {
                 ty,
                 conv,
                 capabilities: capabilities.unwrap_or_else(|| BTreeSet::new()),
+                trusted,
             });
         }
     }
@@ -119,6 +125,7 @@ pub(crate) mod cfg {
                 ty: Some(it.clone()),
                 conv: None,
                 capabilities: BTreeSet::new(),
+                trusted: false,
             };
         }
     }
@@ -348,12 +355,11 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     let capabilities = &protocol.capabilities;
     let konst = runner::konst(protocol.konst);
     let bonst = runner::bonst(protocol.konst);
-    let destruct = runner::destruct(protocol.konst);
 
     let seal_declaration = protocol.emit_seal.then(|| {
         quote! {
             #konst trait #seal {
-                fn #conversion(&self) -> #relation;
+                fn #conversion(self) -> #relation;
             }
         }
     });
@@ -362,7 +368,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
         quote! {
             #konst impl #seal for #target {
                 #[inline(always)]
-                fn #conversion(&self) -> #relation {
+                fn #conversion(self) -> #relation {
                     #body
                 }
             }
@@ -376,7 +382,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
             quote! {
                 #konst impl #seal for #ty {
                     #[inline(always)]
-                    fn #conversion(&self) -> #relation {
+                    fn #conversion(self) -> #relation {
                         #body
                     }
                 }
@@ -398,38 +404,6 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
         #target_seal
         #(#friend_impls)*
-
-        #konst impl<T> #seal for &T
-        where
-            T: #bonst #seal #destruct,
-        {
-            #[inline(always)]
-            fn #conversion(&self) -> #relation {
-                return #seal::#conversion(&**self);
-            }
-        }
-
-        #konst impl<T> #seal for &mut T
-        where
-            T: #bonst #seal #destruct,
-        {
-            #[inline(always)]
-            fn #conversion(&self) -> #relation {
-                return #seal::#conversion(&**self);
-            }
-        }
-
-        #(
-            #konst impl<T> #capabilities for &T
-            where
-                T: #bonst #capabilities #destruct,
-            {}
-
-            #konst impl<T> #capabilities for &mut T
-            where
-                T: #bonst #capabilities #destruct,
-            {}
-        )*
     };
 }
 
@@ -494,6 +468,10 @@ fn expand(
     }
 
     for friend in &friendship.friends {
+        if friend.trusted {
+            return item
+                .fail("trusted friends are only supported by text Make");
+        }
         if friend.ty.is_some() && friend.conv.is_none() {
             return item.fail("friendship friend requires `conv = ...`");
         }
@@ -628,7 +606,7 @@ pub(crate) fn emit_friendship(
                 where
                     T: #constructor_capability + #seal,
                 {
-                    return #of_relation(#seal::#conversion(&it));
+                    return #of_relation(#seal::#conversion(it));
                 }
             }
 
@@ -637,8 +615,8 @@ pub(crate) fn emit_friendship(
                 #relation_value: ::core::marker::Copy,
             {
                 #[inline(always)]
-                fn #conversion(&self) -> #value {
-                    return *self;
+                fn #conversion(self) -> #value {
+                    return self;
                 }
             }
 
@@ -651,7 +629,7 @@ pub(crate) fn emit_friendship(
 
     let items = quote! {
         #trait_visibility trait #seal {
-            fn #conversion(&self) -> #value;
+            fn #conversion(self) -> #value;
         }
 
         #(
@@ -660,36 +638,6 @@ pub(crate) fn emit_friendship(
         )*
 
         #(#friend_impls)*
-
-        impl<T> #seal for &T
-        where
-            T: #seal,
-        {
-            #[inline(always)]
-            fn #conversion(&self) -> #value {
-                return #seal::#conversion(&**self);
-            }
-        }
-
-        impl<T> #seal for &mut T
-        where
-            T: #seal,
-        {
-            #[inline(always)]
-            fn #conversion(&self) -> #value {
-                return #seal::#conversion(&**self);
-            }
-        }
-
-        #(impl<T> #capabilities for &T
-        where
-            T: #capabilities,
-        {})*
-
-        #(impl<T> #capabilities for &mut T
-        where
-            T: #capabilities,
-        {})*
 
         #constructor
     };
@@ -738,7 +686,7 @@ fn emit_friend(
     return quote! {
         impl #seal for #ty {
             #[inline(always)]
-            fn #conversion(&self) -> #value {
+            fn #conversion(self) -> #value {
                 return #conv(self);
             }
         }

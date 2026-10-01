@@ -37,46 +37,30 @@ mod tests {
     // =============================================================================
 
     #[test]
-    fn value_from_borrowed_integral_friend() {
+    fn value_from_owned_integral_friend() {
         let raw = 0b011u8;
-        let it = ThingyValue::of(&raw);
+        let it = ThingyValue::of(raw);
         assert_eq!(it.raw(), raw);
     }
 
     #[test]
-    fn value_from_mutably_borrowed_integral_friend() {
-        let mut raw = 0b011u8;
-        let it = ThingyValue::of(&mut raw);
-        assert_eq!(it.raw(), raw);
-        assert_eq!(raw, 0b011u8);
-    }
-
-    #[test]
-    fn enum_left_bitwise_borrowed_generated_value_friend() {
+    fn enum_left_bitwise_owned_generated_value_friend() {
         let rhs = Thingy::WritersBlock.into_value();
-        let it = Thingy::ReadThing | &rhs;
+        let it = Thingy::ReadThing | rhs;
         assert_eq!(it.raw(), 0b011);
     }
 
     #[test]
-    fn enum_left_bitwise_mutably_borrowed_generated_value_friend() {
-        let mut rhs = Thingy::WritersBlock.into_value();
-        let it = Thingy::ReadThing | &mut rhs;
-        assert_eq!(it.raw(), 0b011);
-        assert_eq!(rhs.raw(), 0b010);
-    }
-
-    #[test]
-    fn enum_left_bitwise_borrowed_configured_friend() {
+    fn enum_left_bitwise_owned_configured_friend() {
         let rhs = 0b010u8;
-        let it = Thingy::ReadThing | &rhs;
+        let it = Thingy::ReadThing | rhs;
         assert_eq!(it.raw(), 0b011);
     }
 
     #[test]
-    fn value_left_bitwise_borrowed_generated_enum_friend() {
+    fn value_left_bitwise_owned_generated_enum_friend() {
         let value = Thingy::ReadThing.into_value();
-        let it = value | &Thingy::WritersBlock;
+        let it = value | Thingy::WritersBlock;
         assert_eq!(it.raw(), 0b011);
     }
 

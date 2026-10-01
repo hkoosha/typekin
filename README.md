@@ -1,1 +1,372 @@
-crates/typekin/README.md
+# Typekin
+
+`typekin` is a set of proc-macros for defining new types with relations between
+them.
+
+Out of the box, it comes with integer and enum-backed bitflags without the need
+to hand-write their conversions and operator implementations, validated text
+newtypes over `alloc::string::String`, and runtime-erased transparent layouts.
+
+The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
+tight control over construction of values. Friend conversions consume their
+input, so a friend cannot retain a borrowed capability after construction.
+
+You can find a set of working examples in the crate repository at
+[typekin/examples](./examples) directory.
+
+## Example 0 - Numbers
+
+```rust
+#[typekin::integral(konst = false)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Quantity(usize);
+
+fn main() {
+    let this: Quantity = Quantity::make(321);
+    let that: Quantity = Quantity::make(123);
+    let it: Quantity = this + that + 222;
+    assert_eq!(it.into_u64(), 666u64);      // 321 + 123 + 222 = 666
+}
+```
+
+## Example 1 - Friendship
+
+With the concept of friendship, one can have full control over not only how
+different types are cast to each other but also how they interact. For example,
+if `PageId(u32)`, `PageState(u16)` and `PageData(u16)` are to be combined into a
+single `PageHeader(u64)` before written to disk,
+
+```rust
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+#[typekin::integral(konst = false, friends = [
+    PageId(conv=id_to_header, cap=[Make, Math, Bit, Relation]),
+    PageState(conv=state_to_header, cap=[Make, Math, Bit, Relation]),
+    PageData(conv=PageData::to_header, cap=[Make, Math, Bit, Relation]),
+])]
+struct PageHeader(u32);
+// VALUE:   0b00000000_00000000_00000000_00000000;
+// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
+
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct PageId(u8);
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct PageState(u8);
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct PageData(u8);
+
+fn id_to_header(it: PageId) -> u32 { (it.0 as u32) << 24 }
+fn state_to_header(it: PageState) -> u32 { (it.0 as u32) << 8 }
+impl PageData { fn to_header(self) -> u32 { (self.0 as u32) << 0 } }
+
+fn main() {
+    let id = PageId(0b0000_0101);
+    let state = PageState(0b1010_1010);
+    let data = PageData(0b1111_1111);
+
+    // While id, state & data all have value of 0b1111, they will not overwrite
+    // each other; because their friendship relationship guards how they are
+    // cast into a PageHeader before being bit-or-ed into header:
+    let mut header = PageHeader::make(0);
+    header |= id;
+    header |= state;
+    header |= data;
+    let expected = 0b00000101_10101010_00000000_11111111;
+    let expected = 0b00000101_10101010_00000000_11111111;
+    // FORMAT:     ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
+}
+```
+
+## The Catch
+
+Mathematical and bitwise operations (e.g. subtraction, bitwise and, ...) can
+still lead to invalid result. Instead of making them fallible operations
+producing a `Result`, they lead to runtime panics. It is still possible to opt
+out of any bitwise or match operation, and require manual cast to raw type and a
+reconstruction of concrete type with the result. However, it will be an
+unpleasant API to use and choosing typekin's for the use case would be
+questionable in the first place.
+
+This only affects types that do not accept all values in the underlying type's
+domain. For instance, if a custom callback fn is provided to reject any u32
+less than 3:
+
+```rust
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+#[typekin::integral(
+  konst = false,
+  valid = Self::is_gte_3,
+)]
+struct Foo(usize);
+
+impl Foo {
+    fn is_gte_3(self) -> bool { self.0 >= 3 }
+}
+
+fn main() {
+    let lhs = Quantity::try_make(5).unwrap();
+    let rhs = Quantity::try_make(20).unwrap();
+
+    // Panics; As 5 - 20 = -15, and  the `is_gte_3` check fails:
+    let _: Foo = lhs - rhs;
+}
+```
+
+________________________________________________________________________________
+
+AI Disclaimer: The code is handwritten, but the rest of this README is AI
+generated. Some tests are also written with the help of AI.
+
+## Constness Status
+
+Generated constness is explicit. Set `konst = true` for nightly-only const
+generation, or `konst = false` for plain implementations that compile on stable
+Rust.
+
+### Friendship is consuming
+
+If a type is not listed in `friends`, it does not get to construct or operate
+on your new-type. A configured conversion receives its friend by value. Ordering
+and equality remain same-type operations because Rust's comparison traits borrow
+their right-hand operand.
+
+```rust
+#[typekin::integral(konst = false)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Quantity(u32);
+
+#[typekin::integral(
+  friends = [Quantity(conv = Quantity::raw, cap = [Make])],
+  konst = false,
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Limit(u32);
+
+fn main() {
+    let quantity = Quantity::make(5);
+    let limit = Limit::of(quantity);
+    assert_eq!(limit.raw(), 5);
+}
+```
+
+### Validation
+
+Place each constraint at the macro root. `valid` accepts either one callback
+path or a comma-separated list in brackets; every listed callback must return `true`.
+
+```rust
+const fn valid_port(it: u16) -> bool { it != 0 }
+
+#[typekin::integral(
+  konst = false,
+  valid = valid_port,
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Port(u16);
+
+fn main() {
+    assert_eq!(Port::try_make(8080).map(Port::raw), Ok(8080));
+
+    // A rejected checked construction returns the raw value.
+    assert_eq!(Port::try_make(0), Err(0));
+}
+```
+
+`in` accepts either one Rust range expression or a `+`-separated union:
+`in = 1..=1023 + 49_152..=65_535`. Commas are reserved for ANDed lists, so
+they are not valid range separators. `in` and `valid` conditions are ANDed;
+generated construction and enabled mathematical or bitwise operations reject
+values that fail them.
+
+```rust
+#[typekin::integral(
+  konst = false,
+  in = 1..=1023 + 49_152..=65_535,
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Port(u16);
+
+assert_eq!(Port::try_make(443).map(Port::raw), Ok(443));
+assert_eq!(Port::try_make(1024), Err(1024));
+```
+
+## `#[typekin::text]`
+
+`text` creates a transparent, validated `String` newtype. Text needs the
+allocator crate in scope, even in a `std` crate:
+
+```rust
+extern crate alloc;
+
+use alloc::string::String;
+
+fn is_slug(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+}
+
+#[typekin::text(
+    konst = false,
+    valid = is_slug,
+    in = ["draft", "published"],
+    with = [display],
+)]
+#[repr(transparent)]
+struct Slug(String);
+
+let draft = Slug::try_from_str("draft").unwrap();
+let published = draft
+    .map(|value| value.replace_range(.., "published"))
+    .unwrap();
+assert_eq!(published.as_str(), "published");
+```
+
+`valid` accepts one callback or a bracketed list; every callback receives
+`&str` and must return `bool`. `in` accepts a non-empty, duplicate-free list of
+string literals. The two constraints compose with logical AND.
+
+The generated type offers fallible `try_make` / `try_from_str`, consuming
+`into_inner` / `into_bytes`, read-only string access, `Deref<Target = str>`,
+`AsRef`, `Borrow`, hash, equality, and ordering. It deliberately does not offer
+mutable string aliases such as `DerefMut`, `as_mut_str`, or `&mut String`.
+`map(self, FnOnce(&mut String)) -> Result<Self, ()>` is the checked mutation
+entry point: invalid output is dropped instead of rewrapped.
+
+Text friends use `cap = [Make]` and an owning `conv` function returning
+`String`. They are validated by default and panic if a friend supplies invalid
+output. `trusted = true` bypasses that validation; use it only when the friend
+author proves validity independently.
+
+`with = [display]` opts into `Display`. `konst = true` propagates const
+generation through text APIs, including validation and `map`; unsupported
+callbacks, allocation, or closure combinations are rejected by the caller's
+nightly compiler configuration.
+
+### Configuration
+
+Generation of individual features can be disabled (check
+integral's [cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
+
+```rust
+#[typekin::integral(
+    // Required. `true` needs nightly const features; `false` generates plain impls.
+  konst = false,
+
+  friends = [
+    u64(cap = [Bit]),                    // Only bitwise operations
+    Foo(conv = Foo::to_u32, cap = [Make, Math, Bit]),
+  ],
+
+  get_raw = Self::unwrap, // Use an existing accessor instead of generated `raw()`
+  valid = is_valid, // Reject invalid raw values in checked construction
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Example(u32);
+```
+
+Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
+and `Math` gates arithmetic. Integral equality and ordering are same-type only.
+
+---
+
+## `#[typekin::bitflag]`
+
+Apply `bitflag` to a unit enum with an integral `repr`. It generates the enum, a
+`{Enum}Value` type that represents combined or unknown bits, and flag/value
+helpers such as `name()`, `items()`, `from_name()`, and `contains()`. It is
+modeled after [bitflag](https://crates.io/crates/bitflag), but with a different
+implementation.
+
+Every enum variant is mirrored as a same-named associated constant on its
+generated `{Enum}Value` type.
+They are constructed through generated integral validation, so each enum
+discriminant must be valid.
+
+`konst` is required and forwarded to `integral` for the generated value type.
+Write it directly as `konst = true` or `konst = false`; use `integral = [...]`
+when configuring other generated value-type behavior. `bitflag` has its own
+`friends = [...]` list for enum-left operations; configure access with
+`cap = [Make, Math, Bit]`. The enum and generated value type are registered as
+friends automatically; arithmetic friendship is not generated.
+
+### Example
+
+```rust
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typekin::bitflag(konst = false)]
+pub enum Perm {
+    None = 0,
+    Read = 0b001,
+    Write = 0b010,
+    Exec = 0b100,
+}
+
+fn main() {
+    let rw = Perm::Read.inserted(Perm::Write);
+
+    assert_eq!(rw.raw(), 0b011);
+    assert!(rw.contains(Perm::Read));
+    assert!(rw.contains(Perm::Write));
+    assert!(!rw.contains(Perm::Exec));
+
+    assert_eq!(Perm::from_name("Exec"), Some(Perm::Exec));
+    assert_eq!(Perm::Read.name(), "Read");
+
+    let names: Vec<_> = rw.iter_known_flags().map(Perm::name).collect();
+    assert_eq!(names, vec!["Read", "Write"]);
+
+    let raw = PermValue::try_make(0b111).unwrap();
+    assert!(raw.contains(Perm::Exec));
+}
+```
+
+## Const mode
+
+Const generation requires `konst = true`. Until the relevant const features
+stabilize, it remains nightly-only:
+
+```rust
+#![feature(const_cmp)]
+#![feature(const_trait_impl)]
+#![feature(const_ops)]
+#![feature(const_convert)]
+#![feature(const_clone)]
+#![feature(const_destruct)]
+#![feature(derive_const)]
+
+#[typekin::integral(konst = true)]
+#[repr(transparent)]
+#[derive(Copy)]
+#[derive_const(Clone)]
+pub struct Counter(u32);
+
+const START: Counter = Counter::make(10);
+const NEXT: Counter = START + 1u32;
+```
+
+Use `konst = false` to generate plain implementations instead:
+
+```rust
+#[typekin::integral(konst = false)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Counter(u32);
+```
+
+Once all required features are stabilized, `konst = true` will be the default
+unless the caller opts out via `konst = false`. This will not be a breaking
+change as currently the macros force all callers to explicitly specify the
+constness flag.

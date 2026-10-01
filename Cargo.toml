@@ -1,25 +1,76 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/*",
-]
-default-members = ["crates/typekin"]
-
-[workspace.package]
-version = "0.11.0"
+[package]
+version = "0.12.0"
 edition = "2024"
-# authors = ["Koosha H <git@koosha.io>"]
+name = "typekin"
+authors = ["Koosha H <git@koosha.io>"]
+license = "MIT"
+description = "new-type pattern with concept of Friends borrowed from c++, no-std and fully const"
 homepage = "https://koosha.io/project/typekin"
 repository = "https://gitlab.com/hkoosha/typekin"
-# license = "MIT"
 keywords = ["newtype", "derive", "invariant", "no_std"]
 categories = ["data-structures"]
-rust-version = "1.97"
 
-[workspace.lints.clippy]
+
+[lints.clippy]
 needless_return = "allow"
 
-[workspace.dependencies]
+[lib]
+proc-macro = true
+
+[dependencies]
 syn = { version = "3", features = ["full", "visit-mut"] }
 quote = { version = "1", }
 proc-macro2 = { version = "1", features = ["span-locations"] }
+
+[[example]]
+name = "my_plain"
+path = "examples/my_plain.rs"
+[[example]]
+name = "my_plain_exp"
+path = "examples/my_plain_exp.rs"
+[[example]]
+name = "my_u16"
+path = "examples/my_u16.rs"
+[[example]]
+name = "my_u16_exp"
+path = "examples/my_u16_exp.rs"
+[[example]]
+name = "my_u32"
+path = "examples/my_u32.rs"
+[[example]]
+name = "my_u32_exp"
+path = "examples/my_u32_exp.rs"
+[[example]]
+name = "my_u32_non_const"
+path = "examples/my_u32_non_const.rs"
+[[example]]
+name = "my_u32_non_const_exp"
+path = "examples/my_u32_non_const_exp.rs"
+[[example]]
+name = "my_flag"
+path = "examples/my_flag.rs"
+[[example]]
+name = "flag_exp"
+path = "examples/my_flag_exp.rs"
+[[example]]
+name = "my_i128"
+path = "examples/my_i128.rs"
+[[example]]
+name = "my_i128_exp"
+path = "examples/my_i128_exp.rs"
+[[example]]
+name = "my_friend"
+path = "examples/my_friend.rs"
+[[example]]
+name = "my_friend_exp"
+path = "examples/my_friend_exp.rs"
+[[example]]
+name = "my_friendship"
+path = "examples/my_friendship.rs"
+[[example]]
+name = "my_friendship_exp"
+path = "examples/my_friendship_exp.rs"
+
+[[example]]
+name = "my_text"
+path = "examples/my_text.rs"

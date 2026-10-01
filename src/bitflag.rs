@@ -114,7 +114,17 @@ impl BitflagCfg {
             }
             "with" => self.bit.parse_from(rest, true)?,
             "without" => self.bit.parse_from(rest, false)?,
-            "friends" => self.friends = runner::list(rest)?.collect(),
+            "friends" => {
+                let friends =
+                    runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
+                if friends.iter().any(|friend| friend.trusted) {
+                    return Err(syn::Error::new(
+                        rest.span(),
+                        "trusted friends are only supported by text Make",
+                    ));
+                }
+                self.friends = friends;
+            }
             "suffix" => {
                 let as_str: syn::LitStr = rest.parse()?;
                 if as_str.value().is_empty() {
@@ -904,7 +914,7 @@ impl Maker {
 
                     #[inline(always)]
                     fn bitand(self, rhs: T) -> Self::Output {
-                        let rhs = #seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(rhs);
                         return self.into_value().intersection(
                             #value::from_bits_retain(rhs)
                         );
@@ -923,7 +933,7 @@ impl Maker {
 
                     #[inline(always)]
                     fn bitor(self, rhs: T) -> Self::Output {
-                        let rhs = #seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(rhs);
                         return self.into_value().union(
                             #value::from_bits_retain(rhs)
                         );
@@ -942,7 +952,7 @@ impl Maker {
 
                     #[inline(always)]
                     fn bitxor(self, rhs: T) -> Self::Output {
-                        let rhs = #seal::#fn_conv(&rhs);
+                        let rhs = #seal::#fn_conv(rhs);
                         return self.into_value().symmetric_difference(
                             #value::from_bits_retain(rhs)
                         );
@@ -1123,14 +1133,14 @@ impl Maker {
                 let relation = &self.el;
                 let conversion = match &friend.conv {
                     Some(conv) if conv.is_ident("self") => quote! {
-                        let relation: #relation = *self;
+                        let relation: #relation = self;
                         return relation;
                     },
                     Some(conv) => quote! {
-                        return #conv(*self);
+                        return #conv(self);
                     },
                     None => quote! {
-                        let relation: #relation = (*self).into();
+                        let relation: #relation = self.into();
                         return relation;
                     },
                 };

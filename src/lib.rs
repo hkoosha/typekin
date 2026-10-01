@@ -4,6 +4,7 @@ pub(crate) mod value_type;
 pub(crate) mod bitflag;
 pub(crate) mod friendship;
 pub(crate) mod integral;
+pub(crate) mod text;
 
 #[cfg(test)]
 #[path = "tests/bitflag.rs"]
@@ -12,6 +13,10 @@ mod bitflag_tests;
 #[cfg(test)]
 #[path = "tests/integral.rs"]
 mod integral_tests;
+
+#[cfg(test)]
+#[path = "tests/text.rs"]
+mod text_tests;
 
 #[proc_macro_attribute]
 pub fn integral(
@@ -27,6 +32,14 @@ pub fn bitflag(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     return bitflag::bitflag(attr, item);
+}
+
+#[proc_macro_attribute]
+pub fn text(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    return text::text(attr, item);
 }
 
 #[proc_macro_attribute]

@@ -56,7 +56,7 @@ impl Document {
     }
 }
 
-fn document_parts(document: &Document) -> DocumentParts {
+fn document_parts(document: Document) -> DocumentParts {
     return DocumentParts {
         id: document.id,
         access: document.access,
@@ -71,14 +71,14 @@ pub struct Writer {
     id: u32,
 }
 
-fn reader_parts(reader: &Reader) -> DocumentParts {
+fn reader_parts(reader: Reader) -> DocumentParts {
     return DocumentParts {
         id: reader.id,
         access: 0b001,
     };
 }
 
-fn writer_parts(writer: &Writer) -> DocumentParts {
+fn writer_parts(writer: Writer) -> DocumentParts {
     return DocumentParts {
         id: writer.id,
         access: 0b010,
@@ -119,15 +119,12 @@ fn constructor_self_alias_grants_target() {
 }
 
 #[test]
-fn forwards_friendship_to_shared_and_mutable_references() {
+fn friendship_consumes_its_friend() {
     let reader = Reader { id: 23 };
-    let mut mutable_reader = Reader { id: 31 };
 
-    let shared_document = Document::of(&reader);
-    let mutable_document = Document::of(&mut mutable_reader);
+    let document = Document::of(reader);
 
-    assert_eq!((shared_document.id, shared_document.access), (23, 0b001));
-    assert_eq!((mutable_document.id, mutable_document.access), (31, 0b001),);
+    assert_eq!((document.id, document.access), (23, 0b001));
 }
 
 #[test]
