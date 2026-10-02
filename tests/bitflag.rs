@@ -1,3 +1,12 @@
+#![feature(const_clone)]
+#![feature(const_cmp)]
+#![feature(const_convert)]
+#![feature(const_destruct)]
+#![feature(const_iter)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(derive_const)]
+
 #[cfg(test)]
 mod tests {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -33,6 +42,170 @@ mod tests {
         assert_eq!(ThingyValue::FirstThing.raw(), Thingy::FirstThing.raw());
         assert_eq!(ThingyValue::WritersBlock.raw(), Thingy::WritersBlock.raw());
         assert_eq!(ThingyValue::Execute.raw(), Thingy::Execute.raw());
+    }
+
+    #[test]
+    fn generated_values_preserve_their_u8_layout() {
+        fn assert_layout<T>() {
+            assert_eq!(core::mem::size_of::<T>(), core::mem::size_of::<u8>());
+            assert_eq!(core::mem::align_of::<T>(), core::mem::align_of::<u8>());
+        }
+
+        assert_layout::<ThingyValue>();
+        assert_layout::<Thingy1Holder>();
+        assert_layout::<Thingies2>();
+    }
+
+    #[test]
+    fn value_construction_distinguishes_known_and_unknown_bits() {
+        let mixed = ThingyValue::from_bits_retain(0b1011);
+
+        assert_eq!(mixed.raw(), 0b1011);
+        assert_eq!(
+            ThingyValue::from_bits(0b011).map(ThingyValue::raw),
+            Some(0b011)
+        );
+        assert_eq!(ThingyValue::from_bits(0b1011), None);
+        assert_eq!(ThingyValue::from_bits_truncate(0b1011).raw(), 0b011);
+
+        assert_eq!(mixed.known_bits(), 0b011);
+        assert_eq!(mixed.unknown_bits(), 0b1000);
+        assert!(mixed.contains_unknown_bits());
+        assert_eq!(mixed.into_known_bits().raw(), 0b011);
+        assert_eq!(mixed.into_unknown_bits().raw(), 0b1000);
+        assert_eq!(mixed.try_as_known_bits_only(), Err(mixed));
+        assert_eq!(
+            ThingyValue::from_bits_retain(0b011)
+                .try_as_known_bits_only()
+                .map(ThingyValue::raw),
+            Ok(0b011)
+        );
+        assert_eq!(ThingyValue::all_unknown().known_bits(), 0);
+        assert!(ThingyValue::all_unknown().contains_unknown_bits());
+    }
+
+    #[test]
+    fn value_converts_to_a_flag_only_for_exact_named_bits() {
+        assert_eq!(ThingyValue::ReadThing.into_flag(), Ok(Thingy::ReadThing));
+        assert_eq!(
+            ThingyValue::from_bits_retain(0b011).into_flag(),
+            Err(ThingyValue::from_bits_retain(0b011))
+        );
+        assert_eq!(
+            ThingyValue::from_bits_retain(0b1000).into_flag(),
+            Err(ThingyValue::from_bits_retain(0b1000))
+        );
+    }
+
+    #[test]
+    fn value_iteration_keeps_zero_named_and_unknown_bits_observable() {
+        assert_eq!(
+            Thingy::iter().collect::<Vec<_>>(),
+            [
+                Thingy::FirstThing,
+                Thingy::ReadThing,
+                Thingy::WritersBlock,
+                Thingy::Execute,
+            ]
+        );
+        assert_eq!(
+            Thingy::iter_values()
+                .map(ThingyValue::raw)
+                .collect::<Vec<_>>(),
+            [0, 1, 2, 4]
+        );
+
+        let mixed = ThingyValue::from_bits_retain(0b1011);
+        assert_eq!(
+            mixed.iter_known_flags().collect::<Vec<_>>(),
+            [Thingy::FirstThing, Thingy::ReadThing, Thingy::WritersBlock,]
+        );
+        assert_eq!(
+            mixed.iter().map(ThingyValue::raw).collect::<Vec<_>>(),
+            [0, 1, 2, 8]
+        );
+        assert_eq!(
+            mixed
+                .iter_names()
+                .map(|(name, value)| (name, value.raw()))
+                .collect::<Vec<_>>(),
+            [("FirstThing", 0), ("ReadThing", 1), ("WritersBlock", 2)]
+        );
+        assert_eq!(
+            ThingyValue::iter_defined_names()
+                .map(|(name, value)| (name, value.raw()))
+                .collect::<Vec<_>>(),
+            [
+                ("FirstThing", 0),
+                ("ReadThing", 1),
+                ("WritersBlock", 2),
+                ("Execute", 4),
+            ]
+        );
+        assert_eq!(
+            ThingyValue::FirstThing
+                .iter_equal_names()
+                .collect::<Vec<_>>(),
+            ["FirstThing"]
+        );
+    }
+
+    #[test]
+    fn value_set_operations_preserve_known_and_unknown_bits() {
+        let read = ThingyValue::ReadThing;
+        let write = ThingyValue::WritersBlock;
+        let execute = ThingyValue::Execute;
+        let unknown = ThingyValue::from_bits_retain(0b1000);
+
+        assert!(read.contains(Thingy::ReadThing));
+        assert!(read.contains_all(read));
+        assert!(read.contains_any(read));
+        assert!(!read.intersects(write));
+        assert_eq!(read.inserted(write).raw(), 0b011);
+        assert_eq!(read.with(write).raw(), 0b011);
+        assert_eq!(read.removed(read).raw(), 0);
+        assert_eq!(read.without(read).raw(), 0);
+        assert_eq!(read.toggled(write).raw(), 0b011);
+        assert_eq!(read.intersection(write).raw(), 0);
+        assert_eq!(read.union(write).raw(), 0b011);
+        assert_eq!(read.difference(write).raw(), 1);
+        assert_eq!(read.symmetric_difference(write).raw(), 0b011);
+        assert_eq!(read.complemented().raw(), 0b110);
+        assert_eq!((!read).raw(), 0b110);
+        assert!(ThingyValue::all().is_all());
+        assert!(ThingyValue::all().is_exactly_all_known_bits());
+        assert!(ThingyValue::all().inserted(unknown).is_all());
+        assert!(
+            !ThingyValue::all()
+                .inserted(unknown)
+                .is_exactly_all_known_bits()
+        );
+
+        let mut value = read;
+        value.insert(write);
+        assert_eq!(value.raw(), 0b011);
+        value.remove(read);
+        assert_eq!(value.raw(), 0b010);
+        value.toggle(execute);
+        assert_eq!(value.raw(), 0b110);
+        value.set(write, false);
+        assert_eq!(value.raw(), 0b100);
+        value.set(read, true);
+        assert_eq!(value.raw(), 0b101);
+        value.unset(read);
+        assert_eq!(value.raw(), 0b100);
+        value.complement();
+        assert_eq!(value.raw(), 0b011);
+        value.clear();
+        assert!(value.is_empty());
+
+        let mut mixed = read.inserted(unknown);
+        mixed.truncate();
+        assert_eq!(mixed.raw(), 1);
+        let mut mixed = read.inserted(unknown);
+        mixed.truncate_into_known_bits();
+        assert_eq!(mixed.raw(), 1);
+        assert_eq!(read.inserted(unknown).truncated_into_known_bits().raw(), 1);
     }
 
     #[test]
@@ -131,6 +304,53 @@ mod tests {
     fn value_name() {
         let _ = Thingies2::all();
         assert_eq!(Thingies2::ReadThing.raw(), Thingy2::ReadThing.raw());
+    }
+}
+
+#[cfg(test)]
+mod const_bitflag {
+    #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
+    #[derive(Copy, Debug, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(konst = true)]
+    enum ConstFlag {
+        Empty = 0,
+        Read = 0b001,
+        Write = 0b010,
+        Execute = 0b100,
+    }
+
+    const RETAINED: ConstFlagValue = ConstFlag::from_bits_retain(0b1011);
+    const TRUNCATED: ConstFlagValue = ConstFlag::from_bits_truncate(0b1011);
+    const SET_ALGEBRA: ConstFlagValue = ConstFlagValue::Read
+        .union(ConstFlagValue::Write)
+        .toggled(ConstFlagValue::Execute);
+    const FROM_ENUM: ConstFlagValue = ConstFlag::Read.into_value();
+    const ENUM_NEGATED: ConstFlagValue = !ConstFlag::Read;
+    const VALUE_NEGATED: ConstFlagValue = !ConstFlagValue::Read;
+
+    #[test]
+    fn bitflag_value_apis_are_const_usable() {
+        assert_eq!(RETAINED.raw(), 0b1011);
+        assert_eq!(RETAINED.known_bits(), 0b011);
+        assert_eq!(RETAINED.unknown_bits(), 0b1000);
+        assert_eq!(TRUNCATED.raw(), 0b011);
+        assert_eq!(SET_ALGEBRA.raw(), 0b111);
+        assert_eq!(FROM_ENUM.raw(), 0b001);
+        assert_eq!(ENUM_NEGATED.raw(), 0b110);
+        assert_eq!(VALUE_NEGATED.raw(), 0b110);
+    }
+
+    #[test]
+    fn generated_value_preserves_the_u8_layout() {
+        assert_eq!(
+            core::mem::size_of::<ConstFlagValue>(),
+            core::mem::size_of::<u8>()
+        );
+        assert_eq!(
+            core::mem::align_of::<ConstFlagValue>(),
+            core::mem::align_of::<u8>()
+        );
     }
 }
 
@@ -312,6 +532,18 @@ mod trusted_friends {
         assert_eq!(FlagsValue::try_make(3), Err(3));
         assert_eq!(FlagsValue::try_make(8), Err(8));
     }
+
+    #[test]
+    fn generated_value_preserves_the_u8_layout() {
+        assert_eq!(
+            core::mem::size_of::<FlagsValue>(),
+            core::mem::size_of::<u8>()
+        );
+        assert_eq!(
+            core::mem::align_of::<FlagsValue>(),
+            core::mem::align_of::<u8>()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -428,6 +660,20 @@ mod display_configuration {
             "0008"
         );
     }
+
+    #[test]
+    fn generated_values_preserve_their_u8_layout() {
+        fn assert_layout<T>() {
+            assert_eq!(core::mem::size_of::<T>(), core::mem::size_of::<u8>());
+            assert_eq!(core::mem::align_of::<T>(), core::mem::align_of::<u8>());
+        }
+
+        assert_layout::<RootBeforeNestedValue>();
+        assert_layout::<NestedBeforeRootValue>();
+        assert_layout::<NestedOnlyValue>();
+        assert_layout::<DisabledRootBeforeNestedValue>();
+        assert_layout::<NestedBeforeDisabledRootValue>();
+    }
 }
 
 #[cfg(test)]
@@ -465,5 +711,25 @@ mod display_native_values {
             assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
             assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
         }
+    }
+
+    #[test]
+    fn generated_values_preserve_their_declared_integer_layout() {
+        assert_eq!(
+            core::mem::size_of::<WideValue>(),
+            core::mem::size_of::<u32>()
+        );
+        assert_eq!(
+            core::mem::align_of::<WideValue>(),
+            core::mem::align_of::<u32>()
+        );
+        assert_eq!(
+            core::mem::size_of::<SignedValue>(),
+            core::mem::size_of::<i16>()
+        );
+        assert_eq!(
+            core::mem::align_of::<SignedValue>(),
+            core::mem::align_of::<i16>()
+        );
     }
 }

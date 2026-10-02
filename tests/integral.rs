@@ -77,6 +77,39 @@ mod tests {
     #[derive(Copy, Clone)]
     struct Ranged(u8);
 
+    #[typekin::integral(konst = true, in = ..)]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct AnyU8(u8);
+
+    #[typekin::integral(konst = true, in = ..5)]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct BelowFive(u8);
+
+    #[typekin::integral(konst = true, in = ..=5)]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct AtMostFive(u8);
+
+    #[typekin::integral(konst = true, in = -2..)]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct FromNegativeTwo(i8);
+
+    const fn is_even_i8(value: i8) -> bool {
+        return value % 2 == 0;
+    }
+
+    #[typekin::integral(
+        konst = true,
+        valid = is_even_i8,
+        in = ..=-6 + 4..,
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct SplitEven(i8);
+
     const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
         Ok(number) => number,
         Err(_) => panic!("valid ranged number rejected"),
@@ -259,6 +292,43 @@ mod tests {
         assert_eq!(Ranged::try_make(1), Err(1));
         assert_eq!(Ranged::try_make(5), Err(5));
         assert_eq!(Ranged::try_make(10), Err(10));
+    }
+
+    #[test]
+    fn range_validation_lowers_open_and_closed_endpoints() {
+        assert_eq!(AnyU8::try_make(0).map(AnyU8::raw), Ok(0));
+        assert_eq!(AnyU8::try_make(u8::MAX).map(AnyU8::raw), Ok(u8::MAX));
+
+        assert_eq!(BelowFive::try_make(0).map(BelowFive::raw), Ok(0));
+        assert_eq!(BelowFive::try_make(4).map(BelowFive::raw), Ok(4));
+        assert_eq!(BelowFive::try_make(5), Err(5));
+
+        assert_eq!(AtMostFive::try_make(0).map(AtMostFive::raw), Ok(0));
+        assert_eq!(AtMostFive::try_make(5).map(AtMostFive::raw), Ok(5));
+        assert_eq!(AtMostFive::try_make(6), Err(6));
+
+        assert_eq!(
+            FromNegativeTwo::try_make(-2).map(FromNegativeTwo::raw),
+            Ok(-2)
+        );
+        assert_eq!(
+            FromNegativeTwo::try_make(i8::MAX).map(FromNegativeTwo::raw),
+            Ok(i8::MAX)
+        );
+        assert_eq!(FromNegativeTwo::try_make(-3), Err(-3));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks() {
+        for value in [-8, -6, 4, 6] {
+            assert_eq!(
+                SplitEven::try_make(value).map(SplitEven::raw),
+                Ok(value)
+            );
+        }
+        for value in [-7, -5, 0, 5] {
+            assert_eq!(SplitEven::try_make(value), Err(value));
+        }
     }
 
     #[test]
