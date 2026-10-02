@@ -119,6 +119,14 @@ mod tests {
     #[derive(Copy, Clone)]
     struct ParsedEven(u8);
 
+    #[typekin::integral(
+        konst = true,
+        without = [impl_core_int],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct CoreDisabled(u8);
+
     const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
         Ok(number) => number,
         Err(_) => panic!("valid ranged number rejected"),
@@ -293,6 +301,147 @@ mod tests {
     fn parsing_remains_checked_when_try_make_is_disabled() {
         assert_eq!("24".parse::<ParsedEven>().map(ParsedEven::raw), Ok(24));
         assert_eq!("23".parse::<ParsedEven>(), Err(()));
+    }
+
+    #[test]
+    fn forwards_common_stable_integral_methods() {
+        let number = My32::make(0x12_34_56_78);
+        assert_eq!(My32::BITS, u32::BITS);
+        assert_eq!(number.count_ones(), 13);
+        assert_eq!(number.count_zeros(), 19);
+        assert_eq!(number.leading_zeros(), 3);
+        assert_eq!(number.trailing_zeros(), 3);
+        assert_eq!(number.leading_ones(), 0);
+        assert_eq!(number.trailing_ones(), 0);
+        assert_eq!(number.highest_one(), Some(28));
+        assert_eq!(number.lowest_one(), Some(3));
+        assert_eq!(number.ilog2(), 28);
+        assert_eq!(number.ilog10(), 8);
+        assert_eq!(number.checked_ilog2(), Some(28));
+        assert_eq!(number.to_be_bytes(), 0x12_34_56_78u32.to_be_bytes());
+        assert_eq!(number.rotate_left(4).raw(), 0x23_45_67_81);
+        assert_eq!(number.rotate_right(4).raw(), 0x81_23_45_67);
+        assert_eq!(number.swap_bytes().raw(), 0x78_56_34_12);
+        assert_eq!(number.reverse_bits().raw(), 0x1e_6a_2c_48);
+        assert_eq!(My32::from_be_bytes(number.to_be_bytes()), number);
+        assert_eq!(
+            number.checked_add(My32::make(1)).map(My32::raw),
+            Some(0x12_34_56_79)
+        );
+        assert_eq!(number.checked_shl(32), None);
+        assert_eq!(number.unbounded_shl(32).raw(), 0);
+        assert_eq!(number.wrapping_shr(32), number);
+        assert_eq!(number.midpoint(My32::make(0)).raw(), 0x09_1a_2b_3c);
+        assert_eq!(My32::make(12).checked_pow(3).map(My32::raw), Some(1728));
+        assert_eq!(My32::make(12).saturating_mul(My32::make(3)).raw(), 36);
+        assert_eq!(My32::make(12).overflowing_mul(My32::make(3)).0.raw(), 36);
+        assert_eq!(MyI32::make(-7).div_euclid(MyI32::make(3)).raw(), -3);
+        assert_eq!(MyI32::make(-7).rem_euclid(MyI32::make(3)).raw(), 2);
+        assert_eq!(My32::make(144).isqrt().raw(), 12);
+    }
+
+    #[test]
+    fn checked_core_operations_reject_invalid_results() {
+        let upper_bound = Even::try_make(100).unwrap();
+        let two = Even::try_make(2).unwrap();
+        assert_eq!(upper_bound.checked_add(two), None);
+        assert!(
+            std::panic::catch_unwind(|| upper_bound.saturating_add(two))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn core_operations_validate_every_wrapped_result() {
+        let two = Even::try_make(2).unwrap();
+        let hundred = Even::try_make(100).unwrap();
+
+        assert!(std::panic::catch_unwind(|| Even::from_ne_bytes([1])).is_err());
+        assert!(std::panic::catch_unwind(|| two.midpoint(hundred)).is_err());
+        assert!(
+            std::panic::catch_unwind(|| hundred.overflowing_add(two)).is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| hundred.carrying_add(two, false))
+                .is_err()
+        );
+
+        let negative = SplitEven::try_make(-6).unwrap();
+        assert!(std::panic::catch_unwind(|| negative.signum()).is_err());
+    }
+
+    #[test]
+    fn forwards_signed_stable_integral_methods() {
+        let negative = MyI32::make(-12);
+        assert_eq!(negative.abs().raw(), 12);
+        assert_eq!(negative.checked_abs().map(MyI32::raw), Some(12));
+        assert_eq!(negative.strict_abs().raw(), 12);
+        assert_eq!(negative.saturating_neg().raw(), 12);
+        assert_eq!(negative.saturating_abs().raw(), 12);
+        assert_eq!(negative.wrapping_abs().raw(), 12);
+        assert_eq!(negative.overflowing_abs().0.raw(), 12);
+        assert_eq!(negative.unsigned_abs(), 12u32);
+        assert_eq!(negative.abs_diff(MyI32::make(3)), 15u32);
+        assert_eq!(negative.cast_unsigned(), (-12i32).cast_unsigned());
+        assert_eq!(negative.signum().raw(), -1);
+        assert!(negative.is_negative());
+        assert!(!negative.is_positive());
+        assert_eq!(MyI32::make(144).checked_isqrt().map(MyI32::raw), Some(12));
+        assert_eq!(negative.checked_isqrt(), None);
+    }
+
+    #[test]
+    fn forwards_unsigned_stable_integral_methods() {
+        assert_eq!(My32::make(15).bit_width(), 4);
+        assert_eq!(My32::make(12).abs_diff(My32::make(3)), 9u32);
+        assert_eq!(My32::make(u32::MAX).cast_signed(), -1i32);
+        assert_eq!(
+            My32::make(0x12_34_56_78)
+                .funnel_shl(My32::make(0x9a_bc_de_f0), 4)
+                .raw(),
+            0x23_45_67_89
+        );
+        assert_eq!(
+            My32::make(0x12_34_56_78)
+                .funnel_shr(My32::make(0x9a_bc_de_f0), 4)
+                .raw(),
+            0x89_ab_cd_ef
+        );
+        assert!(My32::make(12).is_multiple_of(My32::make(3)));
+        assert!(!My32::make(12).is_multiple_of(My32::make(5)));
+        assert!(My32::make(16).is_power_of_two());
+        assert_eq!(My32::make(15).next_power_of_two().raw(), 16);
+        assert_eq!(
+            My32::make(15).checked_next_power_of_two().map(My32::raw),
+            Some(16)
+        );
+        assert_eq!(My32::make(10).div_ceil(My32::make(3)).raw(), 4);
+        assert_eq!(My32::make(10).next_multiple_of(My32::make(6)).raw(), 12);
+        assert_eq!(
+            My32::make(10)
+                .checked_next_multiple_of(My32::make(6))
+                .map(My32::raw),
+            Some(12)
+        );
+        assert_eq!(My32::make(1).carrying_add(My32::make(2), false).0.raw(), 3);
+        assert_eq!(
+            My32::make(5).borrowing_sub(My32::make(2), false).0.raw(),
+            3
+        );
+        assert_eq!(
+            My32::make(3)
+                .carrying_mul(My32::make(4), My32::make(5))
+                .0
+                .raw(),
+            17
+        );
+        assert_eq!(
+            My32::make(3)
+                .carrying_mul_add(My32::make(4), My32::make(5), My32::make(7))
+                .0
+                .raw(),
+            24
+        );
     }
 
     #[test]

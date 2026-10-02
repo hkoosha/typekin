@@ -104,6 +104,23 @@ impl N {
         };
     }
 
+    pub fn unsigned_rust_name(&self) -> &'static str {
+        return match self {
+            N::USIZ => "usize",
+            N::ISIZ => "usize",
+            N::U008 => "u8",
+            N::U016 => "u16",
+            N::U032 => "u32",
+            N::U064 => "u64",
+            N::U128 => "u128",
+            N::I008 => "u8",
+            N::I016 => "u16",
+            N::I032 => "u32",
+            N::I064 => "u64",
+            N::I128 => "u128",
+        };
+    }
+
     pub fn bits(&self) -> usize {
         return match self {
             N::USIZ => usize::BITS,

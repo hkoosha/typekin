@@ -239,6 +239,28 @@ fn accepts_from_str_generation_flag() {
 }
 
 #[test]
+fn accepts_core_integral_generation_flag() {
+    for input in [
+        "konst = false, with = [impl_core_int]",
+        "konst = false, without = [impl_core_int]",
+    ] {
+        syn::parse_str::<IntegralCfg>(input).expect(input);
+    }
+}
+
+#[test]
+fn rejects_undocumented_with_aliases() {
+    for input in [
+        "konst = false, with_impl_core_int = [impl_core_int]",
+        "konst = false, with_display = [display]",
+    ] {
+        let error = syn::parse_str::<IntegralCfg>(input)
+            .expect_err("generation options use `with = [...]`");
+        assert_eq!(error.to_string(), "unknown attribute");
+    }
+}
+
+#[test]
 fn rejects_unsupported_single_capabilities() {
     for input in [
         "konst = false, friends = [_(Source) -> Rel]",
@@ -370,6 +392,19 @@ fn shared_friend_parser_rejects_obsolete_relationship_syntax() {
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
             "{input}"
         );
+    }
+}
+
+#[test]
+fn shared_friend_parser_does_not_suggest_obsolete_migrations() {
+    for input in ["Source(conv = convert, cap = Make)", "_(cap = Make)"] {
+        let error = syn::parse_str::<crate::friendship::cfg::Friend>(input)
+            .expect_err("obsolete friend syntax must fail");
+        assert!(
+            !error.to_string().contains("were removed"),
+            "{input}: {error}"
+        );
+        assert!(!error.to_string().contains("use `_ ->"), "{input}: {error}");
     }
 }
 

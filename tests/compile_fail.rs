@@ -237,6 +237,37 @@ fn generated_api_boundaries_reject_invalid_consumers() {
             "the trait bound `Number: FromStr` is not satisfied",
         ),
         (
+            "without-removes-common-integral-methods",
+            r#"
+                #[typekin::integral(
+                    konst = false,
+                    without = [impl_core_int],
+                )]
+                #[repr(transparent)]
+                #[derive(Copy, Clone)]
+                struct Number(u8);
+
+                fn requires_count_ones() {
+                    let _ = Number::make(2).count_ones();
+                }
+            "#,
+            "no method named `count_ones`",
+        ),
+        (
+            "core-integral-methods-exclude-unsafe-operations",
+            r#"
+                #[typekin::integral(konst = false)]
+                #[repr(transparent)]
+                #[derive(Copy, Clone)]
+                struct Number(u8);
+
+                fn requires_unchecked_add() {
+                    let _ = Number::make(2).unchecked_add(Number::make(3));
+                }
+            "#,
+            "no method named `unchecked_add`",
+        ),
+        (
             "validated-text-has-no-infallible-from",
             r#"
                 extern crate alloc;

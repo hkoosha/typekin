@@ -109,6 +109,840 @@ mod subject {
                 return &self.0;
             }
         }
+        impl ::core::str::FromStr for MyU32 {
+            type Err = ();
+            #[inline(always)]
+            fn from_str(
+                source: &str
+            ) -> ::core::result::Result<Self, Self::Err> {
+                let value =
+                    match <u32 as ::core::str::FromStr>::from_str(source) {
+                        ::core::result::Result::Ok(value) => value,
+                        ::core::result::Result::Err(_) => {
+                            return ::core::result::Result::Err(());
+                        }
+                    };
+                return if true {
+                    ::core::result::Result::Ok(Self(value))
+                }
+                else {
+                    ::core::result::Result::Err(())
+                };
+            }
+        }
+        impl MyU32 {
+            #[doc = r" The number of bits in the wrapped primitive integer."]
+            pub const BITS: u32 = u32::BITS;
+            #[inline(always)]
+            pub const fn count_ones(self) -> u32 {
+                return Self::raw(self).count_ones();
+            }
+            #[inline(always)]
+            pub const fn count_zeros(self) -> u32 {
+                return Self::raw(self).count_zeros();
+            }
+            #[inline(always)]
+            pub const fn leading_zeros(self) -> u32 {
+                return Self::raw(self).leading_zeros();
+            }
+            #[inline(always)]
+            pub const fn trailing_zeros(self) -> u32 {
+                return Self::raw(self).trailing_zeros();
+            }
+            #[inline(always)]
+            pub const fn leading_ones(self) -> u32 {
+                return Self::raw(self).leading_ones();
+            }
+            #[inline(always)]
+            pub const fn trailing_ones(self) -> u32 {
+                return Self::raw(self).trailing_ones();
+            }
+            #[inline(always)]
+            pub const fn highest_one(self) -> ::core::option::Option<u32> {
+                return Self::raw(self).highest_one();
+            }
+            #[inline(always)]
+            pub const fn lowest_one(self) -> ::core::option::Option<u32> {
+                return Self::raw(self).lowest_one();
+            }
+            #[inline(always)]
+            pub const fn ilog(
+                self,
+                base: Self,
+            ) -> u32 {
+                return Self::raw(self).ilog(Self::raw(base));
+            }
+            #[inline(always)]
+            pub const fn ilog2(self) -> u32 {
+                return Self::raw(self).ilog2();
+            }
+            #[inline(always)]
+            pub const fn ilog10(self) -> u32 {
+                return Self::raw(self).ilog10();
+            }
+            #[inline(always)]
+            pub const fn checked_ilog(
+                self,
+                base: Self,
+            ) -> ::core::option::Option<u32> {
+                return Self::raw(self).checked_ilog(Self::raw(base));
+            }
+            #[inline(always)]
+            pub const fn checked_ilog2(self) -> ::core::option::Option<u32> {
+                return Self::raw(self).checked_ilog2();
+            }
+            #[inline(always)]
+            pub const fn checked_ilog10(self) -> ::core::option::Option<u32> {
+                return Self::raw(self).checked_ilog10();
+            }
+            #[inline(always)]
+            pub const fn to_be_bytes(
+                self
+            ) -> [u8; ::core::mem::size_of::<u32>()] {
+                return Self::raw(self).to_be_bytes();
+            }
+            #[inline(always)]
+            pub const fn to_le_bytes(
+                self
+            ) -> [u8; ::core::mem::size_of::<u32>()] {
+                return Self::raw(self).to_le_bytes();
+            }
+            #[inline(always)]
+            pub const fn to_ne_bytes(
+                self
+            ) -> [u8; ::core::mem::size_of::<u32>()] {
+                return Self::raw(self).to_ne_bytes();
+            }
+        }
+        impl MyU32 {
+            #[inline(always)]
+            pub const fn rotate_left(
+                self,
+                n: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).rotate_left(n));
+            }
+            #[inline(always)]
+            pub const fn rotate_right(
+                self,
+                n: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).rotate_right(n));
+            }
+            #[inline(always)]
+            pub const fn swap_bytes(self) -> Self {
+                return Self::_core_int(Self::raw(self).swap_bytes());
+            }
+            #[inline(always)]
+            pub const fn reverse_bits(self) -> Self {
+                return Self::_core_int(Self::raw(self).reverse_bits());
+            }
+            #[inline(always)]
+            pub const fn isolate_highest_one(self) -> Self {
+                return Self::_core_int(Self::raw(self).isolate_highest_one());
+            }
+            #[inline(always)]
+            pub const fn isolate_lowest_one(self) -> Self {
+                return Self::_core_int(Self::raw(self).isolate_lowest_one());
+            }
+            #[inline(always)]
+            pub const fn to_be(self) -> Self {
+                return Self::_core_int(Self::raw(self).to_be());
+            }
+            #[inline(always)]
+            pub const fn to_le(self) -> Self {
+                return Self::_core_int(Self::raw(self).to_le());
+            }
+            #[inline(always)]
+            pub const fn from_be(value: Self) -> Self {
+                return Self::_core_int(u32::from_be(Self::raw(value)));
+            }
+            #[inline(always)]
+            pub const fn from_le(value: Self) -> Self {
+                return Self::_core_int(u32::from_le(Self::raw(value)));
+            }
+            #[inline(always)]
+            pub const fn from_ne_bytes(
+                bytes: [u8; ::core::mem::size_of::<u32>()]
+            ) -> Self {
+                return Self::_core_int(u32::from_ne_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn from_be_bytes(
+                bytes: [u8; ::core::mem::size_of::<u32>()]
+            ) -> Self {
+                return Self::_core_int(u32::from_be_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn from_le_bytes(
+                bytes: [u8; ::core::mem::size_of::<u32>()]
+            ) -> Self {
+                return Self::_core_int(u32::from_le_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn checked_add(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_add(Self::raw(rhs)) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_sub(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_sub(Self::raw(rhs)) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_neg(self) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_neg() {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_mul(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_mul(Self::raw(rhs)) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_div(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_div(Self::raw(rhs)) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_rem(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_rem(Self::raw(rhs)) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_div_euclid(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_div_euclid(Self::raw(rhs))
+                {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_rem_euclid(Self::raw(rhs))
+                {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_shl(
+                self,
+                rhs: u32,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_shl(rhs) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_shr(
+                self,
+                rhs: u32,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_shr(rhs) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_pow(
+                self,
+                exp: u32,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_pow(exp) {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+        }
+        impl MyU32 {
+            #[inline(always)]
+            pub const fn midpoint(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).midpoint(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn unbounded_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).unbounded_shl(rhs));
+            }
+            #[inline(always)]
+            pub const fn unbounded_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).unbounded_shr(rhs));
+            }
+            #[inline(always)]
+            pub const fn saturating_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).saturating_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).saturating_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).saturating_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).saturating_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).saturating_pow(exp));
+            }
+            #[inline(always)]
+            pub const fn wrapping_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_neg(self) -> Self {
+                return Self::_core_int(Self::raw(self).wrapping_neg());
+            }
+            #[inline(always)]
+            pub const fn wrapping_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_rem(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_rem(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).wrapping_rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).wrapping_shl(rhs));
+            }
+            #[inline(always)]
+            pub const fn wrapping_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).wrapping_shr(rhs));
+            }
+            #[inline(always)]
+            pub const fn wrapping_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).wrapping_pow(exp));
+            }
+            #[inline(always)]
+            pub const fn pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).pow(exp));
+            }
+            #[inline(always)]
+            pub const fn isqrt(self) -> Self {
+                return Self::_core_int(Self::raw(self).isqrt());
+            }
+            #[inline(always)]
+            pub const fn div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_neg(self) -> Self {
+                return Self::_core_int(Self::raw(self).strict_neg());
+            }
+            #[inline(always)]
+            pub const fn strict_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_rem(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_rem(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).strict_rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).strict_shl(rhs));
+            }
+            #[inline(always)]
+            pub const fn strict_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).strict_shr(rhs));
+            }
+            #[inline(always)]
+            pub const fn strict_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_core_int(Self::raw(self).strict_pow(exp));
+            }
+        }
+        impl MyU32 {
+            #[inline(always)]
+            pub const fn overflowing_add(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_add(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_sub(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_sub(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_neg(self) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_neg();
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_mul(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_mul(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_div(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_div(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_rem(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_rem(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_div_euclid(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_div_euclid(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_rem_euclid(Self::raw(rhs));
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_shl(
+                self,
+                rhs: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_shl(rhs);
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_shr(
+                self,
+                rhs: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_shr(rhs);
+                return (Self::_core_int(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_pow(
+                self,
+                exp: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_pow(exp);
+                return (Self::_core_int(value), overflowed);
+            }
+        }
+        impl MyU32 {
+            #[inline(always)]
+            pub const fn cast_signed(self) -> i32 {
+                return Self::raw(self).cast_signed();
+            }
+            #[inline(always)]
+            pub const fn bit_width(self) -> u32 {
+                return Self::raw(self).bit_width();
+            }
+            #[inline(always)]
+            pub const fn funnel_shl(
+                self,
+                right: Self,
+                n: u32,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).funnel_shl(Self::raw(right), n),
+                );
+            }
+            #[inline(always)]
+            pub const fn funnel_shr(
+                self,
+                right: Self,
+                n: u32,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).funnel_shr(Self::raw(right), n),
+                );
+            }
+            #[inline(always)]
+            pub const fn abs_diff(
+                self,
+                rhs: Self,
+            ) -> u32 {
+                return Self::raw(self).abs_diff(Self::raw(rhs));
+            }
+            #[inline(always)]
+            pub const fn is_multiple_of(
+                self,
+                rhs: Self,
+            ) -> bool {
+                return Self::raw(self).is_multiple_of(Self::raw(rhs));
+            }
+            #[inline(always)]
+            pub const fn is_power_of_two(self) -> bool {
+                return Self::raw(self).is_power_of_two();
+            }
+            #[inline(always)]
+            pub const fn next_power_of_two(self) -> Self {
+                return Self::_core_int(Self::raw(self).next_power_of_two());
+            }
+            #[inline(always)]
+            pub const fn checked_next_power_of_two(
+                self
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self).checked_next_power_of_two() {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub const fn div_ceil(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).div_ceil(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn next_multiple_of(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_core_int(
+                    Self::raw(self).next_multiple_of(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn checked_next_multiple_of(
+                self,
+                rhs: Self,
+            ) -> ::core::option::Option<Self> {
+                return match Self::raw(self)
+                    .checked_next_multiple_of(Self::raw(rhs))
+                {
+                    ::core::option::Option::Some(value) => {
+                        Self::_core_int_checked(value)
+                    }
+                    ::core::option::Option::None => {
+                        ::core::option::Option::None
+                    }
+                };
+            }
+            #[inline(always)]
+            pub fn carrying_add(
+                self,
+                rhs: Self,
+                carry: bool,
+            ) -> (Self, bool) {
+                let (value, carry) =
+                    Self::raw(self).carrying_add(Self::raw(rhs), carry);
+                return (Self::_core_int(value), carry);
+            }
+            #[inline(always)]
+            pub fn borrowing_sub(
+                self,
+                rhs: Self,
+                borrow: bool,
+            ) -> (Self, bool) {
+                let (value, borrow) =
+                    Self::raw(self).borrowing_sub(Self::raw(rhs), borrow);
+                return (Self::_core_int(value), borrow);
+            }
+            #[inline(always)]
+            pub fn carrying_mul(
+                self,
+                rhs: Self,
+                carry: Self,
+            ) -> (Self, Self) {
+                let (low, high) = Self::raw(self)
+                    .carrying_mul(Self::raw(rhs), Self::raw(carry));
+                return (Self::_core_int(low), Self::_core_int(high));
+            }
+            #[inline(always)]
+            pub fn carrying_mul_add(
+                self,
+                rhs: Self,
+                carry: Self,
+                add: Self,
+            ) -> (Self, Self) {
+                let (low, high) = Self::raw(self).carrying_mul_add(
+                    Self::raw(rhs),
+                    Self::raw(carry),
+                    Self::raw(add),
+                );
+                return (Self::_core_int(low), Self::_core_int(high));
+            }
+        }
         const impl ::core::convert::Into<usize> for MyU32 {
             #[inline(always)]
             fn into(self) -> usize {
@@ -335,7 +1169,13 @@ mod subject {
             }
         }
         if !(::core::mem::size_of::<MyU32>() == ::core::mem::size_of::<u32>()) {
-            panic!("invalid memory layout: #ty(#el) != #el");
+            panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
+        };
+        if !(::core::mem::align_of::<MyU32>() == ::core::mem::align_of::<u32>())
+        {
+            panic!(
+                "invalid memory layout, mismatching alignment: #ty(#el) != #el"
+            );
         };
         const impl<T> ::core::ops::Add<T> for MyU32
         where
@@ -817,6 +1657,29 @@ mod subject {
             #[inline(always)]
             pub(self) const fn _unchecked(it: u32) -> Self {
                 return Self(it);
+            }
+            #[inline(always)]
+            #[track_caller]
+            pub(self) const fn _core_int(value: u32) -> Self {
+                if true {
+                    return Self(value);
+                }
+                else {
+                    ::core::panic!(
+                        "integral operation produced an invalid value"
+                    );
+                }
+            }
+            #[inline(always)]
+            pub(self) const fn _core_int_checked(
+                value: u32
+            ) -> ::core::option::Option<Self> {
+                return if true {
+                    ::core::option::Option::Some(Self(value))
+                }
+                else {
+                    ::core::option::Option::None
+                };
             }
         }
         #[allow(clippy::unnecessary_cast)]

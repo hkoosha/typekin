@@ -67,16 +67,6 @@ pub(crate) mod cfg {
             let ty = if input.peek(syn::token::Paren) {
                 let content;
                 let _ = parenthesized!(content in input);
-                if content.peek(syn::Ident) && content.peek2(Token![=]) {
-                    return content.span().fail(
-                        "friend attributes were removed; use `conversion(Type) -> Capabilities`",
-                    );
-                }
-                if content.peek(Token![_]) {
-                    return content.span().fail(
-                        "use `_ -> Capabilities` for a capability-only declaration",
-                    );
-                }
                 let types =
                     Punctuated::<Path, Token![,]>::parse_terminated(&content)?;
                 if types.len() != 1 {
@@ -328,8 +318,8 @@ pub(crate) mod cfg {
                     "seal" => this.seal = Some(stream.parse()?),
                     "conversion" => this.conversion = Some(stream.parse()?),
                     "mod" => {
-                        if stream.peek(syn::Token![_]) {
-                            let _: syn::Token![_] = stream.parse()?;
+                        if stream.peek(Token![_]) {
+                            let _: Token![_] = stream.parse()?;
                         }
                         else {
                             this.module = Some(stream.parse()?);
