@@ -9,7 +9,7 @@ newtypes over `alloc::string::String`, and runtime-erased transparent layouts.
 
 The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
 tight control over construction of values. Friend conversions consume their
-input, so a friend cannot retain a borrowed capability after construction.
+input; non-`Copy` friends are moved into the conversion.
 
 You can find a set of working examples in the crate repository at
 [typekin/examples](./examples) directory.
@@ -25,7 +25,7 @@ struct Quantity(usize);
 fn main() {
     let this: Quantity = Quantity::make(321);
     let that: Quantity = Quantity::make(123);
-    let it: Quantity = this + that + 222;
+    let it: Quantity = this + that + 222usize;
     assert_eq!(it.into_u64(), 666u64);      // 321 + 123 + 222 = 666
 }
 ```
@@ -34,16 +34,16 @@ fn main() {
 
 With the concept of friendship, one can have full control over not only how
 different types are cast to each other but also how they interact. For example,
-if `PageId(u32)`, `PageState(u16)` and `PageData(u16)` are to be combined into a
-single `PageHeader(u64)` before written to disk,
+if `PageId(u8)`, `PageState(u8)` and `PageData(u8)` are to be combined into a
+single `PageHeader(u32)` before being written to disk,
 
 ```rust
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 #[typekin::integral(konst = false, friends = [
-    PageId(conv=id_to_header, cap=[Make, Math, Bit, Relation]),
-    PageState(conv=state_to_header, cap=[Make, Math, Bit, Relation]),
-    PageData(conv=PageData::to_header, cap=[Make, Math, Bit, Relation]),
+    id_to_header(PageId) -> [Make, Math, Bit, Relation],
+    state_to_header(PageState) -> [Make, Math, Bit, Relation],
+    PageData::to_header(PageData) -> [Make, Math, Bit, Relation],
 ])]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;
@@ -60,40 +60,35 @@ struct PageState(u8);
 struct PageData(u8);
 
 fn id_to_header(it: PageId) -> u32 { (it.0 as u32) << 24 }
-fn state_to_header(it: PageState) -> u32 { (it.0 as u32) << 8 }
-impl PageData { fn to_header(self) -> u32 { (self.0 as u32) << 0 } }
+fn state_to_header(it: PageState) -> u32 { (it.0 as u32) << 16 }
+impl PageData { fn to_header(self) -> u32 { self.0 as u32 } }
 
 fn main() {
     let id = PageId(0b0000_0101);
     let state = PageState(0b1010_1010);
     let data = PageData(0b1111_1111);
 
-    // While id, state & data all have value of 0b1111, they will not overwrite
-    // each other; because their friendship relationship guards how they are
-    // cast into a PageHeader before being bit-or-ed into header:
+    // Each conversion places its source in a separate byte of the header:
     let mut header = PageHeader::make(0);
     header |= id;
     header |= state;
     header |= data;
     let expected = 0b00000101_10101010_00000000_11111111;
-    let expected = 0b00000101_10101010_00000000_11111111;
+    assert_eq!(header.raw(), expected);
     // FORMAT:     ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 }
 ```
 
 ## The Catch
 
-Mathematical and bitwise operations (e.g. subtraction, bitwise and, ...) can
-still lead to invalid result. Instead of making them fallible operations
-producing a `Result`, they lead to runtime panics. It is still possible to opt
-out of any bitwise or match operation, and require manual cast to raw type and a
-reconstruction of concrete type with the result. However, it will be an
-unpleasant API to use and choosing typekin's for the use case would be
-questionable in the first place.
+Mathematical and bitwise operations can produce results rejected by a configured
+validator. Instead of returning a `Result`, these operations panic on invalid
+output. They can be disabled, leaving callers to extract raw values, operate on
+them, and reconstruct the wrapper through checked construction.
 
-This only affects types that do not accept all values in the underlying type's
-domain. For instance, if a custom callback fn is provided to reject any u32
-less than 3:
+These validation panics affect types that reject part of their underlying
+domain; ordinary integer failures such as division by zero can also panic.
+For instance, a callback can reject any `u32` less than 3:
 
 ```rust
 #[repr(transparent)]
@@ -102,17 +97,17 @@ less than 3:
   konst = false,
   valid = Self::is_gte_3,
 )]
-struct Foo(usize);
+struct Foo(u32);
 
 impl Foo {
-    fn is_gte_3(self) -> bool { self.0 >= 3 }
+    const fn is_gte_3(value: u32) -> bool { value >= 3 }
 }
 
 fn main() {
-    let lhs = Quantity::try_make(5).unwrap();
-    let rhs = Quantity::try_make(20).unwrap();
+    let lhs = Foo::try_make(5).unwrap();
+    let rhs = Foo::try_make(3).unwrap();
 
-    // Panics; As 5 - 20 = -15, and  the `is_gte_3` check fails:
+    // Panics: 5 - 3 = 2, which fails `is_gte_3`:
     let _: Foo = lhs - rhs;
 }
 ```
@@ -124,16 +119,17 @@ generated.
 
 ## Constness Status
 
-Generated constness is explicit. Set `konst = true` for nightly-only const
-generation, or `konst = false` for plain implementations that compile on stable
-Rust.
+`integral` and `bitflag` require explicit `konst = true|false`. Set `true` for
+nightly-only const generation or `false` for ordinary stable implementations.
+Text currently defaults to non-const generation when `konst` is omitted.
 
 ### Friendship is consuming
 
-If a type is not listed in `friends`, it does not get to construct or operate
-on your new-type. A configured conversion receives its friend by value. Ordering
-and equality remain same-type operations because Rust's comparison traits borrow
-their right-hand operand.
+Friend capabilities gate construction and operations. Integral automatically
+includes itself and its backing integer for operations, and grants raw/widening
+construction when unvalidated; bitflag registers its enum/value pair. Additional
+friends are declared explicitly. Conversions consume their inputs. Integral and
+text equality and ordering remain same-type operations.
 
 ```rust
 #[typekin::integral(konst = false)]
@@ -142,7 +138,7 @@ their right-hand operand.
 struct Quantity(u32);
 
 #[typekin::integral(
-  friends = [Quantity(conv = Quantity::raw, cap = [Make])],
+  friends = Quantity::raw(Quantity) -> Make,
   konst = false,
 )]
 #[repr(transparent)]
@@ -158,10 +154,10 @@ fn main() {
 
 ### Trusted friend construction
 
-Friends default to untrusted. Integral and text `of` validate an untrusted
-friend's converted value and panic if it is invalid. `trusted = true` requires
-the `Make` capability and skips that construction validation: the friend author
-must prove the converted value is already valid.
+Friends without `Trust` are untrusted. Integral and text `of` validate their
+converted values and panic if invalid. Granting both `Make` and `Trust` skips
+only that friend-construction validation: the friend author must prove the
+converted value is already valid. `Trust` alone does not grant `Make`.
 
 ```rust
 struct Verified(u32);
@@ -177,24 +173,26 @@ impl Verified {
 #[typekin::integral(
     konst = false,
     in = 1..=100,
-    friends = [Verified(conv = Verified::into_raw, cap = [Make], trusted = true)],
+    friends = Verified::into_raw(Verified) -> [Make, Trust],
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Limited(u32);
 
-let verified = Verified::try_make(42).unwrap();
-let limited = Limited::of(verified); // Consumes the non-Copy friend.
-assert_eq!(limited.raw(), 42);
-assert_eq!(Limited::try_make(0), Err(0));
+fn main() {
+    let verified = Verified::try_make(42).unwrap();
+    let limited = Limited::of(verified); // Consumes the non-Copy friend.
+    assert_eq!(limited.raw(), 42);
+    assert_eq!(Limited::try_make(0), Err(0));
+}
 ```
 
 Trust grants no additional capabilities. Checked constructors and math/bitwise
 operation results still validate, including operations with a trusted friend
 as the right-hand operand.
 
-Standalone `friendship` also accepts trusted `Make` friends, including `Make`
-granted by `constructor`. It has no generated validator to bypass: the
+Standalone `friendship` also accepts `Trust`, independently of `Make` (including
+`Make` granted by `constructor`). It has no generated validator to bypass: the
 configured `of_relation` function always runs, including its own checks.
 Relations and friend inputs can both be non-`Copy`.
 
@@ -237,8 +235,10 @@ values that fail them.
 #[derive(Copy, Clone)]
 struct Port(u16);
 
-assert_eq!(Port::try_make(443).map(Port::raw), Ok(443));
-assert_eq!(Port::try_make(1024), Err(1024));
+fn main() {
+    assert_eq!(Port::try_make(443).map(Port::raw), Ok(443));
+    assert_eq!(Port::try_make(1024), Err(1024));
+}
 ```
 
 ## `#[typekin::text]`
@@ -267,20 +267,22 @@ fn is_slug(value: &str) -> bool {
 #[repr(transparent)]
 struct Slug(String);
 
-let draft = Slug::try_from_str("draft").unwrap();
-let published = draft
-    .map(|value| value.replace_range(.., "published"))
-    .unwrap();
-assert_eq!(published.as_str(), "published");
+fn main() {
+    let draft = Slug::try_from_str("draft").unwrap();
+    let published = draft
+        .map(|value| value.replace_range(.., "published"))
+        .unwrap();
+    assert_eq!(published.as_str(), "published");
+}
 ```
 
 `valid` accepts one callback or a bracketed list; every callback receives
-`&str` and must return `bool`. `in` accepts a non-empty, duplicate-free list of
-string literals. The two constraints compose with logical AND.
+`&str` and must return `bool`. `in` accepts a duplicate-free list of string
+literals. The two constraints compose with logical AND.
 
-Membership compares exact strings without case or Unicode normalization. The
-list must be non-empty, but a literal may be empty. A listed value must still
-pass every callback.
+Membership compares exact strings without case or Unicode normalization.
+`in = []` rejects every normal input; `in = [""]` admits the empty string.
+A listed value must still pass every callback.
 
 The generated type offers fallible `try_make` / `try_from_str`, consuming
 `into_inner` / `into_bytes`, read-only string access, `Deref<Target = str>`,
@@ -289,10 +291,10 @@ mutable string aliases such as `DerefMut`, `as_mut_str`, or `&mut String`.
 `map(self, FnOnce(&mut String)) -> Result<Self, ()>` is the checked mutation
 entry point: invalid output is dropped instead of rewrapped.
 
-Text friends use `cap = [Make]` and an owning `conv` function returning
-`String`. They are validated by default and panic if a friend supplies invalid
-output. `trusted = true` bypasses that validation; use it only when the friend
-author proves validity independently.
+Text friends use `conversion(Source) -> Make`, with an owning function returning
+`String`. Missing conversions are rejected during macro expansion. Friend output
+is validated by default and panics if invalid. `-> [Make, Trust]` bypasses only
+that construction validation; use it only when validity is proved independently.
 
 `with = [display]` opts into `Display`. `konst = true` propagates const
 generation through text APIs, including validation and `map`; unsupported
@@ -305,14 +307,19 @@ Generation of individual features can be disabled (check
 integral's [cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
 
 ```rust
+struct Foo(u32);
+impl Foo { fn to_u32(self) -> u32 { self.0 } }
+const fn is_valid(value: u32) -> bool { value != 0 }
+
 #[typekin::integral(
     // Required. `true` needs nightly const features; `false` generates plain impls.
   konst = false,
 
   friends = [
-    u64(cap = [Bit]),                    // Only bitwise operations
-    Foo(conv = Foo::to_u32, cap = [Make, Math, Bit]),
+    _(u64) -> Bit,                    // Only bitwise operations
+    Foo::to_u32(Foo) -> [Make, Math, Bit],
   ],
+  without = [fn_conv_raw], // Do not generate the existing accessor below
 
   get_raw = Self::unwrap, // Use an existing accessor instead of generated `raw()`
   valid = is_valid, // Reject invalid raw values in checked construction
@@ -320,6 +327,10 @@ integral's [cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Example(u32);
+
+impl Example {
+    const fn unwrap(self) -> u32 { self.0 }
+}
 ```
 
 Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
@@ -343,9 +354,10 @@ discriminant must be valid.
 `konst` is required and forwarded to `integral` for the generated value type.
 Write it directly as `konst = true` or `konst = false`; use `integral = [...]`
 when configuring other generated value-type behavior. `bitflag` has its own
-`friends = [...]` list for enum-left operations; configure access with
-`cap = [Make, Math, Bit]`. The enum and generated value type are registered as
-friends automatically; arithmetic friendship is not generated.
+`friends` option for enum-left operations; for example,
+`friends = _(u8) -> Bit` or a bracketed list of such declarations. The enum and
+generated value type are registered as friends automatically; enum arithmetic
+operators are not generated.
 
 ### Example
 
@@ -372,7 +384,7 @@ fn main() {
     assert_eq!(Perm::Read.name(), "Read");
 
     let names: Vec<_> = rw.iter_known_flags().map(Perm::name).collect();
-    assert_eq!(names, vec!["Read", "Write"]);
+    assert_eq!(names, vec!["None", "Read", "Write"]);
 
     let raw = PermValue::try_make(0b111).unwrap();
     assert!(raw.contains(Perm::Exec));
@@ -401,6 +413,8 @@ pub struct Counter(u32);
 
 const START: Counter = Counter::make(10);
 const NEXT: Counter = START + 1u32;
+
+fn main() { assert_eq!(NEXT.raw(), 11); }
 ```
 
 Use `konst = false` to generate plain implementations instead:
@@ -412,7 +426,3 @@ Use `konst = false` to generate plain implementations instead:
 struct Counter(u32);
 ```
 
-Once all required features are stabilized, `konst = true` will be the default
-unless the caller opts out via `konst = false`. This will not be a breaking
-change as currently the macros force all callers to explicitly specify the
-constness flag.
