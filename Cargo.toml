@@ -1,7 +1,7 @@
 [package]
 name = "typekin"
 authors = ["Koosha H <git@koosha.io>"]
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 license = "MIT"
 description = "new-type pattern with concept of Friends borrowed from c++, no-std and fully const"
