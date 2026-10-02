@@ -1427,7 +1427,10 @@ impl Maker {
         if self.cfg.flags.assertions {
             let it = quote! {
                 if !(::core::mem::size_of::<#ty>() == ::core::mem::size_of::<#el>()) {
-                    panic!("invalid memory layout: #ty(#el) != #el");
+                    panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
+                };
+                if !(::core::mem::align_of::<#ty>() == ::core::mem::align_of::<#el>()) {
+                    panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
                 };
             };
             stream.extend(it);
