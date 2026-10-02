@@ -104,7 +104,7 @@ impl Parse for BitflagCfg {
 
 impl BitflagCfg {
     fn parse_attr(
-        self: &mut Self,
+        &mut self,
         has_konst: &mut bool,
         attr: &str,
         rest: ParseStream,
