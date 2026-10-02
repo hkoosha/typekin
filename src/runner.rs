@@ -1,10 +1,3 @@
-use crate::value_type::N;
-use proc_macro2::{
-    Ident,
-    TokenStream,
-};
-use quote::quote;
-
 use std::{
     collections::HashSet,
     fmt::Display,
@@ -14,13 +7,18 @@ use std::{
         Mutex,
     },
 };
+
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
+use quote::quote;
 use syn::{
     Attribute,
     Token,
     Visibility,
     bracketed,
     meta::ParseNestedMeta,
-    parenthesized,
     parse::{
         Parse,
         ParseStream,
@@ -28,6 +26,8 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
 };
+
+use crate::value_type::N;
 
 macro_rules! mk_flags {
     (
@@ -43,6 +43,7 @@ macro_rules! mk_flags {
         $(#[$meta])*
         $vis struct $name {
             $( pub $f_name: $f_typ, )*
+            seen_flags: ::std::collections::BTreeMap<::std::string::String, bool>,
         }
 
         impl ::core::default::Default for $name {
@@ -56,6 +57,7 @@ macro_rules! mk_flags {
 
             $vis fn new() -> Self {
                 return Self {
+                    seen_flags: ::std::collections::BTreeMap::new(),
                     $(
                         $f_name: mk_flags!{
                             @define,
@@ -98,7 +100,22 @@ macro_rules! mk_flags {
                     return $crate::runner::MkErr::fail(&span, err);
                 };
 
-                attrs.retain(|it, _| self.set_bool(it, value_if_seen).is_err());
+                for (name, (_, span)) in &attrs {
+                    if self.seen_flags.get(name).is_some_and(|setting| *setting != value_if_seen) {
+                        return $crate::runner::MkErr::fail(
+                            span,
+                            "flag specified in both `with` and `without`",
+                        );
+                    }
+                }
+
+                attrs.retain(|name, _| {
+                    if self.set_bool(name, value_if_seen).is_err() {
+                        return true;
+                    }
+                    self.seen_flags.insert(name.clone(), value_if_seen);
+                    return false;
+                });
 
                 if let Some(span) = attrs
                     .into_values()
@@ -374,6 +391,19 @@ pub(crate) fn list<T: Parse>(
     return Ok(items);
 }
 
+pub(crate) fn one_or_list<T: Parse>(
+    stream: ParseStream
+) -> syn::Result<impl Iterator<Item = T>> {
+    let (one, many) = if stream.peek(syn::token::Bracket) {
+        (None, Some(list::<T>(stream)?))
+    }
+    else {
+        (Some(stream.parse::<T>()?), None)
+    };
+
+    return Ok(one.into_iter().chain(many.into_iter().flatten()));
+}
+
 pub(crate) fn find_repr_n(
     attrs: &Vec<Attribute>,
     span: impl Spanned,
@@ -480,20 +510,6 @@ pub(crate) fn parse_inner_attributes(
     }
 
     return Ok(());
-}
-
-pub(crate) fn parse_optional_attributes(
-    input: ParseStream,
-    on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
-) -> syn::Result<()> {
-    if !input.peek(syn::token::Paren) {
-        return Ok(());
-    }
-
-    let content;
-    let _ = parenthesized!(content in input);
-
-    return parse_inner_attributes(&content, on_attr);
 }
 
 pub(crate) fn snake_case_of(it: &str) -> String {

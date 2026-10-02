@@ -1,5 +1,8 @@
-use crate::value_type::N;
 use std::collections::BTreeSet;
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 
 use proc_macro2::{
     Ident,
@@ -26,20 +29,20 @@ use syn::{
     parse_quote,
 };
 
-use crate::friendship::cfg::Friend;
-use crate::friendship::{
-    Protocol,
-    ProtocolFriend,
-};
-use crate::runner;
-use crate::runner::{
-    Merged,
-    MkErr,
-    mk_flags,
-};
-use std::fmt::{
-    Debug,
-    Formatter,
+use crate::{
+    friendship::{
+        Construction,
+        Protocol,
+        ProtocolFriend,
+        cfg::Friend,
+    },
+    runner,
+    runner::{
+        Merged,
+        MkErr,
+        mk_flags,
+    },
+    value_type::N,
 };
 
 pub(crate) fn integral(
@@ -97,6 +100,7 @@ mk_flags! {
         pub bit_access: bool,
 
         pub impl_debug: bool,
+        pub display: bool = false,
         pub impl_eq: bool,
         pub impl_fmt_binary: bool,
         pub impl_fmt_hex_lower: bool,
@@ -304,19 +308,13 @@ impl IntegralCfg {
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
                 "friends" => {
-                    let friends =
-                        runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
+                    let friends = runner::one_or_list::<Friend>(rest)?
+                        .collect::<BTreeSet<_>>();
                     for friend in &friends {
-                        if friend.trusted {
-                            return Err(syn::Error::new(
-                                rest.span(),
-                                "trusted friends are only supported by text Make",
-                            ));
-                        }
                         for capability in &friend.capabilities {
                             if !matches!(
                                 capability.to_string().as_str(),
-                                "Make" | "Math" | "Bit" | "Relation"
+                                "Make" | "Math" | "Bit" | "Relation" | "Trust"
                             ) {
                                 return capability
                                     .fail("unknown integral capability");
@@ -379,19 +377,13 @@ impl Parse for IntegralCfg {
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
                 "friends" => {
-                    let friends =
-                        runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
+                    let friends = runner::one_or_list::<Friend>(rest)?
+                        .collect::<BTreeSet<_>>();
                     for friend in &friends {
-                        if friend.trusted {
-                            return Err(syn::Error::new(
-                                rest.span(),
-                                "trusted friends are only supported by text Make",
-                            ));
-                        }
                         for capability in &friend.capabilities {
                             if !matches!(
                                 capability.to_string().as_str(),
-                                "Make" | "Math" | "Bit" | "Relation"
+                                "Make" | "Math" | "Bit" | "Relation" | "Trust"
                             ) {
                                 return capability
                                     .fail("unknown integral capability");
@@ -630,6 +622,7 @@ impl Maker {
                 self.cfg.flags.impl_friendzone_friend_math_rel,
                 self.trait_friend_rel.clone(),
             ),
+            (true, format_ident!("Trust")),
         ]
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))
@@ -684,6 +677,14 @@ impl Maker {
                 })
                 .collect(),
         };
+        let mut checked = self.fp_unchecked.clone();
+        if checked.leading_colon.is_none() {
+            if let Some(segment) = checked.segments.first_mut() {
+                if segment.ident == "Self" {
+                    segment.ident = target.clone();
+                }
+            }
+        }
 
         return crate::friendship::emit_protocol(Protocol {
             target,
@@ -694,6 +695,11 @@ impl Maker {
             friends,
             emit_seal: self.cfg.flags.impl_friendzone_seal,
             target_conversion,
+            construction: Some(Construction {
+                make: self.trait_friend_make.clone(),
+                trusted: format_ident!("Trust"),
+                checked: quote! { #checked },
+            }),
             konst: self.cfg.konst,
         });
     }
@@ -734,16 +740,7 @@ impl Maker {
             let konst = runner::konst(self.cfg.konst);
             let bonst = runner::bonst(self.cfg.konst);
             let destruct = runner::destruct(self.cfg.konst);
-            let trait_seal = &self.trait_seal;
             let what = &self.trait_friend_make;
-
-            let fp_friend_conv = {
-                let trait_seal = &self.trait_seal;
-                let fn_conv = &self.fn_conv;
-                quote! { #trait_seal::#fn_conv }
-            };
-
-            let cond_seal = quote! { #bonst #trait_seal };
 
             let fn_of = format_ident!("of");
 
@@ -754,10 +751,9 @@ impl Maker {
                     it: T,
                 ) -> #ty
                 where
-                    T: #what + #cond_seal #destruct,
+                    T: #bonst #what #destruct,
                 {
-                    let this = #fp_friend_conv(it);
-                    return #fp_unchecked(this);
+                    return <T as #what>::make(it);
                 }
             };
             stream.extend(it);
@@ -1625,6 +1621,21 @@ impl Maker {
                 }
             };
             stream.extend(it);
+        }
+
+        if self.cfg.flags.display {
+            stream.extend(quote! {
+                impl ::core::fmt::Display for #ty {
+                    #[inline(always)]
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        let raw = #fp_get_raw(*self);
+                        return ::core::fmt::Display::fmt(&raw, f);
+                    }
+                }
+            });
         }
 
         if self.cfg.flags.impl_fmt_binary {

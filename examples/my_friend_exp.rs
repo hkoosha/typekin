@@ -16,129 +16,139 @@ struct PageHeader(u32);
 #[allow(clippy::unnecessary_cast)]
 const _: () = {
     const trait Seal {
-        fn conv_page_header(&self) -> u32;
+        fn conv_page_header(self) -> u32;
     }
-    const trait Make: [const] Seal {}
+    const trait Make: [const] Seal {
+        fn make(self) -> PageHeader;
+    }
     const trait Math: [const] Seal {}
     const trait Bit: [const] Seal {}
     const trait Relation: [const] Seal {}
+    const trait Trust: [const] Seal {}
     const impl Seal for PageHeader {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return Self::raw(*self);
+        fn conv_page_header(self) -> u32 {
+            return Self::raw(self);
         }
     }
     const impl Seal for PageData {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return PageData::to_header(*self);
+        fn conv_page_header(self) -> u32 {
+            return PageData::to_header(self);
         }
     }
     const impl Bit for PageData {}
-    const impl Make for PageData {}
+    const impl Make for PageData {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Math for PageData {}
     const impl Relation for PageData {}
     const impl Bit for PageHeader {}
-    const impl Make for PageHeader {}
+    const impl Make for PageHeader {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Math for PageHeader {}
     const impl Relation for PageHeader {}
     const impl Seal for PageId {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return id_to_header(*self);
+        fn conv_page_header(self) -> u32 {
+            return id_to_header(self);
         }
     }
     const impl Bit for PageId {}
-    const impl Make for PageId {}
+    const impl Make for PageId {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Math for PageId {}
     const impl Relation for PageId {}
     const impl Seal for PageState {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return state_to_header(*self);
+        fn conv_page_header(self) -> u32 {
+            return state_to_header(self);
         }
     }
     const impl Bit for PageState {}
-    const impl Make for PageState {}
+    const impl Make for PageState {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Math for PageState {}
     const impl Relation for PageState {}
     const impl Seal for i16 {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return *self as u32;
+        fn conv_page_header(self) -> u32 {
+            return self as u32;
         }
     }
-    const impl Make for i16 {}
+    const impl Make for i16 {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Seal for u16 {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return *self as u32;
+        fn conv_page_header(self) -> u32 {
+            return self as u32;
         }
     }
-    const impl Make for u16 {}
+    const impl Make for u16 {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Seal for u32 {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return *self as u32;
+        fn conv_page_header(self) -> u32 {
+            return self as u32;
         }
     }
     const impl Bit for u32 {}
-    const impl Make for u32 {}
+    const impl Make for u32 {
+        #[inline(always)]
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
+        }
+    }
     const impl Math for u32 {}
     const impl Relation for u32 {}
     const impl Seal for u8 {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return *self as u32;
+        fn conv_page_header(self) -> u32 {
+            return self as u32;
         }
     }
-    const impl Make for u8 {}
-    const impl<T> Seal for &T
-    where
-        T: [const] Seal + [const] ::core::marker::Destruct,
-    {
+    const impl Make for u8 {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return Seal::conv_page_header(&**self);
+        fn make(self) -> PageHeader {
+            let raw = <Self as Seal>::conv_page_header(self);
+            return PageHeader::_unchecked(raw);
         }
     }
-    const impl<T> Seal for &mut T
-    where
-        T: [const] Seal + [const] ::core::marker::Destruct,
-    {
+    impl ::core::convert::AsRef<u32> for PageHeader {
         #[inline(always)]
-        fn conv_page_header(&self) -> u32 {
-            return Seal::conv_page_header(&**self);
+        fn as_ref(&self) -> &u32 {
+            return &self.0;
         }
-    }
-    const impl<T> Make for &T where
-        T: [const] Make + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Make for &mut T where
-        T: [const] Make + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Math for &T where
-        T: [const] Math + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Math for &mut T where
-        T: [const] Math + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
-    const impl<T> Bit for &mut T where
-        T: [const] Bit + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Relation for &T where
-        T: [const] Relation + [const] ::core::marker::Destruct
-    {
-    }
-    const impl<T> Relation for &mut T where
-        T: [const] Relation + [const] ::core::marker::Destruct
-    {
     }
     const impl ::core::convert::Into<usize> for PageHeader {
         #[inline(always)]
@@ -265,7 +275,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._bitand(it);
         }
     }
@@ -278,7 +288,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._add(it);
         }
     }
@@ -291,7 +301,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._sub(it);
         }
     }
@@ -304,7 +314,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._mul(it);
         }
     }
@@ -317,7 +327,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._div(it);
         }
     }
@@ -330,7 +340,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._rem(it);
         }
     }
@@ -343,7 +353,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._bitor(it);
         }
     }
@@ -379,7 +389,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._add(it);
         }
     }
@@ -393,7 +403,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._sub(it);
         }
     }
@@ -407,7 +417,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._mul(it);
         }
     }
@@ -421,7 +431,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._div(it);
         }
     }
@@ -435,7 +445,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._rem(it);
         }
     }
@@ -449,7 +459,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._bitand(it);
         }
     }
@@ -463,7 +473,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._bitor(it);
         }
     }
@@ -477,7 +487,7 @@ const _: () = {
             self,
             rhs: T,
         ) -> Self::Output {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             return self._bitxor(it);
         }
     }
@@ -490,7 +500,7 @@ const _: () = {
             &mut self,
             rhs: T,
         ) {
-            let it = Seal::conv_page_header(&rhs);
+            let it = Seal::conv_page_header(rhs);
             *self = self._bitxor(it);
         }
     }
@@ -537,31 +547,25 @@ const _: () = {
             return ::core::fmt::UpperHex::fmt(&raw, f);
         }
     }
-    const impl<T> ::core::cmp::PartialEq<T> for PageHeader
-    where
-        T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-    {
+    const impl ::core::cmp::PartialEq for PageHeader {
         #[inline(always)]
         fn eq(
             &self,
-            rhs: &T,
+            rhs: &Self,
         ) -> bool {
             let lhs = Self::raw(*self);
-            let rhs = Seal::conv_page_header(rhs);
+            let rhs = Self::raw(*rhs);
             return lhs == rhs;
         }
     }
-    const impl<T> ::core::cmp::PartialOrd<T> for PageHeader
-    where
-        T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-    {
+    const impl ::core::cmp::PartialOrd for PageHeader {
         #[inline(always)]
         fn partial_cmp(
             &self,
-            rhs: &T,
+            rhs: &Self,
         ) -> ::core::option::Option<::core::cmp::Ordering> {
             let lhs = Self::raw(*self);
-            let rhs = Seal::conv_page_header(rhs);
+            let rhs = Self::raw(*rhs);
             return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
         }
     }
@@ -570,10 +574,9 @@ const _: () = {
         #[allow(private_bounds)]
         pub const fn of<T>(it: T) -> PageHeader
         where
-            T: Make + [const] Seal + [const] ::core::marker::Destruct,
+            T: [const] Make + [const] ::core::marker::Destruct,
         {
-            let this = Seal::conv_page_header(&it);
-            return Self::_unchecked(this);
+            return <T as Make>::make(it);
         }
         #[inline(always)]
         pub const fn make(it: u32) -> PageHeader {

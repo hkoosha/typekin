@@ -9,7 +9,7 @@
 mod subject {
     #[typekin::integral(
         konst = true,
-        friends = [MyFriend(conv=MyFriend::my_conv)],
+        friends = MyFriend::my_conv(MyFriend) -> [],
     )]
     #[repr(transparent)]
     #[derive(Copy)]

@@ -1,10 +1,3 @@
-use crate::friendship::cfg::{
-    Cfg,
-    Friend,
-    MakeCfg,
-};
-use crate::runner;
-use crate::runner::MkErr;
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -13,8 +6,20 @@ use quote::{
     format_ident,
     quote,
 };
-use syn::Type;
-use syn::spanned::Spanned;
+use syn::{
+    Type,
+    spanned::Spanned,
+};
+
+use crate::{
+    friendship::cfg::{
+        Cfg,
+        Friend,
+        MakeCfg,
+    },
+    runner,
+    runner::MkErr,
+};
 
 pub(crate) mod cfg {
     use crate::runner;
@@ -30,11 +35,14 @@ pub(crate) mod cfg {
     };
     use syn::{
         Path,
+        Token,
         Type,
+        parenthesized,
         parse::{
             Parse,
             ParseStream,
         },
+        punctuated::Punctuated,
     };
 
     #[derive(Clone)]
@@ -43,37 +51,53 @@ pub(crate) mod cfg {
         pub(crate) ty: Option<Path>,
         pub(crate) conv: Option<Path>,
         pub(crate) capabilities: BTreeSet<Ident>,
-        pub(crate) trusted: bool,
     }
 
     impl Parse for Friend {
         fn parse(input: ParseStream) -> syn::Result<Self> {
-            let ty = if input.peek(syn::Token![_]) {
-                let _: syn::Token![_] = input.parse()?;
+            let start = input.span();
+            let conv = if input.peek(Token![_]) {
+                let _: Token![_] = input.parse()?;
                 None
             }
             else {
                 Some(input.parse::<Path>()?)
             };
 
-            let mut conv = None;
-            let mut capabilities = None;
-            let mut trusted = false;
-            runner::parse_optional_attributes(input, |name, stream| {
-                match name {
-                    "conv" => conv = Some(stream.parse()?),
-                    "cap" => {
-                        capabilities = Some(
-                            runner::list(stream)?.collect::<BTreeSet<_>>(),
-                        );
-                    }
-                    "trusted" => {
-                        trusted = stream.parse::<syn::LitBool>()?.value
-                    }
-                    _ => return Ok(false),
-                };
-                return Ok(true);
-            })?;
+            let ty = if input.peek(syn::token::Paren) {
+                let content;
+                let _ = parenthesized!(content in input);
+                if content.peek(syn::Ident) && content.peek2(Token![=]) {
+                    return content.span().fail(
+                        "friend attributes were removed; use `conversion(Type) -> Capabilities`",
+                    );
+                }
+                if content.peek(Token![_]) {
+                    return content.span().fail(
+                        "use `_ -> Capabilities` for a capability-only declaration",
+                    );
+                }
+                let types =
+                    Punctuated::<Path, Token![,]>::parse_terminated(&content)?;
+                if types.len() != 1 {
+                    return content.span().fail(
+                        "friend conversion requires exactly one source type",
+                    );
+                }
+                Some(types.into_iter().next().unwrap())
+            }
+            else if conv.is_none() {
+                None
+            }
+            else {
+                return start.fail(
+                    "expected `conversion(Type) -> Capabilities` or `_ -> Capabilities`",
+                );
+            };
+
+            let _: Token![->] = input.parse()?;
+            let capabilities =
+                runner::one_or_list::<Ident>(input)?.collect::<BTreeSet<_>>();
 
             return Ok(Self {
                 identity: ty
@@ -83,8 +107,7 @@ pub(crate) mod cfg {
                     .unwrap_or_else(|| "_".to_string()),
                 ty,
                 conv,
-                capabilities: capabilities.unwrap_or_else(|| BTreeSet::new()),
-                trusted,
+                capabilities,
             });
         }
     }
@@ -125,7 +148,6 @@ pub(crate) mod cfg {
                 ty: Some(it.clone()),
                 conv: None,
                 capabilities: BTreeSet::new(),
-                trusted: false,
             };
         }
     }
@@ -223,7 +245,9 @@ pub(crate) mod cfg {
                 match attr {
                     "of_relation" => of_relation = Some(stream.parse()?),
                     "of_friend" => of_friend = stream.parse()?,
-                    "friends" => friends = runner::list(stream)?.collect(),
+                    "friends" => {
+                        friends = runner::one_or_list(stream)?.collect()
+                    }
                     _ => return Ok(false),
                 };
 
@@ -312,7 +336,17 @@ pub(crate) mod cfg {
                         }
                     }
                     "friends" => {
-                        for friend in runner::list(stream)? {
+                        for mut friend in runner::one_or_list::<Friend>(stream)?
+                        {
+                            if friend.ty.is_none() {
+                                if let Some(existing) =
+                                    this.friends.take(&friend)
+                                {
+                                    friend
+                                        .capabilities
+                                        .extend(existing.capabilities);
+                                }
+                            }
                             if !this.friends.insert(friend) {
                                 return stream.span().fail("duplicated friend");
                             }
@@ -335,6 +369,12 @@ pub(crate) struct ProtocolFriend {
     pub(crate) conversion: Option<TokenStream>,
 }
 
+pub(crate) struct Construction {
+    pub(crate) make: Ident,
+    pub(crate) trusted: Ident,
+    pub(crate) checked: TokenStream,
+}
+
 pub(crate) struct Protocol {
     pub(crate) target: Ident,
     pub(crate) relation: Type,
@@ -344,6 +384,7 @@ pub(crate) struct Protocol {
     pub(crate) friends: Vec<ProtocolFriend>,
     pub(crate) emit_seal: bool,
     pub(crate) target_conversion: Option<TokenStream>,
+    pub(crate) construction: Option<Construction>,
     pub(crate) konst: bool,
 }
 
@@ -352,7 +393,6 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     let relation = &protocol.relation;
     let seal = &protocol.seal;
     let conversion = &protocol.conversion;
-    let capabilities = &protocol.capabilities;
     let konst = runner::konst(protocol.konst);
     let bonst = runner::bonst(protocol.konst);
 
@@ -364,7 +404,23 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
         }
     });
 
-    let target_seal = protocol.target_conversion.map(|body| {
+    let capability_declarations =
+        protocol.capabilities.iter().map(|capability| {
+            let method =
+                protocol.construction.as_ref().and_then(|construction| {
+                    (capability == &construction.make).then(|| {
+                        quote! { fn make(self) -> #target; }
+                    })
+                });
+
+            quote! {
+                #konst trait #capability: #bonst #seal {
+                    #method
+                }
+            }
+        });
+
+    let target_seal = protocol.target_conversion.as_ref().map(|body| {
         quote! {
             #konst impl #seal for #target {
                 #[inline(always)]
@@ -377,7 +433,6 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
     let friend_impls = protocol.friends.iter().map(|friend| {
         let ty = &friend.ty;
-        let capabilities = &friend.capabilities;
         let seal_impl = friend.conversion.as_ref().map(|body| {
             quote! {
                 #konst impl #seal for #ty {
@@ -388,19 +443,46 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                 }
             }
         });
+        let capability_impls = friend.capabilities.iter().map(|capability| {
+            let method =
+                protocol.construction.as_ref().and_then(|construction| {
+                    if capability != &construction.make {
+                        return None;
+                    }
+
+                    let constructor = match friend
+                        .capabilities
+                        .contains(&construction.trusted)
+                    {
+                        true => quote! { #target },
+                        false => construction.checked.clone(),
+                    };
+
+                    Some(quote! {
+                        #[inline(always)]
+                        fn make(self) -> #target {
+                            let raw = <Self as #seal>::#conversion(self);
+                            return #constructor(raw);
+                        }
+                    })
+                });
+
+            quote! {
+                #konst impl #capability for #ty {
+                    #method
+                }
+            }
+        });
 
         quote! {
             #seal_impl
-            #(#konst impl #capabilities for #ty {})*
+            #(#capability_impls)*
         }
     });
 
     return quote! {
         #seal_declaration
-
-        #(
-            #konst trait #capabilities: #bonst #seal {}
-        )*
+        #(#capability_declarations)*
 
         #target_seal
         #(#friend_impls)*
@@ -468,12 +550,10 @@ fn expand(
     }
 
     for friend in &friendship.friends {
-        if friend.trusted {
-            return item
-                .fail("trusted friends are only supported by text Make");
-        }
         if friend.ty.is_some() && friend.conv.is_none() {
-            return item.fail("friendship friend requires `conv = ...`");
+            return item.fail(
+                "concrete friendship requires `conversion(Type) -> Capabilities`",
+            );
         }
     }
 
@@ -610,20 +690,14 @@ pub(crate) fn emit_friendship(
                 }
             }
 
-            impl #seal for #relation_value
-            where
-                #relation_value: ::core::marker::Copy,
-            {
+            impl #seal for #relation_value {
                 #[inline(always)]
                 fn #conversion(self) -> #value {
                     return self;
                 }
             }
 
-            impl #constructor_capability for #relation_value
-            where
-                #relation_value: ::core::marker::Copy,
-            {}
+            impl #constructor_capability for #relation_value {}
         };
     });
 

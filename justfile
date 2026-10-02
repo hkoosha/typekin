@@ -9,15 +9,22 @@ export RUSTFLAGS := '-Zmacro-backtrace'
 
 clean:
   cargo clean
+  cd ./typekin_testing && pwd && just clean
 
 fmt:
   cargo fmt
 
-test:
+test-here:
   cargo test
+test-there:
+  cd ./typekin_testing && pwd && just test
+test: test-here test-there
 
 build: fmt
   cargo build
+
+clippy: fmt
+  cargo clippy
 
 init:
   cargo install expandem
@@ -55,11 +62,6 @@ non-expand: (z-expand 'my_u32_non_const')
 non: non-expand fmt
 
 [group("example")]
-thingy-expand: (z-expand 'my_thingy')
-[group("example")]
-thingy: thingy-expand fmt
-
-[group("example")]
 flag-expand: (z-expand 'my_flag')
 [group("example")]
 flag: flag-expand fmt
@@ -75,7 +77,7 @@ all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand frien
 
 # ==============================================================================
 
-examples := 'crates' / 'typekin' / 'examples'
+examples := 'examples'
 
 [group("z")]
 z-expand what: (
@@ -90,9 +92,3 @@ zz-expand from to:
   touch '{{ to }}'
   expandem '{{ from }}' 'typekin::**' > '{{ to }}'
 
-fast-test:
-  CARGO_TARGET_DIR=/tmp/typekin_perf_ok_outer cargo +nightly test -p typekin_perf_ok & \
-  CARGO_TARGET_DIR=/tmp/typekin_perf_must_fail_outer cargo +nightly test -p typekin_perf_must_fail & \
-  CARGO_TARGET_DIR=/tmp/typekin_perf_types_outer cargo +nightly test -p typekin_perf_types & \
-  CARGO_TARGET_DIR=/tmp/typekin_outer cargo +nightly test -p typekin & \
-  wait

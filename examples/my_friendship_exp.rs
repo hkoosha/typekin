@@ -35,7 +35,7 @@ mod folks {
         }
     }
 
-    pub(super) fn executor_parts(it: &ExecXX) -> (u64, u8) {
+    pub(super) fn executor_parts(it: ExecXX) -> (u64, u8) {
         return (PRETTY | ((it.id as u64) << 32), 0b10_100);
     }
 }
@@ -61,7 +61,7 @@ mod sample {
     }
     mod things {
         pub(super) trait Seal {
-            fn convert(&self) -> (u64, u8);
+            fn convert(self) -> (u64, u8);
         }
         #[allow(unused, dead_code)]
         pub(super) trait Haha: Seal {}
@@ -71,14 +71,14 @@ mod sample {
         pub(super) trait Make: Seal {}
         impl Seal for super::ExecXX {
             #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
+            fn convert(self) -> (u64, u8) {
                 return crate::folks::executor_parts(self);
             }
         }
         impl Make for super::ExecXX {}
         impl Seal for super::Reader {
             #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
+            fn convert(self) -> (u64, u8) {
                 return super::Reader::parts(self);
             }
         }
@@ -86,43 +86,19 @@ mod sample {
         impl Make for super::Reader {}
         impl Seal for super::Document {
             #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
+            fn convert(self) -> (u64, u8) {
                 return super::Document::convert_me(self);
             }
         }
         impl Make for super::Document {}
         impl Seal for super::Writer {
             #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
+            fn convert(self) -> (u64, u8) {
                 return super::writer_parts(self);
             }
         }
         impl Inspector for super::Writer {}
         impl Make for super::Writer {}
-        impl<T> Seal for &T
-        where
-            T: Seal,
-        {
-            #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
-                return Seal::convert(&**self);
-            }
-        }
-        impl<T> Seal for &mut T
-        where
-            T: Seal,
-        {
-            #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
-                return Seal::convert(&**self);
-            }
-        }
-        impl<T> Haha for &T where T: Haha {}
-        impl<T> Inspector for &T where T: Inspector {}
-        impl<T> Make for &T where T: Make {}
-        impl<T> Haha for &mut T where T: Haha {}
-        impl<T> Inspector for &mut T where T: Inspector {}
-        impl<T> Make for &mut T where T: Make {}
         impl super::Document {
             #[allow(private_bounds)]
             #[inline(always)]
@@ -130,19 +106,16 @@ mod sample {
             where
                 T: Make + Seal,
             {
-                return Self::of_parts(Seal::convert(&it));
+                return Self::of_parts(Seal::convert(it));
             }
         }
-        impl Seal for (u64, u8)
-        where
-            (u64, u8): ::core::marker::Copy,
-        {
+        impl Seal for (u64, u8) {
             #[inline(always)]
-            fn convert(&self) -> (u64, u8) {
-                return *self;
+            fn convert(self) -> (u64, u8) {
+                return self;
             }
         }
-        impl Make for (u64, u8) where (u64, u8): ::core::marker::Copy {}
+        impl Make for (u64, u8) {}
     }
 
     impl Default for Document {
@@ -171,7 +144,7 @@ mod sample {
             };
         }
 
-        fn convert_me(it: &Self) -> (u64, u8) {
+        fn convert_me(it: Self) -> (u64, u8) {
             return (it.id, it.access);
         }
     }
@@ -191,12 +164,12 @@ mod sample {
     }
 
     impl Reader {
-        fn parts(&self) -> (u64, u8) {
+        fn parts(self) -> (u64, u8) {
             return (PRETTY | ((self.id as u64) << 16), 0b10_001);
         }
     }
 
-    fn writer_parts(it: &Writer) -> (u64, u8) {
+    fn writer_parts(it: Writer) -> (u64, u8) {
         return (PRETTY | it.id as u64, 0b10_010);
     }
 

@@ -1,0 +1,18 @@
+fmt:
+  cargo fmt
+
+fix: fmt
+  cargo clippy --fix
+
+clippy: fmt
+  cargo clippy
+
+build: fmt
+  cargo build
+
+test: fmt build
+  cargo test
+
+clean:
+  cargo clean
+

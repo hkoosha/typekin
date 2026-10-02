@@ -7,16 +7,7 @@ pub(crate) mod integral;
 pub(crate) mod text;
 
 #[cfg(test)]
-#[path = "tests/bitflag.rs"]
-mod bitflag_tests;
-
-#[cfg(test)]
-#[path = "tests/integral.rs"]
-mod integral_tests;
-
-#[cfg(test)]
-#[path = "tests/text.rs"]
-mod text_tests;
+mod tests;
 
 #[proc_macro_attribute]
 pub fn integral(

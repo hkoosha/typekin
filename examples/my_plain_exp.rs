@@ -18,120 +18,130 @@ mod subject {
     #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
-            fn conv_my_plain(&self) -> i64;
+            fn conv_my_plain(self) -> i64;
         }
-        const trait Make: [const] Seal {}
+        const trait Make: [const] Seal {
+            fn make(self) -> MyPlain;
+        }
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Relation: [const] Seal {}
+        const trait Trust: [const] Seal {}
         const impl Seal for MyPlain {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Self::raw(*self);
+            fn conv_my_plain(self) -> i64 {
+                return Self::raw(self);
             }
         }
         const impl Bit for MyPlain {}
-        const impl Make for MyPlain {}
+        const impl Make for MyPlain {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Math for MyPlain {}
         const impl Relation for MyPlain {}
         const impl Seal for i32 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for i32 {}
+        const impl Make for i32 {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Seal for i64 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
         const impl Bit for i64 {}
-        const impl Make for i64 {}
+        const impl Make for i64 {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Math for i64 {}
         const impl Relation for i64 {}
         const impl Seal for i8 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for i8 {}
+        const impl Make for i8 {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Seal for isize {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for isize {}
+        const impl Make for isize {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Seal for u16 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for u16 {}
+        const impl Make for u16 {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for u32 {}
+        const impl Make for u32 {
+            #[inline(always)]
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
+            }
+        }
         const impl Seal for u8 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return *self as i64;
+            fn conv_my_plain(self) -> i64 {
+                return self as i64;
             }
         }
-        const impl Make for u8 {}
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl Make for u8 {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Seal::conv_my_plain(&**self);
+            fn make(self) -> MyPlain {
+                let raw = <Self as Seal>::conv_my_plain(self);
+                return MyPlain::_unchecked(raw);
             }
         }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        impl ::core::convert::AsRef<i64> for MyPlain {
             #[inline(always)]
-            fn conv_my_plain(&self) -> i64 {
-                return Seal::conv_my_plain(&**self);
+            fn as_ref(&self) -> &i64 {
+                return &self.0;
             }
-        }
-        const impl<T> Make for &T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Make for &mut T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &mut T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
-        const impl<T> Bit for &mut T where
-            T: [const] Bit + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &mut T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
         }
         const impl ::core::convert::Into<isize> for MyPlain {
             #[inline(always)]
@@ -261,7 +271,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._bitand(it);
             }
         }
@@ -274,7 +284,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._add(it);
             }
         }
@@ -287,7 +297,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._sub(it);
             }
         }
@@ -300,7 +310,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._mul(it);
             }
         }
@@ -313,7 +323,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._div(it);
             }
         }
@@ -326,7 +336,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._rem(it);
             }
         }
@@ -339,7 +349,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._bitor(it);
             }
         }
@@ -375,7 +385,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._add(it);
             }
         }
@@ -389,7 +399,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._sub(it);
             }
         }
@@ -403,7 +413,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._mul(it);
             }
         }
@@ -417,7 +427,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._div(it);
             }
         }
@@ -431,7 +441,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._rem(it);
             }
         }
@@ -445,7 +455,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._bitand(it);
             }
         }
@@ -459,7 +469,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._bitor(it);
             }
         }
@@ -473,7 +483,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 return self._bitxor(it);
             }
         }
@@ -486,7 +496,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_plain(&rhs);
+                let it = Seal::conv_my_plain(rhs);
                 *self = self._bitxor(it);
             }
         }
@@ -533,31 +543,25 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl<T> ::core::cmp::PartialEq<T> for MyPlain
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialEq for MyPlain {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_plain(rhs);
+                let rhs = Self::raw(*rhs);
                 return lhs == rhs;
             }
         }
-        const impl<T> ::core::cmp::PartialOrd<T> for MyPlain
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialOrd for MyPlain {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_plain(rhs);
+                let rhs = Self::raw(*rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
@@ -566,10 +570,9 @@ mod subject {
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyPlain
             where
-                T: Make + [const] Seal + [const] ::core::marker::Destruct,
+                T: [const] Make + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_plain(&it);
-                return Self::_unchecked(this);
+                return <T as Make>::make(it);
             }
             #[inline(always)]
             pub const fn make(it: i64) -> MyPlain {

@@ -1,20 +1,32 @@
 [package]
-edition = "2024"
-name = "typekin_perf_must_fail"
+name = "typekin_testing"
+authors = ["Koosha H <git@koosha.io>"]
 version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+homepage = "https://koosha.io/project/typekin"
+repository = "https://gitlab.com/hkoosha/typekin"
+description = "Unpublished crate only for testing the crate: typekin"
+
 publish = false
 
-[lints]
-workspace = true
+[lints.clippy]
+needless_return = "allow"
+
+[lints.cargo]
+unused_dependencies = "allow"
+
+[dependencies]
+typekin = { path = ".." }
 
 [[bin]]
-name = "typekin-perf-must-fail-fixture"
-path = "src/typekin-perf-must-fail-fixture.rs"
+name = "my_u32"
+path = "src/my_u32.rs"
 test = false
 bench = false
 
 [[bin]]
-name = "typekin-perf-ok-fixture"
-path = "src/typekin-perf-ok-fixture.rs"
+name = "my_u32_const"
+path = "src/my_u32_const.rs"
 test = false
 bench = false

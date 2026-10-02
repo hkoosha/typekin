@@ -120,7 +120,7 @@ fn main() {
 ________________________________________________________________________________
 
 AI Disclaimer: The code is handwritten, but the rest of this README is AI
-generated. Some tests are also written with the help of AI.
+generated.
 
 ## Constness Status
 
@@ -155,6 +155,48 @@ fn main() {
     assert_eq!(limit.raw(), 5);
 }
 ```
+
+### Trusted friend construction
+
+Friends default to untrusted. Integral and text `of` validate an untrusted
+friend's converted value and panic if it is invalid. `trusted = true` requires
+the `Make` capability and skips that construction validation: the friend author
+must prove the converted value is already valid.
+
+```rust
+struct Verified(u32);
+
+impl Verified {
+    fn try_make(raw: u32) -> Option<Self> {
+        (1..=100).contains(&raw).then_some(Self(raw))
+    }
+
+    fn into_raw(self) -> u32 { self.0 }
+}
+
+#[typekin::integral(
+    konst = false,
+    in = 1..=100,
+    friends = [Verified(conv = Verified::into_raw, cap = [Make], trusted = true)],
+)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Limited(u32);
+
+let verified = Verified::try_make(42).unwrap();
+let limited = Limited::of(verified); // Consumes the non-Copy friend.
+assert_eq!(limited.raw(), 42);
+assert_eq!(Limited::try_make(0), Err(0));
+```
+
+Trust grants no additional capabilities. Checked constructors and math/bitwise
+operation results still validate, including operations with a trusted friend
+as the right-hand operand.
+
+Standalone `friendship` also accepts trusted `Make` friends, including `Make`
+granted by `constructor`. It has no generated validator to bypass: the
+configured `of_relation` function always runs, including its own checks.
+Relations and friend inputs can both be non-`Copy`.
 
 ### Validation
 
@@ -235,6 +277,10 @@ assert_eq!(published.as_str(), "published");
 `valid` accepts one callback or a bracketed list; every callback receives
 `&str` and must return `bool`. `in` accepts a non-empty, duplicate-free list of
 string literals. The two constraints compose with logical AND.
+
+Membership compares exact strings without case or Unicode normalization. The
+list must be non-empty, but a literal may be empty. A listed value must still
+pass every callback.
 
 The generated type offers fallible `try_make` / `try_from_str`, consuming
 `into_inner` / `into_bytes`, read-only string access, `Deref<Target = str>`,

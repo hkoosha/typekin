@@ -28,128 +28,144 @@ mod subject {
     #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
-            fn conv_my_flags(&self) -> u128;
+            fn conv_my_flags(self) -> u128;
         }
-        const trait Make: [const] Seal {}
+        const trait Make: [const] Seal {
+            fn make(self) -> MyFlags;
+        }
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Relation: [const] Seal {}
+        const trait Trust: [const] Seal {}
         const impl Seal for MyFlags {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Self::raw(*self);
+            fn conv_my_flags(self) -> u128 {
+                return Self::raw(self);
             }
         }
         const impl Seal for MyFlag {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return MyFlag::raw(*self);
+            fn conv_my_flags(self) -> u128 {
+                return MyFlag::raw(self);
             }
         }
         const impl Bit for MyFlag {}
-        const impl Make for MyFlag {}
+        const impl Make for MyFlag {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Bit for MyFlags {}
-        const impl Make for MyFlags {}
+        const impl Make for MyFlags {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Math for MyFlags {}
         const impl Relation for MyFlags {}
         const impl Seal for i16 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for i16 {}
+        const impl Make for i16 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Seal for u128 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
         const impl Bit for u128 {}
-        const impl Make for u128 {}
+        const impl Make for u128 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Math for u128 {}
         const impl Relation for u128 {}
         const impl Seal for u16 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for u16 {}
+        const impl Make for u16 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for u32 {}
+        const impl Make for u32 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Seal for u64 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for u64 {}
+        const impl Make for u64 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Seal for u8 {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for u8 {}
+        const impl Make for u8 {
+            #[inline(always)]
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
+            }
+        }
         const impl Seal for usize {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return *self as u128;
+            fn conv_my_flags(self) -> u128 {
+                return self as u128;
             }
         }
-        const impl Make for usize {}
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl Make for usize {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Seal::conv_my_flags(&**self);
+            fn make(self) -> MyFlags {
+                let raw = <Self as Seal>::conv_my_flags(self);
+                return MyFlags::_unchecked(raw);
             }
         }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        impl ::core::convert::AsRef<u128> for MyFlags {
             #[inline(always)]
-            fn conv_my_flags(&self) -> u128 {
-                return Seal::conv_my_flags(&**self);
+            fn as_ref(&self) -> &u128 {
+                return &self.0;
             }
-        }
-        const impl<T> Make for &T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Make for &mut T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &mut T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
-        const impl<T> Bit for &mut T where
-            T: [const] Bit + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &mut T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
         }
         const impl ::core::convert::Into<u128> for MyFlags {
             #[inline(always)]
@@ -281,7 +297,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._bitand(it);
             }
         }
@@ -294,7 +310,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._add(it);
             }
         }
@@ -307,7 +323,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._sub(it);
             }
         }
@@ -320,7 +336,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._mul(it);
             }
         }
@@ -333,7 +349,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._div(it);
             }
         }
@@ -346,7 +362,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._rem(it);
             }
         }
@@ -359,7 +375,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._bitor(it);
             }
         }
@@ -396,7 +412,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._add(it);
             }
         }
@@ -410,7 +426,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._sub(it);
             }
         }
@@ -424,7 +440,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._mul(it);
             }
         }
@@ -438,7 +454,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._div(it);
             }
         }
@@ -452,7 +468,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._rem(it);
             }
         }
@@ -466,7 +482,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._bitand(it);
             }
         }
@@ -480,7 +496,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._bitor(it);
             }
         }
@@ -494,7 +510,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 return self._bitxor(it);
             }
         }
@@ -507,8 +523,18 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_flags(&rhs);
+                let it = Seal::conv_my_flags(rhs);
                 *self = self._bitxor(it);
+            }
+        }
+        impl ::core::fmt::Display for MyFlags {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                let raw = Self::raw(*self);
+                return ::core::fmt::Display::fmt(&raw, f);
             }
         }
         impl ::core::fmt::Binary for MyFlags {
@@ -547,31 +573,25 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl<T> ::core::cmp::PartialEq<T> for MyFlags
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialEq for MyFlags {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_flags(rhs);
+                let rhs = Self::raw(*rhs);
                 return lhs == rhs;
             }
         }
-        const impl<T> ::core::cmp::PartialOrd<T> for MyFlags
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialOrd for MyFlags {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_flags(rhs);
+                let rhs = Self::raw(*rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
@@ -580,10 +600,9 @@ mod subject {
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyFlags
             where
-                T: Make + [const] Seal + [const] ::core::marker::Destruct,
+                T: [const] Make + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_flags(&it);
-                return Self::_unchecked(this);
+                return <T as Make>::make(it);
             }
             #[inline(always)]
             pub const fn make(it: u128) -> MyFlags {
@@ -1069,6 +1088,14 @@ mod subject {
             }
         }
         impl MyFlags {
+            #[allow(non_upper_case_globals)]
+            pub const Z: Self = Self::_unchecked(MyFlag::Z as u128);
+            #[allow(non_upper_case_globals)]
+            pub const A: Self = Self::_unchecked(MyFlag::A as u128);
+            #[allow(non_upper_case_globals)]
+            pub const B: Self = Self::_unchecked(MyFlag::B as u128);
+            #[allow(non_upper_case_globals)]
+            pub const C: Self = Self::_unchecked(MyFlag::C as u128);
             #[must_use]
             #[inline(always)]
             pub const fn bits(self) -> u128 {
@@ -1127,7 +1154,7 @@ mod subject {
             #[must_use]
             #[inline(always)]
             pub const fn contains_unknown_bits(self) -> bool {
-                return self.unknown_bits() != Self::empty().into();
+                return self.unknown_bits() != Self::empty().bits();
             }
             #[must_use]
             #[inline(always)]
@@ -1542,6 +1569,15 @@ mod subject {
                 return MyFlags::iter_defined_names();
             }
         }
+        impl ::core::fmt::Display for MyFlag {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                return ::core::fmt::Display::fmt(self.name(), f);
+            }
+        }
         const impl ::core::ops::Shr<usize> for MyFlag {
             type Output = MyFlags;
             #[inline(always)]
@@ -1572,7 +1608,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = FlagSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(rhs);
                 return self
                     .into_value()
                     .intersection(MyFlags::from_bits_retain(rhs));
@@ -1588,7 +1624,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = FlagSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(rhs);
                 return self.into_value().union(MyFlags::from_bits_retain(rhs));
             }
         }
@@ -1602,7 +1638,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let rhs = FlagSeal::conv_my_flag(&rhs);
+                let rhs = FlagSeal::conv_my_flag(rhs);
                 return self
                     .into_value()
                     .symmetric_difference(MyFlags::from_bits_retain(rhs));
@@ -1711,16 +1747,17 @@ mod subject {
             }
         }
         const trait FlagSeal {
-            fn conv_my_flag(&self) -> u128;
+            fn conv_my_flag(self) -> u128;
         }
         const trait FlagMake: [const] FlagSeal {}
         const trait FlagMath: [const] FlagSeal {}
         const trait FlagBit: [const] FlagSeal {}
         const trait FlagCmp: [const] FlagSeal {}
+        const trait FlagTrust: [const] FlagSeal {}
         const impl FlagSeal for MyFlag {
             #[inline(always)]
-            fn conv_my_flag(&self) -> u128 {
-                return MyFlag::raw(*self);
+            fn conv_my_flag(self) -> u128 {
+                return MyFlag::raw(self);
             }
         }
         const impl FlagBit for MyFlag {}
@@ -1728,62 +1765,12 @@ mod subject {
         const impl FlagMake for MyFlag {}
         const impl FlagSeal for MyFlags {
             #[inline(always)]
-            fn conv_my_flag(&self) -> u128 {
-                return MyFlags::raw(*self);
+            fn conv_my_flag(self) -> u128 {
+                return MyFlags::raw(self);
             }
         }
         const impl FlagBit for MyFlags {}
         const impl FlagMake for MyFlags {}
-        const impl<T> FlagSeal for &T
-        where
-            T: [const] FlagSeal + [const] ::core::marker::Destruct,
-        {
-            #[inline(always)]
-            fn conv_my_flag(&self) -> u128 {
-                return FlagSeal::conv_my_flag(&**self);
-            }
-        }
-        const impl<T> FlagSeal for &mut T
-        where
-            T: [const] FlagSeal + [const] ::core::marker::Destruct,
-        {
-            #[inline(always)]
-            fn conv_my_flag(&self) -> u128 {
-                return FlagSeal::conv_my_flag(&**self);
-            }
-        }
-        const impl<T> FlagMake for &T where
-            T: [const] FlagMake + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagMake for &mut T where
-            T: [const] FlagMake + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagMath for &T where
-            T: [const] FlagMath + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagMath for &mut T where
-            T: [const] FlagMath + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagBit for &T where
-            T: [const] FlagBit + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagBit for &mut T where
-            T: [const] FlagBit + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagCmp for &T where
-            T: [const] FlagCmp + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> FlagCmp for &mut T where
-            T: [const] FlagCmp + [const] ::core::marker::Destruct
-        {
-        }
     };
 }
 
@@ -1794,9 +1781,12 @@ fn main() {
     let lhs = Subject::A;
     let rhs = Subject::B.into_value();
 
+    assert_eq!(lhs.to_string(), "A");
+    assert_eq!(lhs.into_value().to_string(), "10");
     println!("{:?}", (lhs & rhs) == (lhs & rhs));
-    println!("{:?}", rhs & lhs);
-    println!("{:?}", lhs & rhs);
+    println!("{}", rhs & lhs);
+    println!("{}", lhs & rhs);
+    println!("{}", lhs);
 
     for x in Subject::items() {
         println!("{}", x.name());

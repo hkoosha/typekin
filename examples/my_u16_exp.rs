@@ -19,99 +19,91 @@ mod subject {
     #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
-            fn conv_my_u32(&self) -> u32;
+            fn conv_my_u32(self) -> u32;
         }
-        const trait Make: [const] Seal {}
+        const trait Make: [const] Seal {
+            fn make(self) -> MyU32;
+        }
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Relation: [const] Seal {}
+        const trait Trust: [const] Seal {}
         const impl Seal for MyU32 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Self::raw(*self);
+            fn conv_my_u32(self) -> u32 {
+                return Self::raw(self);
             }
         }
         const impl Bit for MyU32 {}
-        const impl Make for MyU32 {}
+        const impl Make for MyU32 {
+            #[inline(always)]
+            fn make(self) -> MyU32 {
+                let raw = <Self as Seal>::conv_my_u32(self);
+                return MyU32::_unchecked(raw);
+            }
+        }
         const impl Math for MyU32 {}
         const impl Relation for MyU32 {}
         const impl Seal for i16 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return *self as u32;
+            fn conv_my_u32(self) -> u32 {
+                return self as u32;
             }
         }
-        const impl Make for i16 {}
+        const impl Make for i16 {
+            #[inline(always)]
+            fn make(self) -> MyU32 {
+                let raw = <Self as Seal>::conv_my_u32(self);
+                return MyU32::_unchecked(raw);
+            }
+        }
         const impl Seal for u16 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return *self as u32;
+            fn conv_my_u32(self) -> u32 {
+                return self as u32;
             }
         }
-        const impl Make for u16 {}
+        const impl Make for u16 {
+            #[inline(always)]
+            fn make(self) -> MyU32 {
+                let raw = <Self as Seal>::conv_my_u32(self);
+                return MyU32::_unchecked(raw);
+            }
+        }
         const impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return *self as u32;
+            fn conv_my_u32(self) -> u32 {
+                return self as u32;
             }
         }
         const impl Bit for u32 {}
-        const impl Make for u32 {}
+        const impl Make for u32 {
+            #[inline(always)]
+            fn make(self) -> MyU32 {
+                let raw = <Self as Seal>::conv_my_u32(self);
+                return MyU32::_unchecked(raw);
+            }
+        }
         const impl Math for u32 {}
         const impl Relation for u32 {}
         const impl Seal for u8 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return *self as u32;
+            fn conv_my_u32(self) -> u32 {
+                return self as u32;
             }
         }
-        const impl Make for u8 {}
-        const impl<T> Seal for &T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl Make for u8 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Seal::conv_my_u32(&**self);
+            fn make(self) -> MyU32 {
+                let raw = <Self as Seal>::conv_my_u32(self);
+                return MyU32::_unchecked(raw);
             }
         }
-        const impl<T> Seal for &mut T
-        where
-            T: [const] Seal + [const] ::core::marker::Destruct,
-        {
+        impl ::core::convert::AsRef<u32> for MyU32 {
             #[inline(always)]
-            fn conv_my_u32(&self) -> u32 {
-                return Seal::conv_my_u32(&**self);
+            fn as_ref(&self) -> &u32 {
+                return &self.0;
             }
-        }
-        const impl<T> Make for &T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Make for &mut T where
-            T: [const] Make + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Math for &mut T where
-            T: [const] Math + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Bit for &T where T: [const] Bit + [const] ::core::marker::Destruct {}
-        const impl<T> Bit for &mut T where
-            T: [const] Bit + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
-        }
-        const impl<T> Relation for &mut T where
-            T: [const] Relation + [const] ::core::marker::Destruct
-        {
         }
         const impl ::core::convert::Into<usize> for MyU32 {
             #[inline(always)]
@@ -238,7 +230,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._bitand(it);
             }
         }
@@ -251,7 +243,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._add(it);
             }
         }
@@ -264,7 +256,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._sub(it);
             }
         }
@@ -277,7 +269,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._mul(it);
             }
         }
@@ -290,7 +282,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._div(it);
             }
         }
@@ -303,7 +295,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._rem(it);
             }
         }
@@ -316,7 +308,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._bitor(it);
             }
         }
@@ -351,7 +343,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._add(it);
             }
         }
@@ -365,7 +357,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._sub(it);
             }
         }
@@ -379,7 +371,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._mul(it);
             }
         }
@@ -393,7 +385,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._div(it);
             }
         }
@@ -407,7 +399,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._rem(it);
             }
         }
@@ -421,7 +413,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._bitand(it);
             }
         }
@@ -435,7 +427,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._bitor(it);
             }
         }
@@ -449,7 +441,7 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 return self._bitxor(it);
             }
         }
@@ -462,7 +454,7 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(&rhs);
+                let it = Seal::conv_my_u32(rhs);
                 *self = self._bitxor(it);
             }
         }
@@ -509,31 +501,25 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl<T> ::core::cmp::PartialEq<T> for MyU32
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialEq for MyU32 {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_u32(rhs);
+                let rhs = Self::raw(*rhs);
                 return lhs == rhs;
             }
         }
-        const impl<T> ::core::cmp::PartialOrd<T> for MyU32
-        where
-            T: Relation + [const] Seal + [const] ::core::marker::Destruct,
-        {
+        const impl ::core::cmp::PartialOrd for MyU32 {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &T,
+                rhs: &Self,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Seal::conv_my_u32(rhs);
+                let rhs = Self::raw(*rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
@@ -542,10 +528,9 @@ mod subject {
             #[allow(private_bounds)]
             pub const fn of<T>(it: T) -> MyU32
             where
-                T: Make + [const] Seal + [const] ::core::marker::Destruct,
+                T: [const] Make + [const] ::core::marker::Destruct,
             {
-                let this = Seal::conv_my_u32(&it);
-                return Self::_unchecked(this);
+                return <T as Make>::make(it);
             }
             #[inline(always)]
             pub const fn make(it: u32) -> MyU32 {

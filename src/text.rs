@@ -1,7 +1,3 @@
-use crate::friendship::cfg::Friend;
-use crate::integral::ValidationCfg;
-use crate::runner;
-use crate::runner::MkErr;
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -26,6 +22,17 @@ use syn::{
         Parse,
         ParseStream,
     },
+    spanned::Spanned,
+};
+
+use crate::{
+    friendship::cfg::Friend,
+    integral::ValidationCfg,
+    runner::{
+        self,
+        MkErr,
+        mk_flags,
+    },
 };
 
 pub(crate) fn text(
@@ -38,39 +45,26 @@ pub(crate) fn text(
     return runner::catching(move || TextMaker::new(item, cfg)?.ekran());
 }
 
+mk_flags! {
+    #[flag_default(bool=false, str="")]
+    #[derive(Debug, Clone)]
+    pub(crate) struct TextFlags {
+        pub display: bool,
+    }
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct TextCfg {
     pub(crate) konst: bool,
     pub(crate) callbacks: Vec<Path>,
-    pub(crate) values: Vec<LitStr>,
+    pub(crate) values: Option<Vec<LitStr>>,
     pub(crate) friends: BTreeSet<Friend>,
-    pub(crate) display: bool,
-}
-
-impl Debug for TextCfg {
-    fn fmt(
-        &self,
-        formatter: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        return formatter
-            .debug_struct("TextCfg")
-            .field("konst", &self.konst)
-            .field("callbacks", &self.callbacks.len())
-            .field("values", &self.values.len())
-            .field("friends", &self.friends)
-            .field("display", &self.display)
-            .finish();
-    }
+    pub(crate) flags: TextFlags,
 }
 
 impl TextCfg {
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
         let values = runner::list::<LitStr>(input)?.collect::<Vec<_>>();
-        if values.is_empty() {
-            return input
-                .span()
-                .fail("text `in` requires at least one string literal");
-        }
 
         let mut seen = BTreeSet::new();
         for value in &values {
@@ -82,28 +76,13 @@ impl TextCfg {
         return Ok(values);
     }
 
-    fn parse_display(
-        &mut self,
-        input: ParseStream,
-        enabled: bool,
-    ) -> syn::Result<()> {
-        for flag in runner::list::<Ident>(input)? {
-            if flag != "display" {
-                return flag.fail("unknown text generation flag");
-            }
-            self.display = enabled;
-        }
-
-        return Ok(());
-    }
-
     fn parse_friends(
         &mut self,
         input: ParseStream,
     ) -> syn::Result<()> {
-        let friends = runner::list::<Friend>(input)?.collect::<BTreeSet<_>>();
+        let mut friends = BTreeSet::new();
 
-        for friend in &friends {
+        for friend in runner::one_or_list::<Friend>(input)? {
             let Some(ty) = &friend.ty
             else {
                 return input
@@ -115,6 +94,7 @@ impl TextCfg {
             for capability in &friend.capabilities {
                 match capability.to_string().as_str() {
                     "Make" => has_make = true,
+                    "Trust" => {}
                     "Rel" => {
                         if !ty.is_ident("Self") {
                             return capability
@@ -125,13 +105,14 @@ impl TextCfg {
                 }
             }
 
-            if !has_make && friend.trusted {
-                return input.span().fail("text `trusted` requires `Make`");
-            }
             if has_make && friend.conv.is_none() {
-                return input
-                    .span()
-                    .fail("text Make friend requires `conv = ...`");
+                return input.span().fail(
+                    "text Make friend requires `conversion(Type) -> Make`",
+                );
+            }
+            let span = ty.span();
+            if !friends.insert(friend) {
+                return span.fail("duplicated text friend");
             }
         }
 
@@ -140,7 +121,23 @@ impl TextCfg {
     }
 
     fn has_validation(&self) -> bool {
-        return !self.callbacks.is_empty() || !self.values.is_empty();
+        return !self.callbacks.is_empty() || self.values.is_some();
+    }
+}
+
+impl Debug for TextCfg {
+    fn fmt(
+        &self,
+        formatter: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return formatter
+            .debug_struct("TextCfg")
+            .field("konst", &self.konst)
+            .field("callbacks", &self.callbacks.len())
+            .field("values", &self.values.as_ref().map(Vec::len))
+            .field("friends", &self.friends)
+            .field("flags", &self.flags)
+            .finish();
     }
 }
 
@@ -154,10 +151,10 @@ impl Parse for TextCfg {
                 "valid" => {
                     this.callbacks = ValidationCfg::parse_callbacks(rest)?
                 }
-                "in" => this.values = Self::parse_values(rest)?,
+                "in" => this.values = Some(Self::parse_values(rest)?),
                 "friends" => this.parse_friends(rest)?,
-                "with" => this.parse_display(rest, true)?,
-                "without" => this.parse_display(rest, false)?,
+                "with" => this.flags.parse_from(rest, true)?,
+                "without" => this.flags.parse_from(rest, false)?,
                 _ => return Ok(false),
             }
 
@@ -168,36 +165,43 @@ impl Parse for TextCfg {
     }
 }
 
-struct TextMaker {
+pub(crate) struct TextMaker {
     item: ItemStruct,
     ty: Ident,
     cfg: TextCfg,
 }
 
 impl TextMaker {
-    fn new(
+    pub(crate) fn new(
         item: ItemStruct,
         cfg: TextCfg,
     ) -> syn::Result<Self> {
-        if !item.generics.params.is_empty()
-            || item.generics.where_clause.is_some()
-        {
-            return item.fail("text does not support generic structs");
+        if !item.generics.params.is_empty() {
+            return item
+                .generics
+                .params
+                .fail("text does not support generic structs");
+        }
+        if let Some(clause) = &item.generics.where_clause {
+            return clause.fail("text does not support generic structs");
         }
         if !runner::find_repr_transparent(&item.attrs)? {
-            return item.fail("expecting #[repr(transparent, ...)]");
+            return item.ident.fail("expecting #[repr(transparent, ...)]");
         }
+        let shape_error =
+            "expected a tuple struct with exactly one String field";
+        let field = match &item.fields {
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                &fields.unnamed[0]
+            }
+            Fields::Unit => return item.ident.fail(shape_error),
+            fields => return fields.fail(shape_error),
+        };
         if !matches!(
-            &item.fields,
-            Fields::Unnamed(fields)
-                if fields.unnamed.len() == 1
-                    && matches!(
-                        &fields.unnamed[0].ty,
-                        Type::Path(path) if path.qself.is_none() && path.path.is_ident("String")
-                    )
+            &field.ty,
+            Type::Path(path) if path.qself.is_none() && path.path.is_ident("String")
         ) {
-            return item
-                .fail("expected a tuple struct with exactly one String field");
+            return field.ty.fail(shape_error);
         }
 
         return Ok(Self {
@@ -214,12 +218,13 @@ impl TextMaker {
             .iter()
             .map(|callback| quote! { #callback(value.as_str()) })
             .reduce(|left, right| quote! { (#left) && (#right) });
-        let values = self
-            .cfg
-            .values
-            .iter()
-            .map(|value| quote! { value.as_str() == #value })
-            .reduce(|left, right| quote! { (#left) || (#right) });
+        let values = self.cfg.values.as_ref().map(|values| {
+            return values
+                .iter()
+                .map(|value| quote! { value.as_str() == #value })
+                .reduce(|left, right| quote! { (#left) || (#right) })
+                .unwrap_or_else(|| quote! { false });
+        });
 
         return match (callbacks, values) {
             (Some(callbacks), Some(values)) => {
@@ -237,6 +242,7 @@ impl TextMaker {
         let bonst = runner::bonst(self.cfg.konst);
         let destruct = runner::destruct(self.cfg.konst);
         let make = format_ident!("Make");
+        let trusted = format_ident!("Trust");
         let seal = format_ident!("TextMake");
         let friends = self
             .cfg
@@ -252,7 +258,7 @@ impl TextMaker {
                     false => quote! { #friend_ty },
                 };
                 let conv = friend.conv.as_ref().expect("text Make conversion missing");
-                let make = if friend.trusted {
+                let make = if friend.capabilities.contains(&trusted) {
                     quote! {
                         return #ty(#conv(self));
                     }
@@ -311,8 +317,10 @@ impl TextMaker {
         let item = &self.item;
         let ty = &self.ty;
         let konst = runner::konst(self.cfg.konst);
+        let bonst = runner::bonst(self.cfg.konst);
+        let destruct = runner::destruct(self.cfg.konst);
         let validation = self.validation_condition();
-        let display = self.cfg.display.then(|| {
+        let display = self.cfg.flags.display.then(|| {
             quote! {
                 impl ::core::fmt::Display for #ty {
                     #[inline(always)]
@@ -376,11 +384,77 @@ impl TextMaker {
                     function: F,
                 ) -> ::core::result::Result<Self, ()>
                 where
-                    F: ::core::ops::FnOnce(&mut ::alloc::string::String),
+                    F: #bonst ::core::ops::FnOnce(&mut ::alloc::string::String) #destruct,
                 {
                     let mut value = self.0;
                     function(&mut value);
                     return Self::try_make(value);
+                }
+
+                #[inline(always)]
+                pub #konst fn try_push(self, character: char) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.push(character));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_push_str(self, text: &str) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.push_str(text));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_insert(self, index: usize, character: char) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.insert(index, character));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_insert_str(self, index: usize, text: &str) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.insert_str(index, text));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_replace_range<R>(self, range: R, text: &str) -> ::core::result::Result<Self, ()>
+                where
+                    R: #bonst ::core::ops::RangeBounds<usize> #destruct,
+                {
+                    return self.map(|value| value.replace_range(range, text));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_truncate(self, length: usize) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.truncate(length));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_clear(self) -> ::core::result::Result<Self, ()> {
+                    return self.map(|value| value.clear());
+                }
+
+                #[inline(always)]
+                pub #konst fn try_retain<F>(self, mut predicate: F) -> ::core::result::Result<Self, ()>
+                where
+                    F: #bonst ::core::ops::FnMut(char) -> bool #destruct,
+                {
+                    return self.map(|value| value.retain(|character| predicate(character)));
+                }
+
+                #[inline(always)]
+                pub #konst fn try_remove(self, index: usize) -> ::core::result::Result<(Self, char), ()> {
+                    let mut value = self.0;
+                    let removed = value.remove(index);
+                    return match Self::try_make(value) {
+                        ::core::result::Result::Ok(value) => ::core::result::Result::Ok((value, removed)),
+                        ::core::result::Result::Err(()) => ::core::result::Result::Err(()),
+                    };
+                }
+
+                #[inline(always)]
+                pub #konst fn try_pop(self) -> ::core::result::Result<(Self, ::core::option::Option<char>), ()> {
+                    let mut value = self.0;
+                    let popped = value.pop();
+                    return match Self::try_make(value) {
+                        ::core::result::Result::Ok(value) => ::core::result::Result::Ok((value, popped)),
+                        ::core::result::Result::Err(()) => ::core::result::Result::Err(()),
+                    };
                 }
 
                 #[must_use]
@@ -423,6 +497,18 @@ impl TextMaker {
                 #[inline(always)]
                 pub #konst fn capacity(&self) -> usize {
                     return self.0.capacity();
+                }
+            }
+
+            #konst impl ::core::ops::Add<&str> for #ty {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, text: &str) -> Self {
+                    return match self.try_push_str(text) {
+                        ::core::result::Result::Ok(value) => value,
+                        ::core::result::Result::Err(()) => ::core::panic!("invalid value from text addition"),
+                    };
                 }
             }
 

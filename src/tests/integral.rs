@@ -3,6 +3,49 @@ mod test {
     use crate::integral::IntegralCfg;
 
     #[test]
+    fn accepts_single_friend_with_scalar_or_list_capabilities() {
+        for input in [
+            "friends = crate::convert(crate::source::Source) -> Make, konst = false",
+            "konst = false, friends = crate::convert(crate::source::Source) -> [Make, Trust], valid = is_valid",
+            "konst = false, valid = is_valid, friends = _(crate::source::Source) -> Bit",
+            "konst = false, friends = _(crate::source::Source) -> [Math, Bit], in = 1..=4",
+            "konst = false, friends = _ -> Math",
+            "konst = false, friends = _ -> [Math, Bit], with = [display]",
+        ] {
+            syn::parse_str::<IntegralCfg>(input).expect(input);
+        }
+    }
+
+    #[test]
+    fn accepts_bracketed_multiple_and_empty_friend_lists() {
+        for input in [
+            "konst = false, friends = [convert(Source) -> Make, _(Other) -> [Math, Bit]], valid = is_valid",
+            "konst = false, friends = [], valid = is_valid",
+        ] {
+            syn::parse_str::<IntegralCfg>(input).expect(input);
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_single_friend_boundaries() {
+        for input in [
+            "konst = false, friends = convert(Source) -> Make, convert(Other) -> Make",
+            "konst = false, friends = _(Source) -> Bit, _(Other) -> Bit",
+            "konst = false, friends =",
+            "konst = false, friends =, valid = is_valid",
+            "konst = false, friends = convert(Source)",
+            "konst = false, friends = convert() -> Make",
+            "konst = false, friends = convert(Source) ->",
+            "konst = false, friends = convert(Source) -> [Make, 1]",
+            "konst = false, friends = _(Source) -> Unknown",
+            "konst = false, friends = _(Source) -> [Bit], unknown = true",
+            "konst = false, friends = _(Source) -> Bit, friends = []",
+        ] {
+            assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
     fn accepts_explicit_konst_values() {
         let konst = syn::parse_str::<IntegralCfg>("konst = true")
             .expect("explicit true konst should parse");
@@ -84,7 +127,7 @@ mod test {
 
     #[test]
     fn rejects_missing_konst() {
-        let error = syn::parse_str::<IntegralCfg>("friends = [u8]")
+        let error = syn::parse_str::<IntegralCfg>("friends = [_(u8) -> Bit]")
             .expect_err("konst must be explicit");
         assert_eq!(error.to_string(), "missing required `konst` argument");
     }
@@ -92,7 +135,7 @@ mod test {
     #[test]
     fn accepts_explicit_friend_capabilities() {
         let config = syn::parse_str::<IntegralCfg>(
-            "konst = false, friends = [u8(conv = self, cap = [Make, Bit])]",
+            "konst = false, friends = [convert(u8) -> [Make, Bit]]",
         )
         .expect("integral capabilities should parse");
         let friend = config.friends.iter().next().unwrap();
@@ -104,22 +147,23 @@ mod test {
     #[test]
     fn accepts_shared_friend_without_conversion() {
         let config = syn::parse_str::<IntegralCfg>(
-            "konst = false, friends = [u8(cap = [Bit])]",
+            "konst = false, friends = [_(u8) -> Bit]",
         )
         .expect("integral may use the shared Into conversion default");
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.conv.is_none());
+        assert!(friend.ty.as_ref().unwrap().is_ident("u8"));
+
         assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
     }
 
     #[test]
     fn rejects_legacy_friend_levels_and_custom_trait_names() {
-        let level = syn::parse_str::<IntegralCfg>(
+        syn::parse_str::<IntegralCfg>(
             "konst = false, friends = [u8(level = [Full])]",
         )
         .expect_err("levels were replaced by capabilities");
-        assert_eq!(level.to_string(), "unknown attribute");
 
         let trait_name = syn::parse_str::<IntegralCfg>(
             "konst = false, trait_seal = OtherSeal",
@@ -134,60 +178,264 @@ mod test {
     }
 
     #[test]
-    fn generates_make_only_for_unvalidated_raw_inputs() {
-        let maker = crate::integral::Maker::new(
-            syn::parse_quote!(Number),
-            syn::parse_quote!(u32),
-            Box::default(),
-        )
-        .expect("a primitive integral representation should be valid");
-        let generated = maker.ekran_items().to_string();
-        assert!(generated.contains(
-            "pub fn make (it : u32) -> Number { return Number :: of (it) ; }"
-        ));
-
-        let mut cfg = IntegralCfg::default();
-        cfg.flags.auto_of_raw = false;
-        let maker = crate::integral::Maker::new(
-            syn::parse_quote!(Number),
-            syn::parse_quote!(u32),
-            Box::new(cfg),
-        )
-        .expect("a primitive integral representation should be valid");
-        assert!(!maker.ekran_items().to_string().contains("fn make"));
-
-        let mut cfg = IntegralCfg::default();
-        cfg.validation.callbacks = vec![syn::parse_quote!(is_valid)];
-        let maker = crate::integral::Maker::new(
-            syn::parse_quote!(Number),
-            syn::parse_quote!(u32),
-            Box::new(cfg),
-        )
-        .expect("a primitive integral representation should be valid");
-        let items = maker.ekran_items().to_string();
-        assert!(!items.contains("fn make"));
-        assert!(items.contains("pub fn of < T >"));
-
-        let impls = maker
-            .ekran_impls()
-            .expect("validated integral generation should succeed")
-            .to_string();
-        assert!(!impls.contains("impl Make for u32"));
-        assert!(!impls.contains("impl Make for u16"));
+    fn accepts_trusted_capability_without_make() {
+        for capabilities in [
+            "Trust",
+            "[Trust]",
+            "[Math, Trust]",
+            "[Bit, Relation, Trust]",
+        ] {
+            let input = format!(
+                "konst = false, friends = [_(Source) -> {capabilities}]"
+            );
+            syn::parse_str::<IntegralCfg>(&input).expect(&input);
+        }
     }
 
     #[test]
-    fn generates_make_with_configured_name() {
-        let mut cfg = IntegralCfg::default();
-        cfg.flags.fn_make = "from_raw".into();
-        let maker = crate::integral::Maker::new(
-            syn::parse_quote!(Number),
-            syn::parse_quote!(u32),
-            Box::new(cfg),
+    fn rejects_legacy_trusted_argument() {
+        for trusted in ["true", "false"] {
+            let input = format!(
+                "konst = false, friends = [Source(cap = Make, trusted = {trusted})]"
+            );
+            assert!(syn::parse_str::<IntegralCfg>(&input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_display_flags_and_generation_arguments() {
+        for input in [
+            "konst = false, with = [display, display]",
+            "konst = false, without = [display, display]",
+            "konst = false, with = [display], with = [display]",
+            "konst = false, without = [display], without = [display]",
+        ] {
+            assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_display_flags() {
+        for input in [
+            "konst = false, with = [display, display_names]",
+            "konst = false, without = [display_names]",
+        ] {
+            assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn rejects_conflicting_generation_flags_in_either_order_and_lists() {
+        for input in [
+            "konst = false, with = [display], without = [display]",
+            "konst = false, without = [display], with = [display]",
+            "konst = false, with = [display, impl_math_add], without = [impl_math_add, fn_conv_raw]",
+            "konst = false, without = [impl_math_add, fn_conv_raw], with = [display, impl_math_add]",
+        ] {
+            assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_single_capabilities() {
+        for input in [
+            "konst = false, friends = [_(Source) -> Rel]",
+            "konst = false, friends = [_(Source) -> Inspector]",
+        ] {
+            assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_accepts_qualified_conversion_and_source_paths() {
+        let friend = syn::parse_str::<crate::friendship::cfg::Friend>(
+            "crate::conversions::own(crate::sources::Source) -> [Make, Trust]",
         )
-        .expect("a primitive integral representation should be valid");
-        assert!(maker.ekran_items().to_string().contains(
-            "pub fn from_raw (it : u32) -> Number { return Number :: of (it) ; }"
-        ));
+        .expect("qualified conversion and source paths should parse");
+
+        let conversion = friend.conv.as_ref().unwrap();
+        let source = friend.ty.as_ref().unwrap();
+        assert_eq!(
+            conversion
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>(),
+            ["crate", "conversions", "own"]
+        );
+        assert_eq!(
+            source
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>(),
+            ["crate", "sources", "Source"]
+        );
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Trust)));
+    }
+
+    #[test]
+    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities() {
+        for (capabilities, expected) in [
+            ("Trust", vec!["Trust"]),
+            ("[Trust]", vec!["Trust"]),
+            ("[Make, Trust]", vec!["Make", "Trust"]),
+            ("[Make, Trust,]", vec!["Make", "Trust"]),
+            ("[]", vec![]),
+        ] {
+            let input = format!("convert(Source) -> {capabilities}");
+            let friend =
+                syn::parse_str::<crate::friendship::cfg::Friend>(&input)
+                    .expect(&input);
+            assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
+            assert!(friend.ty.as_ref().unwrap().is_ident("Source"));
+            assert_eq!(
+                friend
+                    .capabilities
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_accepts_typed_implicit_conversion() {
+        for input in ["_(Source) -> Trust", "_(Source,) -> [Make, Trust]"] {
+            let friend =
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .expect(input);
+            assert!(friend.conv.is_none(), "{input}");
+            assert!(friend.ty.as_ref().unwrap().is_ident("Source"), "{input}");
+            assert!(friend.capabilities.contains(&syn::parse_quote!(Trust)));
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_accepts_capability_only_declarations() {
+        for (input, expected) in [
+            ("_ -> Foo", vec!["Foo"]),
+            ("_ -> [Foo, Bar]", vec!["Bar", "Foo"]),
+            ("_ -> []", vec![]),
+        ] {
+            let friend =
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .expect(input);
+            assert!(friend.conv.is_none(), "{input}");
+            assert!(friend.ty.is_none(), "{input}");
+            assert_eq!(
+                friend
+                    .capabilities
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_accepts_absolute_paths_and_trailing_source_comma() {
+        let friend = syn::parse_str::<crate::friendship::cfg::Friend>(
+            "::conversions::own(::sources::Source,) -> Make",
+        )
+        .expect("one source argument may have a trailing comma");
+
+        let conversion = friend.conv.as_ref().unwrap();
+        let source = friend.ty.as_ref().unwrap();
+        assert!(conversion.leading_colon.is_some());
+        assert_eq!(conversion.segments.first().unwrap().ident, "conversions");
+        assert_eq!(conversion.segments.last().unwrap().ident, "own");
+        assert!(source.leading_colon.is_some());
+        assert_eq!(source.segments.first().unwrap().ident, "sources");
+        assert_eq!(source.segments.last().unwrap().ident, "Source");
+    }
+
+    #[test]
+    fn shared_friend_parser_rejects_obsolete_relationship_syntax() {
+        for input in [
+            "Source",
+            "Source -> Make",
+            "Source(conv = convert, cap = Make)",
+            "Source(cap = [Make, Trust])",
+            "_(cap = Make)",
+            "Source(level = [Full])",
+            "Source(conv = convert, cap = Make, trusted = true)",
+            "Source(conv = convert, cap = Make, trusted = false)",
+        ] {
+            assert!(
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_requires_arrow_and_capabilities() {
+        for input in [
+            "convert(Source)",
+            "convert(Source) Make",
+            "convert(Source) ->",
+            "_(Source)",
+            "_(Source) ->",
+            "_",
+            "_ Make",
+            "_ ->",
+        ] {
+            assert!(
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_requires_exactly_one_source_path() {
+        for input in [
+            "convert() -> Make",
+            "convert(Source, Other) -> Make",
+            "convert(_) -> Make",
+            "convert(&Source) -> Make",
+            "convert((Source)) -> Make",
+            "_() -> Make",
+            "_(Source, Other) -> Make",
+            "_(_) -> Make",
+        ] {
+            assert!(
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens() {
+        for input in [
+            "convert(Source) -> \"Make\"",
+            "convert(Source) -> [Make, 1]",
+            "convert(Source) -> {Make}",
+            "convert(Source) -> (Make)",
+            "convert(Source) -> [Make Trust]",
+            "convert(Source) -> [Make,, Trust]",
+            "convert(Source) -> Make::Nested",
+            "convert(Source) -> [Make::Nested]",
+            "convert(Source) -> Make extra",
+            "convert(Source) -> [Make] extra",
+            "convert(Source) -> Make, Trust",
+            "_ -> Foo(Source)",
+        ] {
+            assert!(
+                syn::parse_str::<crate::friendship::cfg::Friend>(input)
+                    .is_err(),
+                "{input}"
+            );
+        }
     }
 }

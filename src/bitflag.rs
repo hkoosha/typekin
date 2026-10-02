@@ -1,20 +1,3 @@
-use crate::{
-    friendship::{
-        Protocol,
-        ProtocolFriend,
-        cfg::Friend,
-    },
-    integral::{
-        self,
-        IntegralCfg,
-    },
-    runner::{
-        self,
-        MkErr,
-        mk_flags,
-    },
-    value_type::N,
-};
 use std::collections::BTreeSet;
 
 use proc_macro2::{
@@ -34,6 +17,24 @@ use syn::{
     },
     parse_quote,
     spanned::Spanned,
+};
+
+use crate::{
+    friendship::{
+        Protocol,
+        ProtocolFriend,
+        cfg::Friend,
+    },
+    integral::{
+        self,
+        IntegralCfg,
+    },
+    runner::{
+        self,
+        MkErr,
+        mk_flags,
+    },
+    value_type::N,
 };
 
 pub(crate) fn bitflag(
@@ -67,6 +68,7 @@ mk_flags! {
     pub(crate) struct BitFlags {
         pub make_value: bool,
         pub impl_value: bool,
+        pub display: bool = false,
 
         pub value_name: String,
         pub suffix: String = "Value",
@@ -115,14 +117,8 @@ impl BitflagCfg {
             "with" => self.bit.parse_from(rest, true)?,
             "without" => self.bit.parse_from(rest, false)?,
             "friends" => {
-                let friends =
-                    runner::list::<Friend>(rest)?.collect::<BTreeSet<_>>();
-                if friends.iter().any(|friend| friend.trusted) {
-                    return Err(syn::Error::new(
-                        rest.span(),
-                        "trusted friends are only supported by text Make",
-                    ));
-                }
+                let friends = runner::one_or_list::<Friend>(rest)?
+                    .collect::<BTreeSet<_>>();
                 self.friends = friends;
             }
             "suffix" => {
@@ -225,7 +221,7 @@ impl Maker {
         );
     }
 
-    pub(crate) fn ekran(self) -> syn::Result<TokenStream> {
+    pub(crate) fn ekran(mut self) -> syn::Result<TokenStream> {
         let vl = self.ekran_vl();
         let vl_impl = self.ekran_vl_impl();
         let vl_impls = self.ekran_vl_impls();
@@ -234,6 +230,7 @@ impl Maker {
         let ty_impls = self.ekran_ty_impls();
         let iter_impl = self.ekran_iter();
         let friends = self.ekran_friendship()?;
+        self.cfg.int.flags.display |= self.cfg.bit.display;
 
         let impl_int = match self.cfg.bit.impl_value {
             false => TokenStream::new(),
@@ -401,7 +398,7 @@ impl Maker {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn contains_unknown_bits(self) -> bool {
-                    return self.unknown_bits() != Self::empty().into();
+                    return self.unknown_bits() != Self::empty().bits();
                 }
 
                 #[must_use]
@@ -878,6 +875,20 @@ impl Maker {
 
         let mut stream = TokenStream::new();
 
+        if self.cfg.bit.display {
+            stream.extend(quote! {
+                impl ::core::fmt::Display for #ty {
+                    #[inline(always)]
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        return ::core::fmt::Display::fmt(self.name(), f);
+                    }
+                }
+            });
+        }
+
         if self.cfg.int.flags.impl_math_shr {
             stream.extend(quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
@@ -1169,10 +1180,12 @@ impl Maker {
                 format_ident!("FlagMath"),
                 format_ident!("FlagBit"),
                 format_ident!("FlagCmp"),
+                format_ident!("FlagTrust"),
             ],
             friends,
             emit_seal: true,
             target_conversion: None,
+            construction: None,
             konst: self.cfg.int.konst,
         }));
     }

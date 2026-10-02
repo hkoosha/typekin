@@ -55,11 +55,11 @@ mod sample {
     #[typekin::friendship(
         relation = (u64, u8),
         friends = [
-            _(conv = x, cap = [Haha]),
-            Self(conv = Document::convert_me, cap = []),
-            Reader(conv = Reader::parts, cap = [Make, Inspector]),
-            ExecXX(conv = crate::folks::executor_parts, cap = []),
-            Writer(conv = writer_parts, cap = [Make, Inspector]),
+            _ -> Haha,
+            Document::convert_me(Self) -> [],
+            Reader::parts(Reader) -> [Make, Inspector],
+            crate::folks::executor_parts(ExecXX) -> [],
+            writer_parts(Writer) -> [Make, Inspector],
         ],
         mod = things,
     )]
