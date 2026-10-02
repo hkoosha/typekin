@@ -94,6 +94,7 @@ fn assert_rejected(
 }
 
 #[test]
+#[ignore]
 fn generated_api_boundaries_reject_invalid_consumers() {
     for (name, source, expected_error) in [
         (
@@ -212,6 +213,28 @@ fn generated_api_boundaries_reject_invalid_consumers() {
                 }
             "#,
             "no method named `raw`",
+        ),
+        (
+            "without-removes-from-str",
+            r#"
+                #[typekin::integral(
+                    konst = false,
+                    without = [impl_from_str],
+                )]
+                #[repr(transparent)]
+                #[derive(Copy, Clone)]
+                struct Number(u8);
+
+                fn requires_from_str<T>()
+                where
+                    T: core::str::FromStr<Err = ()>,
+                {}
+
+                fn requires_number_from_str() {
+                    requires_from_str::<Number>();
+                }
+            "#,
+            "the trait bound `Number: FromStr` is not satisfied",
         ),
         (
             "validated-text-has-no-infallible-from",

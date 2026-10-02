@@ -106,6 +106,7 @@ mk_flags! {
         pub impl_fmt_hex_lower: bool,
         pub impl_fmt_hex_upper: bool,
         pub impl_fmt_octal: bool,
+        pub impl_from_str: bool,
         pub impl_into: bool,
         pub impl_ord: bool,
         pub impl_partial_eq: bool,
@@ -292,8 +293,10 @@ impl IntegralCfg {
         input: ParseStream,
         konst: bool,
     ) -> syn::Result<Self> {
-        let mut this = Self::default();
-        this.konst = konst;
+        let mut this = Self {
+            konst,
+            ..Default::default()
+        };
 
         runner::parse_inner_attributes(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {
@@ -578,7 +581,7 @@ impl Maker {
 
         if !validated && has_make {
             N::items()
-                .into_iter()
+                .iter()
                 .filter(|it| {
                     **it != self.repr && it.can_safe_cast_to(self.repr)
                 })
@@ -678,12 +681,11 @@ impl Maker {
                 .collect(),
         };
         let mut checked = self.fp_unchecked.clone();
-        if checked.leading_colon.is_none() {
-            if let Some(segment) = checked.segments.first_mut() {
-                if segment.ident == "Self" {
-                    segment.ident = target.clone();
-                }
-            }
+        if checked.leading_colon.is_none()
+            && let Some(segment) = checked.segments.first_mut()
+            && segment.ident == "Self"
+        {
+            segment.ident = target.clone();
         }
 
         return crate::friendship::emit_protocol(Protocol {
@@ -1109,6 +1111,8 @@ impl Maker {
     pub(crate) fn ekran_impls(&self) -> syn::Result<TokenStream> {
         let ty = &self.ty;
         let el = &self.el;
+        let value = quote! { value };
+        let validation = self.validation_condition(&value);
 
         let trait_friend_bit = &self.trait_friend_bit;
         let trait_friend_math = &self.trait_friend_math;
@@ -1139,6 +1143,34 @@ impl Maker {
                 }
             };
             stream.extend(it);
+        }
+
+        if self.cfg.flags.impl_from_str {
+            stream.extend(quote! {
+                impl ::core::str::FromStr for #ty {
+                    type Err = ();
+
+                    #[inline(always)]
+                    fn from_str(
+                        source: &str,
+                    ) -> ::core::result::Result<Self, Self::Err> {
+                        let value =
+                            match <#el as ::core::str::FromStr>::from_str(source) {
+                                ::core::result::Result::Ok(value) => value,
+                                ::core::result::Result::Err(_) => {
+                                    return ::core::result::Result::Err(());
+                                }
+                            };
+
+                        return if #validation {
+                            ::core::result::Result::Ok(Self(value))
+                        }
+                        else {
+                            ::core::result::Result::Err(())
+                        };
+                    }
+                }
+            });
         }
 
         if self.cfg.flags.impl_into {

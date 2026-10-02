@@ -220,6 +220,10 @@ fn main() {
 }
 ```
 
+Integral types also implement `FromStr`. Parsing first uses the wrapped
+primitive's parser and then applies the same validation; either failure returns
+`Err(())`. Use `without = [impl_from_str]` to omit this implementation.
+
 `in` accepts either one Rust range expression or a `+`-separated union:
 `in = 1..=1023 + 49_152..=65_535`. Commas are reserved for ANDed lists, so
 they are not valid range separators. `in` and `valid` conditions are ANDed;

@@ -338,14 +338,13 @@ pub(crate) mod cfg {
                     "friends" => {
                         for mut friend in runner::one_or_list::<Friend>(stream)?
                         {
-                            if friend.ty.is_none() {
-                                if let Some(existing) =
+                            if friend.ty.is_none()
+                                && let Some(existing) =
                                     this.friends.take(&friend)
-                                {
-                                    friend
-                                        .capabilities
-                                        .extend(existing.capabilities);
-                                }
+                            {
+                                friend
+                                    .capabilities
+                                    .extend(existing.capabilities);
                             }
                             if !this.friends.insert(friend) {
                                 return stream.span().fail("duplicated friend");

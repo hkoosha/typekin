@@ -229,6 +229,16 @@ fn rejects_conflicting_generation_flags_in_either_order_and_lists() {
 }
 
 #[test]
+fn accepts_from_str_generation_flag() {
+    for input in [
+        "konst = false, with = [impl_from_str]",
+        "konst = false, without = [impl_from_str]",
+    ] {
+        syn::parse_str::<IntegralCfg>(input).expect(input);
+    }
+}
+
+#[test]
 fn rejects_unsupported_single_capabilities() {
     for input in [
         "konst = false, friends = [_(Source) -> Rel]",

@@ -95,6 +95,10 @@ pub fn build_even(value: u8) -> Result<Even, u8> {
     return Even::try_make(value);
 }
 
+pub fn parse_even(value: &str) -> Result<Even, ()> {
+    return value.parse();
+}
+
 pub fn build_permission(value: u8) -> PermissionValue {
     return Permission::from_bits_truncate(value);
 }

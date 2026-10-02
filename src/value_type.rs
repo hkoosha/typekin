@@ -1,6 +1,7 @@
 #![allow(unused, dead_code)]
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[allow(clippy::upper_case_acronyms)]
 pub(crate) enum N {
     USIZ,
     ISIZ,
@@ -31,7 +32,7 @@ const N_ITEMS: [N; 12] = [
     N::I128,
 ];
 
-const N_RUST_NAMES: [&'static str; 12] = [
+const N_RUST_NAMES: [&str; 12] = [
     "usize", "isize", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32",
     "i64", "i128",
 ];

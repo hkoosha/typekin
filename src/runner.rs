@@ -405,7 +405,7 @@ pub(crate) fn one_or_list<T: Parse>(
 }
 
 pub(crate) fn find_repr_n(
-    attrs: &Vec<Attribute>,
+    attrs: &[Attribute],
     span: impl Spanned,
 ) -> syn::Result<N> {
     let mut repr = None::<N>;
@@ -431,20 +431,18 @@ pub(crate) fn find_repr_n(
 }
 
 fn for_repr(
-    attrs: &Vec<Attribute>,
+    attrs: &[Attribute],
     mut exe: impl FnMut(ParseNestedMeta) -> syn::Result<()>,
 ) -> syn::Result<()> {
     attrs
-        .into_iter()
+        .iter()
         .filter(|it| it.path().is_ident("repr"))
-        .try_for_each(|it| it.parse_nested_meta(|meta| exe(meta)))?;
+        .try_for_each(|it| it.parse_nested_meta(&mut exe))?;
 
     return Ok(());
 }
 
-pub(crate) fn find_repr_transparent(
-    attrs: &Vec<Attribute>
-) -> syn::Result<bool> {
+pub(crate) fn find_repr_transparent(attrs: &[Attribute]) -> syn::Result<bool> {
     let mut found = false;
 
     for_repr(attrs, |it| {
@@ -494,7 +492,7 @@ pub(crate) fn parse_inner_attributes(
 
         stream.parse::<Token![=]>()?;
 
-        match on_attr(&attr, &stream) {
+        match on_attr(&attr, stream) {
             Ok(true) => {}
             Ok(false) => return stream.span().fail("unknown attribute"),
             Err(err) => {
@@ -522,12 +520,12 @@ pub(crate) fn snake_case_of(it: &str) -> String {
             if i > 0 && !chars[i - 1].is_uppercase() {
                 result.push('_');
             }
-            else if i > 0 && chars[i - 1].is_uppercase() {
-                if let Some(&next) = chars.get(i + 1) {
-                    if next.is_lowercase() {
-                        result.push('_');
-                    }
-                }
+            else if i > 0
+                && chars[i - 1].is_uppercase()
+                && let Some(&next) = chars.get(i + 1)
+                && next.is_lowercase()
+            {
+                result.push('_');
             }
 
             result.push(c.to_lowercase().next().unwrap());
@@ -553,7 +551,7 @@ pub(crate) fn catching(
     }));
 
     let result = std::panic::catch_unwind(|| {
-        f().unwrap_or_else(|it| it.to_compile_error().into())
+        f().unwrap_or_else(|it| it.to_compile_error())
     });
     let _ = std::panic::take_hook();
 
@@ -567,7 +565,7 @@ pub(crate) fn catching(
             return it;
         })
         .map_err(|it| quote::quote! { compile_error!(#it); })
-        .unwrap_or_else(|it| it.into())
+        .unwrap_or_else(|it| it)
         .into();
 }
 

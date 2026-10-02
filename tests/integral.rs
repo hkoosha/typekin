@@ -110,6 +110,15 @@ mod tests {
     #[derive(Copy, Clone)]
     struct SplitEven(i8);
 
+    #[typekin::integral(
+        konst = true,
+        valid = is_even,
+        without = [fn_make_unchecked_try],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct ParsedEven(u8);
+
     const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
         Ok(number) => number,
         Err(_) => panic!("valid ranged number rejected"),
@@ -256,6 +265,34 @@ mod tests {
     fn try_make_accepts_unvalidated_value() {
         let it = My32::make(23);
         assert_eq!(My32::try_make(23), Ok(it));
+    }
+
+    #[test]
+    fn parses_integrals_from_plain_numbers() {
+        assert_eq!("23".parse::<My32>().map(My32::raw), Ok(23));
+        assert_eq!("-23".parse::<MyI32>().map(MyI32::raw), Ok(-23));
+        assert_eq!("24".parse::<Even>().map(Even::raw), Ok(24));
+        assert_eq!("-6".parse::<SplitEven>().map(SplitEven::raw), Ok(-6));
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values() {
+        for source in ["", "-1", "4_294_967_296", "not a number"] {
+            assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+        }
+
+        for source in ["23", "50", "102"] {
+            assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+        }
+        for source in ["-5", "0"] {
+            assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+        }
+    }
+
+    #[test]
+    fn parsing_remains_checked_when_try_make_is_disabled() {
+        assert_eq!("24".parse::<ParsedEven>().map(ParsedEven::raw), Ok(24));
+        assert_eq!("23".parse::<ParsedEven>(), Err(()));
     }
 
     #[test]

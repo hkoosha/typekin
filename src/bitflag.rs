@@ -137,7 +137,7 @@ impl BitflagCfg {
 
                 let cfg = IntegralCfg::parse_with_konst(&content, true)?;
                 let konst = self.int.konst;
-                self.int = Box::new(cfg);
+                *self.int = cfg;
                 self.int.konst = konst;
 
                 return Ok(true);
