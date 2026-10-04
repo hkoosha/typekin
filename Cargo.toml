@@ -17,8 +17,8 @@ needless_return = "allow"
 proc-macro = true
 
 [dependencies]
-quote       = "1"
-syn         = { version = "3", features = ["full", "visit-mut"] }
+quote = "1"
+syn = { version = "3", features = ["full", "visit-mut"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 
 [[example]]
@@ -70,5 +70,14 @@ path = "examples/my_friendship.rs"
 name = "my_friendship_exp"
 path = "examples/my_friendship_exp.rs"
 [[example]]
+name = "my_friendships"
+path = "examples/my_friendships.rs"
+[[example]]
+name = "my_friendships_exp"
+path = "examples/my_friendships_exp.rs"
+[[example]]
 name = "my_text"
 path = "examples/my_text.rs"
+[[example]]
+name = "my_text_exp"
+path = "examples/my_text_exp.rs"

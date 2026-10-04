@@ -106,7 +106,7 @@ mod sample {
             where
                 T: Make + Seal,
             {
-                return Self::of_parts(Seal::convert(it));
+                return Self::of_parts(<T as Seal>::convert(it));
             }
         }
         impl Seal for (u64, u8) {

@@ -1,4 +1,4 @@
-use crate::bitflag::BitflagCfg;
+use crate::bitflag::Cfg;
 
 #[test]
 fn accepts_single_root_and_nested_friends() {
@@ -11,7 +11,7 @@ fn accepts_single_root_and_nested_friends() {
         "konst = false, integral = [valid = is_valid, friends = _(crate::source::Source) -> [Math, Bit]], suffix = \"Value\"",
         "konst = false, integral = [friends = _ -> Math]",
     ] {
-        syn::parse_str::<BitflagCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -21,7 +21,7 @@ fn accepts_bracketed_multiple_and_empty_friends_at_each_scope() {
         "konst = false, friends = [convert(Source) -> Bit, _(Other) -> [Bit, Trust]], integral = [friends = [convert(Source) -> Make, _(Other) -> Math]]",
         "konst = false, friends = [], integral = [friends = [], valid = is_valid]",
     ] {
-        syn::parse_str::<BitflagCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -43,24 +43,24 @@ fn rejects_invalid_single_friends_at_root_and_nested_scope() {
         "friends = _(Source) -> Bit, friends = []",
     ] {
         let input = format!("konst = false, {attributes}");
-        assert!(syn::parse_str::<BitflagCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }
 
 #[test]
 fn accepts_top_level_konst_values() {
-    let config = syn::parse_str::<BitflagCfg>("konst = true")
+    let config = syn::parse_str::<Cfg>("konst = true")
         .expect("top-level true konst should parse");
     assert!(config.int.konst);
 
-    let config = syn::parse_str::<BitflagCfg>("konst = false")
+    let config = syn::parse_str::<Cfg>("konst = false")
         .expect("top-level false konst should parse");
     assert!(!config.int.konst);
 }
 
 #[test]
 fn rejects_missing_konst() {
-    let error = match syn::parse_str::<BitflagCfg>("friends = [_(u8) -> Bit]") {
+    let error = match syn::parse_str::<Cfg>("friends = [_(u8) -> Bit]") {
         Ok(_) => panic!("konst must be explicit"),
         Err(error) => error,
     };
@@ -69,7 +69,7 @@ fn rejects_missing_konst() {
 
 #[test]
 fn rejects_friendship_trait_configuration() {
-    let error = match syn::parse_str::<BitflagCfg>(
+    let error = match syn::parse_str::<Cfg>(
         "with = [trait_seal], integral = [konst = false]",
     ) {
         Ok(_) => panic!("bitflag must delegate friendship trait names"),
@@ -81,14 +81,14 @@ fn rejects_friendship_trait_configuration() {
 
 #[test]
 fn accepts_friend_capabilities_and_rejects_levels() {
-    let config = syn::parse_str::<BitflagCfg>(
+    let config = syn::parse_str::<Cfg>(
         "konst = false, friends = [_(u8) -> [Bit]], integral = []",
     )
     .expect("bitflag capabilities should parse");
     let friend = config.friends.iter().next().unwrap();
     assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
 
-    assert!(syn::parse_str::<BitflagCfg>(
+    assert!(syn::parse_str::<Cfg>(
             "konst = false, friends = [u8(conv = self, level = [Bit])], integral = []",
         )
         .is_err());
@@ -105,13 +105,13 @@ fn accepts_trusted_root_and_nested_capability_without_make() {
         "integral = [friends = [_(Source) -> [Math, Bit, Trust]]]",
     ] {
         let input = format!("konst = false, {attributes}");
-        syn::parse_str::<BitflagCfg>(&input).expect(&input);
+        syn::parse_str::<Cfg>(&input).expect(&input);
     }
 }
 
 #[test]
 fn accepts_root_marker_capabilities_without_narrowing_integral_vocabulary() {
-    let config = syn::parse_str::<BitflagCfg>(
+    let config = syn::parse_str::<Cfg>(
             "konst = false, friends = [convert(Source) -> Inspector], integral = [friends = [_(Other) -> Math]]",
         )
         .expect("bitflag root capabilities may name arbitrary markers");
@@ -132,7 +132,7 @@ fn rejects_legacy_trusted_argument_at_root_and_nested_scope() {
             ),
         ] {
             let input = format!("konst = false, {attributes}");
-            assert!(syn::parse_str::<BitflagCfg>(&input).is_err(), "{input}");
+            assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
         }
     }
 }
@@ -149,7 +149,7 @@ fn rejects_duplicate_root_and_nested_display_flags() {
         "konst = false, integral = [with = [display], with = [display]]",
         "konst = false, integral = [without = [display], without = [display]]",
     ] {
-        assert!(syn::parse_str::<BitflagCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -161,7 +161,7 @@ fn rejects_unsupported_root_and_nested_display_flags() {
         "konst = false, integral = [with = [display, display_names]]",
         "konst = false, integral = [without = [display_names]]",
     ] {
-        assert!(syn::parse_str::<BitflagCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -178,7 +178,7 @@ fn rejects_conflicting_flags_within_root_or_nested_scope() {
         "integral = [without = [impl_math_add, fn_conv_raw], with = [display, impl_math_add]]",
     ] {
         let input = format!("konst = false, {attributes}");
-        assert!(syn::parse_str::<BitflagCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }
 
@@ -191,7 +191,7 @@ fn opposite_display_settings_in_distinct_scopes_are_legal() {
         "integral = [with = [display]], without = [display]",
     ] {
         let input = format!("konst = false, {attributes}");
-        syn::parse_str::<BitflagCfg>(&input).expect(&input);
+        syn::parse_str::<Cfg>(&input).expect(&input);
     }
 }
 
@@ -202,7 +202,7 @@ fn rejects_unsupported_nested_single_capabilities() {
         "integral = [friends = [_(Source) -> Inspector]]",
     ] {
         let input = format!("konst = false, {attributes}");
-        assert!(syn::parse_str::<BitflagCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }
 
@@ -214,6 +214,6 @@ fn rejects_invalid_root_capability_value_syntax() {
         "friends = [_(Source) -> {Bit}]",
     ] {
         let input = format!("konst = false, {attributes}");
-        assert!(syn::parse_str::<BitflagCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }

@@ -14,20 +14,10 @@ use quote::{
     format_ident,
     quote,
 };
-use syn::{
-    Expr,
-    ExprRange,
-    Fields,
-    Path,
-    Token,
-    Type,
-    bracketed,
-    parse::{
-        Parse,
-        ParseStream,
-    },
-    parse_quote,
-};
+use syn::{bracketed, parse::{
+    Parse,
+    ParseStream,
+}, parse_quote, Expr, ExprRange, Fields, ItemStruct, Path, Token, Type};
 
 use crate::{
     friendship::{
@@ -46,12 +36,9 @@ use crate::{
 };
 
 pub(crate) fn integral(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
+    attr: Box<Cfg>,
+    item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    let cfg = Box::new(syn::parse_macro_input!(attr as IntegralCfg));
-    let item = syn::parse_macro_input!(item as syn::ItemStruct);
-
     return runner::catching(move || {
         let ty = item.ident.clone();
 
@@ -73,7 +60,7 @@ pub(crate) fn integral(
             return item.fail("expecting #[repr(transparent, ...)]");
         }
 
-        let it = Maker::new(ty, el, cfg)?.ekran()?;
+        let it = Maker::new(ty, el, attr)?.ekran()?;
 
         let stream = quote::quote! {
             #[allow(dead_code)]
@@ -264,7 +251,7 @@ impl ValidationCfg {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct IntegralCfg {
+pub(crate) struct Cfg {
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) konst: bool,
     pub(crate) get_raw: Option<Path>,
@@ -272,7 +259,7 @@ pub(crate) struct IntegralCfg {
     pub(crate) friends: BTreeSet<Friend>,
 }
 
-impl IntegralCfg {
+impl Cfg {
     pub(crate) fn add_friend(
         &mut self,
         ty: &Ident,
@@ -340,7 +327,7 @@ impl IntegralCfg {
     }
 }
 
-impl Debug for IntegralCfg {
+impl Debug for Cfg {
     fn fmt(
         &self,
         f: &mut Formatter<'_>,
@@ -360,7 +347,7 @@ impl Debug for IntegralCfg {
     }
 }
 
-impl Parse for IntegralCfg {
+impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
         let mut has_konst = false;
@@ -425,14 +412,14 @@ pub(crate) struct Maker {
     trait_friend_bit: Ident,
     trait_friend_rel: Ident,
 
-    cfg: Box<IntegralCfg>,
+    cfg: Box<Cfg>,
 }
 
 impl Maker {
     pub(crate) fn new(
         ty: Ident,
         el: Ident,
-        cfg: Box<IntegralCfg>,
+        cfg: Box<Cfg>,
     ) -> syn::Result<Self> {
         let cfg = Self::preprocess_cfg(cfg);
 
@@ -466,7 +453,7 @@ impl Maker {
         return Ok(this);
     }
 
-    fn preprocess_cfg(mut cfg: Box<IntegralCfg>) -> Box<IntegralCfg> {
+    fn preprocess_cfg(mut cfg: Box<Cfg>) -> Box<Cfg> {
         if cfg.flags.auto_of_raw && cfg.has_validation() {
             cfg.flags.auto_of_raw = false;
         }

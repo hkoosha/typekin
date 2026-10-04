@@ -47,7 +47,7 @@ bypass is `unsafe` `new_unchecked`, behind a crate feature and a per-type flag.
 | no_std               | generated code uses `::core` and `::alloc`                                                                                                                                                                                                         | `std` default; `default-features = false` exists. `regex` is a separate feature and needs the `regex` crate in the consuming crate                                |
 | Other                | bitflag enum plus `{Enum}Value`, unknown bits, flag iteration                                                                                                                                                                                      | serde, schemars, arbitrary, valuable, guarded derives, `#[repr]` passthrough                                                                                      |
 
-Standalone `friendship` does not generate a validator. `of_relation` always
+Standalone `friendship` does not generate a validator. `relationship` always
 runs, `Trust` included.
 
 ## What nutype cannot already do

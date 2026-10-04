@@ -71,8 +71,13 @@ plain-expand: (z-expand 'my_plain')
 [group("example")]
 plain: plain-expand fmt
 
+[group("example")]
+text-expand: (z-expand 'my_text')
+[group("example")]
+text: text-expand fmt
+
 [parallel]
-all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand
+all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand text-expand
   just fmt
 
 # ==============================================================================

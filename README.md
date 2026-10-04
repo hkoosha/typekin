@@ -193,7 +193,7 @@ as the right-hand operand.
 
 Standalone `friendship` also accepts `Trust`, independently of `Make` (including
 `Make` granted by `constructor`). It has no generated validator to bypass: the
-configured `of_relation` function always runs, including its own checks.
+configured `relationship` function always runs, including its own checks.
 Relations and friend inputs can both be non-`Copy`.
 
 ### Validation

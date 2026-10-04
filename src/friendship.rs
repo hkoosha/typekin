@@ -7,31 +7,29 @@ use quote::{
     quote,
 };
 use syn::{
+    Item,
     Type,
-    spanned::Spanned,
 };
 
 use crate::{
-    friendship::cfg::{
-        Cfg,
-        Friend,
-        MakeCfg,
-    },
+    constructor,
     runner,
     runner::MkErr,
 };
 
+pub(crate) use self::cfg::Cfg;
+use self::cfg::Friend;
+
 pub(crate) mod cfg {
-    use crate::runner;
-    use crate::runner::MkErr;
+    use std::{
+        cmp::Ordering,
+        collections::BTreeSet,
+    };
+
     use proc_macro2::Ident;
     use quote::{
         ToTokens,
         format_ident,
-    };
-    use std::{
-        cmp::Ordering,
-        collections::BTreeSet,
     };
     use syn::{
         Path,
@@ -43,6 +41,12 @@ pub(crate) mod cfg {
             ParseStream,
         },
         punctuated::Punctuated,
+    };
+
+    use crate::{
+        constructor,
+        runner,
+        runner::MkErr,
     };
 
     #[derive(Clone)]
@@ -160,131 +164,13 @@ pub(crate) mod cfg {
 
     // =========================================================================
 
-    #[derive(Clone)]
-    pub(crate) struct MakeCfg {
-        pub(super) of_relation: Path,
-        pub(super) of_friend: Ident,
-        pub(super) friends: BTreeSet<MakeFriend>,
-    }
-
-    #[derive(Clone)]
-    pub(crate) struct MakeFriend {
-        identity: String,
-        pub(super) ty: Path,
-    }
-
-    impl MakeFriend {
-        pub(super) fn resolved_identity(
-            &self,
-            target: &Ident,
-        ) -> String {
-            return match self.ty.is_ident("Self") {
-                true => target.to_string(),
-                false => self.identity.clone(),
-            };
-        }
-    }
-
-    impl Parse for MakeFriend {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let ty: Path = input.parse()?;
-
-            return Ok(Self {
-                identity: ty.to_token_stream().to_string(),
-                ty,
-            });
-        }
-    }
-
-    impl Eq for MakeFriend {}
-
-    impl PartialOrd for MakeFriend {
-        fn partial_cmp(
-            &self,
-            other: &Self,
-        ) -> Option<Ordering> {
-            return Some(self.cmp(other));
-        }
-    }
-
-    impl PartialEq for MakeFriend {
-        fn eq(
-            &self,
-            other: &Self,
-        ) -> bool {
-            return self.identity == other.identity;
-        }
-    }
-
-    impl Ord for MakeFriend {
-        fn cmp(
-            &self,
-            other: &Self,
-        ) -> Ordering {
-            return self.identity.cmp(&other.identity);
-        }
-    }
-
-    impl Parse for MakeCfg {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let mut of_relation = None;
-            let mut of_friend = format_ident!("of");
-            let mut friends = BTreeSet::new();
-
-            runner::parse_inner_attributes(input, |attr, stream| {
-                match attr {
-                    "of_relation" => of_relation = Some(stream.parse()?),
-                    "of_friend" => of_friend = stream.parse()?,
-                    "friends" => {
-                        friends = runner::one_or_list(stream)?.collect()
-                    }
-                    _ => return Ok(false),
-                };
-
-                return Ok(true);
-            })?;
-
-            let of_relation = of_relation.ok_or_else(|| {
-                syn::Error::new(
-                    input.span(),
-                    "missing required `of_relation` argument",
-                )
-            })?;
-
-            return Ok(Self {
-                of_relation,
-                of_friend,
-                friends,
-            });
-        }
-    }
-
-    // =========================================================================
-
-    #[derive(Clone)]
-    pub(crate) struct ModuleCfg {
-        pub(crate) visibility: syn::Visibility,
-        pub(crate) name: Ident,
-    }
-
-    impl Parse for ModuleCfg {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let visibility = input.parse()?;
-            let name = input.parse()?;
-
-            return Ok(Self { visibility, name });
-        }
-    }
-
-    // =========================================================================
-
     #[derive(Default)]
     pub(crate) struct Cfg {
         pub(super) relation: Option<Type>,
         pub(super) value: Option<Type>,
         pub(super) seal: Option<Ident>,
         pub(super) conversion: Option<Ident>,
-        pub(super) module: Option<ModuleCfg>,
+        pub(super) module: Option<constructor::ModuleCfg>,
         pub(super) friends: BTreeSet<Friend>,
     }
 
@@ -478,60 +364,63 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     };
 }
 
-pub(crate) fn friendship(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
+pub(crate) fn ekran(
+    attr: Cfg,
+    mut item: Item,
 ) -> proc_macro::TokenStream {
-    let friendship = syn::parse_macro_input!(attr as Cfg);
-    let mut item = syn::parse_macro_input!(item as syn::Item);
-
     return runner::catching(move || {
-        let (_, _, attr) = runner::get_concrete_type(&mut item)?;
-
-        let constructor = runner::pop_attr(attr, "constructor")?
-            .map(|attr| attr.parse_args::<MakeCfg>())
+        let (_, _, attrs) = runner::get_concrete_type(&mut item)?;
+        let constructor = runner::pop_attr(attrs, "constructor")?
+            .map(|attr| {
+                attr.parse_args_with(constructor::Cfg::parse_without_scope)
+            })
             .transpose()?;
 
-        return expand(item, friendship, constructor);
+        return expand(item, attr, constructor, None);
     });
 }
 
-pub(crate) fn constructor(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    let constructor = syn::parse_macro_input!(attr as MakeCfg);
-    let mut item = syn::parse_macro_input!(item as syn::Item);
+pub(crate) fn expand_with_constructor(
+    item: Item,
+    friendship: Cfg,
+    constructor: constructor::Cfg,
+) -> syn::Result<TokenStream> {
+    if friendship.module.is_some()
+        && !matches!(constructor.scope, constructor::Scope::Self_,)
+    {
+        return item.fail(
+            "`constructor mod` conflicts with the friendship protocol module",
+        );
+    }
 
-    return runner::catching(move || {
-        let (_, _, attr) = runner::get_concrete_type(&mut item)?;
-
-        let friendship =
-            match runner::pop_attr(attr, "friendship")? {
-                None => return item.span().fail(
-                    "missing required `#[typekin::friendship(...)]` attribute",
-                ),
-                Some(it) => it,
-            }
-            .parse_args::<Cfg>()?;
-
-        return expand(item, friendship, Some(constructor));
-    });
+    return expand(
+        item,
+        friendship,
+        Some(constructor),
+        Some(constructor::Scope::Self_),
+    );
 }
 
 fn expand(
-    mut item: syn::Item,
+    mut item: Item,
     mut friendship: Cfg,
-    mut constructor: Option<MakeCfg>,
+    constructor: Option<constructor::Cfg>,
+    scope: Option<constructor::Scope>,
 ) -> syn::Result<TokenStream> {
     let (target, visibility, _) = runner::get_concrete_type(&mut item)?;
+    let target = target.clone();
+    let visibility = visibility.clone();
+    let module = friendship
+        .module
+        .clone()
+        .or_else(|| scope.as_ref().and_then(|scope| scope.module().cloned()));
 
     if friendship.relation.is_none() {
         return item.fail("missing required argument: `relation`");
     }
 
-    if let Some(constructor) = constructor.as_mut() {
-        grant_constructor(&mut friendship, constructor, target)?;
+    if let Some(constructor) = &constructor {
+        grant_constructor(&mut friendship, constructor, &target)?;
     }
 
     if friendship.capabilities(constructor.is_some()).is_empty() {
@@ -546,8 +435,68 @@ fn expand(
         }
     }
 
-    let protocol =
-        emit_friendship(&friendship, target, visibility, constructor.as_ref());
+    let constructor = constructor.map(|constructor| {
+        let relation = friendship
+            .relation
+            .as_ref()
+            .expect("friendship relation is empty");
+        let in_module = module.is_some();
+        let relation = match relation {
+            Type::Path(path) if path.qself.is_none() => {
+                parent_path(&path.path, in_module)
+            }
+            _ => quote! { #relation },
+        };
+        let value = friendship
+            .value
+            .as_ref()
+            .map_or_else(|| relation.clone(), |value| quote! { #value });
+        let target = match in_module {
+            true => quote! { super::#target },
+            false => quote! { #target },
+        };
+        let seal = friendship
+            .seal
+            .clone()
+            .unwrap_or_else(|| format_ident!("Seal"));
+        let conversion = friendship.conversion.clone().unwrap_or_else(|| {
+            let name =
+                friendship.relation.as_ref().and_then(
+                    |relation| match relation {
+                        Type::Path(path) if path.qself.is_none() => path
+                            .path
+                            .segments
+                            .last()
+                            .map(|segment| segment.ident.to_string()),
+                        _ => None,
+                    },
+                );
+
+            name.map(|name| {
+                format_ident!("to_{}", runner::snake_case_of(&name))
+            })
+            .unwrap_or_else(|| format_ident!("convert"))
+        });
+
+        return constructor::expand(
+            &constructor.in_self_scope(),
+            constructor::Protocol {
+                target,
+                visibility: visibility.clone(),
+                relation,
+                value,
+                seal,
+                conversion,
+            },
+        );
+    });
+    let protocol = emit_friendship(
+        &friendship,
+        &target,
+        constructor.is_some(),
+        constructor,
+        module.as_ref(),
+    );
 
     return Ok(quote! {
         #item
@@ -558,33 +507,32 @@ fn expand(
 
 fn grant_constructor(
     cfg: &mut Cfg,
-    constructor: &MakeCfg,
+    constructor: &constructor::Cfg,
     target: &Ident,
 ) -> syn::Result<()> {
-    for it in &constructor.friends {
-        let identity = it.resolved_identity(target);
-        let friend = match cfg
+    for requested in &constructor.friends {
+        let identity = match requested.ty.is_ident("Self") {
+            true => target.to_string(),
+            false => requested.identity.clone(),
+        };
+        let friend = cfg
             .friends
             .iter()
             .find(|friend| {
-                if friend.identity == identity {
-                    return true;
-                }
-
-                return it.ty.is_ident("Self")
-                    && friend
-                        .ty
-                        .as_ref()
-                        .is_some_and(|ty| ty.is_ident("Self"));
+                return friend.identity == identity
+                    || (requested.ty.is_ident("Self")
+                        && friend
+                            .ty
+                            .as_ref()
+                            .is_some_and(|ty| ty.is_ident("Self")));
             })
             .cloned()
-        {
-            None => {
-                return target
-                    .fail("constructor friend is not declared by friendship");
-            }
-            Some(friend) => friend,
-        };
+            .ok_or_else(|| {
+                syn::Error::new(
+                    target.span(),
+                    "constructor friend is not declared by friendship",
+                )
+            })?;
 
         let mut friend = cfg
             .friends
@@ -600,15 +548,15 @@ fn grant_constructor(
 pub(crate) fn emit_friendship(
     cfg: &Cfg,
     target: &Ident,
-    visibility: &syn::Visibility,
-    constructor: Option<&MakeCfg>,
+    include_constructor: bool,
+    constructor: Option<TokenStream>,
+    module: Option<&constructor::ModuleCfg>,
 ) -> TokenStream {
     let relation = cfg.relation.as_ref().expect("friendship relation is empty");
 
-    let in_module = cfg.module.is_some();
-    let constructor_capability = format_ident!("Make");
+    let in_module = module.is_some();
     let seal = cfg.seal.clone().unwrap_or_else(|| format_ident!("Seal"));
-    let capabilities = cfg.capabilities(constructor.is_some());
+    let capabilities = cfg.capabilities(include_constructor);
 
     let relation_value = match relation {
         Type::Path(path) if path.qself.is_none() => {
@@ -616,10 +564,9 @@ pub(crate) fn emit_friendship(
         }
         _ => quote! { #relation },
     };
-
     let value = match &cfg.value {
         Some(value) => quote! { #value },
-        None => relation_value.clone(),
+        None => relation_value,
     };
 
     let target = match in_module {
@@ -661,35 +608,6 @@ pub(crate) fn emit_friendship(
                 )
             });
 
-    // =========================================================================
-
-    let constructor = constructor.map(|constructor| {
-        let of_relation = &constructor.of_relation;
-        let of_friend = &constructor.of_friend;
-
-        return quote! {
-            impl #target {
-                #[allow(private_bounds)]
-                #[inline(always)]
-                #visibility fn #of_friend<T>(it: T) -> Self
-                where
-                    T: #constructor_capability + #seal,
-                {
-                    return #of_relation(#seal::#conversion(it));
-                }
-            }
-
-            impl #seal for #relation_value {
-                #[inline(always)]
-                fn #conversion(self) -> #value {
-                    return self;
-                }
-            }
-
-            impl #constructor_capability for #relation_value {}
-        };
-    });
-
     let items = quote! {
         #trait_visibility trait #seal {
             fn #conversion(self) -> #value;
@@ -705,7 +623,7 @@ pub(crate) fn emit_friendship(
         #constructor
     };
 
-    return match &cfg.module {
+    return match module {
         None => quote! {
             const _: () = {
                 #items

@@ -10,6 +10,7 @@ use quote::{
 };
 use syn::{
     Fields,
+    ItemEnum,
     bracketed,
     parse::{
         Parse,
@@ -25,10 +26,7 @@ use crate::{
         ProtocolFriend,
         cfg::Friend,
     },
-    integral::{
-        self,
-        IntegralCfg,
-    },
+    integral,
     runner::{
         self,
         MkErr,
@@ -37,13 +35,10 @@ use crate::{
     value_type::N,
 };
 
-pub(crate) fn bitflag(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
+pub(crate) fn ekran(
+    attr: Box<Cfg>,
+    item: ItemEnum,
 ) -> proc_macro::TokenStream {
-    let cfg = Box::new(syn::parse_macro_input!(attr as BitflagCfg));
-    let item = syn::parse_macro_input!(item as syn::ItemEnum);
-
     return runner::catching(move || {
         let repr = runner::find_repr_n(&item.attrs, item.span())?;
         let ty = item.ident.clone();
@@ -57,7 +52,7 @@ pub(crate) fn bitflag(
             return bad.fail("only unit variants are supported");
         }
 
-        let stream = Maker::new(ty, repr, cfg, items).ekran()?;
+        let stream = Maker::new(ty, repr, attr, items).ekran()?;
         return Ok(quote! { #item #stream });
     });
 }
@@ -76,13 +71,13 @@ mk_flags! {
 }
 
 #[derive(Default)]
-pub(crate) struct BitflagCfg {
+pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
-    pub(crate) int: Box<IntegralCfg>,
+    pub(crate) int: Box<integral::Cfg>,
 }
 
-impl Parse for BitflagCfg {
+impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
         let mut has_konst = false;
@@ -102,7 +97,7 @@ impl Parse for BitflagCfg {
     }
 }
 
-impl BitflagCfg {
+impl Cfg {
     fn parse_attr(
         &mut self,
         has_konst: &mut bool,
@@ -135,7 +130,7 @@ impl BitflagCfg {
                 let content;
                 let _ = bracketed!(content in rest);
 
-                let cfg = IntegralCfg::parse_with_konst(&content, true)?;
+                let cfg = integral::Cfg::parse_with_konst(&content, true)?;
                 let konst = self.int.konst;
                 *self.int = cfg;
                 self.int.konst = konst;
@@ -158,7 +153,7 @@ pub(crate) struct Maker {
     el: Ident,
     ty: Ident,
     vl: Ident,
-    cfg: Box<BitflagCfg>,
+    cfg: Box<Cfg>,
     items: Vec<Ident>,
 }
 
@@ -166,7 +161,7 @@ impl Maker {
     pub(crate) fn new(
         ty: Ident,
         repr: N,
-        cfg: Box<BitflagCfg>,
+        cfg: Box<Cfg>,
         items: Vec<Ident>,
     ) -> Self {
         let mut this = Self {

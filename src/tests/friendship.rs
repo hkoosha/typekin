@@ -1,6 +1,6 @@
-use crate::friendship::cfg::{
-    Cfg,
-    MakeCfg,
+use crate::{
+    constructor::Cfg as MakeCfg,
+    friendship::cfg::Cfg,
 };
 
 #[test]
@@ -49,9 +49,9 @@ fn rejects_invalid_single_friend_boundaries() {
 #[test]
 fn accepts_single_constructor_type_with_neighboring_attributes() {
     for input in [
-        "friends = crate::source::Source, of_relation = Self::new",
-        "of_relation = Self::new, friends = crate::source::Source, of_friend = from_source",
-        "of_relation = crate::construct, of_friend = from_source, friends = Source",
+        "friends = crate::source::Source, of_relation = Self::new, mod = self",
+        "of_relation = Self::new, friends = crate::source::Source, of_friend = from_source, mod = _",
+        "of_relation = crate::construct, of_friend = from_source, friends = Source, mod = pub(crate) constructors",
     ] {
         syn::parse_str::<MakeCfg>(input).expect(input);
     }
@@ -60,17 +60,36 @@ fn accepts_single_constructor_type_with_neighboring_attributes() {
 #[test]
 fn accepts_bracketed_multiple_and_empty_constructor_types() {
     for input in [
-        "of_relation = Self::new, friends = [crate::source::Source, Other], of_friend = from_source",
-        "of_relation = Self::new, friends = [], of_friend = from_source",
+        "of_relation = Self::new, friends = [crate::source::Source, Other], of_friend = from_source, mod = self",
+        "of_relation = Self::new, friends = [], of_friend = from_source, mod = _",
     ] {
         syn::parse_str::<MakeCfg>(input).expect(input);
     }
 }
 
 #[test]
+fn friendship_controls_constructor_scope() {
+    assert!(
+        syn::parse::Parser::parse_str(
+            MakeCfg::parse_without_scope,
+            "of_relation = Self::new, friends = Source",
+        )
+        .is_ok()
+    );
+    assert!(
+        syn::parse::Parser::parse_str(
+            MakeCfg::parse_without_scope,
+            "of_relation = Self::new, friends = Source, mod = self",
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn rejects_non_type_or_unbracketed_multiple_constructor_selectors() {
     for input in [
         "of_relation = Self::new, friends = Source, Other",
+        "of_relation = Self::new, friends = Source",
         "of_relation = Self::new, friends =",
         "of_relation = Self::new, friends =, of_friend = from_source",
         "of_relation = Self::new, friends = 1",

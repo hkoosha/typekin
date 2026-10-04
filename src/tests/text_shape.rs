@@ -1,5 +1,5 @@
 use crate::text::{
-    TextCfg,
+    Cfg,
     TextMaker,
 };
 
@@ -8,7 +8,7 @@ fn reject_at(
     marker: &str,
 ) {
     let item = syn::parse_str(source).expect("valid Rust struct syntax");
-    let error = match TextMaker::new(item, TextCfg::default()) {
+    let error = match TextMaker::new(item, Cfg::default()) {
         Err(error) => error,
         Ok(_) => panic!("unsupported text shape accepted: {source}"),
     };

@@ -1,4 +1,4 @@
-use crate::text::TextCfg;
+use crate::text::Cfg;
 
 #[test]
 fn accepts_single_friend_without_consuming_neighboring_attributes() {
@@ -8,7 +8,7 @@ fn accepts_single_friend_without_consuming_neighboring_attributes() {
         "valid = is_slug, friends = _(crate::source::Source) -> Trust",
         "friends = _(Self) -> [Rel, Trust], with = [display]",
     ] {
-        syn::parse_str::<TextCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -18,7 +18,7 @@ fn accepts_bracketed_multiple_and_empty_friend_lists() {
         "friends = [convert(Source) -> [Make, Trust], _(Other) -> Trust], valid = is_slug",
         "friends = [], valid = is_slug",
     ] {
-        syn::parse_str::<TextCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -41,13 +41,13 @@ fn rejects_invalid_single_friend_boundaries_and_family_capabilities() {
         "friends = _(Source) -> [Trust], unknown = true",
         "friends = _(Source) -> Trust, friends = []",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
 #[test]
 fn accepts_callbacks_literals_and_trusted_make_friend() {
-    let cfg = syn::parse_str::<TextCfg>(
+    let cfg = syn::parse_str::<Cfg>(
             "konst = false, valid = [is_slug, is_published], in = [\"draft\", \"published\"], friends = [Source::into_string(Source) -> [Make, Trust]], with = [display]",
         )
         .expect("text configuration should parse");
@@ -60,7 +60,7 @@ fn accepts_callbacks_literals_and_trusted_make_friend() {
 
 #[test]
 fn accepts_single_callback() {
-    let cfg = syn::parse_str::<TextCfg>("valid = is_slug")
+    let cfg = syn::parse_str::<Cfg>("valid = is_slug")
         .expect("a single text callback should parse");
 
     assert_eq!(cfg.callbacks.len(), 1);
@@ -73,7 +73,7 @@ fn rejects_duplicate_literal_membership() {
         r#"in = ["é", "\u{e9}"]"#,
         r##"in = ["draft", r#"draft"#]"##,
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -87,7 +87,7 @@ fn rejects_non_literal_membership() {
         r#"in = [b"draft"]"#,
         r#"in = 1..=3 + 8..10"#,
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -98,7 +98,7 @@ fn rejects_non_path_validation_callbacks() {
         r#"valid = [is_slug, "is_not_reserved"]"#,
         "valid = |value| true",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -109,7 +109,7 @@ fn rejects_invalid_friend_configuration() {
         "friends = [_(Source) -> Make]",
         "friends = [_(Source) -> [Make, Trust]]",
     ] {
-        syn::parse_str::<TextCfg>(input)
+        syn::parse_str::<Cfg>(input)
             .expect_err("Make friends must provide an owning conversion");
     }
 }
@@ -129,7 +129,7 @@ fn rejects_unknown_text_attributes_flags_and_capabilities() {
         "friends = [convert(Source) -> Bit]",
         "friends = [convert(Source) -> Relation]",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -143,7 +143,7 @@ fn rejects_duplicate_configuration_keys() {
         r#"in = ["draft"], in = ["draft"]"#,
         "friends = [], friends = []",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -156,7 +156,7 @@ fn rejects_duplicate_generation_flags_and_friend_types() {
         "friends = [first(Source) -> [Make], \
             second(Source) -> [Make, Trust]]",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -169,7 +169,7 @@ fn accepts_trusted_capability_without_make_or_conversion() {
         "friends = [_(Source) -> Trust]",
         "friends = [_(Source) -> [Trust]]",
     ] {
-        syn::parse_str::<TextCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -180,7 +180,7 @@ fn accepts_self_relation_with_implicit_conversion() {
         "friends = [_(Self) -> [Rel]]",
         "friends = [_(Self,) -> [Rel, Trust]]",
     ] {
-        let config = syn::parse_str::<TextCfg>(input).expect(input);
+        let config = syn::parse_str::<Cfg>(input).expect(input);
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.ty.as_ref().unwrap().is_ident("Self"));
@@ -198,7 +198,7 @@ fn rejects_untyped_friend_declarations() {
         "friends = [_ -> [Rel, Trust]]",
         "friends = [_ -> []]",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -208,7 +208,7 @@ fn rejects_legacy_trusted_argument() {
         let input = format!(
             "friends = [Source(conv = convert, cap = Make, trusted = {trusted})]"
         );
-        assert!(syn::parse_str::<TextCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }
 
@@ -218,6 +218,6 @@ fn rejects_conflicting_generation_flags_in_either_order() {
         "with = [display], without = [display]",
         "without = [display], with = [display]",
     ] {
-        assert!(syn::parse_str::<TextCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }

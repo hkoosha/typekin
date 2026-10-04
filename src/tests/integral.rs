@@ -1,4 +1,4 @@
-use crate::integral::IntegralCfg;
+use crate::integral::Cfg;
 
 #[test]
 fn accepts_single_friend_with_scalar_or_list_capabilities() {
@@ -10,7 +10,7 @@ fn accepts_single_friend_with_scalar_or_list_capabilities() {
         "konst = false, friends = _ -> Math",
         "konst = false, friends = _ -> [Math, Bit], with = [display]",
     ] {
-        syn::parse_str::<IntegralCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -20,7 +20,7 @@ fn accepts_bracketed_multiple_and_empty_friend_lists() {
         "konst = false, friends = [convert(Source) -> Make, _(Other) -> [Math, Bit]], valid = is_valid",
         "konst = false, friends = [], valid = is_valid",
     ] {
-        syn::parse_str::<IntegralCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -39,24 +39,24 @@ fn rejects_invalid_single_friend_boundaries() {
         "konst = false, friends = _(Source) -> [Bit], unknown = true",
         "konst = false, friends = _(Source) -> Bit, friends = []",
     ] {
-        assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
 #[test]
 fn accepts_explicit_konst_values() {
-    let konst = syn::parse_str::<IntegralCfg>("konst = true")
+    let konst = syn::parse_str::<Cfg>("konst = true")
         .expect("explicit true konst should parse");
     assert!(konst.konst);
 
-    let konst = syn::parse_str::<IntegralCfg>("konst = false")
+    let konst = syn::parse_str::<Cfg>("konst = false")
         .expect("explicit false konst should parse");
     assert!(!konst.konst);
 }
 
 #[test]
 fn accepts_root_validation_attributes() {
-    let config = syn::parse_str::<IntegralCfg>(
+    let config = syn::parse_str::<Cfg>(
         "konst = false, valid = is_even, in = 1..=4",
     )
     .expect("root validation attributes should parse");
@@ -68,7 +68,7 @@ fn accepts_root_validation_attributes() {
 
 #[test]
 fn accepts_root_validation_lists() {
-    let config = syn::parse_str::<IntegralCfg>(
+    let config = syn::parse_str::<Cfg>(
             "konst = false, valid = [is_even, is_not_fifty], in = [1..=4 + 8..10 + ..=0]",
         )
         .expect("root validation lists should parse");
@@ -79,7 +79,7 @@ fn accepts_root_validation_lists() {
 
 #[test]
 fn accepts_unbracketed_root_in_union_with_valid_callback() {
-    let config = syn::parse_str::<IntegralCfg>(
+    let config = syn::parse_str::<Cfg>(
         "konst = false, in = 1..2 + 6..8, valid = foo",
     )
     .expect("an unbracketed root in union with a valid callback should parse");
@@ -90,7 +90,7 @@ fn accepts_unbracketed_root_in_union_with_valid_callback() {
 
 #[test]
 fn rejects_non_in_validation() {
-    let error = syn::parse_str::<IntegralCfg>("konst = false, in = [1]")
+    let error = syn::parse_str::<Cfg>("konst = false, in = [1]")
         .expect_err("in validation needs range expressions");
 
     assert_eq!(error.to_string(), "invalid range definition");
@@ -98,37 +98,37 @@ fn rejects_non_in_validation() {
 
 #[test]
 fn rejects_comma_separated_ranges() {
-    syn::parse_str::<IntegralCfg>("konst = false, in = [1..2, 3..4]")
+    syn::parse_str::<Cfg>("konst = false, in = [1..2, 3..4]")
         .expect_err("multiple ranges use + separators");
 }
 
 #[test]
 fn rejects_legacy_validation_attributes() {
     let callback =
-        syn::parse_str::<IntegralCfg>("konst = false, callback = is_valid")
+        syn::parse_str::<Cfg>("konst = false, callback = is_valid")
             .expect_err("valid is the validation callback key");
     assert_eq!(callback.to_string(), "unknown attribute");
 
-    let range = syn::parse_str::<IntegralCfg>("konst = false, range = 1..2")
+    let range = syn::parse_str::<Cfg>("konst = false, range = 1..2")
         .expect_err("in is the range constraint key");
     assert_eq!(range.to_string(), "unknown attribute");
 
     let validator =
-        syn::parse_str::<IntegralCfg>("konst = false, validator = is_valid")
+        syn::parse_str::<Cfg>("konst = false, validator = is_valid")
             .expect_err("valid is the validation callback key");
     assert_eq!(validator.to_string(), "unknown attribute");
 }
 
 #[test]
 fn rejects_missing_konst() {
-    let error = syn::parse_str::<IntegralCfg>("friends = [_(u8) -> Bit]")
+    let error = syn::parse_str::<Cfg>("friends = [_(u8) -> Bit]")
         .expect_err("konst must be explicit");
     assert_eq!(error.to_string(), "missing required `konst` argument");
 }
 
 #[test]
 fn accepts_explicit_friend_capabilities() {
-    let config = syn::parse_str::<IntegralCfg>(
+    let config = syn::parse_str::<Cfg>(
         "konst = false, friends = [convert(u8) -> [Make, Bit]]",
     )
     .expect("integral capabilities should parse");
@@ -140,7 +140,7 @@ fn accepts_explicit_friend_capabilities() {
 
 #[test]
 fn accepts_shared_friend_without_conversion() {
-    let config = syn::parse_str::<IntegralCfg>(
+    let config = syn::parse_str::<Cfg>(
         "konst = false, friends = [_(u8) -> Bit]",
     )
     .expect("integral may use the shared Into conversion default");
@@ -154,18 +154,18 @@ fn accepts_shared_friend_without_conversion() {
 
 #[test]
 fn rejects_legacy_friend_levels_and_custom_trait_names() {
-    syn::parse_str::<IntegralCfg>(
+    syn::parse_str::<Cfg>(
         "konst = false, friends = [u8(level = [Full])]",
     )
     .expect_err("levels were replaced by capabilities");
 
     let trait_name =
-        syn::parse_str::<IntegralCfg>("konst = false, trait_seal = OtherSeal")
+        syn::parse_str::<Cfg>("konst = false, trait_seal = OtherSeal")
             .expect_err("integral seal name is fixed");
     assert_eq!(trait_name.to_string(), "unknown attribute");
 
     let of_name =
-        syn::parse_str::<IntegralCfg>("konst = false, fn_of = custom_of")
+        syn::parse_str::<Cfg>("konst = false, fn_of = custom_of")
             .expect_err("integral of name is fixed");
     assert_eq!(of_name.to_string(), "unknown attribute");
 }
@@ -180,7 +180,7 @@ fn accepts_trusted_capability_without_make() {
     ] {
         let input =
             format!("konst = false, friends = [_(Source) -> {capabilities}]");
-        syn::parse_str::<IntegralCfg>(&input).expect(&input);
+        syn::parse_str::<Cfg>(&input).expect(&input);
     }
 }
 
@@ -190,7 +190,7 @@ fn rejects_legacy_trusted_argument() {
         let input = format!(
             "konst = false, friends = [Source(cap = Make, trusted = {trusted})]"
         );
-        assert!(syn::parse_str::<IntegralCfg>(&input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }
 
@@ -202,7 +202,7 @@ fn rejects_duplicate_display_flags_and_generation_arguments() {
         "konst = false, with = [display], with = [display]",
         "konst = false, without = [display], without = [display]",
     ] {
-        assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -212,7 +212,7 @@ fn rejects_unsupported_display_flags() {
         "konst = false, with = [display, display_names]",
         "konst = false, without = [display_names]",
     ] {
-        assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -224,7 +224,7 @@ fn rejects_conflicting_generation_flags_in_either_order_and_lists() {
         "konst = false, with = [display, impl_math_add], without = [impl_math_add, fn_conv_raw]",
         "konst = false, without = [impl_math_add, fn_conv_raw], with = [display, impl_math_add]",
     ] {
-        assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 
@@ -234,7 +234,7 @@ fn accepts_from_str_generation_flag() {
         "konst = false, with = [impl_from_str]",
         "konst = false, without = [impl_from_str]",
     ] {
-        syn::parse_str::<IntegralCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -244,7 +244,7 @@ fn accepts_core_integral_generation_flag() {
         "konst = false, with = [impl_core_int]",
         "konst = false, without = [impl_core_int]",
     ] {
-        syn::parse_str::<IntegralCfg>(input).expect(input);
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 }
 
@@ -254,7 +254,7 @@ fn rejects_undocumented_with_aliases() {
         "konst = false, with_impl_core_int = [impl_core_int]",
         "konst = false, with_display = [display]",
     ] {
-        let error = syn::parse_str::<IntegralCfg>(input)
+        let error = syn::parse_str::<Cfg>(input)
             .expect_err("generation options use `with = [...]`");
         assert_eq!(error.to_string(), "unknown attribute");
     }
@@ -266,7 +266,7 @@ fn rejects_unsupported_single_capabilities() {
         "konst = false, friends = [_(Source) -> Rel]",
         "konst = false, friends = [_(Source) -> Inspector]",
     ] {
-        assert!(syn::parse_str::<IntegralCfg>(input).is_err(), "{input}");
+        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }
 

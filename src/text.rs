@@ -35,14 +35,11 @@ use crate::{
     },
 };
 
-pub(crate) fn text(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
+pub(crate) fn ekran(
+    attr: Cfg,
+    item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    let cfg = syn::parse_macro_input!(attr as TextCfg);
-    let item = syn::parse_macro_input!(item as ItemStruct);
-
-    return runner::catching(move || TextMaker::new(item, cfg)?.ekran());
+    return runner::catching(move || TextMaker::new(item, attr)?.ekran());
 }
 
 mk_flags! {
@@ -54,7 +51,7 @@ mk_flags! {
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct TextCfg {
+pub(crate) struct Cfg {
     pub(crate) konst: bool,
     pub(crate) callbacks: Vec<Path>,
     pub(crate) values: Option<Vec<LitStr>>,
@@ -62,7 +59,7 @@ pub(crate) struct TextCfg {
     pub(crate) flags: TextFlags,
 }
 
-impl TextCfg {
+impl Cfg {
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
         let values = runner::list::<LitStr>(input)?.collect::<Vec<_>>();
 
@@ -125,7 +122,7 @@ impl TextCfg {
     }
 }
 
-impl Debug for TextCfg {
+impl Debug for Cfg {
     fn fmt(
         &self,
         formatter: &mut Formatter<'_>,
@@ -141,7 +138,7 @@ impl Debug for TextCfg {
     }
 }
 
-impl Parse for TextCfg {
+impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
 
@@ -168,13 +165,13 @@ impl Parse for TextCfg {
 pub(crate) struct TextMaker {
     item: ItemStruct,
     ty: Ident,
-    cfg: TextCfg,
+    cfg: Cfg,
 }
 
 impl TextMaker {
     pub(crate) fn new(
         item: ItemStruct,
-        cfg: TextCfg,
+        cfg: Cfg,
     ) -> syn::Result<Self> {
         if !item.generics.params.is_empty() {
             return item

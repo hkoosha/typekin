@@ -26,6 +26,7 @@ struct DocumentProtocol;
 #[typekin::constructor(
     of_relation = Self::from_parts,
     of_friend = from_friend,
+    mod = self,
 )]
 #[typekin::friendship(
     relation = DirectParts,
@@ -150,6 +151,57 @@ fn friendship_consumes_its_friend() {
 #[test]
 fn constructor_dispatches_inner_friendship() {
     let _ = Direct::from_friend(DirectParts);
+}
+
+#[typekin::constructor(
+    of_relation = Self::from_parts,
+    friends = Self,
+    mod = pub(crate) scoped_document_protocol,
+)]
+#[typekin::friendship(
+    relation = ScopedDocumentParts,
+    friends = scoped_document_parts(Self) -> [],
+)]
+pub struct ScopedDocument;
+
+pub struct ScopedDocumentParts;
+
+impl ScopedDocument {
+    fn from_parts(_: ScopedDocumentParts) -> Self {
+        return Self;
+    }
+}
+
+fn scoped_document_parts(_: ScopedDocument) -> ScopedDocumentParts {
+    return ScopedDocumentParts;
+}
+
+#[test]
+fn constructor_module_contains_friendship_and_constructor_implementations() {
+    let _ = ScopedDocument::of(ScopedDocumentParts);
+}
+
+#[typekin::constructor(
+    of_relation = Self::from_parts,
+    mod = _,
+)]
+#[typekin::friendship(
+    relation = ConstDocumentParts,
+    friends = [],
+)]
+struct ConstDocument;
+
+struct ConstDocumentParts;
+
+impl ConstDocument {
+    fn from_parts(_: ConstDocumentParts) -> Self {
+        return Self;
+    }
+}
+
+#[test]
+fn constructor_const_scope_contains_its_implementations() {
+    let _ = ConstDocument::of(ConstDocumentParts);
 }
 
 #[typekin::friendship(
