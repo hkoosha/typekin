@@ -143,8 +143,8 @@ impl Debug for Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self {
-            std: false,
-            konst: true,
+            std: true,
+            konst: false,
             callbacks: vec![],
             values: None,
             friends: BTreeSet::new(),

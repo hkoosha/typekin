@@ -144,7 +144,7 @@ mod tests {
         return value == "safe" || value == MY_WORD;
     }
 
-    #[typekin::text(konst = false, valid = valid_owned_text)]
+    #[typekin::text(konst = false, std = false, valid = valid_owned_text)]
     #[repr(transparent)]
     struct OwnedText(String);
 
@@ -169,7 +169,7 @@ mod tests {
     }
 
     #[typekin::text(
-        konst = false,
+        konst = false, std = false,
         in = [],
         friends = [
             empty_set_text(EmptySetSource) -> Make,
@@ -179,7 +179,7 @@ mod tests {
     #[repr(transparent)]
     struct EmptySetText(String);
 
-    #[typekin::text(konst = false, in = [], valid = valid_owned_text)]
+    #[typekin::text(konst = false, std = false, in = [], valid = valid_owned_text)]
     #[repr(transparent)]
     struct CallbackEmptySetText(String);
 

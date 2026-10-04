@@ -9,10 +9,28 @@ newtypes over `alloc::string::String`, and runtime-erased transparent layouts.
 
 The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
 tight control over construction of values. Friend conversions consume their
-input; non-`Copy` friends are moved into the conversion.
+input; non-`Copy` friends are moved into the conversion. Once a validated value
+enters the validated graph, it stays validated while it moves between different
+types and can be relied upon.
 
 You can find a set of working examples in the crate repository at
 [typekin/examples](./examples) directory.
+
+## Attribute Macro Inventory and Item Requirements
+
+The public attribute macros are:
+
+- `#[typekin::integral]`
+- `#[typekin::bitflag]`
+- `#[typekin::text]`
+- `#[typekin::friends]`
+
+`integral` requires a `#[repr(transparent)]` one-field tuple struct whose field
+is a primitive integer. `text` requires a nongeneric, `#[repr(transparent)]`
+one-field tuple struct whose field is an unqualified `String`. `bitflag`
+requires a unit enum with an integral `repr`. `friends` accepts concrete,
+nongeneric structs, enums, or unions.
+
 
 ## Example 0 - Numbers
 
@@ -79,6 +97,42 @@ fn main() {
 }
 ```
 
+## Example 2 - Friendship
+
+`friends` declares a conversion protocol. The conversion consumes its source,
+and `Target::of` passes the resulting relation to `Target::of_parts`:
+
+```rust
+
+#[typekin::friends(
+    // The two types talk to each other over `u8`-typed values.
+    relation = u8,
+    // `Source` is a friend of target`, it can participate in `Make` operations
+    // That is, its value can be used to construct new Target instances.
+    // The conversion happens by the function/method Source::into_relation
+    friends = Source::into_relation(Source) -> Make,
+)]
+struct Target(u8);
+
+impl Target {
+    #[inline(always)]
+    fn of_parts(relation: u8) -> Self { Self(relation) }
+}
+
+struct Source(u8);
+impl Source {
+    #[inline(always)]
+    fn into_relation(self) -> u8 { self.0 }
+}
+
+fn main() {
+    // The generated `of` method accepts instances of `Source` and knows how to
+    // extract the relation value and construct a Target using the defined
+    // `of_parts`
+    assert_eq!(Target::of(Source(7)).0, 7);
+}
+```
+
 ## The Catch
 
 Mathematical and bitwise operations can produce results rejected by a configured
@@ -100,6 +154,7 @@ For instance, a callback can reject any `u32` less than 3:
 struct Foo(u32);
 
 impl Foo {
+    #[inline(always)]
     const fn is_gte_3(value: u32) -> bool { value >= 3 }
 }
 
@@ -112,16 +167,12 @@ fn main() {
 }
 ```
 
-________________________________________________________________________________
-
-AI Disclaimer: The code is handwritten, but the rest of this README is AI
-generated.
-
 ## Constness Status
 
 `integral` and `bitflag` require explicit `konst = true|false`. Set `true` for
 nightly-only const generation or `false` for ordinary stable implementations.
-Text currently defaults to non-const generation when `konst` is omitted.
+Text defaults to `konst = true`; set `konst = false` for ordinary stable
+implementations.
 
 ### Friendship is consuming
 
@@ -163,10 +214,12 @@ converted value is already valid. `Trust` alone does not grant `Make`.
 struct Verified(u32);
 
 impl Verified {
+    #[inline(always)]
     fn try_make(raw: u32) -> Option<Self> {
         (1..=100).contains(&raw).then_some(Self(raw))
     }
 
+    #[inline(always)]
     fn into_raw(self) -> u32 { self.0 }
 }
 
@@ -226,16 +279,19 @@ Integral types also implement `FromStr`. Parsing first uses the wrapped
 primitive's parser and then applies the same validation; either failure returns
 `Err(())`. Use `without = [impl_from_str]` to omit this implementation.
 
-`in` accepts either one Rust range expression or a `+`-separated union:
-`in = 1..=1023 + 49_152..=65_535`. Commas are reserved for ANDed lists, so
-they are not valid range separators. `in` and `valid` conditions are ANDed;
-generated construction and enabled mathematical or bitwise operations reject
-values that fail them.
+An unvalidated integral has raw `make`. Configuring `in` or `valid` suppresses
+that constructor and exposes `try_make(raw) -> Result<Self, Raw>` instead.
+
+`in` accepts one range or a bracketed, comma-separated list:
+`in = [2..=4, 8..10]`. Bounds must be integer constants (including primitive
+`MIN`/`MAX` constants), not arbitrary expressions. `in` and `valid` conditions
+are ANDed; generated construction and enabled mathematical or bitwise
+operations reject values that fail them.
 
 ```rust
 #[typekin::integral(
   konst = false,
-  in = 1..=1023 + 49_152..=65_535,
+  in = [1..=1023, 49_152..=65_535],
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -249,63 +305,50 @@ fn main() {
 
 ## `#[typekin::text]`
 
-`text` creates a transparent, validated `String` newtype. Text needs the
-allocator crate in scope, even in a `std` crate:
+`text` creates a transparent, validated `String` newtype. By default
+(`std = true`), generated paths use `::alloc::{string::String, vec::Vec}`.
+Set `std = false` to use the corresponding `::alloc` paths. Text needs the
+allocator crate in scope when not using std:
 
 ```rust
 extern crate alloc;
 
 use alloc::string::String;
 
-fn is_slug(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
-}
-
 #[typekin::text(
     konst = false,
-    valid = is_slug,
-    in = ["draft", "published"],
+    in = ["draft", "news", "medical-news"],
+    // valid = some_fn, <- alternative to hardcoded list via `in`.
     with = [display],
 )]
 #[repr(transparent)]
-struct Slug(String);
+struct Tag(String);
 
 fn main() {
-    let draft = Slug::try_from_str("draft").unwrap();
-    let published = draft
-        .map(|value| value.replace_range(.., "published"))
+    let draft = Tag::try_from_str("draft").unwrap();
+    let news = draft
+        .map(|it| it.replace_range(.., "news"))
         .unwrap();
-    assert_eq!(published.as_str(), "published");
+    let medical_news = news
+        .clone()
+        .map(|it| "medical-" + it)
+        .unwrap();
+    assert_eq!(news.as_str(), "news");
+
+    let draft_news = news
+        .map(|it| "draft-" + it);
+    assert!(draft_news.is_err()); // There is no "draft-news" in allow-list.
 }
 ```
-
-`valid` accepts one callback or a bracketed list; every callback receives
-`&str` and must return `bool`. `in` accepts a duplicate-free list of string
-literals. The two constraints compose with logical AND.
 
 Membership compares exact strings without case or Unicode normalization.
 `in = []` rejects every normal input; `in = [""]` admits the empty string.
 A listed value must still pass every callback.
 
-The generated type offers fallible `try_make` / `try_from_str`, consuming
-`into_inner` / `into_bytes`, read-only string access, `Deref<Target = str>`,
-`AsRef`, `Borrow`, hash, equality, and ordering. It deliberately does not offer
-mutable string aliases such as `DerefMut`, `as_mut_str`, or `&mut String`.
-`map(self, FnOnce(&mut String)) -> Result<Self, ()>` is the checked mutation
-entry point: invalid output is dropped instead of rewrapped.
-
 Text friends use `conversion(Source) -> Make`, with an owning function returning
 `String`. Missing conversions are rejected during macro expansion. Friend output
 is validated by default and panics if invalid. `-> [Make, Trust]` bypasses only
 that construction validation; use it only when validity is proved independently.
-
-`with = [display]` opts into `Display`. `konst = true` propagates const
-generation through text APIs, including validation and `map`; unsupported
-callbacks, allocation, or closure combinations are rejected by the caller's
-nightly compiler configuration.
 
 ### Configuration
 
@@ -318,17 +361,14 @@ impl Foo { fn to_u32(self) -> u32 { self.0 } }
 const fn is_valid(value: u32) -> bool { value != 0 }
 
 #[typekin::integral(
-    // Required. `true` needs nightly const features; `false` generates plain impls.
-  konst = false,
-
+  konst = false, // Required, and `true` needs nightly const features.
   friends = [
-    _(u64) -> Bit,                    // Only bitwise operations
+    _(u64) -> Bit,         // Only bitwise operations, no conversion needed
     Foo::to_u32(Foo) -> [Make, Math, Bit],
   ],
   without = [fn_conv_raw], // Do not generate the existing accessor below
-
-  get_raw = Self::unwrap, // Use an existing accessor instead of generated `raw()`
-  valid = is_valid, // Reject invalid raw values in checked construction
+  get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
+  valid = is_valid,        // Reject invalid raw values in checked construction
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -353,9 +393,8 @@ modeled after [bitflag](https://crates.io/crates/bitflag), but with a different
 implementation.
 
 Every enum variant is mirrored as a same-named associated constant on its
-generated `{Enum}Value` type.
-They are constructed through generated integral validation, so each enum
-discriminant must be valid.
+generated `{Enum}Value` type. They are constructed through generated integral
+validation, so each enum discriminant must be valid.
 
 `konst` is required and forwarded to `integral` for the generated value type.
 Write it directly as `konst = true` or `konst = false`; use `integral = [...]`
@@ -364,6 +403,10 @@ when configuring other generated value-type behavior. `bitflag` has its own
 `friends = _(u8) -> Bit` or a bracketed list of such declarations. The enum and
 generated value type are registered as friends automatically; enum arithmetic
 operators are not generated.
+
+`suffix` and `value_name` control the generated value-type name. In the nested
+`integral = [...]` configuration, `without = [impl_core_int]` removes the large
+forwarded primitive-integral-method group.
 
 ### Example
 
@@ -394,13 +437,21 @@ fn main() {
 
     let raw = PermValue::try_make(0b111).unwrap();
     assert!(raw.contains(Perm::Exec));
+
+    let mixed = PermValue::from_bits_retain(0b1011);
+    assert_eq!(PermValue::from_bits(0b1011), None);
+    assert_eq!(mixed.raw(), 0b1011);
+    assert_eq!(PermValue::from_bits_truncate(0b1011).raw(), 0b0011);
+    assert_eq!(PermValue::Read.into_flag(), Ok(Perm::Read));
+    assert_eq!(mixed.into_flag(), Err(mixed));
 }
 ```
 
 ## Const mode
 
 Const generation requires `konst = true`. Until the relevant const features
-stabilize, it remains nightly-only:
+stabilize, it remains nightly-only. These gates are sufficient for the
+`integral` example below:
 
 ```rust
 #![feature(const_cmp)]
@@ -421,6 +472,28 @@ const START: Counter = Counter::make(10);
 const NEXT: Counter = START + 1u32;
 
 fn main() { assert_eq!(NEXT.raw(), 11); }
+```
+
+`bitflag(konst = true)` needs that set plus const iterator support:
+
+```rust
+#![feature(const_cmp)]
+#![feature(const_trait_impl)]
+#![feature(const_ops)]
+#![feature(const_convert)]
+#![feature(const_clone)]
+#![feature(const_destruct)]
+#![feature(derive_const)]
+#![feature(const_iter)]
+
+#[repr(u8)]
+#[derive(Copy)]
+#[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[typekin::bitflag(konst = true)]
+enum Permission {
+    Read = 0b001,
+    Write = 0b010,
+}
 ```
 
 Use `konst = false` to generate plain implementations instead:

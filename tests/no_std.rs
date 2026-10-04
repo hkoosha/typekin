@@ -92,7 +92,7 @@ pub enum Permission {
     Write = 0b010,
 }
 
-#[typekin::text(konst = false, valid = is_slug)]
+#[typekin::text(konst = false, std = false, valid = is_slug)]
 #[repr(transparent)]
 pub struct Slug(String);
 
