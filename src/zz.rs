@@ -1,8 +1,4 @@
-use proc_macro2::{
-    Ident,
-    TokenStream,
-    TokenTree,
-};
+use proc_macro2::Ident;
 use std::collections::HashSet;
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
@@ -13,7 +9,6 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     Attribute,
-    Expr,
     ExprRange,
     Path,
     Token,
@@ -52,46 +47,188 @@ impl ValidationCfg {
     }
 }
 
-fn parse_ranges(input: ParseStream) -> syn::Result<Vec<ExprRange>> {
-    let tokens = if input.peek(syn::token::Bracket) {
-        let content;
-        let _ = bracketed!(content in input);
-        content.parse()?
-    }
-    else {
-        let mut tokens = TokenStream::new();
+pub(crate) use ranges::parse_ranges;
 
-        while !input.is_empty() && !input.peek(Token![,]) {
-            let token: TokenTree = input.parse()?;
-            tokens.extend([token]);
-        }
-
-        tokens
+mod ranges {
+    use crate::runner::MkErr;
+    use crate::value_type::{
+        Int,
+        N,
+        RangeEnding,
+    };
+    use crate::zz::one_or_list;
+    use std::cmp::Ordering;
+    use syn::parse::ParseStream;
+    use syn::{
+        Expr,
+        ExprRange,
+        Lit,
+        RangeLimits,
+        UnOp,
     };
 
-    fn no_attr_range(it: Expr) -> syn::Result<ExprRange> {
-        return match it {
-            Expr::Range(range) if range.attrs.is_empty() => Ok(range),
-            expr => expr.fail("invalid range definition"),
+    pub(crate) fn parse_ranges(
+        input: ParseStream
+    ) -> syn::Result<Vec<ExprRange>> {
+        let mut ranges = one_or_list(input)?
+            .into_iter()
+            .map(|it| {
+                let Expr::Range(range) = it
+                else {
+                    return it.fail("invalid range definition");
+                };
+
+                if !range.attrs.is_empty() {
+                    return range.fail("invalid range definition");
+                }
+
+                if let Some(start) = &range.start {
+                    integer_constant(start)?;
+                }
+                if let Some(end) = &range.end {
+                    integer_constant(end)?;
+                }
+
+                return Ok(range);
+            })
+            .collect::<syn::Result<Vec<_>>>()?
+            .into_iter()
+            .map(ComparableRange::of)
+            .collect::<Vec<_>>();
+
+        ranges.sort_by(|l, r| match (l.lower, r.lower) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(left), Some(right)) => left.cmp(&right),
+        });
+
+        let mut merged = Vec::<ComparableRange>::with_capacity(ranges.len());
+        for mut next in ranges {
+            let Some(curr) = merged.last_mut()
+            else {
+                merged.push(next);
+                continue;
+            };
+
+            let connected = match (&curr.upper, next.lower) {
+                (RangeEnding::Empty, _) => false,
+                (RangeEnding::Unbounded, _) | (_, None) => true,
+                (RangeEnding::Value(hi), Some(lo)) => {
+                    lo <= *hi || hi.successor().is_some_and(|it| it == lo)
+                }
+            };
+            if !connected {
+                merged.push(next);
+                continue;
+            }
+
+            if next.upper.cmp(&curr.upper) == Ordering::Greater {
+                curr.range.end = next.range.end.take();
+                curr.range.limits = next.range.limits;
+                curr.upper = next.upper;
+            }
+        }
+
+        let fin = merged.into_iter().map(|it| it.range).collect();
+
+        return Ok(fin);
+    }
+
+    fn integer_constant(expr: &Expr) -> syn::Result<Int> {
+        return match expr {
+            Expr::Lit(expr) if expr.attrs.is_empty() => {
+                let Lit::Int(literal) = &expr.lit
+                else {
+                    return expr.fail("range bounds must be integer constants");
+                };
+                Int::parse_non_negative(
+                    literal.base10_digits(),
+                    literal.suffix(),
+                )
+                .map_err(|_| expr.errorful::<()>("invalid number"))
+            }
+
+            Expr::Unary(expr)
+                if expr.attrs.is_empty()
+                    && matches!(&expr.op, UnOp::Neg(_)) =>
+            {
+                Ok(integer_constant(&expr.expr)?.negate())
+            }
+
+            Expr::Path(expr)
+                if expr.attrs.is_empty() && expr.qself.is_none() =>
+            {
+                let Some(ty) = expr.path.segments.first()
+                else {
+                    return expr.fail("range bounds must be integer constants");
+                };
+
+                let Some(bound) = expr.path.segments.last()
+                else {
+                    return expr.fail("range bounds must be integer constants");
+                };
+
+                if expr.path.segments.len() != 2
+                    || !matches!(ty.arguments, syn::PathArguments::None)
+                    || !matches!(bound.arguments, syn::PathArguments::None)
+                {
+                    return expr.fail("range bounds must be integer constants");
+                }
+
+                let (min, max) = N::of(ty.ident.to_string())
+                    .map(|it| it.bounds())
+                    .ok_or_else(|| {
+                        expr.errorful::<Int>(
+                            "range bounds must be integer constants",
+                        )
+                    })?;
+
+                match bound.ident.to_string().as_str() {
+                    "MIN" => Ok(min),
+                    "MAX" => Ok(max),
+                    _ => expr.fail("range bounds must be integer constants"),
+                }
+            }
+
+            Expr::Paren(expr) if expr.attrs.is_empty() => {
+                integer_constant(&expr.expr)
+            }
+
+            _ => expr.fail("range bounds must be integer constants"),
         };
     }
 
-    let mut ranges = vec![];
-    let mut range = TokenStream::new();
-
-    for token in tokens {
-        if matches!(&token, TokenTree::Punct(it) if it.as_char() == '+') {
-            ranges.push(no_attr_range(syn::parse2(range)?)?);
-            range = TokenStream::new();
-        }
-        else {
-            range.extend([token]);
-        }
+    struct ComparableRange {
+        range: ExprRange,
+        lower: Option<Int>,
+        upper: RangeEnding,
     }
 
-    // WTF?
-    ranges.push(no_attr_range(syn::parse2(range)?)?);
-    return Ok(ranges);
+    impl ComparableRange {
+        fn of(it: ExprRange) -> Self {
+            return Self {
+                lower: it.start.as_ref().map(|it| {
+                    integer_constant(it)
+                        .expect("ranges were validated before merging")
+                }),
+                upper: match &it.end {
+                    None => RangeEnding::Unbounded,
+                    Some(end) => {
+                        let end = integer_constant(end)
+                            .expect("ranges were validated before merging");
+                        match &it.limits {
+                            RangeLimits::HalfOpen(_) => end
+                                .predecessor()
+                                .map_or(RangeEnding::Empty, RangeEnding::Value),
+                            RangeLimits::Closed(_) => RangeEnding::Value(end),
+                        }
+                    }
+                },
+                range: it,
+            };
+        }
+    }
 }
 
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
@@ -272,7 +409,9 @@ pub(crate) fn parse_inner(
 
         match on_attr(&attr, stream) {
             Ok(true) => {}
-            Ok(false) => return stream.span().fail("unknown attribute"),
+            Ok(false) => {
+                return stream.span().fail("unknown attribute");
+            }
             Err(err) => {
                 return Err(err);
             }

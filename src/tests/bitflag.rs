@@ -127,7 +127,9 @@ mod tests {
 
     #[test]
     fn rejects_legacy_trusted_argument_at_root_and_nested_scope() {
-        for trusted in ["true", "false"] {
+        for trusted in [
+            "true", "false",
+        ] {
             for attributes in [
                 format!("friends = [Source(cap = Make, trusted = {trusted})]"),
                 format!(

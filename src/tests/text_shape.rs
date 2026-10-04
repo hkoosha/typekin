@@ -33,9 +33,10 @@ mod tests {
 
     #[test]
     fn missing_transparency_points_to_the_struct_name() {
-        for source in
-            ["struct Value(String);", "#[repr(C)]\nstruct Value(String);"]
-        {
+        for source in [
+            "struct Value(String);",
+            "#[repr(C)]\nstruct Value(String);",
+        ] {
             reject_at(source, "Value");
         }
     }

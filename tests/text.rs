@@ -98,7 +98,10 @@ mod tests {
 
     #[test]
     fn validates_callbacks_and_literal_membership() {
-        for value in ["draft", "published"] {
+        for value in [
+            "draft",
+            "published",
+        ] {
             assert_eq!(
                 Slug::try_make(value.into()).map(Slug::into_inner),
                 Ok(value.into())
@@ -111,7 +114,9 @@ mod tests {
 
         // Each value violates only one constraint: first callback, second
         // callback, or membership. None of those constraints may be skipped.
-        for value in ["Draft", "reserved", "other"] {
+        for value in [
+            "Draft", "reserved", "other",
+        ] {
             assert_eq!(Slug::try_make(value.into()), Err(()));
             assert_eq!(Slug::try_from_str(value), Err(()));
         }
@@ -136,13 +141,17 @@ mod tests {
 
     #[test]
     fn literal_membership_is_exact_without_callback_validation() {
-        for value in ["", "é"] {
+        for value in [
+            "", "é",
+        ] {
             assert_eq!(
                 LiteralText::try_from_str(value).map(LiteralText::into_inner),
                 Ok(value.into())
             );
         }
-        for value in ["e\u{301}", "É", "é ", "é\0"] {
+        for value in [
+            "e\u{301}", "É", "é ", "é\0",
+        ] {
             assert_eq!(LiteralText::try_from_str(value), Err(()));
         }
     }
@@ -154,7 +163,9 @@ mod tests {
             .map(|value| value.replace_range(.., "published"));
         assert_eq!(published.map(Slug::into_inner), Ok("published".into()));
 
-        for invalid in ["Draft", "reserved", "other"] {
+        for invalid in [
+            "Draft", "reserved", "other",
+        ] {
             let result = Slug::try_from_str("draft").unwrap().map(|value| {
                 value.clear();
                 value.push_str(invalid);
@@ -200,7 +211,10 @@ mod tests {
         }
         assert_eq!(
             ordered.keys().map(Slug::as_str).collect::<Vec<_>>(),
-            ["draft", "published"]
+            [
+                "draft",
+                "published"
+            ]
         );
     }
 
@@ -216,7 +230,11 @@ mod tests {
         assert_eq!(bytes.as_ptr(), value.as_bytes().as_ptr());
         assert_eq!(
             value.char_indices().collect::<Vec<_>>(),
-            [(0, 'é'), (2, '🦀'), (6, 'Z')]
+            [
+                (0, 'é'),
+                (2, '🦀'),
+                (6, 'Z')
+            ]
         );
         assert_eq!(value.get(2..6), Some("🦀"));
         assert_eq!(value.get(1..2), None);
@@ -288,7 +306,9 @@ mod tests {
         let valid = Slug::of(SlugSource("draft".into()));
         assert_eq!(valid.as_str(), "draft");
 
-        for invalid in ["Draft", "reserved", "other"] {
+        for invalid in [
+            "Draft", "reserved", "other",
+        ] {
             assert_panics(|| {
                 let _ = Slug::of(SlugSource(invalid.into()));
             });
@@ -309,7 +329,9 @@ mod tests {
         assert_eq!(text.as_str().as_ptr(), pointer);
         assert_eq!(text.into_inner().capacity(), capacity);
 
-        for invalid in ["", "Draft", "é"] {
+        for invalid in [
+            "", "Draft", "é",
+        ] {
             assert_panics(|| {
                 let _ = CallbackText::of(SlugSource(String::from(invalid)));
             });
@@ -451,7 +473,12 @@ mod tests {
             .try_retain(move |character| state.keep(character, visited_ref))
             .unwrap();
         assert_eq!(text.as_str(), "a🍆");
-        assert_eq!(visited, ['a', 'é', '🍆', '界']);
+        assert_eq!(
+            visited,
+            [
+                'a', 'é', '🍆', '界'
+            ]
+        );
     }
 
     #[test]
@@ -689,7 +716,9 @@ mod tests {
             assert!(earlier < later);
             assert_eq!(earlier.cmp(&later), core::cmp::Ordering::Less);
             assert_eq!(earlier, RelatedText::try_from_str("draft").unwrap());
-            for invalid in ["", "Draft", "é"] {
+            for invalid in [
+                "", "Draft", "é",
+            ] {
                 let checked: Result<RelatedText, ()> =
                     RelatedText::try_make(String::from(invalid));
                 assert_eq!(checked, Err(()));
@@ -734,7 +763,9 @@ mod tests {
         #[test]
         fn empty_membership_rejects_every_checked_input_with_and_without_callbacks()
          {
-            for value in ["", "draft", "reserved", "é🦀", "\0"] {
+            for value in [
+                "", "draft", "reserved", "é🦀", "\0",
+            ] {
                 let owned: Result<EmptyDomain, ()> =
                     EmptyDomain::try_make(String::from(value));
                 let borrowed: Result<EmptyDomain, ()> =
@@ -763,7 +794,9 @@ mod tests {
                     .map(EmptyStringOnly::into_inner),
                 Ok(String::new()),
             );
-            for value in ["draft", "é", "\0"] {
+            for value in [
+                "draft", "é", "\0",
+            ] {
                 assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
                 assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
             }
@@ -771,7 +804,9 @@ mod tests {
 
         #[test]
         fn only_trusted_make_can_construct_an_empty_domain_value() {
-            for value in ["", "draft", "é🦀"] {
+            for value in [
+                "", "draft", "é🦀",
+            ] {
                 let checked = CheckedSource(String::from(value));
                 assert_panics(|| EmptyDomain::of(checked));
                 let trusted = TrustSource(String::from(value));

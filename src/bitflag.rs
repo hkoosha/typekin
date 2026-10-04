@@ -213,7 +213,10 @@ impl Maker {
         // value :: enum, Make & Bit.
         self.cfg.int.add_friend(
             ty,
-            [format_ident!("Bit"), format_ident!("Make")],
+            [
+                format_ident!("Bit"),
+                format_ident!("Make"),
+            ],
             parse_quote! { #ty::raw },
         );
     }

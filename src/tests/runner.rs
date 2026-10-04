@@ -27,7 +27,12 @@ mod tests {
     fn one_or_list_preserves_single_bracketed_and_empty_forms() {
         for (input, expected) in [
             ("One", &["One"][..]),
-            ("[One, Two]", &["One", "Two"][..]),
+            (
+                "[One, Two]",
+                &[
+                    "One", "Two",
+                ][..],
+            ),
             ("[]", &[][..]),
         ] {
             let parsed = syn::parse_str::<OneOrList>(input).unwrap();

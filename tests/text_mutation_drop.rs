@@ -196,7 +196,9 @@ mod tests {
             }),
         ];
         for (name, construct) in constructors {
-            for value in ["", "safe", "é🦀"] {
+            for value in [
+                "", "safe", "é🦀",
+            ] {
                 let mut raw = String::with_capacity(64);
                 raw.push_str(value);
                 let watch = AllocationWatch::new(raw.as_ptr());

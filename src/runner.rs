@@ -490,7 +490,14 @@ pub(crate) trait MkErr: Spanned {
         &self,
         msg: impl Display,
     ) -> Result<T, syn::Error> {
-        return Err(syn::Error::new(self.span(), msg));
+        return Err(self.errorful::<T>(msg));
+    }
+
+    fn errorful<T>(
+        &self,
+        msg: impl Display,
+    ) -> syn::Error {
+        return syn::Error::new(self.span(), msg);
     }
 }
 

@@ -112,24 +112,36 @@ mod tests {
             Thingy::iter_values()
                 .map(ThingyValue::raw)
                 .collect::<Vec<_>>(),
-            [0, 1, 2, 4]
+            [
+                0, 1, 2, 4
+            ]
         );
 
         let mixed = ThingyValue::from_bits_retain(0b1011);
         assert_eq!(
             mixed.iter_known_flags().collect::<Vec<_>>(),
-            [Thingy::FirstThing, Thingy::ReadThing, Thingy::WritersBlock,]
+            [
+                Thingy::FirstThing,
+                Thingy::ReadThing,
+                Thingy::WritersBlock,
+            ]
         );
         assert_eq!(
             mixed.iter().map(ThingyValue::raw).collect::<Vec<_>>(),
-            [0, 1, 2, 8]
+            [
+                0, 1, 2, 8
+            ]
         );
         assert_eq!(
             mixed
                 .iter_names()
                 .map(|(name, value)| (name, value.raw()))
                 .collect::<Vec<_>>(),
-            [("FirstThing", 0), ("ReadThing", 1), ("WritersBlock", 2)]
+            [
+                ("FirstThing", 0),
+                ("ReadThing", 1),
+                ("WritersBlock", 2)
+            ]
         );
         assert_eq!(
             ThingyValue::iter_defined_names()
@@ -409,7 +421,9 @@ mod tests {
 
         #[test]
         fn generated_value_untrusted_friends_validate_scalar_and_list_make() {
-            for raw in [3, 8] {
+            for raw in [
+                3, 8,
+            ] {
                 assert_panics(|| FlagsValue::of(DefaultBits(Box::new(raw))));
                 assert_panics(|| FlagsValue::of(CheckedBits(Box::new(raw))));
             }
@@ -419,13 +433,17 @@ mod tests {
 
         #[test]
         fn generated_value_trusted_owned_friend_bypasses_only_construction() {
-            for raw in [3, 8] {
+            for raw in [
+                3, 8,
+            ] {
                 let source = TrustBits(Box::new(raw));
                 assert_eq!(FlagsValue::of(source).raw(), raw);
                 assert_eq!(FlagsValue::try_make(raw), Err(raw));
                 assert_panics(|| Flags::from_bits_retain(raw));
             }
-            for rhs in [1, 8] {
+            for rhs in [
+                1, 8,
+            ] {
                 assert_panics(|| {
                     let _ = FlagsValue::try_make(2).unwrap()
                         | TrustBits(Box::new(rhs));
@@ -442,7 +460,9 @@ mod tests {
 
         #[test]
         fn trusted_owned_assignment_results_validate_before_mutating() {
-            for rhs in [1, 8] {
+            for rhs in [
+                1, 8,
+            ] {
                 let mut flags = FlagsValue::try_make(2).unwrap();
                 unsafe_assert_panics(|| {
                     flags |= TrustBits(Box::new(rhs));
@@ -461,7 +481,9 @@ mod tests {
             let math_source = MathOnlyBits(Box::new(4));
             assert_eq!((Flags::Read.into_value() + math_source).raw(), 6);
 
-            for rhs in [1, 8] {
+            for rhs in [
+                1, 8,
+            ] {
                 assert_panics(|| Flags::Read | BitOnlyBits(Box::new(rhs)));
                 assert_panics(|| {
                     Flags::Read.into_value() | BitOnlyBits(Box::new(rhs))
@@ -644,13 +666,22 @@ mod tests {
             assert_eq!(Wide::High.to_string(), "High");
             assert_eq!(Signed::Negative.to_string(), "Negative");
 
-            for raw in [0u32, 0x8000_0001, u32::MAX] {
+            for raw in [
+                0u32,
+                0x8000_0001,
+                u32::MAX,
+            ] {
                 let value = Wide::from_bits_retain(raw);
                 assert_eq!(format!("{value}"), format!("{raw}"));
                 assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
                 assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
             }
-            for raw in [i16::MIN, -123, 0, i16::MAX] {
+            for raw in [
+                i16::MIN,
+                -123,
+                0,
+                i16::MAX,
+            ] {
                 let value = Signed::from_bits_retain(raw);
                 assert_eq!(format!("{value}"), format!("{raw}"));
                 assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));

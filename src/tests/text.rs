@@ -206,7 +206,9 @@ mod tests {
 
     #[test]
     fn rejects_legacy_trusted_argument() {
-        for trusted in ["true", "false"] {
+        for trusted in [
+            "true", "false",
+        ] {
             let input = format!(
                 "friends = [Source(conv = convert, cap = Make, trusted = {trusted})]"
             );

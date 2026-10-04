@@ -70,7 +70,7 @@ mod tests {
     #[typekin::integral(
         konst = true,
         friends = [_(u8) -> [Make, Math, Bit, Relation]],
-        in = 2..=4 + 8..10,
+        in = [2..=4, 8..10],
         valid = accepts_ranged,
     )]
     #[repr(transparent)]
@@ -104,7 +104,7 @@ mod tests {
     #[typekin::integral(
         konst = true,
         valid = is_even_i8,
-        in = ..=-6 + 4..,
+        in = [..=-6, 4..],
     )]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
@@ -279,14 +279,23 @@ mod tests {
 
     #[test]
     fn parsing_returns_unit_error_for_invalid_syntax_and_values() {
-        for source in ["", "-1", "4_294_967_296", "not a number"] {
+        for source in [
+            "",
+            "-1",
+            "4_294_967_296",
+            "not a number",
+        ] {
             assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
         }
 
-        for source in ["23", "50", "102"] {
+        for source in [
+            "23", "50", "102",
+        ] {
             assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
         }
-        for source in ["-5", "0"] {
+        for source in [
+            "-5", "0",
+        ] {
             assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
         }
     }
@@ -492,13 +501,17 @@ mod tests {
 
     #[test]
     fn open_range_union_ors_ranges_and_ands_callbacks() {
-        for value in [-8, -6, 4, 6] {
+        for value in [
+            -8, -6, 4, 6,
+        ] {
             assert_eq!(
                 SplitEven::try_make(value).map(SplitEven::raw),
                 Ok(value)
             );
         }
-        for value in [-7, -5, 0, 5] {
+        for value in [
+            -7, -5, 0, 5,
+        ] {
             assert_eq!(SplitEven::try_make(value), Err(value));
         }
     }
@@ -967,7 +980,9 @@ mod tests {
         #[test]
         fn same_type_construction_requires_explicit_target_trust_to_bypass_validation()
          {
-            for raw in [3, 12] {
+            for raw in [
+                3, 12,
+            ] {
                 let untrusted_target = Number::of(TrustSource(Box::new(raw)));
                 assert_panics(|| Number::of(untrusted_target));
 
@@ -979,7 +994,9 @@ mod tests {
 
         #[test]
         fn untrusted_owned_friends_validate_scalar_and_list_make() {
-            for raw in [3, 12] {
+            for raw in [
+                3, 12,
+            ] {
                 assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
                 assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
             }
@@ -989,7 +1006,9 @@ mod tests {
 
         #[test]
         fn trusted_owned_friend_bypasses_only_construction_validation() {
-            for raw in [3, 12] {
+            for raw in [
+                3, 12,
+            ] {
                 let source = TrustSource(Box::new(raw));
                 assert_eq!(Number::of(source).raw(), raw);
                 assert_eq!(Number::try_make(raw), Err(raw));
@@ -1008,7 +1027,9 @@ mod tests {
 
         #[test]
         fn trusted_owned_assignment_results_validate_before_mutating() {
-            for rhs in [1, 8] {
+            for rhs in [
+                1, 8,
+            ] {
                 let mut number = Number::try_make(4).unwrap();
                 assert_panics(move || number += TrustSource(Box::new(rhs)));
                 assert_eq!(number.raw(), 4);
@@ -1026,7 +1047,9 @@ mod tests {
             let bit_source = BitOnlySource(Box::new(2));
             assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
 
-            for rhs in [1, 8] {
+            for rhs in [
+                1, 8,
+            ] {
                 assert_panics(|| {
                     let _ = Number::try_make(4).unwrap()
                         + MathOnlySource(Box::new(rhs));

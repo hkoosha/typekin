@@ -2334,8 +2334,12 @@ mod subject {
             #[inline(always)]
             #[must_use]
             pub const fn items() -> &'static [Self] {
-                const ITEMS: &'static [MyFlag] =
-                    &[MyFlag::Z, MyFlag::A, MyFlag::B, MyFlag::C];
+                const ITEMS: &'static [MyFlag] = &[
+                    MyFlag::Z,
+                    MyFlag::A,
+                    MyFlag::B,
+                    MyFlag::C,
+                ];
                 return ITEMS;
             }
             #[inline]

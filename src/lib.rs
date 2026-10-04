@@ -1,3 +1,5 @@
+extern crate core;
+
 use syn::{
     Item,
     ItemEnum,

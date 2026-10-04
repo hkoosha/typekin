@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use quote::ToTokens;
+
     use crate::integral::Cfg;
 
     #[test]
@@ -70,25 +72,66 @@ mod tests {
     #[test]
     fn accepts_root_validation_lists() {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, valid = [is_even, is_not_fifty], in = [1..=4 + 8..10 + ..=0]",
+            "konst = false, valid = [is_even, is_not_fifty], in = [1..=4, 8..10, ..=0]",
         )
             .expect("root validation lists should parse");
 
         assert_eq!(config.validation.callbacks.len(), 2);
-        assert_eq!(config.validation.ranges.len(), 3);
+        assert_eq!(config.validation.ranges.len(), 2);
+    }
+
+    #[test]
+    fn merges_overlapping_and_adjacent_ranges() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = false, in = [10..=12, 1..3, 3..=5, 6..10]",
+        )
+        .expect("constant ranges should parse");
+
+        assert_eq!(config.validation.ranges.len(), 1);
+        let range = &config.validation.ranges[0];
+        assert_eq!(
+            range.start.as_ref().unwrap().to_token_stream().to_string(),
+            "1",
+        );
+        assert_eq!(
+            range.end.as_ref().unwrap().to_token_stream().to_string(),
+            "12",
+        );
+        assert!(matches!(range.limits, syn::RangeLimits::Closed(_)));
+    }
+
+    #[test]
+    fn accepts_primitive_integer_constants_and_rejects_non_constants() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = false, in = [1..=u32::MAX, u32::MAX..]",
+        )
+        .expect("primitive integer constants should parse");
+        assert_eq!(config.validation.ranges.len(), 1);
+
+        for input in [
+            "konst = false, in = [MAX..4]",
+            "konst = false, in = [foo..]",
+            "konst = false, in = [1 + 1..4]",
+        ] {
+            let error = syn::parse_str::<Cfg>(input)
+                .expect_err("range bounds must be integer constants");
+            assert_eq!(
+                error.to_string(),
+                "range bounds must be integer constants"
+            );
+        }
     }
 
     #[test]
     fn accepts_unbracketed_root_in_union_with_valid_callback() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = false, in = 1..2 + 6..8, valid = foo",
-        )
-        .expect(
-            "an unbracketed root in union with a valid callback should parse",
-        );
+        let config =
+            syn::parse_str::<Cfg>("konst = false, in = 1..2, valid = foo")
+                .expect(
+                    "an unbracketed range with a valid callback should parse",
+                );
 
         assert_eq!(config.validation.callbacks.len(), 1);
-        assert_eq!(config.validation.ranges.len(), 2);
+        assert_eq!(config.validation.ranges.len(), 1);
     }
 
     #[test]
@@ -100,9 +143,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_comma_separated_ranges() {
-        syn::parse_str::<Cfg>("konst = false, in = [1..2, 3..4]")
-            .expect_err("multiple ranges use + separators");
+    fn rejects_plus_separated_ranges() {
+        syn::parse_str::<Cfg>("konst = false, in = [1..2 + 3..4]")
+            .expect_err("multiple ranges use comma separators");
     }
 
     #[test]
@@ -186,7 +229,9 @@ mod tests {
 
     #[test]
     fn rejects_legacy_trusted_argument() {
-        for trusted in ["true", "false"] {
+        for trusted in [
+            "true", "false",
+        ] {
             let input = format!(
                 "konst = false, friends = [Source(cap = Make, trusted = {trusted})]"
             );
@@ -285,7 +330,11 @@ mod tests {
                 .iter()
                 .map(|segment| segment.ident.to_string())
                 .collect::<Vec<_>>(),
-            ["crate", "conversions", "own"]
+            [
+                "crate",
+                "conversions",
+                "own"
+            ]
         );
         assert_eq!(
             source
@@ -293,7 +342,9 @@ mod tests {
                 .iter()
                 .map(|segment| segment.ident.to_string())
                 .collect::<Vec<_>>(),
-            ["crate", "sources", "Source"]
+            [
+                "crate", "sources", "Source"
+            ]
         );
         assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Trust)));
@@ -304,8 +355,18 @@ mod tests {
         for (capabilities, expected) in [
             ("Trust", vec!["Trust"]),
             ("[Trust]", vec!["Trust"]),
-            ("[Make, Trust]", vec!["Make", "Trust"]),
-            ("[Make, Trust,]", vec!["Make", "Trust"]),
+            (
+                "[Make, Trust]",
+                vec![
+                    "Make", "Trust",
+                ],
+            ),
+            (
+                "[Make, Trust,]",
+                vec![
+                    "Make", "Trust",
+                ],
+            ),
             ("[]", vec![]),
         ] {
             let input = format!("convert(Source) -> {capabilities}");
@@ -328,7 +389,10 @@ mod tests {
 
     #[test]
     fn shared_friend_parser_accepts_typed_implicit_conversion() {
-        for input in ["_(Source) -> Trust", "_(Source,) -> [Make, Trust]"] {
+        for input in [
+            "_(Source) -> Trust",
+            "_(Source,) -> [Make, Trust]",
+        ] {
             let friend =
                 syn::parse_str::<crate::friendship::cfg::Friend>(input)
                     .expect(input);
@@ -342,7 +406,12 @@ mod tests {
     fn shared_friend_parser_accepts_capability_only_declarations() {
         for (input, expected) in [
             ("_ -> Foo", vec!["Foo"]),
-            ("_ -> [Foo, Bar]", vec!["Bar", "Foo"]),
+            (
+                "_ -> [Foo, Bar]",
+                vec![
+                    "Bar", "Foo",
+                ],
+            ),
             ("_ -> []", vec![]),
         ] {
             let friend =
@@ -401,7 +470,10 @@ mod tests {
 
     #[test]
     fn shared_friend_parser_does_not_suggest_obsolete_migrations() {
-        for input in ["Source(conv = convert, cap = Make)", "_(cap = Make)"] {
+        for input in [
+            "Source(conv = convert, cap = Make)",
+            "_(cap = Make)",
+        ] {
             let error = syn::parse_str::<crate::friendship::cfg::Friend>(input)
                 .expect_err("obsolete friend syntax must fail");
             assert!(
