@@ -26,13 +26,13 @@ use syn::{
 };
 
 use crate::{
-    attr_cfg,
     friendship::cfg::Friend,
     runner::{
         self,
         MkErr,
         mk_flags,
     },
+    zz,
 };
 
 pub(crate) fn ekran(
@@ -62,7 +62,7 @@ pub(crate) struct Cfg {
 
 impl Cfg {
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
-        let values = runner::list::<LitStr>(input)?.collect::<Vec<_>>();
+        let values = zz::list::<LitStr>(input)?.collect::<Vec<_>>();
 
         let mut seen = BTreeSet::new();
         for value in &values {
@@ -80,7 +80,7 @@ impl Cfg {
     ) -> syn::Result<()> {
         let mut friends = BTreeSet::new();
 
-        for friend in runner::one_or_list::<Friend>(input)? {
+        for friend in zz::one_or_list::<Friend>(input)? {
             let Some(ty) = &friend.ty
             else {
                 return input
@@ -151,11 +151,11 @@ impl Parse for Cfg {
             flags: Default::default(),
         };
 
-        runner::parse_inner_attributes(input, |attr, rest| {
+        zz::parse_inner(input, |attr, rest| {
             match attr {
                 "std" => this.std = rest.parse::<LitBool>()?.value,
                 "konst" => this.konst = rest.parse::<LitBool>()?.value,
-                "valid" => this.callbacks = attr_cfg::parse_callbacks(rest)?,
+                "valid" => this.callbacks = zz::parse_callbacks(rest)?,
                 "in" => this.values = Some(Self::parse_values(rest)?),
                 "friends" => this.parse_friends(rest)?,
                 "with" => this.flags.parse_from(rest, true)?,
@@ -190,7 +190,8 @@ impl TextMaker {
         if let Some(clause) = &item.generics.where_clause {
             return clause.fail("text does not support generic structs");
         }
-        if !runner::find_repr_transparent(&item.attrs)? {
+        let attrs = &item.attrs;
+        if !zz::find_repr_transparent(attrs)? {
             return item.ident.fail("expecting #[repr(transparent, ...)]");
         }
         let shape_error =

@@ -1,63 +1,68 @@
-use std::{
-    env,
-    fs,
-    path::{
-        Path,
-        PathBuf,
-    },
-    process::Command,
-    time::{
-        SystemTime,
-        UNIX_EPOCH,
-    },
-};
+#[cfg(test)]
+mod tests {
+    use std::{
+        env,
+        fs,
+        path::{
+            Path,
+            PathBuf,
+        },
+        process::Command,
+        time::{
+            SystemTime,
+            UNIX_EPOCH,
+        },
+    };
 
-struct FixtureDir {
-    path: PathBuf,
-}
-
-impl FixtureDir {
-    fn new() -> Self {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock before the Unix epoch")
-            .as_nanos();
-        let path = env::temp_dir()
-            .join(format!("typekin-no-std-{}-{unique}", std::process::id()));
-
-        fs::create_dir_all(path.join("src"))
-            .expect("create no-std fixture directory");
-
-        return Self { path };
+    struct FixtureDir {
+        path: PathBuf,
     }
-}
 
-impl Drop for FixtureDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
+    impl FixtureDir {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock before the Unix epoch")
+                .as_nanos();
+            let path = env::temp_dir().join(format!(
+                "typekin-no-std-{}-{unique}",
+                std::process::id()
+            ));
+
+            fs::create_dir_all(path.join("src"))
+                .expect("create no-std fixture directory");
+
+            return Self { path };
+        }
     }
-}
 
-#[test]
-fn generated_macros_compile_for_a_no_std_alloc_consumer() {
-    let fixture = FixtureDir::new();
-    let manifest = fixture.path.join("Cargo.toml");
-    let source = fixture.path.join("src/lib.rs");
-    let typekin = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .canonicalize()
-        .expect("canonicalize typekin root");
-    let typekin = typekin.to_str().expect("typekin root must be valid UTF-8");
+    impl Drop for FixtureDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 
-    fs::write(
-        &manifest,
-        format!(
-            "[package]\nname = \"typekin_no_std_fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\ntypekin = {{ path = {typekin:?} }}\n"
-        ),
-    )
-    .expect("write no-std fixture manifest");
-    fs::write(
-        &source,
-        r#"#![no_std]
+    #[test]
+    fn generated_macros_compile_for_a_no_std_alloc_consumer() {
+        let fixture = FixtureDir::new();
+        let manifest = fixture.path.join("Cargo.toml");
+        let source = fixture.path.join("src/lib.rs");
+        let typekin = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .expect("canonicalize typekin root");
+        let typekin =
+            typekin.to_str().expect("typekin root must be valid UTF-8");
+
+        fs::write(
+            &manifest,
+            format!(
+                "[package]\nname = \"typekin_no_std_fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\ntypekin = {{ path = {typekin:?} }}\n"
+            ),
+        )
+            .expect("write no-std fixture manifest");
+        fs::write(
+            &source,
+            r#"#![no_std]
 
 extern crate alloc;
 
@@ -107,26 +112,27 @@ pub fn build_slug(value: &str) -> Result<Slug, ()> {
     return Slug::try_from_str(value);
 }
 "#,
-    )
-    .expect("write no-std fixture source");
+        )
+        .expect("write no-std fixture source");
 
-    let output = Command::new("cargo")
-        .args([
-            "+nightly",
-            "check",
-            "--offline",
-            "--quiet",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
-        .arg("--target-dir")
-        .arg(fixture.path.join("target"))
-        .output()
-        .expect("run nightly no-std fixture");
+        let output = Command::new("cargo")
+            .args([
+                "+nightly",
+                "check",
+                "--offline",
+                "--quiet",
+                "--manifest-path",
+            ])
+            .arg(&manifest)
+            .arg("--target-dir")
+            .arg(fixture.path.join("target"))
+            .output()
+            .expect("run nightly no-std fixture");
 
-    assert!(
-        output.status.success(),
-        "no-std fixture failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+        assert!(
+            output.status.success(),
+            "no-std fixture failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

@@ -33,6 +33,7 @@ use crate::{
         mk_flags,
     },
     value_type::N,
+    zz,
 };
 
 pub(crate) fn ekran(
@@ -40,7 +41,9 @@ pub(crate) fn ekran(
     item: ItemEnum,
 ) -> proc_macro::TokenStream {
     return runner::catching(move || {
-        let repr = runner::find_repr_n(&item.attrs, item.span())?;
+        let attrs = &item.attrs;
+        let span = item.span();
+        let repr = zz::find_repr_n(attrs, span)?;
         let ty = item.ident.clone();
         let items = item.variants.iter().map(|it| it.ident.clone()).collect();
 
@@ -82,7 +85,7 @@ impl Parse for Cfg {
         let mut this = Self::default();
         let mut has_konst = false;
 
-        runner::parse_inner_attributes(input, |attr, rest| {
+        zz::parse_inner(input, |attr, rest| {
             return this.parse_attr(&mut has_konst, attr, rest);
         })?;
 
@@ -112,8 +115,7 @@ impl Cfg {
             "with" => self.bit.parse_from(rest, true)?,
             "without" => self.bit.parse_from(rest, false)?,
             "friends" => {
-                let friends = runner::one_or_list::<Friend>(rest)?
-                    .collect::<BTreeSet<_>>();
+                let friends = zz::one_or_list(rest)?.collect::<BTreeSet<_>>();
                 self.friends = friends;
             }
             "suffix" => {

@@ -3,9 +3,9 @@ pub mod subject {
     pub struct ConstructedThingy(pub f64);
 }
 
-type Subject = subject::ConstructedThingy;
+use subject::ConstructedThingy as Subject;
 
 fn main() {
     let it = Subject(1.1f64);
-    println!("subject: {}", it);
+    println!("subject: {:?}", it);
 }

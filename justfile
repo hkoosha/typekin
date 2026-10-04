@@ -47,6 +47,11 @@ friendship-expand: (z-expand 'my_friendship')
 friendship: friendship-expand fmt
 
 [group("example")]
+friendships-expand: (z-expand 'my_friendships')
+[group("example")]
+friendships: friendships-expand fmt
+
+[group("example")]
 u32-expand: (z-expand 'my_u32')
 [group("example")]
 u32: u32-expand fmt
@@ -82,7 +87,7 @@ text-expand: (z-expand 'my_text')
 text: text-expand fmt
 
 [parallel]
-all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand text-expand constructor-expand
+all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand constructor-expand
   just fmt
 
 # ==============================================================================

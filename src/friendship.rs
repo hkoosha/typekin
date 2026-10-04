@@ -1,8 +1,3 @@
-use crate::{
-    constructor,
-    runner,
-    runner::MkErr,
-};
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -14,6 +9,13 @@ use quote::{
 use syn::{
     Item,
     Type,
+};
+
+use crate::{
+    constructor,
+    runner,
+    runner::MkErr,
+    zz,
 };
 
 pub(crate) use self::cfg::Cfg;
@@ -44,8 +46,8 @@ pub(crate) mod cfg {
 
     use crate::{
         constructor,
-        runner,
         runner::MkErr,
+        zz,
     };
 
     #[derive(Clone)]
@@ -53,6 +55,7 @@ pub(crate) mod cfg {
         pub(crate) identity: String,
         pub(crate) ty: Option<Path>,
         pub(crate) conv: Option<Path>,
+        pub(crate) make_conv: Option<Path>,
         pub(crate) capabilities: BTreeSet<Ident>,
     }
 
@@ -89,8 +92,7 @@ pub(crate) mod cfg {
             };
 
             let _: Token![->] = input.parse()?;
-            let capabilities =
-                runner::one_or_list::<Ident>(input)?.collect::<BTreeSet<_>>();
+            let capabilities = zz::one_or_list(input)?.collect::<BTreeSet<_>>();
 
             return Ok(Self {
                 identity: ty
@@ -99,6 +101,10 @@ pub(crate) mod cfg {
                     .map(|tokens| tokens.to_string())
                     .unwrap_or_else(|| "_".to_string()),
                 ty,
+                make_conv: capabilities
+                    .contains(&format_ident!("Make"))
+                    .then_some(conv.clone())
+                    .flatten(),
                 conv,
                 capabilities,
             });
@@ -140,6 +146,7 @@ pub(crate) mod cfg {
                 identity: it.to_token_stream().to_string(),
                 ty: Some(it.clone()),
                 conv: None,
+                make_conv: None,
                 capabilities: BTreeSet::new(),
             };
         }
@@ -219,7 +226,7 @@ pub(crate) mod cfg {
         fn parse(input: ParseStream) -> syn::Result<Self> {
             let mut this = Self::default();
 
-            runner::parse_inner_attributes(input, |attr, stream| {
+            zz::parse_inner(input, |attr, stream| {
                 match attr {
                     "relation" => this.relation = Some(stream.parse()?),
                     "value" => this.value = Some(stream.parse()?),
@@ -235,18 +242,30 @@ pub(crate) mod cfg {
                     }
                     "scope" => this.scope = Some(stream.parse()?),
                     "friends" => {
-                        for mut friend in runner::one_or_list::<Friend>(stream)?
-                        {
-                            if friend.ty.is_none()
-                                && let Some(existing) =
-                                    this.friends.take(&friend)
+                        for friend in zz::one_or_list(stream)? {
+                            if let Some(mut existing) =
+                                this.friends.take(&friend)
                             {
-                                friend
+                                if friend.ty.is_some()
+                                    && !existing
+                                        .capabilities
+                                        .is_disjoint(&friend.capabilities)
+                                {
+                                    return stream.span().fail(
+                                        "friend capabilities overlap for a source type",
+                                    );
+                                }
+
+                                existing
                                     .capabilities
-                                    .extend(existing.capabilities);
+                                    .extend(friend.capabilities);
+                                if friend.make_conv.is_some() {
+                                    existing.make_conv = friend.make_conv;
+                                }
+                                this.friends.insert(existing);
                             }
-                            if !this.friends.insert(friend) {
-                                return stream.span().fail("duplicated friend");
+                            else {
+                                this.friends.insert(friend);
                             }
                         }
                     }
@@ -429,7 +448,7 @@ fn expand(
     constructor: Option<constructor::Cfg>,
     scope: Option<constructor::Scope>,
 ) -> syn::Result<TokenStream> {
-    let (target, visibility, _) = runner::get_concrete_type(&mut item)?;
+    let (target, visibility, _) = zz::get_concrete_type(&mut item)?;
     let target = target.clone();
     let visibility = visibility.clone();
     let module = friendship
@@ -689,7 +708,10 @@ fn emit_friend(
     };
 
     let conv = parent_path(
-        cfg.conv.as_ref().expect("friend conversion missing"),
+        cfg.make_conv
+            .as_ref()
+            .or(cfg.conv.as_ref())
+            .expect("friend conversion missing"),
         in_module,
     );
 

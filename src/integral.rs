@@ -4,23 +4,6 @@ use std::fmt::{
     Formatter,
 };
 
-use crate::{
-    attr_cfg,
-    friendship::{
-        Construction,
-        Protocol,
-        ProtocolFriend,
-        cfg::Friend,
-    },
-    runner,
-    runner::{
-        Merged,
-        MkErr,
-        mk_flags,
-    },
-    value_type::N,
-};
-use attr_cfg::ValidationCfg;
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -41,6 +24,24 @@ use syn::{
         ParseStream,
     },
     parse_quote,
+};
+
+use crate::{
+    friendship::{
+        Construction,
+        Protocol,
+        ProtocolFriend,
+        cfg::Friend,
+    },
+    runner,
+    runner::{
+        Merged,
+        MkErr,
+        mk_flags,
+    },
+    value_type::N,
+    zz,
+    zz::ValidationCfg,
 };
 
 pub(crate) fn integral(
@@ -64,7 +65,8 @@ pub(crate) fn integral(
             );
         };
 
-        if !runner::find_repr_transparent(&item.attrs)? {
+        let attrs = &item.attrs;
+        if !zz::find_repr_transparent(attrs)? {
             return item.fail("expecting #[repr(transparent, ...)]");
         }
 
@@ -207,7 +209,7 @@ impl Cfg {
             ..Default::default()
         };
 
-        runner::parse_inner_attributes(input, |attr, rest| {
+        zz::parse_inner(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {
                 return Ok(true);
             }
@@ -220,7 +222,7 @@ impl Cfg {
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
                 "friends" => {
-                    let friends = runner::one_or_list::<Friend>(rest)?
+                    let friends = zz::one_or_list::<Friend>(rest)?
                         .collect::<BTreeSet<_>>();
                     for friend in &friends {
                         for capability in &friend.capabilities {
@@ -273,7 +275,7 @@ impl Parse for Cfg {
         let mut this = Self::default();
         let mut has_konst = false;
 
-        runner::parse_inner_attributes(input, |attr, rest| {
+        zz::parse_inner(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {
                 return Ok(true);
             }
@@ -286,7 +288,7 @@ impl Parse for Cfg {
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
                 "friends" => {
-                    let friends = runner::one_or_list::<Friend>(rest)?
+                    let friends = zz::one_or_list::<Friend>(rest)?
                         .collect::<BTreeSet<_>>();
                     for friend in &friends {
                         for capability in &friend.capabilities {

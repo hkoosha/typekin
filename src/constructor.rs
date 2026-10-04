@@ -19,7 +19,10 @@ use syn::{
     spanned::Spanned,
 };
 
-use crate::runner;
+use crate::{
+    runner,
+    zz,
+};
 
 #[derive(Clone)]
 pub(crate) struct Cfg {
@@ -160,11 +163,11 @@ impl Parse for Cfg {
         let mut friends = BTreeSet::new();
         let mut scope = None;
 
-        runner::parse_inner_attributes(input, |attr, stream| {
+        zz::parse_inner(input, |attr, stream| {
             match attr {
                 "relationship" => relationship = Some(stream.parse()?),
                 "maker" => maker = stream.parse()?,
-                "friends" => friends = runner::one_or_list(stream)?.collect(),
+                "friends" => friends = zz::one_or_list(stream)?.collect(),
                 "scope" => scope = Some(stream.parse()?),
                 _ => return Ok(false),
             };
@@ -242,8 +245,8 @@ pub(crate) fn ekran(
     mut item: Item,
 ) -> proc_macro::TokenStream {
     return runner::catching(move || {
-        let (_, _, attrs) = runner::get_concrete_type(&mut item)?;
-        let friendship = runner::pop_attr(attrs, "friendship")?
+        let (_, _, attrs) = zz::get_concrete_type(&mut item)?;
+        let friendship = zz::pop_attr(attrs, "friendship")?
             .ok_or_else(|| {
                 syn::Error::new(
                     item.span(),
