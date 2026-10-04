@@ -142,6 +142,14 @@ them, and reconstruct the wrapper through checked construction.
 
 These validation panics affect types that reject part of their underlying
 domain; ordinary integer failures such as division by zero can also panic.
+Validation occurs after every generated operator call, not only after a whole
+expression. Rust evaluates `foo + 1 + 2` as `(foo + 1) + 2`, and each `+` must
+produce a validated wrapper. Consequently, an intermediate result rejected by
+the validator panics even if a later operation would produce an accepted final
+value. To validate only a final result, extract the raw value, do the primitive
+operations (using checked arithmetic when overflow must be handled), and
+reconstruct with `try_make`.
+
 For instance, a callback can reject any `u32` less than 3:
 
 ```rust
@@ -167,12 +175,58 @@ fn main() {
 }
 ```
 
+Similarly, a type that accepts `0` but rejects `1` and `2` cannot evaluate this
+chain through the generated operators, even though its final raw result would
+be `3`:
+
+```rust
+#[typekin::integral(konst = false, valid = Self::is_valid)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct SkipOneAndTwo(u32);
+
+impl SkipOneAndTwo {
+    const fn is_valid(value: u32) -> bool { value != 1 && value != 2 }
+}
+
+let start = SkipOneAndTwo::try_make(0).unwrap();
+// Parses as `(start + 1) + 2`; the first `+` must create `SkipOneAndTwo(1)`.
+let _: SkipOneAndTwo = start + 1 + 2; // Panics.
+
+// Validate only the final raw result instead.
+let value = SkipOneAndTwo::try_make(start.raw() + 1 + 2).unwrap();
+```
+
+Validation has a runtime cost on every checked construction and generated
+operation. When the invariant is a development-time diagnostic rather than a
+release guarantee, a validator can be enabled only by an opt-in Cargo feature:
+
+```rust
+#[typekin::integral(konst = false, valid = Self::is_valid)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct Counter(u32);
+
+impl Counter {
+    #[cfg(feature = "validate")]
+    const fn is_valid(value: u32) -> bool { value <= 1_000 }
+
+    #[cfg(not(feature = "validate"))]
+    #[inline(always)]
+    const fn is_valid(_: u32) -> bool { true }
+}
+```
+
+This is analogous to the usual profile-dependent integer-overflow checking:
+it can reduce release overhead, but it also means invalid values can be
+constructed in builds without the feature. It is not suitable when the
+invariant is required for safety, correctness, or an external contract.
+
 ## Constness Status
 
 `integral` and `bitflag` require explicit `konst = true|false`. Set `true` for
 nightly-only const generation or `false` for ordinary stable implementations.
-Text defaults to `konst = true`; set `konst = false` for ordinary stable
-implementations.
+`text` also requires explicit `konst = true|false`.
 
 ### Friendship is consuming
 
