@@ -71,7 +71,6 @@ mod ranges {
         input: ParseStream
     ) -> syn::Result<Vec<ExprRange>> {
         let mut ranges = one_or_list(input)?
-            .into_iter()
             .map(|it| {
                 let Expr::Range(range) = it
                 else {

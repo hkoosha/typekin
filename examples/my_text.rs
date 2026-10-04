@@ -23,7 +23,6 @@ mod subject {
         std = true,
         in = ["draft", "published", "published-new", "archive", "-"],
         friends = into_my_tag(MyHeadline<'_>) -> Make,
-        with = [display],
     )]
     #[repr(transparent)]
     #[derive(Clone)]

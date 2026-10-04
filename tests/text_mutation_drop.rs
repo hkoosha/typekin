@@ -179,7 +179,7 @@ mod tests {
     #[repr(transparent)]
     struct EmptySetText(String);
 
-    #[typekin::text(konst = false, std = false, in = [], valid = valid_owned_text)]
+    #[typekin::text(konst = false, std = false, in = [])]
     #[repr(transparent)]
     struct CallbackEmptySetText(String);
 
@@ -188,7 +188,7 @@ mod tests {
         type Construction = fn(String) -> bool;
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
-            ("callback and membership", |raw| {
+            ("membership", |raw| {
                 CallbackEmptySetText::try_make(raw).is_err()
             }),
             ("untrusted friend", |raw| {

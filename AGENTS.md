@@ -90,7 +90,8 @@ constness, and runtime cost as API behavior.
 ### Constness is a caller-visible choice
 
 - `integral` and `bitflag` require explicit `konst = true|false`.
-- Text should default to const generation when `konst` is omitted.
+- `text` requires explicit `konst = true|false`, matching the other primary
+  macro families.
 - `konst = true` means consistent const emission. Do not silently emit a
   non-const subset when a requested combination is unsupported; let the
   caller's nightly compiler diagnose it.

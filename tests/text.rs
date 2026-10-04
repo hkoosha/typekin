@@ -31,13 +31,11 @@ mod tests {
 
     #[typekin::text(
         konst = false, std = false,
-        valid = [is_slug, is_not_reserved],
-        in = ["draft", "published", "reserved", "Draft"],
+        in = ["draft", "published"],
         friends = [
             SlugSource::into_string(SlugSource) -> Make,
             TrustSlugSource::into_string(TrustSlugSource) -> [Make, Trust],
         ],
-        with = [display],
     )]
     #[repr(transparent)]
     struct Slug(String);
@@ -62,9 +60,22 @@ mod tests {
     #[repr(transparent)]
     struct LiteralText(String);
 
-    #[typekin::text(konst = false, std = false, friends = _(Self) -> [Rel], with = [display])]
+    #[typekin::text(konst = false, std = false, friends = _(Self) -> [Rel])]
     #[repr(transparent)]
     struct DisplayText(String);
+
+    #[typekin::text(konst = false, std = false, without = [display])]
+    #[repr(transparent)]
+    struct NoDisplayText(String);
+
+    impl core::fmt::Display for NoDisplayText {
+        fn fmt(
+            &self,
+            formatter: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
+            return formatter.write_str(self.as_str());
+        }
+    }
 
     std::thread_local! {
         static MUTATION_VALIDATIONS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
@@ -97,7 +108,7 @@ mod tests {
     struct MutationAllocationText(String);
 
     #[test]
-    fn validates_callbacks_and_literal_membership() {
+    fn validates_literal_membership() {
         for value in [
             "draft",
             "published",
@@ -112,8 +123,7 @@ mod tests {
             );
         }
 
-        // Each value violates only one constraint: first callback, second
-        // callback, or membership. None of those constraints may be skipped.
+        // Each value is absent from the membership list.
         for value in [
             "Draft", "reserved", "other",
         ] {
@@ -752,7 +762,7 @@ mod tests {
         #[repr(transparent)]
         struct EmptyDomain(String);
 
-        #[typekin::text(konst = false, std = false, in = [], valid = super::is_not_reserved)]
+        #[typekin::text(konst = false, std = false, in = [])]
         #[repr(transparent)]
         struct CallbackEmptyDomain(String);
 

@@ -16,7 +16,7 @@ fmt:
 
 test-here:
   cargo test --offline
-test-there:
+test-there: fmt
   cd ./typekin_testing && pwd && just test
 test: test-here test-there
 

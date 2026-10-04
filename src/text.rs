@@ -43,7 +43,7 @@ pub(crate) fn ekran(
 }
 
 mk_flags! {
-    #[flag_default(bool=false, str="")]
+    #[flag_default(bool=true, str="")]
     #[derive(Debug, Clone)]
     pub(crate) struct TextFlags {
         pub display: bool,
@@ -150,13 +150,31 @@ impl Parse for Cfg {
             friends: BTreeSet::new(),
             flags: Default::default(),
         };
+        let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
             match attr {
                 "std" => this.std = rest.parse::<LitBool>()?.value,
-                "konst" => this.konst = rest.parse::<LitBool>()?.value,
-                "valid" => this.callbacks = zz::parse_callbacks(rest)?,
-                "in" => this.values = Some(Self::parse_values(rest)?),
+                "konst" => {
+                    this.konst = rest.parse::<LitBool>()?.value;
+                    has_konst = true;
+                }
+                "valid" => {
+                    if this.values.is_some() {
+                        return rest
+                            .span()
+                            .fail("`valid` and `in` cannot be used together");
+                    }
+                    this.callbacks = zz::parse_callbacks(rest)?;
+                }
+                "in" => {
+                    if !this.callbacks.is_empty() {
+                        return rest
+                            .span()
+                            .fail("`valid` and `in` cannot be used together");
+                    }
+                    this.values = Some(Self::parse_values(rest)?);
+                }
                 "friends" => this.parse_friends(rest)?,
                 "with" => this.flags.parse_from(rest, true)?,
                 "without" => this.flags.parse_from(rest, false)?,
@@ -165,6 +183,13 @@ impl Parse for Cfg {
 
             return Ok(true);
         })?;
+
+        if !has_konst {
+            return Err(syn::Error::new(
+                input.span(),
+                "missing required `konst` argument",
+            ));
+        }
 
         return Ok(this);
     }

@@ -335,7 +335,7 @@ impl Int {
         digits: &str,
         suffix: &str,
     ) -> Result<Int, ()> {
-        if suffix != "" && N::rust_names().contains(&suffix) {
+        if !suffix.is_empty() && N::rust_names().contains(&suffix) {
             return Err(());
         }
 
