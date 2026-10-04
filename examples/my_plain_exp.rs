@@ -1281,6 +1281,16 @@ mod subject {
                 return self._not();
             }
         }
+        impl ::core::fmt::Display for MyPlain {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                let raw = Self::raw(*self);
+                return ::core::fmt::Display::fmt(&raw, f);
+            }
+        }
         impl ::core::fmt::Binary for MyPlain {
             fn fmt(
                 &self,

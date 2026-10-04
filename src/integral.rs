@@ -4,22 +4,8 @@ use std::fmt::{
     Formatter,
 };
 
-use proc_macro2::{
-    Ident,
-    TokenStream,
-    TokenTree,
-};
-use quote::{
-    ToTokens,
-    format_ident,
-    quote,
-};
-use syn::{bracketed, parse::{
-    Parse,
-    ParseStream,
-}, parse_quote, Expr, ExprRange, Fields, ItemStruct, Path, Token, Type};
-
 use crate::{
+    attr_cfg,
     friendship::{
         Construction,
         Protocol,
@@ -33,6 +19,28 @@ use crate::{
         mk_flags,
     },
     value_type::N,
+};
+use attr_cfg::ValidationCfg;
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
+use quote::{
+    ToTokens,
+    format_ident,
+    quote,
+};
+use syn::{
+    ExprRange,
+    Fields,
+    ItemStruct,
+    Path,
+    Type,
+    parse::{
+        Parse,
+        ParseStream,
+    },
+    parse_quote,
 };
 
 pub(crate) fn integral(
@@ -160,93 +168,6 @@ mk_flags! {
         pub fn_make: String = "make",
 
         pub fp_unchecked: String = "Self::_unchecked",
-    }
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct ValidationCfg {
-    pub(crate) callbacks: Vec<Path>,
-    pub(crate) ranges: Vec<ExprRange>,
-}
-
-impl ValidationCfg {
-    pub(crate) fn has_validation(&self) -> bool {
-        return !self.callbacks.is_empty() || !self.ranges.is_empty();
-    }
-
-    pub(crate) fn parse_callbacks(
-        input: ParseStream
-    ) -> syn::Result<Vec<Path>> {
-        if input.peek(syn::token::Bracket) {
-            return Ok(runner::list::<Path>(input)?.collect());
-        }
-
-        return Ok(vec![input.parse()?]);
-    }
-
-    fn parse_ranges(input: ParseStream) -> syn::Result<Vec<ExprRange>> {
-        let tokens = if input.peek(syn::token::Bracket) {
-            let content;
-            let _ = bracketed!(content in input);
-            content.parse()?
-        }
-        else {
-            let mut tokens = TokenStream::new();
-
-            while !input.is_empty() && !input.peek(Token![,]) {
-                let token: TokenTree = input.parse()?;
-                tokens.extend([token]);
-            }
-
-            tokens
-        };
-
-        return Self::parse_range_union(tokens);
-    }
-
-    fn parse_range_union(tokens: TokenStream) -> syn::Result<Vec<ExprRange>> {
-        let mut ranges = vec![];
-        let mut range = TokenStream::new();
-
-        for token in tokens {
-            if matches!(&token, TokenTree::Punct(it) if it.as_char() == '+') {
-                ranges.push(Self::parse_range_tokens(range)?);
-                range = TokenStream::new();
-            }
-            else {
-                range.extend([token]);
-            }
-        }
-
-        ranges.push(Self::parse_range_tokens(range)?);
-        return Ok(ranges);
-    }
-
-    fn parse_range_tokens(tokens: TokenStream) -> syn::Result<ExprRange> {
-        return Self::parse_range(syn::parse2(tokens)?);
-    }
-
-    fn parse_range(expr: Expr) -> syn::Result<ExprRange> {
-        return match expr {
-            Expr::Range(range) if range.attrs.is_empty() => Ok(range),
-            expr => expr.fail("invalid range definition"),
-        };
-    }
-
-    fn parse_attr(
-        &mut self,
-        attr: &str,
-        input: ParseStream,
-    ) -> syn::Result<bool> {
-        match attr {
-            "valid" => {
-                self.callbacks = Self::parse_callbacks(input)?;
-            }
-            "in" => self.ranges = Self::parse_ranges(input)?,
-            _ => return Ok(false),
-        };
-
-        return Ok(true);
     }
 }
 

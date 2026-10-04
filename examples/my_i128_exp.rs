@@ -11,178 +11,178 @@ mod subject {
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]
-    pub struct MyU32(i128);
+    pub struct MyU128(i128);
 
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
     const _: () = {
         const trait Seal {
-            fn conv_my_u32(self) -> i128;
+            fn conv_my_u128(self) -> i128;
         }
         const trait Make: [const] Seal {
-            fn make(self) -> MyU32;
+            fn make(self) -> MyU128;
         }
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Relation: [const] Seal {}
         const trait Trust: [const] Seal {}
-        const impl Seal for MyU32 {
+        const impl Seal for MyU128 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return Self::raw(self);
             }
         }
-        const impl Bit for MyU32 {}
-        const impl Make for MyU32 {
+        const impl Bit for MyU128 {}
+        const impl Make for MyU128 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
-        const impl Math for MyU32 {}
-        const impl Relation for MyU32 {}
+        const impl Math for MyU128 {}
+        const impl Relation for MyU128 {}
         const impl Seal for i128 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Bit for i128 {}
         const impl Make for i128 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Math for i128 {}
         const impl Relation for i128 {}
         const impl Seal for i32 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for i32 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for i64 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for i64 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for i8 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for i8 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for isize {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for isize {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for u16 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for u16 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for u32 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for u64 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for u64 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for u8 {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for u8 {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
         const impl Seal for usize {
             #[inline(always)]
-            fn conv_my_u32(self) -> i128 {
+            fn conv_my_u128(self) -> i128 {
                 return self as i128;
             }
         }
         const impl Make for usize {
             #[inline(always)]
-            fn make(self) -> MyU32 {
-                let raw = <Self as Seal>::conv_my_u32(self);
-                return MyU32::_unchecked(raw);
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_unchecked(raw);
             }
         }
-        impl ::core::convert::AsRef<i128> for MyU32 {
+        impl ::core::convert::AsRef<i128> for MyU128 {
             #[inline(always)]
             fn as_ref(&self) -> &i128 {
                 return &self.0;
             }
         }
-        impl ::core::str::FromStr for MyU32 {
+        impl ::core::str::FromStr for MyU128 {
             type Err = ();
             #[inline(always)]
             fn from_str(
@@ -203,7 +203,7 @@ mod subject {
                 };
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[doc = r" The number of bits in the wrapped primitive integer."]
             pub const BITS: u32 = i128::BITS;
             #[inline(always)]
@@ -287,7 +287,7 @@ mod subject {
                 return Self::raw(self).to_ne_bytes();
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[inline(always)]
             pub const fn rotate_left(
                 self,
@@ -506,7 +506,7 @@ mod subject {
                 };
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[inline(always)]
             pub const fn midpoint(
                 self,
@@ -779,7 +779,7 @@ mod subject {
                 return Self::_core_int(Self::raw(self).strict_pow(exp));
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[inline(always)]
             pub const fn overflowing_add(
                 self,
@@ -873,7 +873,7 @@ mod subject {
                 return (Self::_core_int(value), overflowed);
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[inline(always)]
             pub const fn cast_unsigned(self) -> u128 {
                 return Self::raw(self).cast_unsigned();
@@ -949,90 +949,90 @@ mod subject {
                 return Self::raw(self).is_negative();
             }
         }
-        const impl ::core::convert::Into<i128> for MyU32 {
+        const impl ::core::convert::Into<i128> for MyU128 {
             #[inline(always)]
             fn into(self) -> i128 {
-                return MyU32::into_i128(self);
+                return MyU128::into_i128(self);
             }
         }
-        const impl ::core::convert::TryInto<usize> for MyU32 {
+        const impl ::core::convert::TryInto<usize> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<usize, Self::Error> {
-                return MyU32::try_into_usize(self);
+                return MyU128::try_into_usize(self);
             }
         }
-        const impl ::core::convert::TryInto<isize> for MyU32 {
+        const impl ::core::convert::TryInto<isize> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
-                return MyU32::try_into_isize(self);
+                return MyU128::try_into_isize(self);
             }
         }
-        const impl ::core::convert::TryInto<u8> for MyU32 {
+        const impl ::core::convert::TryInto<u8> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
-                return MyU32::try_into_u8(self);
+                return MyU128::try_into_u8(self);
             }
         }
-        const impl ::core::convert::TryInto<u16> for MyU32 {
+        const impl ::core::convert::TryInto<u16> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
-                return MyU32::try_into_u16(self);
+                return MyU128::try_into_u16(self);
             }
         }
-        const impl ::core::convert::TryInto<u32> for MyU32 {
+        const impl ::core::convert::TryInto<u32> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u32, Self::Error> {
-                return MyU32::try_into_u32(self);
+                return MyU128::try_into_u32(self);
             }
         }
-        const impl ::core::convert::TryInto<u64> for MyU32 {
+        const impl ::core::convert::TryInto<u64> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u64, Self::Error> {
-                return MyU32::try_into_u64(self);
+                return MyU128::try_into_u64(self);
             }
         }
-        const impl ::core::convert::TryInto<u128> for MyU32 {
+        const impl ::core::convert::TryInto<u128> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u128, Self::Error> {
-                return MyU32::try_into_u128(self);
+                return MyU128::try_into_u128(self);
             }
         }
-        const impl ::core::convert::TryInto<i8> for MyU32 {
+        const impl ::core::convert::TryInto<i8> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
-                return MyU32::try_into_i8(self);
+                return MyU128::try_into_i8(self);
             }
         }
-        const impl ::core::convert::TryInto<i16> for MyU32 {
+        const impl ::core::convert::TryInto<i16> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
-                return MyU32::try_into_i16(self);
+                return MyU128::try_into_i16(self);
             }
         }
-        const impl ::core::convert::TryInto<i32> for MyU32 {
+        const impl ::core::convert::TryInto<i32> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
-                return MyU32::try_into_i32(self);
+                return MyU128::try_into_i32(self);
             }
         }
-        const impl ::core::convert::TryInto<i64> for MyU32 {
+        const impl ::core::convert::TryInto<i64> for MyU128 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i64, Self::Error> {
-                return MyU32::try_into_i64(self);
+                return MyU128::try_into_i64(self);
             }
         }
-        const impl ::core::ops::Shr<usize> for MyU32 {
+        const impl ::core::ops::Shr<usize> for MyU128 {
             type Output = Self;
             #[inline(always)]
             fn shr(
@@ -1042,7 +1042,7 @@ mod subject {
                 return self._shr(rhs);
             }
         }
-        const impl ::core::ops::Shl<usize> for MyU32 {
+        const impl ::core::ops::Shl<usize> for MyU128 {
             type Output = Self;
             #[inline(always)]
             fn shl(
@@ -1052,7 +1052,7 @@ mod subject {
                 return self._shl(rhs);
             }
         }
-        const impl ::core::ops::ShrAssign<usize> for MyU32 {
+        const impl ::core::ops::ShrAssign<usize> for MyU128 {
             #[inline(always)]
             fn shr_assign(
                 &mut self,
@@ -1061,7 +1061,7 @@ mod subject {
                 *self = self._shr(other);
             }
         }
-        const impl ::core::ops::ShlAssign<usize> for MyU32 {
+        const impl ::core::ops::ShlAssign<usize> for MyU128 {
             #[inline(always)]
             fn shl_assign(
                 &mut self,
@@ -1070,7 +1070,7 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        const impl<T> ::core::ops::BitAndAssign<T> for MyU32
+        const impl<T> ::core::ops::BitAndAssign<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1079,11 +1079,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._bitand(it);
             }
         }
-        const impl<T> ::core::ops::AddAssign<T> for MyU32
+        const impl<T> ::core::ops::AddAssign<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1092,11 +1092,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._add(it);
             }
         }
-        const impl<T> ::core::ops::SubAssign<T> for MyU32
+        const impl<T> ::core::ops::SubAssign<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1105,11 +1105,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._sub(it);
             }
         }
-        const impl<T> ::core::ops::MulAssign<T> for MyU32
+        const impl<T> ::core::ops::MulAssign<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1118,11 +1118,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._mul(it);
             }
         }
-        const impl<T> ::core::ops::DivAssign<T> for MyU32
+        const impl<T> ::core::ops::DivAssign<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1131,11 +1131,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._div(it);
             }
         }
-        const impl<T> ::core::ops::RemAssign<T> for MyU32
+        const impl<T> ::core::ops::RemAssign<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1144,11 +1144,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._rem(it);
             }
         }
-        const impl<T> ::core::ops::BitOrAssign<T> for MyU32
+        const impl<T> ::core::ops::BitOrAssign<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1157,20 +1157,20 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._bitor(it);
             }
         }
-        impl ::core::fmt::Debug for MyU32 {
+        impl ::core::fmt::Debug for MyU128 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
-                ::core::write!(f, "MyU32({})", self.0)
+                ::core::write!(f, "MyU128({})", self.0)
             }
         }
-        const impl ::core::cmp::Eq for MyU32 {}
-        const impl ::core::cmp::Ord for MyU32 {
+        const impl ::core::cmp::Eq for MyU128 {}
+        const impl ::core::cmp::Ord for MyU128 {
             #[inline(always)]
             fn cmp(
                 &self,
@@ -1179,18 +1179,18 @@ mod subject {
                 return self.partial_cmp(other).unwrap();
             }
         }
-        if !(::core::mem::size_of::<MyU32>() == ::core::mem::size_of::<i128>())
+        if !(::core::mem::size_of::<MyU128>() == ::core::mem::size_of::<i128>())
         {
             panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
         };
-        if !(::core::mem::align_of::<MyU32>()
+        if !(::core::mem::align_of::<MyU128>()
             == ::core::mem::align_of::<i128>())
         {
             panic!(
                 "invalid memory layout, mismatching alignment: #ty(#el) != #el"
             );
         };
-        const impl<T> ::core::ops::Add<T> for MyU32
+        const impl<T> ::core::ops::Add<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1200,11 +1200,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._add(it);
             }
         }
-        const impl<T> ::core::ops::Sub<T> for MyU32
+        const impl<T> ::core::ops::Sub<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1214,11 +1214,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._sub(it);
             }
         }
-        const impl<T> ::core::ops::Mul<T> for MyU32
+        const impl<T> ::core::ops::Mul<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1228,11 +1228,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._mul(it);
             }
         }
-        const impl<T> ::core::ops::Div<T> for MyU32
+        const impl<T> ::core::ops::Div<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1242,11 +1242,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._div(it);
             }
         }
-        const impl<T> ::core::ops::Rem<T> for MyU32
+        const impl<T> ::core::ops::Rem<T> for MyU128
         where
             T: Math + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1256,11 +1256,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._rem(it);
             }
         }
-        const impl<T> ::core::ops::BitAnd<T> for MyU32
+        const impl<T> ::core::ops::BitAnd<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1270,11 +1270,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._bitand(it);
             }
         }
-        const impl<T> ::core::ops::BitOr<T> for MyU32
+        const impl<T> ::core::ops::BitOr<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1284,11 +1284,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._bitor(it);
             }
         }
-        const impl<T> ::core::ops::BitXor<T> for MyU32
+        const impl<T> ::core::ops::BitXor<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1298,11 +1298,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 return self._bitxor(it);
             }
         }
-        const impl<T> ::core::ops::BitXorAssign<T> for MyU32
+        const impl<T> ::core::ops::BitXorAssign<T> for MyU128
         where
             T: Bit + [const] Seal + [const] ::core::marker::Destruct,
         {
@@ -1311,18 +1311,18 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_u32(rhs);
+                let it = Seal::conv_my_u128(rhs);
                 *self = self._bitxor(it);
             }
         }
-        const impl ::core::ops::Not for MyU32 {
+        const impl ::core::ops::Not for MyU128 {
             type Output = Self;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
             }
         }
-        impl ::core::fmt::Binary for MyU32 {
+        impl ::core::fmt::Binary for MyU128 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1331,7 +1331,7 @@ mod subject {
                 return ::core::fmt::Binary::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::Octal for MyU32 {
+        impl ::core::fmt::Octal for MyU128 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1340,7 +1340,7 @@ mod subject {
                 return ::core::fmt::Octal::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::LowerHex for MyU32 {
+        impl ::core::fmt::LowerHex for MyU128 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1349,7 +1349,7 @@ mod subject {
                 return ::core::fmt::LowerHex::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::UpperHex for MyU32 {
+        impl ::core::fmt::UpperHex for MyU128 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1358,7 +1358,7 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl ::core::cmp::PartialEq for MyU32 {
+        const impl ::core::cmp::PartialEq for MyU128 {
             #[inline(always)]
             fn eq(
                 &self,
@@ -1369,7 +1369,7 @@ mod subject {
                 return lhs == rhs;
             }
         }
-        const impl ::core::cmp::PartialOrd for MyU32 {
+        const impl ::core::cmp::PartialOrd for MyU128 {
             #[inline(always)]
             fn partial_cmp(
                 &self,
@@ -1380,18 +1380,18 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        impl MyU32 {
+        impl MyU128 {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub const fn of<T>(it: T) -> MyU32
+            pub const fn of<T>(it: T) -> MyU128
             where
                 T: [const] Make + [const] ::core::marker::Destruct,
             {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub const fn make(it: i128) -> MyU32 {
-                return MyU32::of(it);
+            pub const fn make(it: i128) -> MyU128 {
+                return MyU128::of(it);
             }
             #[must_use]
             #[inline(always)]
@@ -1701,11 +1701,11 @@ mod subject {
             }
         }
         #[allow(clippy::unnecessary_cast)]
-        impl MyU32 {}
+        impl MyU128 {}
     };
 }
 
-type Subject = subject::MyU32;
+type Subject = subject::MyU128;
 
 fn main() {
     let lhs = 0b1101i128;

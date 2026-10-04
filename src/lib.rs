@@ -5,6 +5,7 @@ use syn::{
     parse_macro_input,
 };
 
+pub(crate) mod attr_cfg;
 pub(crate) mod bitflag;
 pub(crate) mod constructor;
 pub(crate) mod friendship;
@@ -62,21 +63,18 @@ pub fn text(
 }
 
 /// Mandatory attributes:
-/// - `relation`: Ty
-///   Name of trait to generate, representing the relationship.
+/// - `relation`: Type
+///   Value produced by friend conversions.
 ///
 /// Optional attributes:
-/// - `maker`: Ident
-///   Defaults: `of`
-///   Name of generated constructor fn accepting friend instances for construction of Self.
-/// - `friends`: Path OR \[Path, ...]
+/// - `friends`: single `conversion(TySource) -> Capability` OR a list of.
 ///   Default: `[]`.
-///   List of friends.
-/// - `mod`: `_` OR `self` OR Ident
+///   Declares friends, their conversion fn and their capabilities.
+/// - `scope`: `_` OR `self` OR Item.
 ///   Default: `_` which expands to `const _: () { ... }`.
-///   Name of module to put generated stuff in.
+///   Where the generated protocol and constructor are put into.
 #[proc_macro_attribute]
-pub fn friendship(
+pub fn friends(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {

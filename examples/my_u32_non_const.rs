@@ -2,7 +2,7 @@ mod subject {
     #[typekin::integral(konst = false, with = [display])]
     #[derive(Copy, Clone)]
     #[repr(transparent)]
-    pub struct MyExample(u32);
+    pub struct MyNonConstU32(u32);
 
     pub struct Verified(u32);
 
@@ -20,13 +20,14 @@ mod subject {
         konst = false,
         in = 1..=100,
         friends = Verified::into_raw(Verified) -> [Make, Trust],
+        with = [display]
     )]
     #[derive(Copy, Clone)]
     #[repr(transparent)]
     pub struct Limited(u32);
 }
 
-type Subject = subject::MyExample;
+use subject::MyNonConstU32 as Subject;
 
 fn main() {
     let lhs = 0b1101u32;

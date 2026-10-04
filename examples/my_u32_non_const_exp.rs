@@ -1,100 +1,100 @@
 mod subject {
     #[derive(Copy, Clone)]
     #[repr(transparent)]
-    pub struct MyExample(u32);
+    pub struct MyNonConstU32(u32);
 
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
     const _: () = {
         trait Seal {
-            fn conv_my_example(self) -> u32;
+            fn conv_my_non_const_u32(self) -> u32;
         }
         trait Make: Seal {
-            fn make(self) -> MyExample;
+            fn make(self) -> MyNonConstU32;
         }
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Relation: Seal {}
         trait Trust: Seal {}
-        impl Seal for MyExample {
+        impl Seal for MyNonConstU32 {
             #[inline(always)]
-            fn conv_my_example(self) -> u32 {
+            fn conv_my_non_const_u32(self) -> u32 {
                 return Self::raw(self);
             }
         }
-        impl Bit for MyExample {}
-        impl Make for MyExample {
+        impl Bit for MyNonConstU32 {}
+        impl Make for MyNonConstU32 {
             #[inline(always)]
-            fn make(self) -> MyExample {
-                let raw = <Self as Seal>::conv_my_example(self);
-                return MyExample::_unchecked(raw);
+            fn make(self) -> MyNonConstU32 {
+                let raw = <Self as Seal>::conv_my_non_const_u32(self);
+                return MyNonConstU32::_unchecked(raw);
             }
         }
-        impl Math for MyExample {}
-        impl Relation for MyExample {}
+        impl Math for MyNonConstU32 {}
+        impl Relation for MyNonConstU32 {}
         impl Seal for i16 {
             #[inline(always)]
-            fn conv_my_example(self) -> u32 {
+            fn conv_my_non_const_u32(self) -> u32 {
                 return self as u32;
             }
         }
         impl Make for i16 {
             #[inline(always)]
-            fn make(self) -> MyExample {
-                let raw = <Self as Seal>::conv_my_example(self);
-                return MyExample::_unchecked(raw);
+            fn make(self) -> MyNonConstU32 {
+                let raw = <Self as Seal>::conv_my_non_const_u32(self);
+                return MyNonConstU32::_unchecked(raw);
             }
         }
         impl Seal for u16 {
             #[inline(always)]
-            fn conv_my_example(self) -> u32 {
+            fn conv_my_non_const_u32(self) -> u32 {
                 return self as u32;
             }
         }
         impl Make for u16 {
             #[inline(always)]
-            fn make(self) -> MyExample {
-                let raw = <Self as Seal>::conv_my_example(self);
-                return MyExample::_unchecked(raw);
+            fn make(self) -> MyNonConstU32 {
+                let raw = <Self as Seal>::conv_my_non_const_u32(self);
+                return MyNonConstU32::_unchecked(raw);
             }
         }
         impl Seal for u32 {
             #[inline(always)]
-            fn conv_my_example(self) -> u32 {
+            fn conv_my_non_const_u32(self) -> u32 {
                 return self as u32;
             }
         }
         impl Bit for u32 {}
         impl Make for u32 {
             #[inline(always)]
-            fn make(self) -> MyExample {
-                let raw = <Self as Seal>::conv_my_example(self);
-                return MyExample::_unchecked(raw);
+            fn make(self) -> MyNonConstU32 {
+                let raw = <Self as Seal>::conv_my_non_const_u32(self);
+                return MyNonConstU32::_unchecked(raw);
             }
         }
         impl Math for u32 {}
         impl Relation for u32 {}
         impl Seal for u8 {
             #[inline(always)]
-            fn conv_my_example(self) -> u32 {
+            fn conv_my_non_const_u32(self) -> u32 {
                 return self as u32;
             }
         }
         impl Make for u8 {
             #[inline(always)]
-            fn make(self) -> MyExample {
-                let raw = <Self as Seal>::conv_my_example(self);
-                return MyExample::_unchecked(raw);
+            fn make(self) -> MyNonConstU32 {
+                let raw = <Self as Seal>::conv_my_non_const_u32(self);
+                return MyNonConstU32::_unchecked(raw);
             }
         }
-        impl ::core::convert::AsRef<u32> for MyExample {
+        impl ::core::convert::AsRef<u32> for MyNonConstU32 {
             #[inline(always)]
             fn as_ref(&self) -> &u32 {
                 return &self.0;
             }
         }
-        impl ::core::str::FromStr for MyExample {
+        impl ::core::str::FromStr for MyNonConstU32 {
             type Err = ();
             #[inline(always)]
             fn from_str(
@@ -115,7 +115,7 @@ mod subject {
                 };
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[doc = r" The number of bits in the wrapped primitive integer."]
             pub const BITS: u32 = u32::BITS;
             #[inline(always)]
@@ -199,7 +199,7 @@ mod subject {
                 return Self::raw(self).to_ne_bytes();
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[inline(always)]
             pub fn rotate_left(
                 self,
@@ -418,7 +418,7 @@ mod subject {
                 };
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[inline(always)]
             pub fn midpoint(
                 self,
@@ -691,7 +691,7 @@ mod subject {
                 return Self::_core_int(Self::raw(self).strict_pow(exp));
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[inline(always)]
             pub fn overflowing_add(
                 self,
@@ -785,7 +785,7 @@ mod subject {
                 return (Self::_core_int(value), overflowed);
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[inline(always)]
             pub fn cast_signed(self) -> i32 {
                 return Self::raw(self).cast_signed();
@@ -928,85 +928,85 @@ mod subject {
                 return (Self::_core_int(low), Self::_core_int(high));
             }
         }
-        impl ::core::convert::Into<usize> for MyExample {
+        impl ::core::convert::Into<usize> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> usize {
-                return MyExample::into_usize(self);
+                return MyNonConstU32::into_usize(self);
             }
         }
-        impl ::core::convert::Into<u32> for MyExample {
+        impl ::core::convert::Into<u32> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> u32 {
-                return MyExample::into_u32(self);
+                return MyNonConstU32::into_u32(self);
             }
         }
-        impl ::core::convert::Into<u64> for MyExample {
+        impl ::core::convert::Into<u64> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> u64 {
-                return MyExample::into_u64(self);
+                return MyNonConstU32::into_u64(self);
             }
         }
-        impl ::core::convert::Into<u128> for MyExample {
+        impl ::core::convert::Into<u128> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> u128 {
-                return MyExample::into_u128(self);
+                return MyNonConstU32::into_u128(self);
             }
         }
-        impl ::core::convert::Into<i64> for MyExample {
+        impl ::core::convert::Into<i64> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> i64 {
-                return MyExample::into_i64(self);
+                return MyNonConstU32::into_i64(self);
             }
         }
-        impl ::core::convert::Into<i128> for MyExample {
+        impl ::core::convert::Into<i128> for MyNonConstU32 {
             #[inline(always)]
             fn into(self) -> i128 {
-                return MyExample::into_i128(self);
+                return MyNonConstU32::into_i128(self);
             }
         }
-        impl ::core::convert::TryInto<isize> for MyExample {
+        impl ::core::convert::TryInto<isize> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
-                return MyExample::try_into_isize(self);
+                return MyNonConstU32::try_into_isize(self);
             }
         }
-        impl ::core::convert::TryInto<u8> for MyExample {
+        impl ::core::convert::TryInto<u8> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
-                return MyExample::try_into_u8(self);
+                return MyNonConstU32::try_into_u8(self);
             }
         }
-        impl ::core::convert::TryInto<u16> for MyExample {
+        impl ::core::convert::TryInto<u16> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
-                return MyExample::try_into_u16(self);
+                return MyNonConstU32::try_into_u16(self);
             }
         }
-        impl ::core::convert::TryInto<i8> for MyExample {
+        impl ::core::convert::TryInto<i8> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
-                return MyExample::try_into_i8(self);
+                return MyNonConstU32::try_into_i8(self);
             }
         }
-        impl ::core::convert::TryInto<i16> for MyExample {
+        impl ::core::convert::TryInto<i16> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
-                return MyExample::try_into_i16(self);
+                return MyNonConstU32::try_into_i16(self);
             }
         }
-        impl ::core::convert::TryInto<i32> for MyExample {
+        impl ::core::convert::TryInto<i32> for MyNonConstU32 {
             type Error = ();
             #[inline(always)]
             fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
-                return MyExample::try_into_i32(self);
+                return MyNonConstU32::try_into_i32(self);
             }
         }
-        impl ::core::ops::Shr<usize> for MyExample {
+        impl ::core::ops::Shr<usize> for MyNonConstU32 {
             type Output = Self;
             #[inline(always)]
             fn shr(
@@ -1016,7 +1016,7 @@ mod subject {
                 return self._shr(rhs);
             }
         }
-        impl ::core::ops::Shl<usize> for MyExample {
+        impl ::core::ops::Shl<usize> for MyNonConstU32 {
             type Output = Self;
             #[inline(always)]
             fn shl(
@@ -1026,7 +1026,7 @@ mod subject {
                 return self._shl(rhs);
             }
         }
-        impl ::core::ops::ShrAssign<usize> for MyExample {
+        impl ::core::ops::ShrAssign<usize> for MyNonConstU32 {
             #[inline(always)]
             fn shr_assign(
                 &mut self,
@@ -1035,7 +1035,7 @@ mod subject {
                 *self = self._shr(other);
             }
         }
-        impl ::core::ops::ShlAssign<usize> for MyExample {
+        impl ::core::ops::ShlAssign<usize> for MyNonConstU32 {
             #[inline(always)]
             fn shl_assign(
                 &mut self,
@@ -1044,7 +1044,7 @@ mod subject {
                 *self = self._shl(other);
             }
         }
-        impl<T> ::core::ops::BitAndAssign<T> for MyExample
+        impl<T> ::core::ops::BitAndAssign<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1053,11 +1053,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._bitand(it);
             }
         }
-        impl<T> ::core::ops::AddAssign<T> for MyExample
+        impl<T> ::core::ops::AddAssign<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1066,11 +1066,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._add(it);
             }
         }
-        impl<T> ::core::ops::SubAssign<T> for MyExample
+        impl<T> ::core::ops::SubAssign<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1079,11 +1079,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._sub(it);
             }
         }
-        impl<T> ::core::ops::MulAssign<T> for MyExample
+        impl<T> ::core::ops::MulAssign<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1092,11 +1092,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._mul(it);
             }
         }
-        impl<T> ::core::ops::DivAssign<T> for MyExample
+        impl<T> ::core::ops::DivAssign<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1105,11 +1105,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._div(it);
             }
         }
-        impl<T> ::core::ops::RemAssign<T> for MyExample
+        impl<T> ::core::ops::RemAssign<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1118,11 +1118,11 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._rem(it);
             }
         }
-        impl<T> ::core::ops::BitOrAssign<T> for MyExample
+        impl<T> ::core::ops::BitOrAssign<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1131,20 +1131,20 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._bitor(it);
             }
         }
-        impl ::core::fmt::Debug for MyExample {
+        impl ::core::fmt::Debug for MyNonConstU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
-                ::core::write!(f, "MyExample({})", self.0)
+                ::core::write!(f, "MyNonConstU32({})", self.0)
             }
         }
-        impl ::core::cmp::Eq for MyExample {}
-        impl ::core::cmp::Ord for MyExample {
+        impl ::core::cmp::Eq for MyNonConstU32 {}
+        impl ::core::cmp::Ord for MyNonConstU32 {
             #[inline(always)]
             fn cmp(
                 &self,
@@ -1153,19 +1153,19 @@ mod subject {
                 return self.partial_cmp(other).unwrap();
             }
         }
-        if !(::core::mem::size_of::<MyExample>()
+        if !(::core::mem::size_of::<MyNonConstU32>()
             == ::core::mem::size_of::<u32>())
         {
             panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
         };
-        if !(::core::mem::align_of::<MyExample>()
+        if !(::core::mem::align_of::<MyNonConstU32>()
             == ::core::mem::align_of::<u32>())
         {
             panic!(
                 "invalid memory layout, mismatching alignment: #ty(#el) != #el"
             );
         };
-        impl<T> ::core::ops::Add<T> for MyExample
+        impl<T> ::core::ops::Add<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1175,11 +1175,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._add(it);
             }
         }
-        impl<T> ::core::ops::Sub<T> for MyExample
+        impl<T> ::core::ops::Sub<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1189,11 +1189,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._sub(it);
             }
         }
-        impl<T> ::core::ops::Mul<T> for MyExample
+        impl<T> ::core::ops::Mul<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1203,11 +1203,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._mul(it);
             }
         }
-        impl<T> ::core::ops::Div<T> for MyExample
+        impl<T> ::core::ops::Div<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1217,11 +1217,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._div(it);
             }
         }
-        impl<T> ::core::ops::Rem<T> for MyExample
+        impl<T> ::core::ops::Rem<T> for MyNonConstU32
         where
             T: Math + Seal,
         {
@@ -1231,11 +1231,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._rem(it);
             }
         }
-        impl<T> ::core::ops::BitAnd<T> for MyExample
+        impl<T> ::core::ops::BitAnd<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1245,11 +1245,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._bitand(it);
             }
         }
-        impl<T> ::core::ops::BitOr<T> for MyExample
+        impl<T> ::core::ops::BitOr<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1259,11 +1259,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._bitor(it);
             }
         }
-        impl<T> ::core::ops::BitXor<T> for MyExample
+        impl<T> ::core::ops::BitXor<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1273,11 +1273,11 @@ mod subject {
                 self,
                 rhs: T,
             ) -> Self::Output {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 return self._bitxor(it);
             }
         }
-        impl<T> ::core::ops::BitXorAssign<T> for MyExample
+        impl<T> ::core::ops::BitXorAssign<T> for MyNonConstU32
         where
             T: Bit + Seal,
         {
@@ -1286,18 +1286,18 @@ mod subject {
                 &mut self,
                 rhs: T,
             ) {
-                let it = Seal::conv_my_example(rhs);
+                let it = Seal::conv_my_non_const_u32(rhs);
                 *self = self._bitxor(it);
             }
         }
-        impl ::core::ops::Not for MyExample {
+        impl ::core::ops::Not for MyNonConstU32 {
             type Output = Self;
             #[inline(always)]
             fn not(self) -> Self::Output {
                 return self._not();
             }
         }
-        impl ::core::fmt::Display for MyExample {
+        impl ::core::fmt::Display for MyNonConstU32 {
             #[inline(always)]
             fn fmt(
                 &self,
@@ -1307,7 +1307,7 @@ mod subject {
                 return ::core::fmt::Display::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::Binary for MyExample {
+        impl ::core::fmt::Binary for MyNonConstU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1316,7 +1316,7 @@ mod subject {
                 return ::core::fmt::Binary::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::Octal for MyExample {
+        impl ::core::fmt::Octal for MyNonConstU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1325,7 +1325,7 @@ mod subject {
                 return ::core::fmt::Octal::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::LowerHex for MyExample {
+        impl ::core::fmt::LowerHex for MyNonConstU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1334,7 +1334,7 @@ mod subject {
                 return ::core::fmt::LowerHex::fmt(&raw, f);
             }
         }
-        impl ::core::fmt::UpperHex for MyExample {
+        impl ::core::fmt::UpperHex for MyNonConstU32 {
             fn fmt(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
@@ -1343,7 +1343,7 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        impl ::core::cmp::PartialEq for MyExample {
+        impl ::core::cmp::PartialEq for MyNonConstU32 {
             #[inline(always)]
             fn eq(
                 &self,
@@ -1354,7 +1354,7 @@ mod subject {
                 return lhs == rhs;
             }
         }
-        impl ::core::cmp::PartialOrd for MyExample {
+        impl ::core::cmp::PartialOrd for MyNonConstU32 {
             #[inline(always)]
             fn partial_cmp(
                 &self,
@@ -1365,18 +1365,18 @@ mod subject {
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
-        impl MyExample {
+        impl MyNonConstU32 {
             #[inline(always)]
             #[allow(private_bounds)]
-            pub fn of<T>(it: T) -> MyExample
+            pub fn of<T>(it: T) -> MyNonConstU32
             where
                 T: Make,
             {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> MyExample {
-                return MyExample::of(it);
+            pub fn make(it: u32) -> MyNonConstU32 {
+                return MyNonConstU32::of(it);
             }
             #[must_use]
             #[inline(always)]
@@ -1681,7 +1681,7 @@ mod subject {
             }
         }
         #[allow(clippy::unnecessary_cast)]
-        impl MyExample {
+        impl MyNonConstU32 {
             #[must_use]
             #[inline(always)]
             pub const fn lo16(self) -> u16 {
@@ -3014,6 +3014,16 @@ mod subject {
                 return self._not();
             }
         }
+        impl ::core::fmt::Display for Limited {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                let raw = Self::raw(*self);
+                return ::core::fmt::Display::fmt(&raw, f);
+            }
+        }
         impl ::core::fmt::Binary for Limited {
             fn fmt(
                 &self,
@@ -3451,7 +3461,7 @@ mod subject {
     };
 }
 
-type Subject = subject::MyExample;
+use subject::MyNonConstU32 as Subject;
 
 fn main() {
     let lhs = 0b1101u32;

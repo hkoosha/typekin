@@ -26,8 +26,8 @@ use syn::{
 };
 
 use crate::{
+    attr_cfg,
     friendship::cfg::Friend,
-    integral::ValidationCfg,
     runner::{
         self,
         MkErr,
@@ -50,9 +50,10 @@ mk_flags! {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub(crate) struct Cfg {
     pub(crate) konst: bool,
+    pub(crate) std: bool,
     pub(crate) callbacks: Vec<Path>,
     pub(crate) values: Option<Vec<LitStr>>,
     pub(crate) friends: BTreeSet<Friend>,
@@ -130,6 +131,7 @@ impl Debug for Cfg {
         return formatter
             .debug_struct("TextCfg")
             .field("konst", &self.konst)
+            .field("std", &self.std)
             .field("callbacks", &self.callbacks.len())
             .field("values", &self.values.as_ref().map(Vec::len))
             .field("friends", &self.friends)
@@ -140,14 +142,20 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
+        let mut this = Self {
+            std: false,
+            konst: true,
+            callbacks: vec![],
+            values: None,
+            friends: BTreeSet::new(),
+            flags: Default::default(),
+        };
 
         runner::parse_inner_attributes(input, |attr, rest| {
             match attr {
+                "std" => this.std = rest.parse::<LitBool>()?.value,
                 "konst" => this.konst = rest.parse::<LitBool>()?.value,
-                "valid" => {
-                    this.callbacks = ValidationCfg::parse_callbacks(rest)?
-                }
+                "valid" => this.callbacks = attr_cfg::parse_callbacks(rest)?,
                 "in" => this.values = Some(Self::parse_values(rest)?),
                 "friends" => this.parse_friends(rest)?,
                 "with" => this.flags.parse_from(rest, true)?,
@@ -313,6 +321,14 @@ impl TextMaker {
     fn ekran(self) -> syn::Result<TokenStream> {
         let item = &self.item;
         let ty = &self.ty;
+        let ty_string = match self.cfg.std {
+            true => quote! { ::std::string::String },
+            false => quote! { ::alloc::string::String },
+        };
+        let ty_vec = match self.cfg.std {
+            true => quote! { ::std::vec::Vec },
+            false => quote! { ::alloc::vec::Vec },
+        };
         let konst = runner::konst(self.cfg.konst);
         let bonst = runner::bonst(self.cfg.konst);
         let destruct = runner::destruct(self.cfg.konst);
@@ -332,9 +348,9 @@ impl TextMaker {
         });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
             quote! {
-                #konst impl ::core::convert::From<::alloc::string::String> for #ty {
+                #konst impl ::core::convert::From<#ty_string> for #ty {
                     #[inline(always)]
-                    fn from(value: ::alloc::string::String) -> Self {
+                    fn from(value: #ty_string) -> Self {
                         return Self(value);
                     }
                 }
@@ -342,7 +358,7 @@ impl TextMaker {
                 #konst impl ::core::convert::From<&str> for #ty {
                     #[inline(always)]
                     fn from(value: &str) -> Self {
-                        return Self(::alloc::string::String::from(value));
+                        return Self(#ty_string::from(value));
                     }
                 }
             }
@@ -352,13 +368,13 @@ impl TextMaker {
         let generated = quote! {
             impl #ty {
                 #[inline(always)]
-                #konst fn is_valid(value: &::alloc::string::String) -> bool {
+                #konst fn is_valid(value: &#ty_string) -> bool {
                     #validation
                 }
 
                 #[inline(always)]
                 pub #konst fn try_make(
-                    value: ::alloc::string::String,
+                    value: #ty_string,
                 ) -> ::core::result::Result<Self, ()> {
                     return if Self::is_valid(&value) {
                         ::core::result::Result::Ok(Self(value))
@@ -372,7 +388,7 @@ impl TextMaker {
                 pub #konst fn try_from_str(
                     value: &str,
                 ) -> ::core::result::Result<Self, ()> {
-                    return Self::try_make(::alloc::string::String::from(value));
+                    return Self::try_make(#ty_string::from(value));
                 }
 
                 #[inline(always)]
@@ -381,7 +397,7 @@ impl TextMaker {
                     function: F,
                 ) -> ::core::result::Result<Self, ()>
                 where
-                    F: #bonst ::core::ops::FnOnce(&mut ::alloc::string::String) #destruct,
+                    F: #bonst ::core::ops::FnOnce(&mut #ty_string) #destruct,
                 {
                     let mut value = self.0;
                     function(&mut value);
@@ -456,13 +472,13 @@ impl TextMaker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn into_inner(self) -> ::alloc::string::String {
+                pub #konst fn into_inner(self) -> #ty_string {
                     return self.0;
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn into_bytes(self) -> ::alloc::vec::Vec<u8> {
+                pub #konst fn into_bytes(self) -> #ty_vec<u8> {
                     return self.0.into_bytes();
                 }
 
@@ -594,7 +610,7 @@ impl TextMaker {
                 }
             }
 
-            impl ::core::convert::From<#ty> for ::alloc::string::String {
+            impl ::core::convert::From<#ty> for #ty_string {
                 #[inline(always)]
                 fn from(value: #ty) -> Self {
                     return value.into_inner();

@@ -1,40 +1,19 @@
-#![feature(const_cmp)]
-#![feature(const_trait_impl)]
-#![feature(const_ops)]
-#![feature(const_convert)]
-#![feature(const_clone)]
-#![feature(const_destruct)]
-#![feature(derive_const)]
-
 mod subject {
-    use std::fmt::Formatter;
-
-    #[typekin::integral(konst = true)]
+    #[typekin::integral(konst = false)]
     #[repr(transparent)]
-    #[derive(Copy)]
-    #[derive_const(Clone)]
-    pub struct MyU32(u32);
-
-    impl std::fmt::Display for MyU32 {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            write!(f, "MyU32({})", self.raw())
-        }
-    }
+    #[derive(Copy, Clone)]
+    pub struct MyU16(u16);
 }
 
-type Subject = subject::MyU32;
+use subject::MyU16 as Subject;
 
 fn main() {
-    let lhs = 0b1101u32;
-    let rhs = 0b0110u32;
+    let lhs = 0b1101u16;
+    let rhs = 0b0110u16;
 
     let lhs = Subject::of(lhs);
     let rhs = Subject::of(rhs);
 
     println!("{:?}", lhs + rhs);
-
-    println!("{:?}", lhs.lo16());
+    println!("{:?}", lhs.lo8());
 }

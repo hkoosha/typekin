@@ -1,3 +1,8 @@
+use crate::{
+    constructor,
+    runner,
+    runner::MkErr,
+};
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -9,12 +14,6 @@ use quote::{
 use syn::{
     Item,
     Type,
-};
-
-use crate::{
-    constructor,
-    runner,
-    runner::MkErr,
 };
 
 pub(crate) use self::cfg::Cfg;
@@ -171,10 +170,33 @@ pub(crate) mod cfg {
         pub(super) seal: Option<Ident>,
         pub(super) conversion: Option<Ident>,
         pub(super) module: Option<constructor::ModuleCfg>,
+        pub(super) scope: Option<constructor::Scope>,
         pub(super) friends: BTreeSet<Friend>,
     }
 
     impl Cfg {
+        pub(super) fn constructor(&self) -> constructor::Cfg {
+            let friends = self
+                .friends
+                .iter()
+                .filter(|friend| friend.ty.is_some())
+                .map(|friend| {
+                    let ty = friend.ty.clone().expect("friend type is empty");
+                    return constructor::Friend {
+                        identity: friend.identity.clone(),
+                        ty,
+                    };
+                })
+                .collect();
+
+            return constructor::Cfg {
+                relationship: syn::parse_quote! { Self::of_parts },
+                maker: format_ident!("of"),
+                friends,
+                scope: self.scope.clone().unwrap_or(constructor::Scope::Const),
+            };
+        }
+
         pub(super) fn capabilities(
             &self,
             include_constructor: bool,
@@ -211,6 +233,7 @@ pub(crate) mod cfg {
                             this.module = Some(stream.parse()?);
                         }
                     }
+                    "scope" => this.scope = Some(stream.parse()?),
                     "friends" => {
                         for mut friend in runner::one_or_list::<Friend>(stream)?
                         {
@@ -232,6 +255,13 @@ pub(crate) mod cfg {
 
                 return Ok(true);
             })?;
+
+            if this.module.is_some() && this.scope.is_some() {
+                return input
+                    .span()
+                    .fail("`mod` and `scope` cannot be used together");
+            }
+
             return Ok(this);
         }
     }
@@ -366,17 +396,13 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
 pub(crate) fn ekran(
     attr: Cfg,
-    mut item: Item,
+    item: Item,
 ) -> proc_macro::TokenStream {
     return runner::catching(move || {
-        let (_, _, attrs) = runner::get_concrete_type(&mut item)?;
-        let constructor = runner::pop_attr(attrs, "constructor")?
-            .map(|attr| {
-                attr.parse_args_with(constructor::Cfg::parse_without_scope)
-            })
-            .transpose()?;
+        let constructor = attr.constructor();
+        let scope = constructor.scope.clone();
 
-        return expand(item, attr, constructor, None);
+        return expand(item, attr, Some(constructor), Some(scope));
     });
 }
 
@@ -393,12 +419,8 @@ pub(crate) fn expand_with_constructor(
         );
     }
 
-    return expand(
-        item,
-        friendship,
-        Some(constructor),
-        Some(constructor::Scope::Self_),
-    );
+    let scope = constructor.scope.clone();
+    return expand(item, friendship, Some(constructor), Some(scope));
 }
 
 fn expand(
@@ -414,6 +436,10 @@ fn expand(
         .module
         .clone()
         .or_else(|| scope.as_ref().and_then(|scope| scope.module().cloned()));
+    let in_self_scope = module.is_none()
+        && scope.as_ref().is_some_and(|scope| {
+            return matches!(scope, constructor::Scope::Self_);
+        });
 
     if friendship.relation.is_none() {
         return item.fail("missing required argument: `relation`");
@@ -496,6 +522,7 @@ fn expand(
         constructor.is_some(),
         constructor,
         module.as_ref(),
+        in_self_scope,
     );
 
     return Ok(quote! {
@@ -551,6 +578,7 @@ pub(crate) fn emit_friendship(
     include_constructor: bool,
     constructor: Option<TokenStream>,
     module: Option<&constructor::ModuleCfg>,
+    in_self_scope: bool,
 ) -> TokenStream {
     let relation = cfg.relation.as_ref().expect("friendship relation is empty");
 
@@ -624,6 +652,9 @@ pub(crate) fn emit_friendship(
     };
 
     return match module {
+        None if in_self_scope => quote! {
+            #items
+        },
         None => quote! {
             const _: () = {
                 #items

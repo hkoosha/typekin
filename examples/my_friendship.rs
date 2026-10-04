@@ -41,8 +41,7 @@ mod folks {
 }
 
 mod sample {
-    use super::folks::ExecXX;
-    use super::folks::Writer;
+    use super::folks::*;
     use std::fmt::{
         Display,
         Formatter,
@@ -52,7 +51,7 @@ mod sample {
     const PRETTY: u64 =
         0b1000000000000000000000000000000000000000000000000000000000000000u64;
 
-    #[typekin::friendship(
+    #[typekin::friends(
         relation = (u64, u8),
         friends = [
             _ -> Haha,
@@ -61,11 +60,7 @@ mod sample {
             crate::folks::executor_parts(ExecXX) -> [],
             writer_parts(Writer) -> [Make, Inspector],
         ],
-        mod = things,
-    )]
-    #[typekin::constructor(
-        of_relation = Self::of_parts,
-        friends = [ExecXX, Self]
+        scope = things,
     )]
     #[derive(Debug, Clone, Copy)]
     pub struct Document {

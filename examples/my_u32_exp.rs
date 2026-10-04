@@ -1760,7 +1760,7 @@ mod subject {
     }
 }
 
-type Subject = subject::MyU32;
+use subject::MyU32 as Subject;
 
 fn main() {
     let lhs = 0b1101u32;

@@ -81,3 +81,9 @@ path = "examples/my_text.rs"
 [[example]]
 name = "my_text_exp"
 path = "examples/my_text_exp.rs"
+[[example]]
+name = "my_constructor"
+path = "examples/my_constructor.rs"
+[[example]]
+name = "my_constructor_exp"
+path = "examples/my_constructor_exp.rs"

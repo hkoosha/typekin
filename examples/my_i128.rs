@@ -12,10 +12,10 @@ mod subject {
     #[repr(transparent)]
     #[derive(Copy)]
     #[derive_const(Clone)]
-    pub struct MyU32(i128);
+    pub struct MyU128(i128);
 }
 
-type Subject = subject::MyU32;
+type Subject = subject::MyU128;
 
 fn main() {
     let lhs = 0b1101i128;

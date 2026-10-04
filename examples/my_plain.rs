@@ -9,7 +9,7 @@
 
 mod subject {
     #[repr(transparent)]
-    #[typekin::integral(konst = true)]
+    #[typekin::integral(konst = true, with=[display])]
     #[derive_const(Clone)]
     #[derive(Copy)]
     pub struct MyPlain(i64);

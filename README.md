@@ -191,10 +191,12 @@ Trust grants no additional capabilities. Checked constructors and math/bitwise
 operation results still validate, including operations with a trusted friend
 as the right-hand operand.
 
-Standalone `friendship` also accepts `Trust`, independently of `Make` (including
-`Make` granted by `constructor`). It has no generated validator to bypass: the
-configured `relationship` function always runs, including its own checks.
-Relations and friend inputs can both be non-`Copy`.
+`friends` also accepts `Trust`, independently of `Make`. It generates
+`Self::of` for the relationship and every declared friend; targets provide
+`fn of_parts(relation) -> Self`, and `scope` controls where the generated
+protocol is placed. It has no generated validator to bypass: the configured
+`of_parts` function always runs, including its own checks. Relations and friend
+inputs can both be non-`Copy`.
 
 ### Validation
 

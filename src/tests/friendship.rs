@@ -12,6 +12,7 @@ fn accepts_single_named_implicit_and_wildcard_friends() {
         "relation = u8, friends = _(crate::source::Source) -> [Inspect, Trust], conversion = into_value",
         "friends = _ -> Inspect, relation = u8",
         "relation = u8, friends = _ -> [Inspect, Trust], value = u16",
+        "relation = u8, scope = pub(crate) protocol, friends = _ -> Inspect",
     ] {
         syn::parse_str::<Cfg>(input).expect(input);
     }
@@ -41,6 +42,7 @@ fn rejects_invalid_single_friend_boundaries() {
         "relation = u8, friends = convert(Source) -> [Inspect, 1]",
         "relation = u8, friends = _(Source) -> [Inspect, Trust], unknown = true",
         "relation = u8, friends = _(Source) -> Inspect, friends = []",
+        "relation = u8, mod = protocol, scope = protocol, friends = _ -> Inspect",
     ] {
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
@@ -49,9 +51,9 @@ fn rejects_invalid_single_friend_boundaries() {
 #[test]
 fn accepts_single_constructor_type_with_neighboring_attributes() {
     for input in [
-        "friends = crate::source::Source, of_relation = Self::new, mod = self",
-        "of_relation = Self::new, friends = crate::source::Source, of_friend = from_source, mod = _",
-        "of_relation = crate::construct, of_friend = from_source, friends = Source, mod = pub(crate) constructors",
+        "friends = crate::source::Source, relationship = Self::new, scope = self",
+        "relationship = Self::new, friends = crate::source::Source, maker = from_source, scope = _",
+        "relationship = crate::construct, maker = from_source, friends = Source, scope = pub(crate) constructors",
     ] {
         syn::parse_str::<MakeCfg>(input).expect(input);
     }
@@ -60,48 +62,43 @@ fn accepts_single_constructor_type_with_neighboring_attributes() {
 #[test]
 fn accepts_bracketed_multiple_and_empty_constructor_types() {
     for input in [
-        "of_relation = Self::new, friends = [crate::source::Source, Other], of_friend = from_source, mod = self",
-        "of_relation = Self::new, friends = [], of_friend = from_source, mod = _",
+        "relationship = Self::new, friends = [crate::source::Source, Other], maker = from_source, scope = self",
+        "relationship = Self::new, friends = [], maker = from_source, scope = _",
     ] {
         syn::parse_str::<MakeCfg>(input).expect(input);
     }
 }
 
 #[test]
-fn friendship_controls_constructor_scope() {
+fn constructor_requires_scope() {
     assert!(
-        syn::parse::Parser::parse_str(
-            MakeCfg::parse_without_scope,
-            "of_relation = Self::new, friends = Source",
-        )
-        .is_ok()
+        syn::parse_str::<MakeCfg>("relationship = Self::new, friends = Source")
+            .is_err()
     );
     assert!(
-        syn::parse::Parser::parse_str(
-            MakeCfg::parse_without_scope,
-            "of_relation = Self::new, friends = Source, mod = self",
+        syn::parse_str::<MakeCfg>(
+            "relationship = Self::new, friends = Source, scope = self",
         )
-        .is_err()
+        .is_ok()
     );
 }
 
 #[test]
 fn rejects_non_type_or_unbracketed_multiple_constructor_selectors() {
     for input in [
-        "of_relation = Self::new, friends = Source, Other",
-        "of_relation = Self::new, friends = Source",
-        "of_relation = Self::new, friends =",
-        "of_relation = Self::new, friends =, of_friend = from_source",
-        "of_relation = Self::new, friends = 1",
-        "of_relation = Self::new, friends = convert(Source)",
-        "of_relation = Self::new, friends = [convert(Source)]",
-        "of_relation = Self::new, friends = convert(Source) -> Make",
-        "of_relation = Self::new, friends = [convert(Source) -> Make]",
-        "of_relation = Self::new, friends = _(Source) -> Make",
-        "of_relation = Self::new, friends = _ -> Make",
-        "of_relation = Self::new, friends = Source -> Make",
-        "of_relation = Self::new, friends = Source, unknown = true",
-        "of_relation = Self::new, friends = Source, friends = []",
+        "relationship = Self::new, scope = self, friends = Source, Other",
+        "relationship = Self::new, scope = self, friends =",
+        "relationship = Self::new, scope = self, friends =, maker = from_source",
+        "relationship = Self::new, scope = self, friends = 1",
+        "relationship = Self::new, scope = self, friends = convert(Source)",
+        "relationship = Self::new, scope = self, friends = [convert(Source)]",
+        "relationship = Self::new, scope = self, friends = convert(Source) -> Make",
+        "relationship = Self::new, scope = self, friends = [convert(Source) -> Make]",
+        "relationship = Self::new, scope = self, friends = _(Source) -> Make",
+        "relationship = Self::new, scope = self, friends = _ -> Make",
+        "relationship = Self::new, scope = self, friends = Source -> Make",
+        "relationship = Self::new, scope = self, friends = Source, unknown = true",
+        "relationship = Self::new, scope = self, friends = Source, friends = []",
     ] {
         assert!(syn::parse_str::<MakeCfg>(input).is_err(), "{input}");
     }

@@ -1,4 +1,4 @@
-#[typekin::friendship(
+#[typekin::friends(
     relation = DocumentParts,
     friends = [
         _ -> [DocumentReserved],
@@ -7,38 +7,52 @@
         writer_parts(Writer) -> [DocumentInspector],
     ],
 )]
-#[typekin::constructor(
-    of_relation = Self::from_parts,
-    friends = [Self, Reader],
-)]
 pub struct Document {
     id: u32,
     access: u8,
 }
 
-#[typekin::friendship(
+#[typekin::friends(
     relation = (u32, u8),
     mod = pub(crate) declared_document_protocol,
     friends = _ -> DocumentDeclared,
 )]
 struct DocumentProtocol;
 
-#[typekin::constructor(
-    of_relation = Self::from_parts,
-    of_friend = from_friend,
-    mod = self,
-)]
-#[typekin::friendship(
+#[typekin::friends(
     relation = DirectParts,
-    mod = pub(crate) direct_friendship,
+    scope = pub(crate) direct_friendship,
     friends = [_ -> []],
 )]
 pub struct Direct;
 #[derive(Copy, Clone)]
 struct DirectParts;
 
+#[typekin::friends(
+    relation = SelfScopedParts,
+    seal = SelfScopedSeal,
+    scope = self,
+    friends = [],
+)]
+struct SelfScoped;
+
+struct SelfScopedParts;
+
 impl Direct {
-    fn from_parts(_: DirectParts) -> Self {
+    fn of_parts(_: DirectParts) -> Self {
+        return Self;
+    }
+}
+
+#[allow(dead_code)]
+impl DocumentProtocol {
+    fn of_parts(_: (u32, u8)) -> Self {
+        return Self;
+    }
+}
+
+impl SelfScoped {
+    fn of_parts(_: SelfScopedParts) -> Self {
         return Self;
     }
 }
@@ -50,7 +64,7 @@ pub struct DocumentParts {
 }
 
 impl Document {
-    fn from_parts(parts: DocumentParts) -> Self {
+    fn of_parts(parts: DocumentParts) -> Self {
         return Self {
             id: parts.id,
             access: parts.access,
@@ -117,6 +131,11 @@ fn constructs_from_friend_with_constructor_capability() {
 
     assert_eq!(document.id, 7);
     assert_eq!(document.access, 0b001);
+
+    let document = Document::of(Writer { id: 13 });
+
+    assert_eq!(document.id, 13);
+    assert_eq!(document.access, 0b010);
 }
 
 #[test]
@@ -149,17 +168,21 @@ fn friendship_consumes_its_friend() {
 }
 
 #[test]
-fn constructor_dispatches_inner_friendship() {
-    let _ = Direct::from_friend(DirectParts);
+fn friends_generate_constructor_for_the_relationship() {
+    let _ = Direct::of(DirectParts);
 }
 
-#[typekin::constructor(
-    of_relation = Self::from_parts,
-    friends = Self,
-    mod = pub(crate) scoped_document_protocol,
-)]
-#[typekin::friendship(
+#[test]
+fn self_scope_exposes_the_friendship_protocol() {
+    fn requires_seal<T: SelfScopedSeal>(_: T) {}
+
+    requires_seal(SelfScopedParts);
+    let _ = SelfScoped::of(SelfScopedParts);
+}
+
+#[typekin::friends(
     relation = ScopedDocumentParts,
+    scope = pub(crate) scoped_document_protocol,
     friends = scoped_document_parts(Self) -> [],
 )]
 pub struct ScopedDocument;
@@ -167,7 +190,7 @@ pub struct ScopedDocument;
 pub struct ScopedDocumentParts;
 
 impl ScopedDocument {
-    fn from_parts(_: ScopedDocumentParts) -> Self {
+    fn of_parts(_: ScopedDocumentParts) -> Self {
         return Self;
     }
 }
@@ -181,12 +204,9 @@ fn constructor_module_contains_friendship_and_constructor_implementations() {
     let _ = ScopedDocument::of(ScopedDocumentParts);
 }
 
-#[typekin::constructor(
-    of_relation = Self::from_parts,
-    mod = _,
-)]
-#[typekin::friendship(
+#[typekin::friends(
     relation = ConstDocumentParts,
+    scope = _,
     friends = [],
 )]
 struct ConstDocument;
@@ -194,7 +214,7 @@ struct ConstDocument;
 struct ConstDocumentParts;
 
 impl ConstDocument {
-    fn from_parts(_: ConstDocumentParts) -> Self {
+    fn of_parts(_: ConstDocumentParts) -> Self {
         return Self;
     }
 }
@@ -204,14 +224,10 @@ fn constructor_const_scope_contains_its_implementations() {
     let _ = ConstDocument::of(ConstDocumentParts);
 }
 
-#[typekin::friendship(
+#[typekin::friends(
     relation = ::std::string::String,
     mod = pub(crate) trusted_title_protocol,
     friends = title_conversions::owned_title(OwnedTitle,) -> Trust,
-)]
-#[typekin::constructor(
-    of_relation = Self::from_title,
-    friends = OwnedTitle,
 )]
 pub(crate) struct TrustDocument {
     title: String,
@@ -226,7 +242,7 @@ mod title_conversions {
 }
 
 impl TrustDocument {
-    fn from_title(title: String) -> Self {
+    fn of_parts(title: String) -> Self {
         assert!(!title.is_empty(), "a document must have a title");
         Self {
             title: title.to_uppercase(),
@@ -260,7 +276,7 @@ mod trusted_inspector {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    #[typekin::friendship(
+    #[typekin::friends(
         relation = ::std::string::String,
         mod = pub(crate) inspector_protocol,
         friends = [
@@ -270,6 +286,13 @@ mod trusted_inspector {
         ],
     )]
     struct Inspectable;
+
+    #[allow(dead_code)]
+    impl Inspectable {
+        fn of_parts(_: String) -> Self {
+            return Self;
+        }
+    }
 
     const _: () = {
         // Do not remove this unless you are adding a direct usage of this

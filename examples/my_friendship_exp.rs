@@ -41,8 +41,7 @@ mod folks {
 }
 
 mod sample {
-    use super::folks::ExecXX;
-    use super::folks::Writer;
+    use super::folks::*;
     use std::fmt::{
         Display,
         Formatter,

@@ -56,10 +56,9 @@ fn accepts_explicit_konst_values() {
 
 #[test]
 fn accepts_root_validation_attributes() {
-    let config = syn::parse_str::<Cfg>(
-        "konst = false, valid = is_even, in = 1..=4",
-    )
-    .expect("root validation attributes should parse");
+    let config =
+        syn::parse_str::<Cfg>("konst = false, valid = is_even, in = 1..=4")
+            .expect("root validation attributes should parse");
 
     assert_eq!(config.validation.callbacks.len(), 1);
     assert_eq!(config.validation.ranges.len(), 1);
@@ -104,9 +103,8 @@ fn rejects_comma_separated_ranges() {
 
 #[test]
 fn rejects_legacy_validation_attributes() {
-    let callback =
-        syn::parse_str::<Cfg>("konst = false, callback = is_valid")
-            .expect_err("valid is the validation callback key");
+    let callback = syn::parse_str::<Cfg>("konst = false, callback = is_valid")
+        .expect_err("valid is the validation callback key");
     assert_eq!(callback.to_string(), "unknown attribute");
 
     let range = syn::parse_str::<Cfg>("konst = false, range = 1..2")
@@ -140,10 +138,9 @@ fn accepts_explicit_friend_capabilities() {
 
 #[test]
 fn accepts_shared_friend_without_conversion() {
-    let config = syn::parse_str::<Cfg>(
-        "konst = false, friends = [_(u8) -> Bit]",
-    )
-    .expect("integral may use the shared Into conversion default");
+    let config =
+        syn::parse_str::<Cfg>("konst = false, friends = [_(u8) -> Bit]")
+            .expect("integral may use the shared Into conversion default");
     let friend = config.friends.iter().next().unwrap();
 
     assert!(friend.conv.is_none());
@@ -154,19 +151,16 @@ fn accepts_shared_friend_without_conversion() {
 
 #[test]
 fn rejects_legacy_friend_levels_and_custom_trait_names() {
-    syn::parse_str::<Cfg>(
-        "konst = false, friends = [u8(level = [Full])]",
-    )
-    .expect_err("levels were replaced by capabilities");
+    syn::parse_str::<Cfg>("konst = false, friends = [u8(level = [Full])]")
+        .expect_err("levels were replaced by capabilities");
 
     let trait_name =
         syn::parse_str::<Cfg>("konst = false, trait_seal = OtherSeal")
             .expect_err("integral seal name is fixed");
     assert_eq!(trait_name.to_string(), "unknown attribute");
 
-    let of_name =
-        syn::parse_str::<Cfg>("konst = false, fn_of = custom_of")
-            .expect_err("integral of name is fixed");
+    let of_name = syn::parse_str::<Cfg>("konst = false, fn_of = custom_of")
+        .expect_err("integral of name is fixed");
     assert_eq!(of_name.to_string(), "unknown attribute");
 }
 

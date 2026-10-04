@@ -19,10 +19,7 @@ use syn::{
     spanned::Spanned,
 };
 
-use crate::{
-    runner,
-    runner::MkErr,
-};
+use crate::runner;
 
 #[derive(Clone)]
 pub(crate) struct Cfg {
@@ -154,20 +151,10 @@ impl Cfg {
         this.scope = Scope::Self_;
         return this;
     }
+}
 
-    pub(crate) fn parse_without_scope(input: ParseStream) -> syn::Result<Self> {
-        return Self::parse_with_default_scope(
-            input,
-            Some(Scope::Self_),
-            false,
-        );
-    }
-
-    fn parse_with_default_scope(
-        input: ParseStream,
-        default_scope: Option<Scope>,
-        allow_scope: bool,
-    ) -> syn::Result<Self> {
+impl Parse for Cfg {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut relationship: Option<Path> = None;
         let mut maker = quote::format_ident!("of");
         let mut friends = BTreeSet::new();
@@ -178,10 +165,7 @@ impl Cfg {
                 "relationship" => relationship = Some(stream.parse()?),
                 "maker" => maker = stream.parse()?,
                 "friends" => friends = runner::one_or_list(stream)?.collect(),
-                "mod" if allow_scope => scope = Some(stream.parse()?),
-                "mod" => {
-                    return attr.fail("`mod` is not allowed in this context");
-                }
+                "scope" => scope = Some(stream.parse()?),
                 _ => return Ok(false),
             };
 
@@ -195,19 +179,13 @@ impl Cfg {
                     "missing required `relationship` argument",
                 )
             })?,
-            scope: scope.or(default_scope).ok_or_else(|| {
+            scope: scope.or(None).ok_or_else(|| {
                 syn::Error::new(input.span(), "missing required `mod` argument")
             })?,
             maker,
             friends,
         };
         return Ok(this);
-    }
-}
-
-impl Parse for Cfg {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        return Self::parse_with_default_scope(input, None, true);
     }
 }
 
