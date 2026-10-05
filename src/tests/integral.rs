@@ -185,6 +185,21 @@ mod tests {
     }
 
     #[test]
+    fn expands_numeric_friend_capability() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = false, friends = [_(u8) -> Numeric]",
+        )
+        .expect("Numeric should expand to integral operation capabilities");
+        let friend = config.friends.iter().next().unwrap();
+
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Math)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Relation)));
+        assert!(!friend.capabilities.contains(&syn::parse_quote!(Numeric)));
+    }
+
+    #[test]
     fn accepts_shared_friend_without_conversion() {
         let config =
             syn::parse_str::<Cfg>("konst = false, friends = [_(u8) -> Bit]")

@@ -1,5 +1,9 @@
 use proc_macro2::Ident;
 use std::collections::HashSet;
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
     Parse,
@@ -27,6 +31,20 @@ pub(crate) struct ValidationCfg {
     pub(crate) ranges: Vec<ExprRange>,
 }
 
+impl Debug for ValidationCfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "ValidationCfg{{callback={}, ranges={}}}",
+            to_debug(&self.callbacks),
+            to_debug(&self.ranges),
+        )
+    }
+}
+
 impl ValidationCfg {
     pub(crate) fn has_validation(&self) -> bool {
         return !self.callbacks.is_empty() || !self.ranges.is_empty();
@@ -47,6 +65,7 @@ impl ValidationCfg {
     }
 }
 
+use crate::runner::to_debug;
 pub(crate) use ranges::parse_ranges;
 
 mod ranges {

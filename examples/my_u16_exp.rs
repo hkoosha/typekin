@@ -1689,8 +1689,8 @@ fn main() {
     let rhs = 0b0110u16;
 
     let lhs = Subject::of(lhs);
-    let rhs = Subject::of(rhs);
 
     println!("{:?}", lhs + rhs);
+    println!("{:?}", lhs | rhs);
     println!("{:?}", lhs.lo8());
 }

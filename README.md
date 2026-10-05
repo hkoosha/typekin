@@ -1,11 +1,10 @@
 # Typekin
 
-`typekin` is a set of proc-macros for defining new types with relations between
-them.
-
-Out of the box, it comes with integer and enum-backed bitflags without the need
-to hand-write their conversions and operator implementations, validated text
-newtypes over `alloc::string::String`, and runtime-erased transparent layouts.
+Typekin is a set of proc-macros for defining new types with relations between
+them. Out of the box, it comes with integer and enum-backed bitflags without the
+need to hand-write their conversions and operator implementations, validated
+text newtypes over `{alloc,std}::string::String`, and runtime-erased transparent
+layouts and more.
 
 The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
 tight control over construction of values. Friend conversions consume their
@@ -13,8 +12,8 @@ input; non-`Copy` friends are moved into the conversion. Once a validated value
 enters the validated graph, it stays validated while it moves between different
 types and can be relied upon.
 
-You can find a set of working examples in the crate repository at
-[typekin/examples](./examples) directory.
+You can find a set of working examples in the crate repository
+at [typekin/examples](./examples) directory.
 
 ## Attribute Macro Inventory and Item Requirements
 
@@ -25,14 +24,19 @@ The public attribute macros are:
 - `#[typekin::text]`
 - `#[typekin::friends]`
 
+Incomplete:
+
+- `#[typekin::constructor]`
+
 `integral` requires a `#[repr(transparent)]` one-field tuple struct whose field
-is a primitive integer. `text` requires a nongeneric, `#[repr(transparent)]`
+is a primitive integer. `text` requires a non-generic, `#[repr(transparent)]`
 one-field tuple struct whose field is an unqualified `String`. `bitflag`
 requires a unit enum with an integral `repr`. `friends` accepts concrete,
-nongeneric structs, enums, or unions.
+non-generic structs, enums, or unions.
 
+## Examples
 
-## Example 0 - Numbers
+### Example 0 - Integers
 
 ```rust
 #[typekin::integral(konst = false)]
@@ -44,11 +48,12 @@ fn main() {
     let this: Quantity = Quantity::make(321);
     let that: Quantity = Quantity::make(123);
     let it: Quantity = this + that + 222usize;
-    assert_eq!(it.into_u64(), 666u64);      // 321 + 123 + 222 = 666
+    // 321 + 123 + 222 = 666
+    assert_eq!(it.into_u64(), 666u64);
 }
 ```
 
-## Example 1 - Friendship
+### Example 1 - Friendship
 
 With the concept of friendship, one can have full control over not only how
 different types are cast to each other but also how they interact. For example,
@@ -97,7 +102,7 @@ fn main() {
 }
 ```
 
-## Example 2 - Friendship
+### Example 2 - Friendship
 
 `friends` declares a conversion protocol. The conversion consumes its source,
 and `Target::of` passes the resulting relation to `Target::of_parts`:
@@ -189,12 +194,14 @@ impl SkipOneAndTwo {
     const fn is_valid(value: u32) -> bool { value != 1 && value != 2 }
 }
 
-let start = SkipOneAndTwo::try_make(0).unwrap();
-// Parses as `(start + 1) + 2`; the first `+` must create `SkipOneAndTwo(1)`.
-let _: SkipOneAndTwo = start + 1 + 2; // Panics.
+fn main() {
+    let start = SkipOneAndTwo::try_make(0).unwrap();
+    // Parses as `(start + 1) + 2`; the first `+` must create `SkipOneAndTwo(1)`.
+    let _: SkipOneAndTwo = start + 1 + 2; // Panics.
 
-// Validate only the final raw result instead.
-let value = SkipOneAndTwo::try_make(start.raw() + 1 + 2).unwrap();
+    // Validate only the final raw result instead.
+    let value = SkipOneAndTwo::try_make(start.raw() + 1 + 2).unwrap();
+}
 ```
 
 Validation has a runtime cost on every checked construction and generated
@@ -308,7 +315,8 @@ inputs can both be non-`Copy`.
 ### Validation
 
 Place each constraint at the macro root. `valid` accepts either one callback
-path or a comma-separated list in brackets; every listed callback must return `true`.
+path or a comma-separated list in brackets; every listed callback must return
+`true`.
 
 ```rust
 const fn valid_port(it: u16) -> bool { it != 0 }
@@ -421,7 +429,7 @@ const fn is_valid(value: u32) -> bool { value != 0 }
   konst = false, // Required, and `true` needs nightly const features.
   friends = [
     _(u64) -> Bit,         // Only bitwise operations, no conversion needed
-    Foo::to_u32(Foo) -> [Make, Math, Bit],
+    Foo::to_u32(Foo) -> [Make, Numeric],
   ],
   without = [fn_conv_raw], // Do not generate the existing accessor below
   get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
@@ -437,7 +445,8 @@ impl Example {
 ```
 
 Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
-and `Math` gates arithmetic. Integral equality and ordering are same-type only.
+and `Math` gates arithmetic. `Numeric` expands to `Math`, `Bit`, and
+`Relation`, plus `Make`. Integral equality and ordering are same-type only.
 
 ---
 

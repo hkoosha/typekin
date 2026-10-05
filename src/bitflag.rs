@@ -60,97 +60,6 @@ pub(crate) fn ekran(
     });
 }
 
-mk_flags! {
-    #[flag_default(bool=true, str="")]
-    #[derive(Debug, Clone)]
-    pub(crate) struct BitFlags {
-        pub make_value: bool,
-        pub impl_value: bool,
-        pub display: bool = false,
-
-        pub value_name: String,
-        pub suffix: String = "Value",
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Cfg {
-    pub(crate) friends: BTreeSet<Friend>,
-    pub(crate) bit: Box<BitFlags>,
-    pub(crate) int: Box<integral::Cfg>,
-}
-
-impl Parse for Cfg {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
-        let mut has_konst = false;
-
-        zz::parse_inner(input, |attr, rest| {
-            return this.parse_attr(&mut has_konst, attr, rest);
-        })?;
-
-        if !has_konst {
-            return Err(syn::Error::new(
-                input.span(),
-                "missing required `konst` argument",
-            ));
-        }
-
-        return Ok(this);
-    }
-}
-
-impl Cfg {
-    fn parse_attr(
-        &mut self,
-        has_konst: &mut bool,
-        attr: &str,
-        rest: ParseStream,
-    ) -> syn::Result<bool> {
-        match attr {
-            "konst" => {
-                *has_konst = true;
-                self.int.konst = rest.parse::<syn::LitBool>()?.value;
-            }
-            "with" => self.bit.parse_from(rest, true)?,
-            "without" => self.bit.parse_from(rest, false)?,
-            "friends" => {
-                let friends = zz::one_or_list(rest)?.collect::<BTreeSet<_>>();
-                self.friends = friends;
-            }
-            "suffix" => {
-                let as_str: syn::LitStr = rest.parse()?;
-                if as_str.value().is_empty() {
-                    self.bit.suffix = "".to_string();
-                }
-                else {
-                    let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                    self.bit.suffix = as_idn.to_string();
-                }
-            }
-            "integral" => {
-                let content;
-                let _ = bracketed!(content in rest);
-
-                let cfg = integral::Cfg::parse_with_konst(&content, true)?;
-                let konst = self.int.konst;
-                *self.int = cfg;
-                self.int.konst = konst;
-
-                return Ok(true);
-            }
-            "value_name" => {
-                let as_str: syn::LitStr = rest.parse()?;
-                let as_idn: Ident = syn::parse_str(&as_str.value())?;
-                self.bit.value_name = as_idn.to_string();
-            }
-            _ => {}
-        };
-
-        return Ok(true);
-    }
-}
-
 pub(crate) struct Maker {
     el: Ident,
     ty: Ident,
@@ -1188,5 +1097,100 @@ impl Maker {
             construction: None,
             konst: self.cfg.int.konst,
         }));
+    }
+}
+
+// =============================================================================
+
+#[derive(Default, Debug)]
+pub(crate) struct Cfg {
+    pub(crate) friends: BTreeSet<Friend>,
+    pub(crate) bit: Box<BitFlags>,
+    pub(crate) int: Box<integral::Cfg>,
+}
+
+impl Parse for Cfg {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut this = Self::default();
+        let mut has_konst = false;
+
+        zz::parse_inner(input, |attr, rest| {
+            return this.parse_attr(&mut has_konst, attr, rest);
+        })?;
+
+        if !has_konst {
+            return Err(syn::Error::new(
+                input.span(),
+                "missing required `konst` argument",
+            ));
+        }
+
+        return Ok(this);
+    }
+}
+
+impl Cfg {
+    fn parse_attr(
+        &mut self,
+        has_konst: &mut bool,
+        attr: &str,
+        rest: ParseStream,
+    ) -> syn::Result<bool> {
+        match attr {
+            "konst" => {
+                *has_konst = true;
+                self.int.konst = rest.parse::<syn::LitBool>()?.value;
+            }
+            "with" => self.bit.parse_from(rest, true)?,
+            "without" => self.bit.parse_from(rest, false)?,
+            "friends" => {
+                let friends = zz::one_or_list(rest)?.collect::<BTreeSet<_>>();
+                self.friends = friends;
+            }
+            "suffix" => {
+                let as_str: syn::LitStr = rest.parse()?;
+                if as_str.value().is_empty() {
+                    self.bit.suffix = "".to_string();
+                }
+                else {
+                    let as_idn: Ident = syn::parse_str(&as_str.value())?;
+                    self.bit.suffix = as_idn.to_string();
+                }
+            }
+            "integral" => {
+                let content;
+                let _ = bracketed!(content in rest);
+
+                let cfg = integral::Cfg::parse_with_konst(&content, true)?;
+                let konst = self.int.konst;
+                *self.int = cfg;
+                self.int.konst = konst;
+
+                return Ok(true);
+            }
+            "value_name" => {
+                let as_str: syn::LitStr = rest.parse()?;
+                let as_idn: Ident = syn::parse_str(&as_str.value())?;
+                self.bit.value_name = as_idn.to_string();
+            }
+            _ => {}
+        };
+
+        return Ok(true);
+    }
+}
+
+// =============================================================================
+
+mk_flags! {
+    #[flag_default(bool=true, str="")]
+    #[derive(Debug, Clone)]
+    pub(crate) struct BitFlags {
+        pub make_value: bool,
+        pub impl_value: bool,
+        pub display: bool = false,
+
+        pub value_name: String,
+        pub suffix: String = "Value",
     }
 }

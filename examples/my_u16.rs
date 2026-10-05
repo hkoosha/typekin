@@ -1,5 +1,8 @@
 mod subject {
-    #[typekin::integral(konst = false)]
+    #[typekin::integral(
+        konst = false,
+        friends = _(u16) -> Numeric,
+    )]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     pub struct MyU16(u16);
@@ -12,8 +15,8 @@ fn main() {
     let rhs = 0b0110u16;
 
     let lhs = Subject::of(lhs);
-    let rhs = Subject::of(rhs);
 
     println!("{:?}", lhs + rhs);
+    println!("{:?}", lhs | rhs);
     println!("{:?}", lhs.lo8());
 }

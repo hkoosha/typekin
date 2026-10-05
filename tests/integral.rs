@@ -923,6 +923,7 @@ mod tests {
         struct TrustSource(Box<u8>);
         struct MathOnlySource(Box<u8>);
         struct BitOnlySource(Box<u8>);
+        struct NumericSource(Box<u8>);
 
         fn default_raw(source: DefaultSource) -> u8 {
             *source.0
@@ -944,6 +945,10 @@ mod tests {
             *source.0
         }
 
+        fn numeric_raw(source: NumericSource) -> u8 {
+            *source.0
+        }
+
         const fn is_even(value: u8) -> bool {
             value % 2 == 0
         }
@@ -956,6 +961,7 @@ mod tests {
                 trusted_raw(TrustSource) -> [Make, Math, Bit, Trust],
                 math_only_raw(MathOnlySource) -> [Math, Trust],
                 bit_only_raw(BitOnlySource) -> [Bit, Trust],
+                numeric_raw(NumericSource) -> [Numeric, Trust],
             ],
             valid = is_even,
             in = 2..=10,
@@ -1067,6 +1073,18 @@ mod tests {
             }
             assert_eq!(Number::try_make(3), Err(3));
             assert_eq!(Number::try_make(12), Err(12));
+        }
+
+        #[test]
+        fn numeric_friend_enables_construction_math_and_bit_operations() {
+            let construction_source = NumericSource(Box::new(2));
+            assert_eq!(Number::of(construction_source).raw(), 2);
+
+            let math_source = NumericSource(Box::new(2));
+            assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
+
+            let bit_source = NumericSource(Box::new(2));
+            assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
         }
     }
 

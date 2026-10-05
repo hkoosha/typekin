@@ -9,7 +9,6 @@ use proc_macro2::{
     TokenStream,
 };
 use quote::{
-    ToTokens,
     format_ident,
     quote,
 };
@@ -26,6 +25,7 @@ use syn::{
     parse_quote,
 };
 
+use crate::runner::to_debug;
 use crate::{
     friendship::{
         Construction,
@@ -83,241 +83,6 @@ pub(crate) fn integral(
 
         return Ok(quote! { #item #stream });
     });
-}
-
-mk_flags! {
-    #[flag_default(bool=true, str="")]
-    #[derive(Debug, Clone)]
-    pub(crate) struct IntegralFlags {
-        pub impl_range: bool = false,
-        pub impl_as_ref: bool,
-
-        pub auto_of_raw: bool,
-        pub assertions: bool,
-        pub bit_access: bool,
-
-        pub impl_debug: bool,
-        pub display: bool = false,
-        pub impl_eq: bool,
-        pub impl_fmt_binary: bool,
-        pub impl_fmt_hex_lower: bool,
-        pub impl_fmt_hex_upper: bool,
-        pub impl_fmt_octal: bool,
-        pub impl_from_str: bool,
-        pub impl_core_int: bool,
-        pub impl_into: bool,
-        pub impl_ord: bool,
-        pub impl_partial_eq: bool,
-        pub impl_partial_ord: bool,
-        pub impl_try_into: bool,
-
-        pub impl_assign_add: bool,
-        pub impl_assign_and: bool,
-        pub impl_assign_div: bool,
-        pub impl_assign_mul: bool,
-        pub impl_assign_or: bool,
-        pub impl_assign_rem: bool,
-        pub impl_assign_shl: bool,
-        pub impl_assign_shr: bool,
-        pub impl_assign_sub: bool,
-        pub impl_math_add: bool,
-        pub impl_math_and: bool,
-        pub impl_math_div: bool,
-        pub impl_math_mul: bool,
-        pub impl_math_not: bool,
-        pub impl_math_or: bool,
-        pub impl_math_rem: bool,
-        pub impl_math_shl: bool,
-        pub impl_math_shr: bool,
-        pub impl_math_sub: bool,
-        pub impl_math_xor: bool,
-
-        pub impl_friends: bool,
-        pub impl_self_friend_make: bool,
-        pub impl_self_friend_math_bit: bool,
-        pub impl_self_friend_math_ops: bool,
-        pub impl_self_friend_math_rel: bool,
-        pub impl_friend_seal: bool,
-        pub impl_friendzone_friend_make: bool,
-        pub impl_friendzone_friend_math_bit: bool,
-        pub impl_friendzone_friend_math_ops: bool,
-        pub impl_friendzone_friend_math_rel: bool,
-        pub impl_friendzone_seal: bool,
-
-        pub fn_conv_into: bool,
-        pub fn_conv_of: bool,
-        pub fn_conv_raw: bool,
-        pub fn_conv_try_into_checked: bool,
-        pub fn_conv_try_into_unchecked: bool,
-        pub fn_make_checked: bool,
-        pub fn_make_checked_try: bool,
-        pub fn_make_unchecked: bool,
-        pub fn_make_unchecked_try: bool,
-        pub fn_math_add: bool,
-        pub fn_math_and: bool,
-        pub fn_math_div: bool,
-        pub fn_math_mul: bool,
-        pub fn_math_not: bool,
-        pub fn_math_or: bool,
-        pub fn_math_rem: bool,
-        pub fn_math_shl: bool,
-        pub fn_math_shr: bool,
-        pub fn_math_sub: bool,
-        pub fn_math_xor: bool,
-        pub fn_op_cmp: bool,
-        pub fn_op_eq: bool,
-
-        pub fn_make: String = "make",
-
-        pub fp_unchecked: String = "Self::_unchecked",
-    }
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct Cfg {
-    pub(crate) flags: Box<IntegralFlags>,
-    pub(crate) konst: bool,
-    pub(crate) get_raw: Option<Path>,
-    pub(crate) validation: ValidationCfg,
-    pub(crate) friends: BTreeSet<Friend>,
-}
-
-impl Cfg {
-    pub(crate) fn add_friend(
-        &mut self,
-        ty: &Ident,
-        capabilities: impl IntoIterator<Item = Ident>,
-        conv: Path,
-    ) {
-        let req = Friend::from(ty);
-        let mut req = self.friends.take(&req).unwrap_or(req);
-        req.capabilities.extend(capabilities);
-        req.conv = Some(conv);
-        assert!(self.friends.insert(req));
-    }
-
-    pub(crate) fn has_validation(&self) -> bool {
-        return self.validation.has_validation();
-    }
-
-    pub(crate) fn parse_with_konst(
-        input: ParseStream,
-        konst: bool,
-    ) -> syn::Result<Self> {
-        let mut this = Self {
-            konst,
-            ..Default::default()
-        };
-
-        zz::parse_inner(input, |attr, rest| {
-            if this.validation.parse_attr(attr, rest)? {
-                return Ok(true);
-            }
-
-            match attr {
-                "konst" => {
-                    return attr
-                        .fail("constness is specified in multiple places");
-                }
-                "with" => this.flags.parse_from(rest, true)?,
-                "without" => this.flags.parse_from(rest, false)?,
-                "friends" => {
-                    let friends = zz::one_or_list::<Friend>(rest)?
-                        .collect::<BTreeSet<_>>();
-                    for friend in &friends {
-                        for capability in &friend.capabilities {
-                            if !matches!(
-                                capability.to_string().as_str(),
-                                "Make" | "Math" | "Bit" | "Relation" | "Trust"
-                            ) {
-                                return capability
-                                    .fail("unknown integral capability");
-                            }
-                        }
-                    }
-                    this.friends = friends;
-                }
-                "get_raw" => this.get_raw = Some(rest.parse()?),
-                _ => {
-                    return Ok(false);
-                }
-            };
-
-            return Ok(true);
-        })?;
-
-        return Ok(this);
-    }
-}
-
-impl Debug for Cfg {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(
-            f,
-            "IntegralCfg[int: {:?}, friends: {:?}, get_raw: {}, callbacks: {}, ranges: {}]",
-            self.flags,
-            self.friends,
-            self.get_raw
-                .as_ref()
-                .map(|it| it.to_token_stream().to_string())
-                .unwrap_or_default(),
-            self.validation.callbacks.len(),
-            self.validation.ranges.len(),
-        )
-    }
-}
-
-impl Parse for Cfg {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
-        let mut has_konst = false;
-
-        zz::parse_inner(input, |attr, rest| {
-            if this.validation.parse_attr(attr, rest)? {
-                return Ok(true);
-            }
-
-            match attr {
-                "konst" => {
-                    this.konst = rest.parse::<syn::LitBool>()?.value;
-                    has_konst = true;
-                }
-                "with" => this.flags.parse_from(rest, true)?,
-                "without" => this.flags.parse_from(rest, false)?,
-                "friends" => {
-                    let friends = zz::one_or_list::<Friend>(rest)?
-                        .collect::<BTreeSet<_>>();
-                    for friend in &friends {
-                        for capability in &friend.capabilities {
-                            if !matches!(
-                                capability.to_string().as_str(),
-                                "Make" | "Math" | "Bit" | "Relation" | "Trust"
-                            ) {
-                                return capability
-                                    .fail("unknown integral capability");
-                            }
-                        }
-                    }
-                    this.friends = friends;
-                }
-                "get_raw" => this.get_raw = Some(rest.parse()?),
-                _ => {
-                    return Ok(false);
-                }
-            };
-
-            return Ok(true);
-        })?;
-
-        if !has_konst {
-            return input.span().fail("missing required `konst` argument");
-        }
-
-        return Ok(this);
-    }
 }
 
 pub(crate) struct Maker {
@@ -2786,5 +2551,241 @@ impl Maker {
 
             #qwords
         };
+    }
+}
+
+// =============================================================================
+
+#[derive(Default, Clone)]
+pub(crate) struct Cfg {
+    pub(crate) konst: bool,
+    pub(crate) get_raw: Option<Path>,
+    pub(crate) validation: ValidationCfg,
+    pub(crate) friends: BTreeSet<Friend>,
+    pub(crate) flags: Box<IntegralFlags>,
+}
+
+impl Cfg {
+    fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
+        return zz::one_or_list::<Friend>(input)?
+            .map(|mut friend| {
+                if friend.capabilities.remove(&format_ident!("Numeric")) {
+                    friend.capabilities.extend([
+                        format_ident!("Make"),
+                        format_ident!("Math"),
+                        format_ident!("Bit"),
+                        format_ident!("Relation"),
+                    ]);
+                }
+
+                for capability in &friend.capabilities {
+                    if !matches!(
+                        capability.to_string().as_str(),
+                        "Make" | "Math" | "Bit" | "Relation" | "Trust"
+                    ) {
+                        return capability.fail("unknown integral capability");
+                    }
+                }
+
+                return Ok(friend);
+            })
+            .collect();
+    }
+
+    pub(crate) fn add_friend(
+        &mut self,
+        ty: &Ident,
+        capabilities: impl IntoIterator<Item = Ident>,
+        conv: Path,
+    ) {
+        let req = Friend::from(ty);
+        let mut req = self.friends.take(&req).unwrap_or(req);
+        req.capabilities.extend(capabilities);
+        req.conv = Some(conv);
+        assert!(self.friends.insert(req));
+    }
+
+    pub(crate) fn has_validation(&self) -> bool {
+        return self.validation.has_validation();
+    }
+
+    pub(crate) fn parse_with_konst(
+        input: ParseStream,
+        konst: bool,
+    ) -> syn::Result<Self> {
+        let mut this = Self {
+            konst,
+            ..Default::default()
+        };
+
+        zz::parse_inner(input, |attr, rest| {
+            if this.validation.parse_attr(attr, rest)? {
+                return Ok(true);
+            }
+
+            match attr {
+                "konst" => {
+                    return attr
+                        .fail("constness is specified in multiple places");
+                }
+                "with" => this.flags.parse_from(rest, true)?,
+                "without" => this.flags.parse_from(rest, false)?,
+                "friends" => {
+                    this.friends = Self::parse_friends(rest)?;
+                }
+                "get_raw" => this.get_raw = Some(rest.parse()?),
+                _ => {
+                    return Ok(false);
+                }
+            };
+
+            return Ok(true);
+        })?;
+
+        return Ok(this);
+    }
+}
+
+impl Debug for Cfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "IntegralCfg[konst={}, get_raw={}, validation={:?}, friends={:?}, flags={:?}",
+            self.konst,
+            to_debug(&self.get_raw),
+            self.validation,
+            self.friends,
+            self.flags,
+        )
+    }
+}
+
+impl Parse for Cfg {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut this = Self::default();
+        let mut has_konst = false;
+
+        zz::parse_inner(input, |attr, rest| {
+            if this.validation.parse_attr(attr, rest)? {
+                return Ok(true);
+            }
+
+            match attr {
+                "konst" => {
+                    this.konst = rest.parse::<syn::LitBool>()?.value;
+                    has_konst = true;
+                }
+                "with" => this.flags.parse_from(rest, true)?,
+                "without" => this.flags.parse_from(rest, false)?,
+                "friends" => {
+                    this.friends = Self::parse_friends(rest)?;
+                }
+                "get_raw" => this.get_raw = Some(rest.parse()?),
+                _ => {
+                    return Ok(false);
+                }
+            };
+
+            return Ok(true);
+        })?;
+
+        if !has_konst {
+            return input.span().fail("missing required `konst` argument");
+        }
+
+        return Ok(this);
+    }
+}
+
+// =============================================================================
+
+mk_flags! {
+    #[flag_default(bool=true, str="")]
+    #[derive(Debug, Clone)]
+    pub(crate) struct IntegralFlags {
+        pub impl_range: bool = false,
+        pub impl_as_ref: bool,
+
+        pub auto_of_raw: bool,
+        pub assertions: bool,
+        pub bit_access: bool,
+
+        pub impl_debug: bool,
+        pub display: bool = false,
+        pub impl_eq: bool,
+        pub impl_fmt_binary: bool,
+        pub impl_fmt_hex_lower: bool,
+        pub impl_fmt_hex_upper: bool,
+        pub impl_fmt_octal: bool,
+        pub impl_from_str: bool,
+        pub impl_core_int: bool,
+        pub impl_into: bool,
+        pub impl_ord: bool,
+        pub impl_partial_eq: bool,
+        pub impl_partial_ord: bool,
+        pub impl_try_into: bool,
+
+        pub impl_assign_add: bool,
+        pub impl_assign_and: bool,
+        pub impl_assign_div: bool,
+        pub impl_assign_mul: bool,
+        pub impl_assign_or: bool,
+        pub impl_assign_rem: bool,
+        pub impl_assign_shl: bool,
+        pub impl_assign_shr: bool,
+        pub impl_assign_sub: bool,
+        pub impl_math_add: bool,
+        pub impl_math_and: bool,
+        pub impl_math_div: bool,
+        pub impl_math_mul: bool,
+        pub impl_math_not: bool,
+        pub impl_math_or: bool,
+        pub impl_math_rem: bool,
+        pub impl_math_shl: bool,
+        pub impl_math_shr: bool,
+        pub impl_math_sub: bool,
+        pub impl_math_xor: bool,
+
+        pub impl_friends: bool,
+        pub impl_self_friend_make: bool,
+        pub impl_self_friend_math_bit: bool,
+        pub impl_self_friend_math_ops: bool,
+        pub impl_self_friend_math_rel: bool,
+        pub impl_friend_seal: bool,
+        pub impl_friendzone_friend_make: bool,
+        pub impl_friendzone_friend_math_bit: bool,
+        pub impl_friendzone_friend_math_ops: bool,
+        pub impl_friendzone_friend_math_rel: bool,
+        pub impl_friendzone_seal: bool,
+
+        pub fn_conv_into: bool,
+        pub fn_conv_of: bool,
+        pub fn_conv_raw: bool,
+        pub fn_conv_try_into_checked: bool,
+        pub fn_conv_try_into_unchecked: bool,
+        pub fn_make_checked: bool,
+        pub fn_make_checked_try: bool,
+        pub fn_make_unchecked: bool,
+        pub fn_make_unchecked_try: bool,
+        pub fn_math_add: bool,
+        pub fn_math_and: bool,
+        pub fn_math_div: bool,
+        pub fn_math_mul: bool,
+        pub fn_math_not: bool,
+        pub fn_math_or: bool,
+        pub fn_math_rem: bool,
+        pub fn_math_shl: bool,
+        pub fn_math_shr: bool,
+        pub fn_math_sub: bool,
+        pub fn_math_xor: bool,
+        pub fn_op_cmp: bool,
+        pub fn_op_eq: bool,
+
+        pub fn_make: String = "make",
+
+        pub fp_unchecked: String = "Self::_unchecked",
     }
 }
