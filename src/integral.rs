@@ -312,10 +312,11 @@ impl Maker {
                 .cfg
                 .friends
                 .iter()
-                .filter_map(|friend| {
+                .map(|friend| {
                     let is_raw = friend.ty.get_ident().is_some_and(|ident| {
                         N::of(ident.to_string()).is_some()
                     });
+
                     let conversion = if friend.ty.is_ident(&self.ty) {
                         None
                     }
@@ -347,11 +348,11 @@ impl Maker {
                         }
                     };
 
-                    Some(ProtocolFriend {
+                    return ProtocolFriend {
                         ty: friend.ty.clone(),
                         capabilities: friend.capabilities.clone(),
                         conversion,
-                    })
+                    };
                 })
                 .vec(),
         };
