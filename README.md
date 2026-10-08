@@ -3,8 +3,7 @@
 Typekin is a set of proc-macros for defining new types with relations between
 them. Out of the box, it comes with integer and enum-backed bitflags without the
 need to hand-write their conversions and operator implementations, validated
-text newtypes over `{alloc,std}::string::String`, and runtime-erased transparent
-layouts and more.
+text newtypes over `std::string::String` or `alloc::string::String`.
 
 The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
 tight control over construction of values. Friend conversions consume their
@@ -17,14 +16,14 @@ at [typekin/examples](./examples) directory.
 
 ## Attribute Macro Inventory and Item Requirements
 
-The public attribute macros are:
+The supported public attribute macros are:
 
 - `#[typekin::integral]`
 - `#[typekin::bitflag]`
 - `#[typekin::text]`
 - `#[typekin::friends]`
 
-Incomplete:
+The crate also exposes an incomplete attribute macro:
 
 - `#[typekin::constructor]`
 
@@ -367,7 +366,7 @@ fn main() {
 ## `#[typekin::text]`
 
 `text` creates a transparent, validated `String` newtype. By default
-(`std = true`), generated paths use `::alloc::{string::String, vec::Vec}`.
+(`std = true`), generated paths use `::std::{string::String, vec::Vec}`.
 Set `std = false` to use the corresponding `::alloc` paths. Text needs the
 allocator crate in scope when not using std:
 
@@ -378,6 +377,7 @@ use alloc::string::String;
 
 #[typekin::text(
     konst = false,
+    std = false,
     in = ["draft", "news", "medical-news"],
     // `valid = some_fn` is the alternative to literal membership.
 )]
@@ -391,12 +391,13 @@ fn main() {
         .unwrap();
     let medical_news = news
         .clone()
-        .map(|it| "medical-" + it)
+        .map(|it| it.insert_str(0, "medical-"))
         .unwrap();
     assert_eq!(news.as_str(), "news");
+    assert_eq!(medical_news.as_str(), "medical-news");
 
     let draft_news = news
-        .map(|it| "draft-" + it);
+        .map(|it| it.insert_str(0, "draft-"));
     assert!(draft_news.is_err()); // There is no "draft-news" in allow-list.
 }
 ```
