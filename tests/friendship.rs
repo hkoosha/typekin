@@ -102,14 +102,14 @@ mod tests {
         };
     }
 
-    impl declared_document_protocol::Seal for Reader {
+    impl declared_document_protocol::Seal for Reader {}
+
+    impl declared_document_protocol::DocumentDeclared for Reader {
         fn convert(self) -> (u32, u8) {
             let parts = reader_parts(self);
             (parts.id, parts.access)
         }
     }
-
-    impl declared_document_protocol::DocumentDeclared for Reader {}
 
     #[test]
     fn standalone_marker_gates_owned_document_construction() {
@@ -118,7 +118,7 @@ mod tests {
             T: declared_document_protocol::DocumentDeclared,
         {
             let (id, access) =
-                declared_document_protocol::Seal::convert(source);
+                declared_document_protocol::DocumentDeclared::convert(source);
             Document::of(DocumentParts { id, access })
         }
 
@@ -167,6 +167,46 @@ mod tests {
         let document = Document::of(reader);
 
         assert_eq!((document.id, document.access), (23, 0b001));
+    }
+
+    #[typekin::friends(
+        relation = ::core::primitive::u128,
+        friends = [
+            make_parts(CapabilitySpecificSource) -> [Make],
+            bit_parts(CapabilitySpecificSource) -> [Bit],
+        ],
+        scope = capability_specific_protocol,
+    )]
+    pub struct CapabilitySpecificTarget(u128);
+
+    struct CapabilitySpecificSource(u128);
+
+    fn make_parts(source: CapabilitySpecificSource) -> u128 {
+        return source.0 / 4;
+    }
+
+    fn bit_parts(source: CapabilitySpecificSource) -> u128 {
+        return source.0 / 2;
+    }
+
+    impl CapabilitySpecificTarget {
+        fn of_parts(value: u128) -> Self {
+            return Self(value);
+        }
+    }
+
+    #[test]
+    fn capabilities_use_their_own_conversions() {
+        assert_eq!(
+            capability_specific_protocol::Bit::to_u128(
+                CapabilitySpecificSource(12)
+            ),
+            6,
+        );
+        assert_eq!(
+            CapabilitySpecificTarget::of(CapabilitySpecificSource(12)).0,
+            3,
+        );
     }
 
     #[test]
@@ -322,9 +362,23 @@ mod tests {
             }
         }
 
-        impl inspector_protocol::ReservedScalar for InspectorSource {}
-        impl inspector_protocol::ReservedFirst for InspectorSource {}
-        impl inspector_protocol::ReservedSecond for InspectorSource {}
+        impl inspector_protocol::ReservedScalar for InspectorSource {
+            fn to_string(self) -> String {
+                return inspector_conversions::inspector_text(self);
+            }
+        }
+
+        impl inspector_protocol::ReservedFirst for InspectorSource {
+            fn to_string(self) -> String {
+                return inspector_conversions::inspector_text(self);
+            }
+        }
+
+        impl inspector_protocol::ReservedSecond for InspectorSource {
+            fn to_string(self) -> String {
+                return inspector_conversions::inspector_text(self);
+            }
+        }
 
         fn inspect<T>(source: T) -> String
         where
@@ -334,7 +388,7 @@ mod tests {
                 + inspector_protocol::ReservedFirst
                 + inspector_protocol::ReservedSecond,
         {
-            inspector_protocol::Seal::to_string(source)
+            inspector_protocol::Inspect::to_string(source)
         }
 
         #[test]

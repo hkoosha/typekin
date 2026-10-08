@@ -224,18 +224,18 @@ pub(crate) fn expand(
             where
                 T: #make + #seal,
             {
-                return #of_relation(<T as #seal>::#conversion(it));
+                return #of_relation(<T as #make>::#conversion(it));
             }
         }
 
-        impl #seal for #relation {
+        impl #seal for #relation {}
+
+        impl #make for #relation {
             #[inline(always)]
             fn #conversion(self) -> #value {
                 return self;
             }
         }
-
-        impl #make for #relation {}
     };
 
     return cfg.scope.wrap(items);

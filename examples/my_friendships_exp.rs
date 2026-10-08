@@ -1,32 +1,42 @@
-struct Thing0(u32);
+use std::ops::BitXor;
 
-fn convert_t0(it: Thing0) -> u128 {
-    return (it.0 as u128) / 4;
+#[derive(Debug, Clone, Copy)]
+struct Thing0(u128);
+
+fn convert_for_make(it: Thing0) -> u128 {
+    return it.0 / 4;
 }
 
-fn convert_t1(it: Thing0) -> u128 {
-    return (it.0 as u128) / 2;
+fn convert_for_bit(it: Thing0) -> u128 {
+    return it.0.bitxor(0b01);
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Thingy(u128);
 
 mod things {
-    pub(super) trait Seal {
-        fn to_u128(self) -> ::core::primitive::u128;
+    pub(super) trait Seal {}
+    #[allow(unused, dead_code)]
+    pub(super) trait Bit: Seal {
+        fn to_u128(self) -> u128;
     }
     #[allow(unused, dead_code)]
-    pub(super) trait Bit: Seal {}
-    #[allow(unused, dead_code)]
-    pub(super) trait Make: Seal {}
-    impl Seal for super::Thing0 {
+    pub(super) trait Make: Seal {
+        fn to_u128(self) -> u128;
+    }
+    impl Seal for super::Thing0 {}
+    impl Bit for super::Thing0 {
         #[inline(always)]
-        fn to_u128(self) -> ::core::primitive::u128 {
-            return super::convert_t1(self);
+        fn to_u128(self) -> u128 {
+            return super::convert_for_bit(self);
         }
     }
-    impl Bit for super::Thing0 {}
-    impl Make for super::Thing0 {}
+    impl Make for super::Thing0 {
+        #[inline(always)]
+        fn to_u128(self) -> u128 {
+            return super::convert_for_make(self);
+        }
+    }
     impl super::Thingy {
         #[allow(private_bounds)]
         #[inline(always)]
@@ -34,16 +44,16 @@ mod things {
         where
             T: Make + Seal,
         {
-            return Self::of_parts(<T as Seal>::to_u128(it));
+            return Self::of_parts(<T as Make>::to_u128(it));
         }
     }
-    impl Seal for ::core::primitive::u128 {
+    impl Seal for u128 {}
+    impl Make for u128 {
         #[inline(always)]
-        fn to_u128(self) -> ::core::primitive::u128 {
+        fn to_u128(self) -> u128 {
             return self;
         }
     }
-    impl Make for ::core::primitive::u128 {}
 }
 
 impl Thingy {
@@ -52,11 +62,16 @@ impl Thingy {
     }
 }
 
-fn requires_bit<T: things::Bit>(_: T) {}
+fn requires_bit<T: things::Bit>(it: T) -> u128 {
+    return it.to_u128();
+}
 
 fn main() {
-    requires_bit(Thing0(1));
-    assert_eq!(Thingy::of(Thing0(7)).0, 7);
+    let vv = Thing0(7);
+    let it = Thingy::of(vv);
+    assert_eq!(it.0, vv.0 / 4);
 
-    assert_eq!(Thingy::of(Thing0(2)).0, 2);
+    let vv = Thing0(0b01101);
+    let bit = requires_bit(vv);
+    assert_eq!(bit, 0b01100);
 }

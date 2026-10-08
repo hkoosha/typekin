@@ -60,43 +60,55 @@ mod sample {
         pub(super) access: u8,
     }
     mod things {
-        pub(super) trait Seal {
+        pub(super) trait Seal {}
+        #[allow(unused, dead_code)]
+        pub(super) trait Inspector: Seal {
             fn convert(self) -> (u64, u8);
         }
         #[allow(unused, dead_code)]
-        pub(super) trait Inspector: Seal {}
-        #[allow(unused, dead_code)]
-        pub(super) trait Make: Seal {}
-        impl Seal for super::ExecXX {
+        pub(super) trait Make: Seal {
+            fn convert(self) -> (u64, u8);
+        }
+        impl Seal for super::ExecXX {}
+        impl Make for super::ExecXX {
             #[inline(always)]
             fn convert(self) -> (u64, u8) {
                 return crate::folks::executor_parts(self);
             }
         }
-        impl Make for super::ExecXX {}
-        impl Seal for super::Reader {
+        impl Seal for super::Reader {}
+        impl Inspector for super::Reader {
             #[inline(always)]
             fn convert(self) -> (u64, u8) {
                 return super::Reader::parts(self);
             }
         }
-        impl Inspector for super::Reader {}
-        impl Make for super::Reader {}
-        impl Seal for super::Document {
+        impl Make for super::Reader {
+            #[inline(always)]
+            fn convert(self) -> (u64, u8) {
+                return super::Reader::parts(self);
+            }
+        }
+        impl Seal for super::Document {}
+        impl Make for super::Document {
             #[inline(always)]
             fn convert(self) -> (u64, u8) {
                 return super::Document::convert_me(self);
             }
         }
-        impl Make for super::Document {}
-        impl Seal for super::Writer {
+        impl Seal for super::Writer {}
+        impl Inspector for super::Writer {
             #[inline(always)]
             fn convert(self) -> (u64, u8) {
                 return super::writer_parts(self);
             }
         }
-        impl Inspector for super::Writer {}
-        impl Make for super::Writer {}
+        impl Make for super::Writer {
+            #[inline(always)]
+            fn convert(self) -> (u64, u8) {
+                return super::writer_parts(self);
+            }
+        }
         impl super::Document {
             #[allow(private_bounds)]
             #[inline(always)]
@@ -104,16 +116,16 @@ mod sample {
             where
                 T: Make + Seal,
             {
-                return Self::of_parts(<T as Seal>::convert(it));
+                return Self::of_parts(<T as Make>::convert(it));
             }
         }
-        impl Seal for (u64, u8) {
+        impl Seal for (u64, u8) {}
+        impl Make for (u64, u8) {
             #[inline(always)]
             fn convert(self) -> (u64, u8) {
                 return self;
             }
         }
-        impl Make for (u64, u8) {}
     }
 
     impl Default for Document {

@@ -3,6 +3,7 @@ use proc_macro2::{
     TokenStream,
 };
 use quote::{
+    ToTokens,
     format_ident,
     quote,
 };
@@ -14,6 +15,7 @@ use syn::{
 pub(crate) use self::cfg::Cfg;
 use crate::friendship::cfg::Friend;
 use crate::runner::MkErr;
+use crate::value_type::N;
 use crate::{
     constructor,
     runner,
@@ -22,7 +24,10 @@ use crate::{
 
 pub(crate) mod cfg {
     use std::cmp::Ordering;
-    use std::collections::BTreeSet;
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+    };
 
     use proc_macro2::Ident;
     use quote::{
@@ -58,6 +63,8 @@ pub(crate) mod cfg {
         pub(crate) ty: Path,
         pub(crate) capabilities: BTreeSet<Ident>,
         pub(crate) conv: Option<Path>,
+        pub(crate) make_conv: Option<Path>,
+        pub(crate) capability_conversions: BTreeMap<Ident, Path>,
     }
 
     impl Parse for Friend {
@@ -90,6 +97,11 @@ pub(crate) mod cfg {
             else {
                 capabilities
             };
+            let capability_conversions = capabilities
+                .iter()
+                .cloned()
+                .map(|capability| (capability, conv.clone()))
+                .collect();
 
             return Ok(Self {
                 identity: ty.to_token_stream().to_string(),
@@ -99,8 +111,12 @@ pub(crate) mod cfg {
                     None
                 }
                 else {
-                    Some(conv)
+                    Some(conv.clone())
                 },
+                make_conv: capabilities
+                    .contains(&format_ident!("Make"))
+                    .then_some(conv),
+                capability_conversions,
                 capabilities,
                 ty,
             });
@@ -142,6 +158,8 @@ pub(crate) mod cfg {
                 identity: it.to_token_stream().to_string(),
                 ty: it.clone(),
                 conv: None,
+                make_conv: None,
+                capability_conversions: BTreeMap::new(),
                 capabilities: BTreeSet::new(),
             };
         }
@@ -261,6 +279,12 @@ pub(crate) mod cfg {
                                 existing
                                     .capabilities
                                     .extend(friend.capabilities);
+                                if friend.make_conv.is_some() {
+                                    existing.make_conv = friend.make_conv;
+                                }
+                                existing
+                                    .capability_conversions
+                                    .extend(friend.capability_conversions);
                                 existing.conv = friend.conv;
                                 this.friends.insert(existing);
                             }
@@ -646,12 +670,13 @@ pub(crate) fn emit_friendship(
 
     let items = quote! {
         #trait_visibility trait #seal {
-            fn #conversion(self) -> #value;
         }
 
         #(
             #[allow(unused, dead_code)]
-            #trait_visibility trait #capabilities: #seal {}
+            #trait_visibility trait #capabilities: #seal {
+                fn #conversion(self) -> #value;
+            }
         )*
 
         #(#friend_impls)*
@@ -694,29 +719,46 @@ fn emit_friend(
         false => parent_path(&cfg.ty, in_module),
     };
 
-    let conv = parent_path(
-        cfg.conv.as_ref().expect("friend conversion missing"),
-        in_module,
-    );
-
     let capabilities = &cfg.capabilities;
+    let capability_impls = capabilities.iter().map(|capability| {
+        let callback = cfg
+            .capability_conversions
+            .get(capability)
+            .or_else(|| {
+                (capability == &format_ident!("Make"))
+                    .then_some(&cfg.make_conv)
+                    .and_then(|conversion| conversion.as_ref())
+            })
+            .or(cfg.conv.as_ref())
+            .expect("friend conversion missing");
+        let callback = parent_path(callback, in_module);
+
+        return quote! {
+            impl #capability for #ty {
+                #[inline(always)]
+                fn #conversion(self) -> #value {
+                    return #callback(self);
+                }
+            }
+        };
+    });
 
     return quote! {
-        impl #seal for #ty {
-            #[inline(always)]
-            fn #conversion(self) -> #value {
-                return #conv(self);
-            }
-        }
-
-        #(impl #capabilities for #ty {})*
+        impl #seal for #ty {}
+        #(#capability_impls)*
     };
 }
 
+// TODO hm... very hacky
 fn parent_path(
     path: &syn::Path,
     in_module: bool,
 ) -> TokenStream {
+    let repr = path.to_token_stream().to_string();
+    if repr == "String" || N::of(repr).is_some() {
+        return quote! { #path };
+    }
+
     let is_explicit = path.leading_colon.is_some()
         || path.segments.first().is_some_and(|segment| {
             matches!(

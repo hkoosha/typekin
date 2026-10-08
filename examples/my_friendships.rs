@@ -1,18 +1,21 @@
-struct Thing0(u32);
+use std::ops::BitXor;
 
-fn convert_t0(it: Thing0) -> u128 {
-    return (it.0 as u128) / 4;
+#[derive(Debug, Clone, Copy)]
+struct Thing0(u128);
+
+fn convert_for_make(it: Thing0) -> u128 {
+    return it.0 / 4;
 }
 
-fn convert_t1(it: Thing0) -> u128 {
-    return (it.0 as u128) / 2;
+fn convert_for_bit(it: Thing0) -> u128 {
+    return it.0.bitxor(0b01);
 }
 
 #[typekin::friends(
-    relation = ::core::primitive::u128,
+    relation = u128,
     friends = [
-        convert_t0(Thing0) -> [Make],
-        convert_t1(Thing0) -> [Bit],
+        convert_for_make(Thing0) -> [Make],
+        convert_for_bit(Thing0) -> [Bit],
     ],
     scope = things,
 )]
@@ -25,11 +28,16 @@ impl Thingy {
     }
 }
 
-fn requires_bit<T: things::Bit>(_: T) {}
+fn requires_bit<T: things::Bit>(it: T) -> u128 {
+    return it.to_u128();
+}
 
 fn main() {
-    requires_bit(Thing0(1));
-    assert_eq!(Thingy::of(Thing0(7)).0, 7);
+    let vv = Thing0(7);
+    let it = Thingy::of(vv);
+    assert_eq!(it.0, vv.0 / 4);
 
-    assert_eq!(Thingy::of(Thing0(2)).0, 2);
+    let vv = Thing0(0b01101);
+    let bit = requires_bit(vv);
+    assert_eq!(bit, 0b01100);
 }
