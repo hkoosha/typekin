@@ -8,11 +8,11 @@ mod tests {
         for input in [
             "friends = crate::convert(crate::source::Source) -> Inspect, relation = u8",
             "relation = u8, friends = crate::convert(crate::source::Source) -> [Inspect, Trust], seal = Seal",
-            "relation = u8, value = u16, friends = _(crate::source::Source) -> Inspect",
-            "relation = u8, friends = _(crate::source::Source) -> [Inspect, Trust], conversion = into_value",
-            "friends = _ -> Inspect, relation = u8",
-            "relation = u8, friends = _ -> [Inspect, Trust], value = u16",
-            "relation = u8, scope = pub(crate) protocol, friends = _ -> Inspect",
+            "relation = u8, value = u16, friends = Foo(crate::source::Source) -> Inspect",
+            "relation = u8, friends = Foo(crate::source::Source) -> [Inspect, Trust], conversion = into_value",
+            "friends = Self(Foo) -> Inspect, relation = u8",
+            "relation = u8, friends = Self(Foo) -> [Inspect, Trust], value = u16",
+            "relation = u8, scope = pub(crate) protocol, friends = Self(Foo) -> Inspect",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -21,7 +21,6 @@ mod tests {
     #[test]
     fn accepts_bracketed_multiple_and_empty_friend_lists() {
         for input in [
-            "relation = u8, friends = [convert(Source) -> Inspect, _(Other) -> [Inspect, Trust], _ -> Extra], seal = Seal",
             "relation = u8, friends = [], seal = Seal",
             "relation = u8, friends = [into_make(Source) -> Make, into_bit(Source) -> Bit]",
         ] {
@@ -44,13 +43,15 @@ mod tests {
         for input in [
             "relation = u8, friends = convert(Source) -> Inspect, convert(Other) -> Inspect",
             "relation = u8, friends = _(Source) -> Inspect, _(Other) -> Inspect",
+            "relation = u8, friends = Foo(Source) -> Inspect, Foo(Other) -> Inspect",
             "relation = u8, friends = _ -> Inspect, _ -> Extra",
             "relation = u8, friends =",
             "relation = u8, friends =, seal = Seal",
-            "relation = u8, friends = convert(Source)",
             "relation = u8, friends = convert() -> Inspect",
             "relation = u8, friends = convert(Source) ->",
             "relation = u8, friends = convert(Source) -> [Inspect, 1]",
+            "relation = u8, friends = Foo(Source) -> [Inspect, Trust], unknown = true",
+            "relation = u8, friends = Foo(Source) -> Inspect, friends = []",
             "relation = u8, friends = _(Source) -> [Inspect, Trust], unknown = true",
             "relation = u8, friends = _(Source) -> Inspect, friends = []",
             "relation = u8, mod = protocol, scope = protocol, friends = _ -> Inspect",
@@ -107,6 +108,8 @@ mod tests {
             "relationship = Self::new, scope = self, friends = [convert(Source)]",
             "relationship = Self::new, scope = self, friends = convert(Source) -> Make",
             "relationship = Self::new, scope = self, friends = [convert(Source) -> Make]",
+            "relationship = Self::new, scope = self, friends = Foo(Source) -> Make",
+            "relationship = Self::new, scope = self, friends = Foo -> Make",
             "relationship = Self::new, scope = self, friends = _(Source) -> Make",
             "relationship = Self::new, scope = self, friends = _ -> Make",
             "relationship = Self::new, scope = self, friends = Source -> Make",

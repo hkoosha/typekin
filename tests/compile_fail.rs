@@ -97,7 +97,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn generated_api_boundaries_reject_invalid_consumers() {
         for (name, source, expected_error) in [
             (

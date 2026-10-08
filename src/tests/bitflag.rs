@@ -7,11 +7,9 @@ mod tests {
         for input in [
             "friends = crate::convert(crate::source::Source) -> Inspector, konst = false",
             "konst = false, friends = crate::convert(crate::source::Source) -> [Bit, Trust], integral = []",
-            "konst = false, integral = [], friends = _(crate::source::Source) -> Bit",
-            "konst = false, friends = _ -> [Bit, Inspector], with = [display]",
+            "konst = false, integral = [], friends = Foo(crate::source::Source) -> Bit",
             "konst = false, integral = [friends = crate::convert(crate::source::Source) -> Make, valid = is_valid]",
-            "konst = false, integral = [valid = is_valid, friends = _(crate::source::Source) -> [Math, Bit]], suffix = \"Value\"",
-            "konst = false, integral = [friends = _ -> Math]",
+            "konst = false, integral = [valid = is_valid, friends = Foo(crate::source::Source) -> [Math, Bit]], suffix = \"Value\"",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -20,7 +18,6 @@ mod tests {
     #[test]
     fn accepts_bracketed_multiple_and_empty_friends_at_each_scope() {
         for input in [
-            "konst = false, friends = [convert(Source) -> Bit, _(Other) -> [Bit, Trust]], integral = [friends = [convert(Source) -> Make, _(Other) -> Math]]",
             "konst = false, friends = [], integral = [friends = [], valid = is_valid]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
@@ -36,12 +33,12 @@ mod tests {
             "integral = [friends =]",
             "friends =, integral = []",
             "integral = [friends =, valid = is_valid]",
-            "friends = convert(Source)",
             "friends = convert(Source) -> [Bit, 1]",
             "integral = [friends = _(Source) -> Inspector]",
             "friends = _(Source) -> Bit, unknown = true",
             "integral = [friends = _(Source) -> [Math, Bit], unknown = true]",
             "friends = _(Source) -> Bit, friends = []",
+            "integral = [unknown = true]",
         ] {
             let input = format!("konst = false, {attributes}");
             assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
@@ -61,7 +58,7 @@ mod tests {
 
     #[test]
     fn rejects_missing_konst() {
-        let error = match syn::parse_str::<Cfg>("friends = [_(u8) -> Bit]") {
+        let error = match syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]") {
             Ok(_) => panic!("konst must be explicit"),
             Err(error) => error,
         };
@@ -83,7 +80,7 @@ mod tests {
     #[test]
     fn accepts_friend_capabilities_and_rejects_levels() {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [_(u8) -> [Bit]], integral = []",
+            "konst = false, friends = [Foo(u8) -> [Bit]], integral = []",
         )
         .expect("bitflag capabilities should parse");
         let friend = config.friends.iter().next().unwrap();
@@ -98,12 +95,12 @@ mod tests {
     #[test]
     fn accepts_trusted_root_and_nested_capability_without_make() {
         for attributes in [
-            "friends = [_(Source) -> Trust]",
-            "friends = [_(Source) -> [Trust]]",
-            "friends = [_(Source) -> [Bit, Trust]]",
-            "integral = [friends = [_(Source) -> Trust]]",
-            "integral = [friends = [_(Source) -> [Trust]]]",
-            "integral = [friends = [_(Source) -> [Math, Bit, Trust]]]",
+            "friends = [Foo(Source) -> Trust]",
+            "friends = [Foo(Source) -> [Trust]]",
+            "friends = [Foo(Source) -> [Bit, Trust]]",
+            "integral = [friends = [Foo(Source) -> Trust]]",
+            "integral = [friends = [Foo(Source) -> [Trust]]]",
+            "integral = [friends = [Foo(Source) -> [Math, Bit, Trust]]]",
         ] {
             let input = format!("konst = false, {attributes}");
             syn::parse_str::<Cfg>(&input).expect(&input);
@@ -114,7 +111,7 @@ mod tests {
     fn accepts_root_marker_capabilities_without_narrowing_integral_vocabulary()
     {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [convert(Source) -> Inspector], integral = [friends = [_(Other) -> Math]]",
+            "konst = false, friends = [convert(Source) -> Inspector], integral = [friends = [Foo(Other) -> Math]]",
         )
             .expect("bitflag root capabilities may name arbitrary markers");
         let friend = config.friends.iter().next().unwrap();
@@ -202,6 +199,9 @@ mod tests {
     #[test]
     fn rejects_unsupported_nested_single_capabilities() {
         for attributes in [
+            "integral = [friends = [Foo(Source) -> Relation]]",
+            "integral = [friends = [Foo(Source) -> Numeric]]",
+            "integral = [friends = [Foo(Source) -> Inspector]]",
             "integral = [friends = [_(Source) -> Relation]]",
             "integral = [friends = [_(Source) -> Numeric]]",
             "integral = [friends = [_(Source) -> Inspector]]",
@@ -214,6 +214,9 @@ mod tests {
     #[test]
     fn rejects_invalid_root_capability_value_syntax() {
         for attributes in [
+            "friends = [Foo(Source) -> \"Bit\"]",
+            "friends = [Foo(Source) -> [Bit, 1]]",
+            "friends = [Foo(Source) -> {Bit}]",
             "friends = [_(Source) -> \"Bit\"]",
             "friends = [_(Source) -> [Bit, 1]]",
             "friends = [_(Source) -> {Bit}]",

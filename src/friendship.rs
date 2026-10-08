@@ -93,7 +93,14 @@ pub(crate) mod cfg {
 
             return Ok(Self {
                 identity: ty.to_token_stream().to_string(),
-                conv: Some(conv),
+                conv: if conv.is_ident(&format_ident!("self"))
+                    || conv.is_ident(&format_ident!("Self"))
+                {
+                    None
+                }
+                else {
+                    Some(conv)
+                },
                 capabilities,
                 ty,
             });
@@ -194,11 +201,12 @@ pub(crate) mod cfg {
             &self,
             include_constructor: bool,
         ) -> BTreeSet<Ident> {
-            let mut capabilities = self
-                .friends
-                .iter()
-                .flat_map(|friend| friend.capabilities.iter().cloned())
-                .set();
+            let mut capabilities = self.extra_caps.clone();
+            capabilities.extend(
+                self.friends
+                    .iter()
+                    .flat_map(|friend| friend.capabilities.iter().cloned()),
+            );
 
             if include_constructor {
                 capabilities.insert(format_ident!("Make"));

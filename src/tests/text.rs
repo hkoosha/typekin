@@ -7,8 +7,8 @@ mod tests {
         for input in [
             "friends = crate::convert(crate::source::Source) -> Make, konst = false",
             "konst = false, friends = crate::convert(crate::source::Source) -> [Make, Trust], valid = is_slug",
-            "konst = false, valid = is_slug, friends = _(crate::source::Source) -> Trust",
-            "konst = false, friends = _(Self) -> [Rel, Trust], with = [display]",
+            "konst = false, valid = is_slug, friends = Foo(crate::source::Source) -> Trust",
+            "konst = false, friends = Foo(Self) -> [Rel, Trust], with = [display]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -17,7 +17,7 @@ mod tests {
     #[test]
     fn accepts_bracketed_multiple_and_empty_friend_lists() {
         for input in [
-            "konst = false, friends = [convert(Source) -> [Make, Trust], _(Other) -> Trust], valid = is_slug",
+            "konst = false, friends = [convert(Source) -> [Make, Trust], Foo(Other) -> Trust], valid = is_slug",
             "konst = false, friends = [], valid = is_slug",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
@@ -193,11 +193,11 @@ mod tests {
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion() {
         for input in [
-            "konst = false, friends = [_(Self) -> [Rel, Trust]]",
-            "konst = false, friends = [_(Self) -> Trust]",
-            "konst = false, friends = [_(Self) -> [Trust]]",
-            "konst = false, friends = [_(Source) -> Trust]",
-            "konst = false, friends = [_(Source) -> [Trust]]",
+            "konst = false, friends = [Self(Self) -> [Rel, Trust]]",
+            "konst = false, friends = [Self(Self) -> Trust]",
+            "konst = false, friends = [Self(Self) -> [Trust]]",
+            "konst = false, friends = [Self(Source) -> Trust]",
+            "konst = false, friends = [Self(Source) -> [Trust]]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -206,9 +206,9 @@ mod tests {
     #[test]
     fn accepts_self_relation_with_implicit_conversion() {
         for input in [
-            "konst = false, friends = [_(Self) -> Rel]",
-            "konst = false, friends = [_(Self) -> [Rel]]",
-            "konst = false, friends = [_(Self,) -> [Rel, Trust]]",
+            "konst = false, friends = [Self(Self) -> Rel]",
+            "konst = false, friends = [Self(Self) -> [Rel]]",
+            "konst = false, friends = [Self(Self,) -> [Rel, Trust]]",
         ] {
             let config = syn::parse_str::<Cfg>(input).expect(input);
             let friend = config.friends.iter().next().unwrap();

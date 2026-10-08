@@ -10,10 +10,10 @@ mod tests {
         for input in [
             "friends = crate::convert(crate::source::Source) -> Make, konst = false",
             "konst = false, friends = crate::convert(crate::source::Source) -> [Make, Trust], valid = is_valid",
-            "konst = false, valid = is_valid, friends = _(crate::source::Source) -> Bit",
-            "konst = false, friends = _(crate::source::Source) -> [Math, Bit], in = 1..=4",
-            "konst = false, friends = _ -> Math",
-            "konst = false, friends = _ -> [Math, Bit], with = [display]",
+            "konst = false, valid = is_valid, friends = Foo(crate::source::Source) -> Bit",
+            "konst = false, friends = Foo(crate::source::Source) -> [Math, Bit], in = 1..=4",
+            "konst = false, friends = Self(Foo) -> Math",
+            "konst = false, friends = Self(Foo) -> [Math, Bit], with = [display]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn accepts_bracketed_multiple_and_empty_friend_lists() {
         for input in [
-            "konst = false, friends = [convert(Source) -> Make, _(Other) -> [Math, Bit]], valid = is_valid",
+            "konst = false, friends = [convert(Source) -> Make, Foo(Other) -> [Math, Bit]], valid = is_valid",
             "konst = false, friends = [], valid = is_valid",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn rejects_missing_konst() {
-        let error = syn::parse_str::<Cfg>("friends = [_(u8) -> Bit]")
+        let error = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
             .expect_err("konst must be explicit");
         assert_eq!(error.to_string(), "missing required `konst` argument");
     }
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn expands_math_friend_capability_without_rel() {
         let config =
-            syn::parse_str::<Cfg>("konst = false, friends = [_(u8) -> Math]")
+            syn::parse_str::<Cfg>("konst = false, friends = [Foo(u8) -> Math]")
                 .expect(
                     "Math should expand to integral operation capabilities",
                 );
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn defaults_omitted_friend_capabilities_to_math() {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [convert(Source), _(Other)]",
+            "konst = false, friends = [convert(Source), Foo(Other)]",
         )
         .expect("integral friends may omit their capabilities");
 
@@ -217,24 +217,11 @@ mod tests {
     #[test]
     fn preserves_explicit_empty_friend_capabilities() {
         let config =
-            syn::parse_str::<Cfg>("konst = false, friends = _(Source) -> []")
+            syn::parse_str::<Cfg>("konst = false, friends = Foo(Source) -> []")
                 .expect("an explicit empty capability list should parse");
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.capabilities.is_empty());
-    }
-
-    #[test]
-    fn accepts_shared_friend_without_conversion() {
-        let config =
-            syn::parse_str::<Cfg>("konst = false, friends = [_(u8) -> Bit]")
-                .expect("integral may use the shared Into conversion default");
-        let friend = config.friends.iter().next().unwrap();
-
-        assert!(friend.conv.is_none());
-        assert!(friend.ty.is_ident("u8"));
-
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
     }
 
     #[test]
@@ -261,7 +248,7 @@ mod tests {
             "[Bit, Rel, Trust]",
         ] {
             let input = format!(
-                "konst = false, friends = [_(Source) -> {capabilities}]"
+                "konst = false, friends = [Foo(Source) -> {capabilities}]"
             );
             syn::parse_str::<Cfg>(&input).expect(&input);
         }
@@ -427,8 +414,8 @@ mod tests {
     #[test]
     fn shared_friend_parser_accepts_typed_implicit_conversion() {
         for input in [
-            "_(Source) -> Trust",
-            "_(Source,) -> [Make, Trust]",
+            "Self(Source) -> Trust",
+            "Self(Source,) -> [Make, Trust]",
         ] {
             let friend =
                 syn::parse_str::<crate::friendship::cfg::Friend>(input)
@@ -497,7 +484,6 @@ mod tests {
     #[test]
     fn shared_friend_parser_requires_arrow_and_capabilities() {
         for input in [
-            "convert(Source)",
             "convert(Source) Make",
             "convert(Source) ->",
             "_(Source)",
@@ -505,6 +491,9 @@ mod tests {
             "_",
             "_ Make",
             "_ ->",
+            "Foo(Source) ->",
+            "Foo",
+            "Foo ->",
         ] {
             assert!(
                 syn::parse_str::<crate::friendship::cfg::Friend>(input)
