@@ -7,16 +7,12 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-mod subject {
-    #[repr(transparent)]
-    #[typekin::integral(konst = true, with=[display])]
-    #[derive_const(Clone)]
-    #[derive(Copy)]
-    pub struct MyPlain(i64);
-}
-
-type Subject = subject::MyPlain;
+#[derive_const(Clone)]
+#[derive(Copy)]
+#[repr(transparent)]
+#[typekin::integral(konst = true)]
+pub struct MyPlain(i64);
 
 fn main() {
-    println!("{:?}", Subject::make(123));
+    println!("{:?}", MyPlain::make(123));
 }

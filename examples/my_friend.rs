@@ -6,6 +6,8 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
+// VALUE:   0b00000000_00000000_00000000_00000000;
+// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 #[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
@@ -15,8 +17,6 @@
     PageData::to_header(PageData) -> [Math, Rel],
 ])]
 struct PageHeader(u32);
-// VALUE:   0b00000000_00000000_00000000_00000000;
-// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

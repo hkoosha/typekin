@@ -1721,8 +1721,6 @@ const _: () = {
         }
     }
 };
-// VALUE:   0b00000000_00000000_00000000_00000000;
-// FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

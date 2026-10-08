@@ -7,21 +7,17 @@
 #![feature(const_destruct)]
 #![feature(derive_const)]
 
-mod subject {
-    #[typekin::integral(konst = true)]
-    #[repr(transparent)]
-    #[derive(Copy)]
-    #[derive_const(Clone)]
-    pub struct MyU128(i128);
-}
-
-type Subject = subject::MyU128;
+#[typekin::integral(konst = true)]
+#[repr(transparent)]
+#[derive(Copy)]
+#[derive_const(Clone)]
+pub struct MyU128(i128);
 
 fn main() {
     let lhs = 0b1101i128;
     let rhs = 0b0110i128;
 
-    let lhs = Subject::of(lhs);
-    let rhs = Subject::of(rhs);
+    let lhs = MyU128::of(lhs);
+    let rhs = MyU128::of(rhs);
     println!("{:?}", lhs + rhs);
 }
