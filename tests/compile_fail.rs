@@ -96,9 +96,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn generated_api_boundaries_reject_invalid_consumers() {
-        for (name, source, expected_error) in [
+    fn assert_generated_api_boundary_rejected(test_name: &str) {
+        let (name, source, expected_error) = [
             (
                 "validated-integral-make",
                 r#"
@@ -133,26 +132,6 @@ mod tests {
                 }
             "#,
                 "Math",
-            ),
-            (
-                "math-does-not-grant-make",
-                r#"
-                struct MathSource(u8);
-                fn into_u8(source: MathSource) -> u8 { source.0 }
-
-                #[typekin::integral(
-                    konst = false,
-                    friends = into_u8(MathSource) -> Math,
-                )]
-                #[repr(transparent)]
-                #[derive(Copy, Clone)]
-                struct Number(u8);
-
-                fn requires_make() {
-                    let _ = Number::of(MathSource(2));
-                }
-            "#,
-                "Make",
             ),
             (
                 "bit-does-not-grant-math",
@@ -361,8 +340,72 @@ mod tests {
             "#,
                 "expected `&mut String`, found `&mut Checked`",
             ),
-        ] {
-            assert_rejected(name, source, expected_error);
-        }
+        ]
+        .into_iter()
+        .find(|(name, _, _)| *name == test_name)
+        .unwrap_or_else(|| {
+            panic!("unknown generated API boundary test: {test_name}")
+        });
+
+        assert_rejected(name, source, expected_error);
     }
+
+    macro_rules! generated_api_boundary_test {
+        ($test_name:ident, $fixture_name:literal) => {
+            #[test]
+            fn $test_name() {
+                assert_generated_api_boundary_rejected($fixture_name);
+            }
+        };
+    }
+
+    generated_api_boundary_test!(
+        validated_integral_has_no_make,
+        "validated-integral-make"
+    );
+    generated_api_boundary_test!(
+        make_does_not_grant_math,
+        "make-does-not-grant-math"
+    );
+    generated_api_boundary_test!(
+        bit_does_not_grant_math,
+        "bit-does-not-grant-math"
+    );
+    generated_api_boundary_test!(
+        trust_does_not_grant_make,
+        "trust-does-not-grant-make"
+    );
+    generated_api_boundary_test!(without_removes_raw, "without-removes-raw");
+    generated_api_boundary_test!(
+        without_removes_from_str,
+        "without-removes-from-str"
+    );
+    generated_api_boundary_test!(
+        without_removes_common_integral_methods,
+        "without-removes-common-integral-methods"
+    );
+    generated_api_boundary_test!(
+        core_integral_methods_exclude_unsafe_operations,
+        "core-integral-methods-exclude-unsafe-operations"
+    );
+    generated_api_boundary_test!(
+        validated_text_has_no_infallible_from,
+        "validated-text-has-no-infallible-from"
+    );
+    generated_api_boundary_test!(
+        validated_text_has_no_deref_mut,
+        "validated-text-has-no-deref-mut"
+    );
+    generated_api_boundary_test!(
+        validated_text_has_no_infallible_str_from,
+        "validated-text-has-no-infallible-str-from"
+    );
+    generated_api_boundary_test!(
+        validated_text_has_no_as_mut,
+        "validated-text-has-no-as-mut"
+    );
+    generated_api_boundary_test!(
+        validated_text_has_no_mutable_string,
+        "validated-text-has-no-mutable-string"
+    );
 }

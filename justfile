@@ -15,7 +15,7 @@ fmt:
   cargo fmt
 
 test-here:
-  cargo test --offline
+  time cargo test --offline
 test-there: fmt
   cd ./typekin_testing && pwd && just test
 test: test-here test-there

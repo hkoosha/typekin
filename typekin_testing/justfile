@@ -11,7 +11,7 @@ build: fmt
   cargo build
 
 test: fmt build
-  cargo test --offline
+  time cargo test --offline
 
 clean:
   cargo clean
