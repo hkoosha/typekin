@@ -1,10 +1,9 @@
-use std::{
-    fmt::Display,
-    panic::UnwindSafe,
-    sync::{
-        Arc,
-        Mutex,
-    },
+use std::collections::BTreeSet;
+use std::fmt::Display;
+use std::panic::UnwindSafe;
+use std::sync::{
+    Arc,
+    Mutex,
 };
 
 use proc_macro2::TokenStream;
@@ -367,7 +366,7 @@ pub(crate) use mk_flags;
 pub(crate) fn snake_case_of(it: &str) -> String {
     // AI generated, whatever.
     let mut result = String::with_capacity(it.len());
-    let chars = it.chars().collect::<Vec<_>>();
+    let chars = it.chars().vec();
 
     for (i, &c) in chars.iter().enumerate() {
         if c.is_uppercase() {
@@ -452,7 +451,7 @@ where
     let mut repr = it
         .into_iter()
         .map(|it| it.to_token_stream().to_string())
-        .collect::<Vec<_>>()
+        .vec()
         .join(", ");
     repr.push(']');
     return "[".to_string() + &repr;
@@ -519,3 +518,29 @@ pub(crate) trait MkErr: Spanned {
 }
 
 impl<T> MkErr for T where T: Spanned {}
+
+// -------------------------------------
+
+pub(crate) trait ToCollection<T> {
+    fn vec(self) -> Vec<T>;
+
+    fn set(self) -> BTreeSet<T>
+    where
+        T: Ord;
+}
+
+impl<I, T> ToCollection<T> for I
+where
+    I: IntoIterator<Item = T>,
+{
+    fn vec(self) -> Vec<T> {
+        return self.into_iter().collect();
+    }
+
+    fn set(self) -> BTreeSet<T>
+    where
+        T: Ord,
+    {
+        return self.into_iter().collect();
+    }
+}

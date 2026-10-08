@@ -213,7 +213,7 @@ mod tests {
             let config = syn::parse_str::<Cfg>(input).expect(input);
             let friend = config.friends.iter().next().unwrap();
 
-            assert!(friend.ty.as_ref().unwrap().is_ident("Self"));
+            assert!(friend.ty.is_ident("Self"));
             assert!(friend.conv.is_none());
             assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
         }

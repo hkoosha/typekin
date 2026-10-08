@@ -37,7 +37,6 @@ mod tests {
             "friends =, integral = []",
             "integral = [friends =, valid = is_valid]",
             "friends = convert(Source)",
-            "integral = [friends = convert(Source)]",
             "friends = convert(Source) -> [Bit, 1]",
             "integral = [friends = _(Source) -> Inspector]",
             "friends = _(Source) -> Bit, unknown = true",
@@ -122,7 +121,7 @@ mod tests {
 
         assert!(friend.capabilities.contains(&syn::parse_quote!(Inspector)));
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.as_ref().unwrap().is_ident("Source"));
+        assert!(friend.ty.is_ident("Source"));
     }
 
     #[test]
@@ -203,7 +202,8 @@ mod tests {
     #[test]
     fn rejects_unsupported_nested_single_capabilities() {
         for attributes in [
-            "integral = [friends = [_(Source) -> Rel]]",
+            "integral = [friends = [_(Source) -> Relation]]",
+            "integral = [friends = [_(Source) -> Numeric]]",
             "integral = [friends = [_(Source) -> Inspector]]",
         ] {
             let input = format!("konst = false, {attributes}");

@@ -14,9 +14,9 @@ mod tests {
     #[typekin::bitflag(
         konst = false,
         with = [display],
-        friends = _(u8) -> Bit,
+        friends = self(u8) -> Bit,
         integral = [
-            friends = _(u8) -> [Make, Math, Bit, Relation],
+            friends = self(u8) -> [Math, Rel],
         ],
     )]
     pub enum Thingy {

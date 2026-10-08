@@ -59,7 +59,7 @@ mod tests {
 
     #[typekin::integral(
         konst = true,
-        friends = _(u8) -> [Make, Math, Bit, Relation],
+        friends = self(u8) -> [Math, Rel],
         valid = [is_even, is_not_fifty],
         in = 2..=100,
     )]
@@ -69,7 +69,7 @@ mod tests {
 
     #[typekin::integral(
         konst = true,
-        friends = [_(u8) -> [Make, Math, Bit, Relation]],
+        friends = [self(u8) -> [Math, Rel]],
         in = [2..=4, 8..10],
         valid = accepts_ranged,
     )]
@@ -134,7 +134,7 @@ mod tests {
 
     #[typekin::integral(
         konst = true,
-        friends = [_(u16) -> [Make, Math, Bit, Relation]],
+        friends = [self(u16) -> [Math, Rel]],
         get_raw = Self::value
     )]
     #[repr(transparent)]
@@ -148,7 +148,7 @@ mod tests {
 
     #[typekin::integral(
         konst = true,
-        friends = _(u8) -> [Make, Math, Bit, Trust],
+        friends = self(u8) -> [Math, Trust],
         valid = is_even,
         in = 2..=10,
     )]
@@ -923,7 +923,6 @@ mod tests {
         struct TrustSource(Box<u8>);
         struct MathOnlySource(Box<u8>);
         struct BitOnlySource(Box<u8>);
-        struct NumericSource(Box<u8>);
 
         fn default_raw(source: DefaultSource) -> u8 {
             *source.0
@@ -945,10 +944,6 @@ mod tests {
             *source.0
         }
 
-        fn numeric_raw(source: NumericSource) -> u8 {
-            *source.0
-        }
-
         const fn is_even(value: u8) -> bool {
             value % 2 == 0
         }
@@ -958,10 +953,10 @@ mod tests {
             friends = [
                 default_raw(DefaultSource) -> Make,
                 checked_raw(CheckedSource) -> [Make],
-                trusted_raw(TrustSource) -> [Make, Math, Bit, Trust],
-                math_only_raw(MathOnlySource) -> [Math, Trust],
+                trusted_raw(TrustSource) -> [Math, Trust],
+                math_only_raw(MathOnlySource),
                 bit_only_raw(BitOnlySource) -> [Bit, Trust],
-                numeric_raw(NumericSource) -> [Numeric, Trust],
+                self(u8) -> Rel,
             ],
             valid = is_even,
             in = 2..=10,
@@ -973,8 +968,8 @@ mod tests {
         #[typekin::integral(
             konst = false,
             friends = [
-                _(TrustSelfNumber) -> [Make, Trust],
-                _(u8) -> [Make, Trust],
+                self(TrustSelfNumber) -> [Make, Trust],
+                self(u8) -> [Make, Trust],
             ],
             valid = is_even,
             in = 2..=10,
@@ -1076,15 +1071,27 @@ mod tests {
         }
 
         #[test]
-        fn numeric_friend_enables_construction_math_and_bit_operations() {
-            let construction_source = NumericSource(Box::new(2));
+        fn math_friend_enables_construction_math_and_bit_operations() {
+            let construction_source = MathOnlySource(Box::new(2));
             assert_eq!(Number::of(construction_source).raw(), 2);
 
-            let math_source = NumericSource(Box::new(2));
+            let math_source = MathOnlySource(Box::new(2));
             assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
 
-            let bit_source = NumericSource(Box::new(2));
+            let bit_source = MathOnlySource(Box::new(2));
             assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
+        }
+
+        #[test]
+        fn rel_friend_enables_cross_type_equality_and_ordering() {
+            let value = Number::try_make(4).unwrap();
+
+            assert!(value == 4u8);
+            assert!(value != 2u8);
+            assert!(value < 6u8);
+            assert!(value <= 4u8);
+            assert!(value > 2u8);
+            assert!(value >= 4u8);
         }
     }
 

@@ -60,7 +60,7 @@ mod tests {
     #[repr(transparent)]
     struct LiteralText(String);
 
-    #[typekin::text(konst = false, std = false, friends = _(Self) -> [Rel])]
+    #[typekin::text(konst = false, std = false, friends = self(Self) -> [Rel])]
     #[repr(transparent)]
     struct DisplayText(String);
 
@@ -77,7 +77,7 @@ mod tests {
         }
     }
 
-    std::thread_local! {
+    thread_local! {
         static MUTATION_VALIDATIONS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
     }
 
@@ -359,14 +359,8 @@ mod tests {
 
     #[test]
     fn transparent_text_preserves_string_layout_and_owned_allocation() {
-        assert_eq!(
-            core::mem::size_of::<Slug>(),
-            core::mem::size_of::<String>()
-        );
-        assert_eq!(
-            core::mem::align_of::<Slug>(),
-            core::mem::align_of::<String>()
-        );
+        assert_eq!(size_of::<Slug>(), size_of::<String>());
+        assert_eq!(align_of::<Slug>(), align_of::<String>());
 
         let mut raw = String::with_capacity(64);
         raw.push_str("draft");
@@ -713,7 +707,7 @@ mod tests {
         #[typekin::text(
             konst = false, std = false,
             valid = super::is_slug,
-            friends = _(Self) -> [Rel, Trust],
+            friends = self(Self) -> [Rel, Trust],
         )]
         #[repr(transparent)]
         struct RelatedText(String);

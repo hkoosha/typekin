@@ -3,7 +3,6 @@ mod tests {
     #[typekin::friends(
         relation = DocumentParts,
         friends = [
-            _ -> [DocumentReserved],
             document_parts(Self) -> [],
             reader_parts(Reader) -> [DocumentInspector],
             writer_parts(Writer) -> [DocumentInspector],
@@ -17,14 +16,14 @@ mod tests {
     #[typekin::friends(
         relation = (u32, u8),
         mod = pub(crate) declared_document_protocol,
-        friends = _ -> DocumentDeclared,
+        extra_caps = [DocumentDeclared],
     )]
     struct DocumentProtocol;
 
     #[typekin::friends(
         relation = DirectParts,
         scope = pub(crate) direct_friendship,
-        friends = [_ -> []],
+        friends = [],
     )]
     pub struct Direct;
     #[derive(Copy, Clone)]
@@ -278,9 +277,8 @@ mod tests {
         #[typekin::friends(
             relation = ::std::string::String,
             mod = pub(crate) inspector_protocol,
+            extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
             friends = [
-                _ -> ReservedScalar,
-                _ -> [ReservedFirst, ReservedSecond],
                 inspector_conversions::inspector_text(InspectorSource) -> [Inspect, Trust],
             ],
         )]

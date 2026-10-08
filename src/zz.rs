@@ -1,9 +1,10 @@
-use proc_macro2::Ident;
 use std::collections::HashSet;
 use std::fmt::{
     Debug,
     Formatter,
 };
+
+use proc_macro2::Ident;
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
     Parse,
@@ -18,12 +19,11 @@ use syn::{
     Token,
     Visibility,
     bracketed,
+    parenthesized,
 };
 
-use crate::{
-    runner::MkErr,
-    value_type::N,
-};
+use crate::runner::MkErr;
+use crate::value_type::N;
 
 #[derive(Default, Clone)]
 pub(crate) struct ValidationCfg {
@@ -65,18 +65,16 @@ impl ValidationCfg {
     }
 }
 
-use crate::runner::to_debug;
 pub(crate) use ranges::parse_ranges;
 
+use crate::runner::{
+    ToCollection,
+    to_debug,
+};
+
 mod ranges {
-    use crate::runner::MkErr;
-    use crate::value_type::{
-        Int,
-        N,
-        RangeEnding,
-    };
-    use crate::zz::one_or_list;
     use std::cmp::Ordering;
+
     use syn::parse::ParseStream;
     use syn::{
         Expr,
@@ -85,6 +83,17 @@ mod ranges {
         RangeLimits,
         UnOp,
     };
+
+    use crate::runner::{
+        MkErr,
+        ToCollection,
+    };
+    use crate::value_type::{
+        Int,
+        N,
+        RangeEnding,
+    };
+    use crate::zz::one_or_list;
 
     pub(crate) fn parse_ranges(
         input: ParseStream
@@ -112,7 +121,7 @@ mod ranges {
             .collect::<syn::Result<Vec<_>>>()?
             .into_iter()
             .map(ComparableRange::of)
-            .collect::<Vec<_>>();
+            .vec();
 
         ranges.sort_by(|l, r| match (l.lower, r.lower) {
             (None, None) => Ordering::Equal,
@@ -148,7 +157,7 @@ mod ranges {
             }
         }
 
-        let fin = merged.into_iter().map(|it| it.range).collect();
+        let fin = merged.into_iter().map(|it| it.range).vec();
 
         return Ok(fin);
     }
@@ -251,7 +260,7 @@ mod ranges {
 
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
     if input.peek(syn::token::Bracket) {
-        return Ok(list(input)?.collect());
+        return Ok(list(input)?.vec());
     }
 
     return Ok(vec![input.parse()?]);
@@ -298,7 +307,7 @@ pub(crate) fn pop_attr(
                 .filter(|segment| segment.ident == name)
                 .map(|_| index)
         })
-        .collect::<Vec<_>>();
+        .vec();
 
     let Some(index) = indexes.first().copied()
     else {
@@ -335,6 +344,28 @@ pub(crate) fn one_or_list<T: Parse>(
     };
 
     return Ok(one.into_iter().chain(many.into_iter().flatten()));
+}
+
+pub(crate) fn arg_or_list<T: Parse>(
+    stream: ParseStream
+) -> syn::Result<Vec<T>> {
+    return if stream.peek(syn::token::Paren) {
+        Ok(tuple(stream)?.vec())
+    }
+    else {
+        let one = stream.parse::<T>()?;
+        Ok(vec![one])
+    };
+}
+
+pub(crate) fn tuple<T: Parse>(
+    stream: ParseStream
+) -> syn::Result<impl Iterator<Item = T>> {
+    let content;
+    let _ = parenthesized!(content in stream);
+    let many =
+        Punctuated::<T, Token![,]>::parse_terminated(&content)?.into_iter();
+    return Ok(many);
 }
 
 pub(crate) fn find_repr_n(

@@ -23,7 +23,7 @@ const _: () = {
     }
     const trait Math: [const] Seal {}
     const trait Bit: [const] Seal {}
-    const trait Relation: [const] Seal {}
+    const trait Rel: [const] Seal {}
     const trait Trust: [const] Seal {}
     const impl Seal for PageHeader {
         #[inline(always)]
@@ -46,7 +46,7 @@ const _: () = {
         }
     }
     const impl Math for PageData {}
-    const impl Relation for PageData {}
+    const impl Rel for PageData {}
     const impl Bit for PageHeader {}
     const impl Make for PageHeader {
         #[inline(always)]
@@ -56,7 +56,7 @@ const _: () = {
         }
     }
     const impl Math for PageHeader {}
-    const impl Relation for PageHeader {}
+    const impl Rel for PageHeader {}
     const impl Seal for PageId {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {
@@ -72,7 +72,7 @@ const _: () = {
         }
     }
     const impl Math for PageId {}
-    const impl Relation for PageId {}
+    const impl Rel for PageId {}
     const impl Seal for PageState {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {
@@ -88,7 +88,7 @@ const _: () = {
         }
     }
     const impl Math for PageState {}
-    const impl Relation for PageState {}
+    const impl Rel for PageState {}
     const impl Seal for i16 {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {
@@ -130,7 +130,7 @@ const _: () = {
         }
     }
     const impl Math for u32 {}
-    const impl Relation for u32 {}
+    const impl Rel for u32 {}
     const impl Seal for u8 {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {
@@ -1331,25 +1331,37 @@ const _: () = {
             return ::core::fmt::UpperHex::fmt(&raw, f);
         }
     }
-    const impl ::core::cmp::PartialEq for PageHeader {
+    const impl<T> ::core::cmp::PartialEq<T> for PageHeader
+    where
+        T: Rel
+            + [const] Seal
+            + [const] ::core::marker::Destruct
+            + ::core::marker::Copy,
+    {
         #[inline(always)]
         fn eq(
             &self,
-            rhs: &Self,
+            rhs: &T,
         ) -> bool {
             let lhs = Self::raw(*self);
-            let rhs = Self::raw(*rhs);
+            let rhs = Seal::conv_page_header(*rhs);
             return lhs == rhs;
         }
     }
-    const impl ::core::cmp::PartialOrd for PageHeader {
+    const impl<T> ::core::cmp::PartialOrd<T> for PageHeader
+    where
+        T: Rel
+            + [const] Seal
+            + [const] ::core::marker::Destruct
+            + ::core::marker::Copy,
+    {
         #[inline(always)]
         fn partial_cmp(
             &self,
-            rhs: &Self,
+            rhs: &T,
         ) -> ::core::option::Option<::core::cmp::Ordering> {
             let lhs = Self::raw(*self);
-            let rhs = Self::raw(*rhs);
+            let rhs = Seal::conv_page_header(*rhs);
             return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
         }
     }

@@ -41,12 +41,13 @@ mod folks {
 }
 
 mod sample {
-    use super::folks::*;
     use std::fmt::{
         Display,
         Formatter,
     };
     use std::ops::BitOr;
+
+    use super::folks::*;
 
     const PRETTY: u64 =
         0b1000000000000000000000000000000000000000000000000000000000000000u64;
@@ -62,8 +63,6 @@ mod sample {
         pub(super) trait Seal {
             fn convert(self) -> (u64, u8);
         }
-        #[allow(unused, dead_code)]
-        pub(super) trait Haha: Seal {}
         #[allow(unused, dead_code)]
         pub(super) trait Inspector: Seal {}
         #[allow(unused, dead_code)]

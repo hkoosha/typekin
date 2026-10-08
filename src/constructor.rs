@@ -8,17 +8,18 @@ use quote::{
     ToTokens,
     quote,
 };
+use syn::parse::{
+    Parse,
+    ParseStream,
+};
+use syn::spanned::Spanned;
 use syn::{
     Item,
     Path,
     Token,
-    parse::{
-        Parse,
-        ParseStream,
-    },
-    spanned::Spanned,
 };
 
+use crate::runner::ToCollection;
 use crate::{
     runner,
     zz,
@@ -167,7 +168,7 @@ impl Parse for Cfg {
             match attr {
                 "relationship" => relationship = Some(stream.parse()?),
                 "maker" => maker = stream.parse()?,
-                "friends" => friends = zz::one_or_list(stream)?.collect(),
+                "friends" => friends = zz::one_or_list(stream)?.set(),
                 "scope" => scope = Some(stream.parse()?),
                 _ => return Ok(false),
             };

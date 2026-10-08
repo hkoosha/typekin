@@ -61,24 +61,21 @@ if `PageId(u8)`, `PageState(u8)` and `PageData(u8)` are to be combined into a
 single `PageHeader(u32)` before being written to disk,
 
 ```rust
+#[typekin::integral(konst = false, friends = [
+    id_to_header(PageId) -> [Math, Rel],
+    state_to_header(PageState),
+    PageData::to_header(PageData),
+])]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
-#[typekin::integral(konst = false, friends = [
-    id_to_header(PageId) -> [Make, Math, Bit, Relation],
-    state_to_header(PageState) -> [Make, Math, Bit, Relation],
-    PageData::to_header(PageData) -> [Make, Math, Bit, Relation],
-])]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;
 // FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageId(u8);
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageState(u8);
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageData(u8);
 
@@ -99,6 +96,8 @@ fn main() {
     let expected = 0b00000101_10101010_00000000_11111111;
     assert_eq!(header.raw(), expected);
     // FORMAT:     ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
+
+    assert!(header > PageId(0));
 }
 ```
 
@@ -429,7 +428,7 @@ const fn is_valid(value: u32) -> bool { value != 0 }
   konst = false, // Required, and `true` needs nightly const features.
   friends = [
     _(u64) -> Bit,         // Only bitwise operations, no conversion needed
-    Foo::to_u32(Foo) -> [Make, Numeric],
+    Foo::to_u32(Foo),      // Omitted capabilities default to Math
   ],
   without = [fn_conv_raw], // Do not generate the existing accessor below
   get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
@@ -445,8 +444,10 @@ impl Example {
 ```
 
 Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
-and `Math` gates arithmetic. `Numeric` expands to `Math`, `Bit`, and
-`Relation`, plus `Make`. Integral equality and ordering are same-type only.
+and `Math` enables construction, arithmetic, and bitwise operations. `Rel`
+enables `==`, `!=`, `<`, `<=`, `>`, and `>=` against `Copy` friends.
+Integral friends with no `->` capability clause default to `Math`; write
+`-> []` to grant no capabilities.
 
 ---
 

@@ -1,3 +1,9 @@
+use std::collections::BTreeSet;
+use std::fmt::{
+    Debug,
+    Formatter,
+};
+
 use proc_macro2::{
     Ident,
     TokenStream,
@@ -6,11 +12,11 @@ use quote::{
     format_ident,
     quote,
 };
-use std::collections::BTreeSet;
-use std::fmt::{
-    Debug,
-    Formatter,
+use syn::parse::{
+    Parse,
+    ParseStream,
 };
+use syn::spanned::Spanned;
 use syn::{
     Fields,
     ItemStruct,
@@ -18,22 +24,16 @@ use syn::{
     LitStr,
     Path,
     Type,
-    parse::{
-        Parse,
-        ParseStream,
-    },
-    spanned::Spanned,
 };
 
-use crate::{
-    friendship::cfg::Friend,
-    runner::{
-        self,
-        MkErr,
-        mk_flags,
-    },
-    zz,
+use crate::friendship::cfg::Friend;
+use crate::runner::{
+    self,
+    MkErr,
+    ToCollection,
+    mk_flags,
 };
+use crate::zz;
 
 pub(crate) fn ekran(
     attr: Cfg,
@@ -62,7 +62,7 @@ pub(crate) struct Cfg {
 
 impl Cfg {
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
-        let values = zz::list::<LitStr>(input)?.collect::<Vec<_>>();
+        let values = zz::list::<LitStr>(input)?.vec();
 
         let mut seen = BTreeSet::new();
         for value in &values {
@@ -81,12 +81,6 @@ impl Cfg {
         let mut friends = BTreeSet::new();
 
         for friend in zz::one_or_list::<Friend>(input)? {
-            let Some(ty) = &friend.ty
-            else {
-                return input
-                    .span()
-                    .fail("text friends require a concrete type");
-            };
             let mut has_make = false;
 
             for capability in &friend.capabilities {
@@ -94,7 +88,7 @@ impl Cfg {
                     "Make" => has_make = true,
                     "Trust" => {}
                     "Rel" => {
-                        if !ty.is_ident("Self") {
+                        if !friend.ty.is_ident("Self") {
                             return capability
                                 .fail("text `Rel` is only available for Self");
                         }
@@ -108,7 +102,7 @@ impl Cfg {
                     "text Make friend requires `conversion(Type) -> Make`",
                 );
             }
-            let span = ty.span();
+            let span = friend.ty.span();
             if !friends.insert(friend) {
                 return span.fail("duplicated text friend");
             }
@@ -283,8 +277,8 @@ impl TextMaker {
                 friend.capabilities.contains(&make)
             })
             .map(|friend| {
-                let friend_ty = friend.ty.as_ref().expect("text friend type missing");
-                let friend_ty = match friend_ty.is_ident("Self") {
+                let friend_ty = &friend.ty;
+                let friend_ty = match friend.ty.is_ident("Self") {
                     true => quote! { #ty },
                     false => quote! { #friend_ty },
                 };

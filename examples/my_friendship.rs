@@ -41,12 +41,13 @@ mod folks {
 }
 
 mod sample {
-    use super::folks::*;
     use std::fmt::{
         Display,
         Formatter,
     };
     use std::ops::BitOr;
+
+    use super::folks::*;
 
     const PRETTY: u64 =
         0b1000000000000000000000000000000000000000000000000000000000000000u64;
@@ -54,7 +55,6 @@ mod sample {
     #[typekin::friends(
         relation = (u64, u8),
         friends = [
-            _ -> Haha,
             Document::convert_me(Self) -> [],
             Reader::parts(Reader) -> [Make, Inspector],
             crate::folks::executor_parts(ExecXX) -> [],

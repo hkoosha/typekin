@@ -8,31 +8,32 @@ use quote::{
     format_ident,
     quote,
 };
+use syn::parse::{
+    Parse,
+    ParseStream,
+};
+use syn::spanned::Spanned;
 use syn::{
     Fields,
     ItemEnum,
     bracketed,
-    parse::{
-        Parse,
-        ParseStream,
-    },
     parse_quote,
-    spanned::Spanned,
 };
 
+use crate::friendship::cfg::Friend;
+use crate::friendship::{
+    Protocol,
+    ProtocolFriend,
+};
+use crate::runner::{
+    self,
+    MkErr,
+    ToCollection,
+    mk_flags,
+};
+use crate::value_type::N;
 use crate::{
-    friendship::{
-        Protocol,
-        ProtocolFriend,
-        cfg::Friend,
-    },
     integral,
-    runner::{
-        self,
-        MkErr,
-        mk_flags,
-    },
-    value_type::N,
     zz,
 };
 
@@ -45,7 +46,7 @@ pub(crate) fn ekran(
         let span = item.span();
         let repr = zz::find_repr_n(attrs, span)?;
         let ty = item.ident.clone();
-        let items = item.variants.iter().map(|it| it.ident.clone()).collect();
+        let items = item.variants.iter().map(|it| it.ident.clone()).vec();
 
         if let Some(bad) = item
             .variants
@@ -680,7 +681,7 @@ impl Maker {
                 let name = it.to_string();
                 return quote! { #ty::#it => #name, };
             })
-            .collect::<Vec<_>>();
+            .vec();
 
         let from_name_arms = self
             .items
@@ -689,13 +690,9 @@ impl Maker {
                 let name = it.to_string();
                 return quote! { #name => Some(#ty::#it), };
             })
-            .collect::<Vec<_>>();
+            .vec();
 
-        let item_items = self
-            .items
-            .iter()
-            .map(|it| quote! { #ty::#it })
-            .collect::<Vec<_>>();
+        let item_items = self.items.iter().map(|it| quote! { #ty::#it }).vec();
 
         return quote! {
             impl #ty {
@@ -1041,15 +1038,11 @@ impl Maker {
             .friends
             .iter()
             .map(|friend| {
-                let Some(ty) = friend.ty.clone()
-                else {
-                    return Ok(None);
-                };
                 let capabilities = friend
                     .capabilities
                     .iter()
                     .map(|it| format_ident!("Flag{}", it))
-                    .collect::<BTreeSet<_>>();
+                    .set();
                 let relation = &self.el;
                 let conversion = match &friend.conv {
                     Some(conv) if conv.is_ident("self") => quote! {
@@ -1066,7 +1059,7 @@ impl Maker {
                 };
 
                 return Ok(Some(ProtocolFriend {
-                    ty,
+                    ty: friend.ty.clone(),
                     capabilities,
                     conversion: Some(conversion),
                 }));
@@ -1074,7 +1067,7 @@ impl Maker {
             .collect::<syn::Result<Vec<_>>>()?
             .into_iter()
             .flatten()
-            .collect();
+            .vec();
 
         return Ok(crate::friendship::emit_protocol(Protocol {
             target: self.ty.clone(),
@@ -1102,7 +1095,7 @@ impl Maker {
 
 // =============================================================================
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
@@ -1111,7 +1104,17 @@ pub(crate) struct Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
+        let mut this = Self {
+            friends: Default::default(),
+            bit: Box::default(),
+            int: Box::new(integral::Cfg {
+                konst: false,
+                get_raw: None,
+                validation: Default::default(),
+                friends: Default::default(),
+                flags: Box::default(),
+            }),
+        };
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
@@ -1144,7 +1147,7 @@ impl Cfg {
             "with" => self.bit.parse_from(rest, true)?,
             "without" => self.bit.parse_from(rest, false)?,
             "friends" => {
-                let friends = zz::one_or_list(rest)?.collect::<BTreeSet<_>>();
+                let friends = zz::one_or_list(rest)?.set();
                 self.friends = friends;
             }
             "suffix" => {

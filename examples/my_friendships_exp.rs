@@ -2,7 +2,11 @@ mod muti_fn_friendship {
     struct Thing0(u32);
 
     fn convert_t0(it: Thing0) -> u128 {
-        return it.0 as u128;
+        return (it.0 as u128) / 4;
+    }
+
+    fn convert_t1(it: Thing0) -> u128 {
+        return (it.0 as u128) / 2;
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -15,13 +19,11 @@ mod muti_fn_friendship {
         #[allow(unused, dead_code)]
         pub(super) trait Bit: Seal {}
         #[allow(unused, dead_code)]
-        pub(super) trait Haha: Seal {}
-        #[allow(unused, dead_code)]
         pub(super) trait Make: Seal {}
         impl Seal for super::Thing0 {
             #[inline(always)]
             fn to_u128(self) -> ::core::primitive::u128 {
-                return super::convert_t0(self);
+                return super::convert_t1(self);
             }
         }
         impl Bit for super::Thing0 {}

@@ -25,7 +25,7 @@ mod subject {
         }
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
-        const trait Relation: [const] Seal {}
+        const trait Rel: [const] Seal {}
         const trait Trust: [const] Seal {}
         const impl Seal for MyU128 {
             #[inline(always)]
@@ -42,7 +42,7 @@ mod subject {
             }
         }
         const impl Math for MyU128 {}
-        const impl Relation for MyU128 {}
+        const impl Rel for MyU128 {}
         const impl Seal for i128 {
             #[inline(always)]
             fn conv_my_u128(self) -> i128 {
@@ -58,7 +58,7 @@ mod subject {
             }
         }
         const impl Math for i128 {}
-        const impl Relation for i128 {}
+        const impl Rel for i128 {}
         const impl Seal for i32 {
             #[inline(always)]
             fn conv_my_u128(self) -> i128 {
@@ -1358,25 +1358,37 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        const impl ::core::cmp::PartialEq for MyU128 {
+        const impl<T> ::core::cmp::PartialEq<T> for MyU128
+        where
+            T: Rel
+                + [const] Seal
+                + [const] ::core::marker::Destruct
+                + ::core::marker::Copy,
+        {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &Self,
+                rhs: &T,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Self::raw(*rhs);
+                let rhs = Seal::conv_my_u128(*rhs);
                 return lhs == rhs;
             }
         }
-        const impl ::core::cmp::PartialOrd for MyU128 {
+        const impl<T> ::core::cmp::PartialOrd<T> for MyU128
+        where
+            T: Rel
+                + [const] Seal
+                + [const] ::core::marker::Destruct
+                + ::core::marker::Copy,
+        {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &Self,
+                rhs: &T,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Self::raw(*rhs);
+                let rhs = Seal::conv_my_u128(*rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }

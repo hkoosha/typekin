@@ -29,9 +29,12 @@ mod subject {
     pub struct MyTag(String);
 }
 
+use subject::{
+    MyHeadline as Thingy,
+    MyTag as Subject,
+};
+
 use crate::subject::assert_panics;
-use subject::MyHeadline as Thingy;
-use subject::MyTag as Subject;
 
 fn main() {
     let it = Subject::try_make("draft".to_string()).unwrap();

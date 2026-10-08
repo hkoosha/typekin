@@ -12,36 +12,37 @@ use quote::{
     format_ident,
     quote,
 };
+use syn::parse::{
+    Parse,
+    ParseStream,
+};
 use syn::{
     ExprRange,
     Fields,
     ItemStruct,
     Path,
     Type,
-    parse::{
-        Parse,
-        ParseStream,
-    },
     parse_quote,
 };
 
-use crate::runner::to_debug;
+use crate::friendship::cfg::Friend;
+use crate::friendship::{
+    Construction,
+    Protocol,
+    ProtocolFriend,
+};
+use crate::runner::{
+    Merged,
+    MkErr,
+    ToCollection,
+    mk_flags,
+    to_debug,
+};
+use crate::value_type::N;
+use crate::zz::ValidationCfg;
 use crate::{
-    friendship::{
-        Construction,
-        Protocol,
-        ProtocolFriend,
-        cfg::Friend,
-    },
     runner,
-    runner::{
-        Merged,
-        MkErr,
-        mk_flags,
-    },
-    value_type::N,
     zz,
-    zz::ValidationCfg,
 };
 
 pub(crate) fn integral(
@@ -116,7 +117,7 @@ impl Maker {
             trait_friend_bit: format_ident!("Bit"),
             trait_friend_make: format_ident!("Make"),
             trait_friend_math: format_ident!("Math"),
-            trait_friend_rel: format_ident!("Relation"),
+            trait_friend_rel: format_ident!("Rel"),
 
             fp_unchecked: syn::parse_str(&cfg.flags.fp_unchecked)?,
             fp_get_raw: cfg
@@ -224,7 +225,11 @@ impl Maker {
                 validated,
             ),
         ] {
-            let mut friend = self.cfg.friends.take(&needle).unwrap_or(needle);
+            let mut friend = self
+                .cfg
+                .friends
+                .take(&needle)
+                .unwrap_or_else(|| needle.clone());
 
             if friend.conv.is_none() {
                 friend.conv = conversion;
@@ -238,8 +243,9 @@ impl Maker {
                 friend.capabilities.insert(format_ident!("Math"));
             }
 
-            if self.cfg.flags.impl_self_friend_math_rel {
-                friend.capabilities.insert(format_ident!("Relation"));
+            if needle.ty.is_ident(target) || self.cfg.flags.impl_self_friend_rel
+            {
+                friend.capabilities.insert(format_ident!("Rel"));
             }
 
             if self.cfg.flags.impl_self_friend_math_bit {
@@ -292,14 +298,14 @@ impl Maker {
                 self.trait_friend_bit.clone(),
             ),
             (
-                self.cfg.flags.impl_friendzone_friend_math_rel,
+                self.cfg.flags.impl_friendzone_friend_rel,
                 self.trait_friend_rel.clone(),
             ),
             (true, format_ident!("Trust")),
         ]
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))
-        .collect();
+        .vec();
         let friends = match self.cfg.flags.impl_friends {
             false => vec![],
             true => self
@@ -307,11 +313,10 @@ impl Maker {
                 .friends
                 .iter()
                 .filter_map(|friend| {
-                    let ty = friend.ty.as_ref()?;
-                    let is_raw = ty.get_ident().is_some_and(|ident| {
+                    let is_raw = friend.ty.get_ident().is_some_and(|ident| {
                         N::of(ident.to_string()).is_some()
                     });
-                    let conversion = if ty.is_ident(&self.ty) {
+                    let conversion = if friend.ty.is_ident(&self.ty) {
                         None
                     }
                     else if is_raw {
@@ -343,12 +348,12 @@ impl Maker {
                     };
 
                     Some(ProtocolFriend {
-                        ty: ty.clone(),
+                        ty: friend.ty.clone(),
                         capabilities: friend.capabilities.clone(),
                         conversion,
                     })
                 })
-                .collect(),
+                .vec(),
         };
         let mut checked = self.fp_unchecked.clone();
         if checked.leading_colon.is_none()
@@ -817,6 +822,7 @@ impl Maker {
 
         let trait_friend_bit = &self.trait_friend_bit;
         let trait_friend_math = &self.trait_friend_math;
+        let trait_friend_rel = &self.trait_friend_rel;
         let trait_seal = &self.trait_seal;
 
         let fn_conv = &self.fn_conv;
@@ -2372,14 +2378,17 @@ impl Maker {
 
         if self.cfg.flags.impl_partial_eq {
             let it = quote! {
-                #konst impl ::core::cmp::PartialEq for #ty {
+                #konst impl<T> ::core::cmp::PartialEq<T> for #ty
+                where T: #trait_friend_rel + #cond_seal #destruct
+                    + ::core::marker::Copy
+                {
                     #[inline(always)]
                     fn eq(
                         &self,
-                        rhs: &Self,
+                        rhs: &T,
                     ) -> bool {
                         let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_get_raw(*rhs);
+                        let rhs = #fp_friend_conv(*rhs);
                         return lhs == rhs;
                     }
                 }
@@ -2389,14 +2398,17 @@ impl Maker {
 
         if self.cfg.flags.impl_partial_ord {
             let it = quote! {
-                #konst impl ::core::cmp::PartialOrd for #ty {
+                #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
+                where T: #trait_friend_rel + #cond_seal #destruct
+                    + ::core::marker::Copy
+                {
                     #[inline(always)]
                     fn partial_cmp(
                         &self,
-                        rhs: &Self,
+                        rhs: &T,
                     ) -> ::core::option::Option<::core::cmp::Ordering> {
                         let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_get_raw(*rhs);
+                        let rhs = #fp_friend_conv(*rhs);
                         return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
                     }
                 }
@@ -2556,7 +2568,19 @@ impl Maker {
 
 // =============================================================================
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
+struct IntegralFriend(Friend);
+
+impl Parse for IntegralFriend {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        return Friend::parse_with_defaults(
+            input,
+            [format_ident!("Math")].set(),
+        )
+        .map(Self);
+    }
+}
+
 pub(crate) struct Cfg {
     pub(crate) konst: bool,
     pub(crate) get_raw: Option<Path>,
@@ -2567,21 +2591,19 @@ pub(crate) struct Cfg {
 
 impl Cfg {
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
-        return zz::one_or_list::<Friend>(input)?
-            .map(|mut friend| {
-                if friend.capabilities.remove(&format_ident!("Numeric")) {
+        return zz::one_or_list::<IntegralFriend>(input)?
+            .map(|IntegralFriend(mut friend)| {
+                if friend.capabilities.contains(&format_ident!("Math")) {
                     friend.capabilities.extend([
                         format_ident!("Make"),
-                        format_ident!("Math"),
                         format_ident!("Bit"),
-                        format_ident!("Relation"),
                     ]);
                 }
 
                 for capability in &friend.capabilities {
                     if !matches!(
                         capability.to_string().as_str(),
-                        "Make" | "Math" | "Bit" | "Relation" | "Trust"
+                        "Make" | "Math" | "Bit" | "Rel" | "Trust"
                     ) {
                         return capability.fail("unknown integral capability");
                     }
@@ -2615,7 +2637,10 @@ impl Cfg {
     ) -> syn::Result<Self> {
         let mut this = Self {
             konst,
-            ..Default::default()
+            get_raw: None,
+            validation: Default::default(),
+            friends: Default::default(),
+            flags: Box::default(),
         };
 
         zz::parse_inner(input, |attr, rest| {
@@ -2665,7 +2690,13 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
+        let mut this = Self {
+            konst: false,
+            get_raw: None,
+            validation: Default::default(),
+            friends: Default::default(),
+            flags: Box::default(),
+        };
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
@@ -2753,12 +2784,12 @@ mk_flags! {
         pub impl_self_friend_make: bool,
         pub impl_self_friend_math_bit: bool,
         pub impl_self_friend_math_ops: bool,
-        pub impl_self_friend_math_rel: bool,
+        pub impl_self_friend_rel: bool,
         pub impl_friend_seal: bool,
         pub impl_friendzone_friend_make: bool,
         pub impl_friendzone_friend_math_bit: bool,
         pub impl_friendzone_friend_math_ops: bool,
-        pub impl_friendzone_friend_math_rel: bool,
+        pub impl_friendzone_friend_rel: bool,
         pub impl_friendzone_seal: bool,
 
         pub fn_conv_into: bool,

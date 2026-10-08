@@ -3,6 +3,7 @@ mod tests {
     use quote::ToTokens;
 
     use crate::integral::Cfg;
+    use crate::runner::ToCollection;
 
     #[test]
     fn accepts_single_friend_with_scalar_or_list_capabilities() {
@@ -35,7 +36,6 @@ mod tests {
             "konst = false, friends = _(Source) -> Bit, _(Other) -> Bit",
             "konst = false, friends =",
             "konst = false, friends =, valid = is_valid",
-            "konst = false, friends = convert(Source)",
             "konst = false, friends = convert() -> Make",
             "konst = false, friends = convert(Source) ->",
             "konst = false, friends = convert(Source) -> [Make, 1]",
@@ -185,18 +185,43 @@ mod tests {
     }
 
     #[test]
-    fn expands_numeric_friend_capability() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [_(u8) -> Numeric]",
-        )
-        .expect("Numeric should expand to integral operation capabilities");
+    fn expands_math_friend_capability_without_rel() {
+        let config =
+            syn::parse_str::<Cfg>("konst = false, friends = [_(u8) -> Math]")
+                .expect(
+                    "Math should expand to integral operation capabilities",
+                );
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Math)));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Relation)));
-        assert!(!friend.capabilities.contains(&syn::parse_quote!(Numeric)));
+        assert!(!friend.capabilities.contains(&syn::parse_quote!(Rel)));
+    }
+
+    #[test]
+    fn defaults_omitted_friend_capabilities_to_math() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = false, friends = [convert(Source), _(Other)]",
+        )
+        .expect("integral friends may omit their capabilities");
+
+        for friend in &config.friends {
+            assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
+            assert!(friend.capabilities.contains(&syn::parse_quote!(Math)));
+            assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
+            assert!(!friend.capabilities.contains(&syn::parse_quote!(Rel)));
+        }
+    }
+
+    #[test]
+    fn preserves_explicit_empty_friend_capabilities() {
+        let config =
+            syn::parse_str::<Cfg>("konst = false, friends = _(Source) -> []")
+                .expect("an explicit empty capability list should parse");
+        let friend = config.friends.iter().next().unwrap();
+
+        assert!(friend.capabilities.is_empty());
     }
 
     #[test]
@@ -207,7 +232,7 @@ mod tests {
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.conv.is_none());
-        assert!(friend.ty.as_ref().unwrap().is_ident("u8"));
+        assert!(friend.ty.is_ident("u8"));
 
         assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
     }
@@ -233,7 +258,7 @@ mod tests {
             "Trust",
             "[Trust]",
             "[Math, Trust]",
-            "[Bit, Relation, Trust]",
+            "[Bit, Rel, Trust]",
         ] {
             let input = format!(
                 "konst = false, friends = [_(Source) -> {capabilities}]"
@@ -323,7 +348,8 @@ mod tests {
     #[test]
     fn rejects_unsupported_single_capabilities() {
         for input in [
-            "konst = false, friends = [_(Source) -> Rel]",
+            "konst = false, friends = [_(Source) -> Relation]",
+            "konst = false, friends = [_(Source) -> Numeric]",
             "konst = false, friends = [_(Source) -> Inspector]",
         ] {
             assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
@@ -338,13 +364,12 @@ mod tests {
         .expect("qualified conversion and source paths should parse");
 
         let conversion = friend.conv.as_ref().unwrap();
-        let source = friend.ty.as_ref().unwrap();
         assert_eq!(
             conversion
                 .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
-                .collect::<Vec<_>>(),
+                .vec(),
             [
                 "crate",
                 "conversions",
@@ -352,11 +377,12 @@ mod tests {
             ]
         );
         assert_eq!(
-            source
+            friend
+                .ty
                 .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
-                .collect::<Vec<_>>(),
+                .vec(),
             [
                 "crate", "sources", "Source"
             ]
@@ -389,13 +415,9 @@ mod tests {
                 syn::parse_str::<crate::friendship::cfg::Friend>(&input)
                     .expect(&input);
             assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-            assert!(friend.ty.as_ref().unwrap().is_ident("Source"));
+            assert!(friend.ty.is_ident("Source"));
             assert_eq!(
-                friend
-                    .capabilities
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>(),
+                friend.capabilities.iter().map(ToString::to_string).vec(),
                 expected,
                 "{input}"
             );
@@ -412,37 +434,8 @@ mod tests {
                 syn::parse_str::<crate::friendship::cfg::Friend>(input)
                     .expect(input);
             assert!(friend.conv.is_none(), "{input}");
-            assert!(friend.ty.as_ref().unwrap().is_ident("Source"), "{input}");
+            assert!(friend.ty.is_ident("Source"), "{input}");
             assert!(friend.capabilities.contains(&syn::parse_quote!(Trust)));
-        }
-    }
-
-    #[test]
-    fn shared_friend_parser_accepts_capability_only_declarations() {
-        for (input, expected) in [
-            ("_ -> Foo", vec!["Foo"]),
-            (
-                "_ -> [Foo, Bar]",
-                vec![
-                    "Bar", "Foo",
-                ],
-            ),
-            ("_ -> []", vec![]),
-        ] {
-            let friend =
-                syn::parse_str::<crate::friendship::cfg::Friend>(input)
-                    .expect(input);
-            assert!(friend.conv.is_none(), "{input}");
-            assert!(friend.ty.is_none(), "{input}");
-            assert_eq!(
-                friend
-                    .capabilities
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>(),
-                expected,
-                "{input}"
-            );
         }
     }
 
@@ -454,13 +447,12 @@ mod tests {
         .expect("one source argument may have a trailing comma");
 
         let conversion = friend.conv.as_ref().unwrap();
-        let source = friend.ty.as_ref().unwrap();
         assert!(conversion.leading_colon.is_some());
         assert_eq!(conversion.segments.first().unwrap().ident, "conversions");
         assert_eq!(conversion.segments.last().unwrap().ident, "own");
-        assert!(source.leading_colon.is_some());
-        assert_eq!(source.segments.first().unwrap().ident, "sources");
-        assert_eq!(source.segments.last().unwrap().ident, "Source");
+        assert!(friend.ty.leading_colon.is_some());
+        assert_eq!(friend.ty.segments.first().unwrap().ident, "sources");
+        assert_eq!(friend.ty.segments.last().unwrap().ident, "Source");
     }
 
     #[test]

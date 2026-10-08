@@ -1,9 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::{
-        constructor::Cfg as MakeCfg,
-        friendship::cfg::Cfg,
-    };
+    use crate::constructor::Cfg as MakeCfg;
+    use crate::friendship::cfg::Cfg;
 
     #[test]
     fn accepts_single_named_implicit_and_wildcard_friends() {

@@ -10,9 +10,9 @@
 #[derive(Copy)]
 #[derive_const(Clone)]
 #[typekin::integral(konst = true, friends = [
-    id_to_header(PageId) -> [Make, Math, Bit, Relation],
-    state_to_header(PageState) -> [Make, Math, Bit, Relation],
-    PageData::to_header(PageData) -> [Make, Math, Bit, Relation],
+    id_to_header(PageId) -> [Math, Rel],
+    state_to_header(PageState) -> [Math, Rel],
+    PageData::to_header(PageData) -> [Math, Rel],
 ])]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;

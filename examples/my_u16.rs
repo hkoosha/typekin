@@ -1,7 +1,7 @@
 mod subject {
     #[typekin::integral(
         konst = false,
-        friends = _(u16) -> Numeric,
+        friends = self(u16) -> Math,
     )]
     #[repr(transparent)]
     #[derive(Copy, Clone)]

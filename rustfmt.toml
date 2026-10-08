@@ -4,3 +4,6 @@ fn_params_layout = "Vertical"
 trailing_semicolon = true
 imports_layout = "Vertical"
 max_width = 80
+reorder_imports = true
+group_imports = "StdExternalCrate"
+imports_granularity = "module"

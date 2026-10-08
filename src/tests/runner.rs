@@ -1,17 +1,18 @@
 #[cfg(test)]
 mod tests {
+    use syn::parse::{
+        Parse,
+        ParseStream,
+    };
     use syn::{
         Ident,
         ItemStruct,
-        parse::{
-            Parse,
-            ParseStream,
-        },
     };
 
+    use crate::runner::ToCollection;
+    use crate::value_type::N;
     use crate::{
         runner,
-        value_type::N,
         zz,
     };
 
@@ -19,7 +20,7 @@ mod tests {
 
     impl Parse for OneOrList {
         fn parse(input: ParseStream) -> syn::Result<Self> {
-            return Ok(Self(zz::one_or_list(input)?.collect()));
+            return Ok(Self(zz::one_or_list(input)?.vec()));
         }
     }
 
@@ -36,8 +37,7 @@ mod tests {
             ("[]", &[][..]),
         ] {
             let parsed = syn::parse_str::<OneOrList>(input).unwrap();
-            let actual =
-                parsed.0.iter().map(ToString::to_string).collect::<Vec<_>>();
+            let actual = parsed.0.iter().map(ToString::to_string).vec();
 
             assert_eq!(actual, expected);
         }

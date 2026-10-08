@@ -2,13 +2,16 @@ mod muti_fn_friendship {
     struct Thing0(u32);
 
     fn convert_t0(it: Thing0) -> u128 {
-        return it.0 as u128;
+        return (it.0 as u128) / 4;
+    }
+
+    fn convert_t1(it: Thing0) -> u128 {
+        return (it.0 as u128) / 2;
     }
 
     #[typekin::friends(
         relation = ::core::primitive::u128,
         friends = [
-            _ -> Haha,
             convert_t0(Thing0) -> [Make],
             convert_t1(Thing0) -> [Bit],
         ],

@@ -15,7 +15,7 @@ mod subject {
         }
         trait Math: Seal {}
         trait Bit: Seal {}
-        trait Relation: Seal {}
+        trait Rel: Seal {}
         trait Trust: Seal {}
         impl Seal for MyU16 {
             #[inline(always)]
@@ -32,7 +32,7 @@ mod subject {
             }
         }
         impl Math for MyU16 {}
-        impl Relation for MyU16 {}
+        impl Rel for MyU16 {}
         impl Seal for i16 {
             #[inline(always)]
             fn conv_my_u16(self) -> u16 {
@@ -61,7 +61,7 @@ mod subject {
             }
         }
         impl Math for u16 {}
-        impl Relation for u16 {}
+        impl Rel for u16 {}
         impl Seal for u8 {
             #[inline(always)]
             fn conv_my_u16(self) -> u16 {
@@ -1314,25 +1314,31 @@ mod subject {
                 return ::core::fmt::UpperHex::fmt(&raw, f);
             }
         }
-        impl ::core::cmp::PartialEq for MyU16 {
+        impl<T> ::core::cmp::PartialEq<T> for MyU16
+        where
+            T: Rel + Seal + ::core::marker::Copy,
+        {
             #[inline(always)]
             fn eq(
                 &self,
-                rhs: &Self,
+                rhs: &T,
             ) -> bool {
                 let lhs = Self::raw(*self);
-                let rhs = Self::raw(*rhs);
+                let rhs = Seal::conv_my_u16(*rhs);
                 return lhs == rhs;
             }
         }
-        impl ::core::cmp::PartialOrd for MyU16 {
+        impl<T> ::core::cmp::PartialOrd<T> for MyU16
+        where
+            T: Rel + Seal + ::core::marker::Copy,
+        {
             #[inline(always)]
             fn partial_cmp(
                 &self,
-                rhs: &Self,
+                rhs: &T,
             ) -> ::core::option::Option<::core::cmp::Ordering> {
                 let lhs = Self::raw(*self);
-                let rhs = Self::raw(*rhs);
+                let rhs = Seal::conv_my_u16(*rhs);
                 return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
             }
         }
