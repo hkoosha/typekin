@@ -58,8 +58,8 @@ new it:
     '[[example]]\nname = "my_%s"\npath = "examples/my_%s.rs"\n[[example]]\nname = "my_%s_exp"\npath = "examples/my_%s_exp.rs"\n' \
     '{{ it }}' '{{ it }}' '{{ it }}' '{{ it }}' \
     >> Cargo.toml
-  sed -i "/^all:/ s/$/ {{ it }}-expand/" j_examples.justfile
+  sed -i "/^all:/ s/$/ {{ it }}-expand/" j_example.justfile
   printf \
     "\n[group(\"example\")]\n%s-expand: (z-expand 'my_%s')\n[group(\"example\")]\n%s: %s-expand fmt\n" \
     '{{ it }}' '{{ it }}' '{{ it }}' '{{ it }}' \
-    >> j_examples.justfile
+    >> j_example.justfile
