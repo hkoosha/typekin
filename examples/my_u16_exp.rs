@@ -15,7 +15,7 @@ const _: () = {
     trait Math: Seal {}
     trait Bit: Seal {}
     trait Rel: Seal {}
-    trait Trust: Seal {}
+    unsafe trait UnsafeTrust: Seal {}
     impl Seal for MyU16 {
         #[inline(always)]
         fn conv_my_u16(self) -> u16 {

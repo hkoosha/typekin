@@ -182,12 +182,13 @@ impl Maker {
     fn ekran_vl(&self) -> TokenStream {
         let ty_value = &self.vl;
         let el = &self.el;
-        let derive_clone = if self.cfg.int.konst {
-            quote! { #[derive_const(Clone)] }
-        }
-        else {
-            quote! { #[derive(Clone)] }
-        };
+        let derive_clone =
+            if matches!(self.cfg.int.konst, integral::Konst::Nightly) {
+                quote! { #[derive_const(Clone)] }
+            }
+            else {
+                quote! { #[derive(Clone)] }
+            };
 
         return match self.cfg.bit.make_value {
             true => quote! {
@@ -1123,7 +1124,7 @@ impl Maker {
                 format_ident!("FlagMath"),
                 format_ident!("FlagBit"),
                 format_ident!("FlagCmp"),
-                format_ident!("FlagTrust"),
+                format_ident!("FlagUnsafeTrust"),
             ],
             friends,
             emit_seal: true,
@@ -1148,7 +1149,7 @@ impl Parse for Cfg {
         let mut this = Self {
             friends: Default::default(),
             bit: Box::default(),
-            int: Box::new(integral::Cfg::with_konst(false)),
+            int: Box::new(integral::Cfg::with_konst(integral::Konst::Nightly)),
         };
         let mut has_konst = false;
 
@@ -1177,7 +1178,7 @@ impl Cfg {
         match attr {
             "konst" => {
                 *has_konst = true;
-                self.int.konst = rest.parse::<syn::LitBool>()?.value;
+                let _ = rest.parse::<syn::LitBool>()?;
             }
             "with" => self.bit.parse_from(rest, true)?,
             "without" => self.bit.parse_from(rest, false)?,
@@ -1199,10 +1200,10 @@ impl Cfg {
                 let content;
                 let _ = bracketed!(content in rest);
 
-                let cfg = integral::Cfg::parse_with_konst(&content, true)?;
-                let konst = self.int.konst;
-                *self.int = cfg;
-                self.int.konst = konst;
+                *self.int = integral::Cfg::parse_with_konst(
+                    &content,
+                    integral::Konst::Nightly,
+                )?;
 
                 return Ok(true);
             }

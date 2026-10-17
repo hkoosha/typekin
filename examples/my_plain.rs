@@ -10,7 +10,7 @@
 #[derive_const(Clone)]
 #[derive(Copy)]
 #[repr(transparent)]
-#[typekin::integral(konst = true)]
+#[typekin::integral(konst = nightly)]
 pub struct MyPlain(i64);
 
 fn main() {

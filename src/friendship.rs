@@ -73,6 +73,35 @@ pub(crate) mod cfg {
         }
     }
 
+    pub(crate) fn trust_capability() -> Ident {
+        return format_ident!("UnsafeTrust");
+    }
+
+    pub(crate) fn is_trust_capability(capability: &Ident) -> bool {
+        return capability == &trust_capability()
+            || capability == &format_ident!("FlagUnsafeTrust");
+    }
+
+    struct Capability(Ident);
+
+    impl Parse for Capability {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            if input.peek(Token![unsafe]) {
+                input.parse::<Token![unsafe]>()?;
+                return Ok(Self(trust_capability()));
+            }
+
+            return input.parse::<Ident>().map(Self);
+        }
+    }
+
+    fn parse_capabilities(input: ParseStream) -> syn::Result<BTreeSet<Ident>> {
+        let capabilities = one_or_list::<Capability>(input)?
+            .map(|Capability(capability)| capability)
+            .set();
+        return Ok(capabilities);
+    }
+
     impl Friend {
         pub(crate) fn parse_with_defaults(
             input: ParseStream,
@@ -92,7 +121,7 @@ pub(crate) mod cfg {
 
             let capabilities = if input.peek(Token![->]) {
                 let _ = input.parse::<Token![->]>()?;
-                one_or_list(input)?.set()
+                parse_capabilities(input)?
             }
             else {
                 capabilities
@@ -294,7 +323,7 @@ pub(crate) mod cfg {
                         }
                     }
                     "extra_caps" => {
-                        this.extra_caps = one_or_list::<Ident>(stream)?.set()
+                        this.extra_caps = parse_capabilities(stream)?
                     }
                     _ => return Ok(false),
                 };
@@ -357,6 +386,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
     let capability_declarations =
         protocol.capabilities.iter().map(|capability| {
+            let unsafe_ =
+                cfg::is_trust_capability(capability).then(|| quote! { unsafe });
             let method =
                 protocol.construction.as_ref().and_then(|construction| {
                     (capability == &construction.make).then(|| {
@@ -365,7 +396,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                 });
 
             quote! {
-                #konst trait #capability: #bonst #seal {
+                #konst #unsafe_ trait #capability: #bonst #seal {
                     #method
                 }
             }
@@ -395,6 +426,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
             }
         });
         let capability_impls = friend.capabilities.iter().map(|capability| {
+            let unsafe_ =
+                cfg::is_trust_capability(capability).then(|| quote! { unsafe });
             let method =
                 protocol.construction.as_ref().and_then(|construction| {
                     if capability != &construction.make {
@@ -419,7 +452,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                 });
 
             quote! {
-                #konst impl #capability for #ty {
+                #konst #unsafe_ impl #capability for #ty {
                     #method
                 }
             }
@@ -668,16 +701,23 @@ pub(crate) fn emit_friendship(
         emit_friend(friend, &seal, &conversion, &value, &target, in_module)
     });
 
+    let capability_declarations = capabilities.iter().map(|capability| {
+        let unsafe_ =
+            cfg::is_trust_capability(capability).then(|| quote! { unsafe });
+
+        return quote! {
+            #[allow(unused, dead_code)]
+            #trait_visibility #unsafe_ trait #capability: #seal {
+                fn #conversion(self) -> #value;
+            }
+        };
+    });
+
     let items = quote! {
         #trait_visibility trait #seal {
         }
 
-        #(
-            #[allow(unused, dead_code)]
-            #trait_visibility trait #capabilities: #seal {
-                fn #conversion(self) -> #value;
-            }
-        )*
+        #(#capability_declarations)*
 
         #(#friend_impls)*
 
@@ -721,6 +761,8 @@ fn emit_friend(
 
     let capabilities = &cfg.capabilities;
     let capability_impls = capabilities.iter().map(|capability| {
+        let unsafe_ =
+            cfg::is_trust_capability(capability).then(|| quote! { unsafe });
         let callback = cfg
             .capability_conversions
             .get(capability)
@@ -734,7 +776,7 @@ fn emit_friend(
         let callback = parent_path(callback, in_module);
 
         return quote! {
-            impl #capability for #ty {
+            #unsafe_ impl #capability for #ty {
                 #[inline(always)]
                 fn #conversion(self) -> #value {
                     return #callback(self);

@@ -12,6 +12,7 @@ clean:
   cd ./typekin_testing && pwd && just clean
 
 fmt:
+  rumdl fmt --deny-config-warnings --no-cache *.md
   cargo fmt
 
 test-here:

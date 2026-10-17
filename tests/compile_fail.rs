@@ -112,7 +112,7 @@ mod tests {
             r#"
                 const fn is_even(value: u8) -> bool { value % 2 == 0 }
 
-                #[typekin::integral(konst = false, valid = is_even)]
+                #[typekin::integral(konst = none, valid = is_even)]
                 #[repr(transparent)]
                 struct Checked(u8);
 
@@ -133,7 +133,7 @@ mod tests {
                 fn into_u8(source: MakeSource) -> u8 { source.0 }
 
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     friends = into_u8(MakeSource) -> Make,
                 )]
                 #[repr(transparent)]
@@ -157,7 +157,7 @@ mod tests {
                 fn into_u8(source: BitSource) -> u8 { source.0 }
 
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     friends = into_u8(BitSource) -> Bit,
                 )]
                 #[repr(transparent)]
@@ -181,8 +181,8 @@ mod tests {
                 fn into_u8(source: TrustSource) -> u8 { source.0 }
 
                 #[typekin::integral(
-                    konst = false,
-                    friends = into_u8(TrustSource) -> Trust,
+                    konst = none,
+                    friends = into_u8(TrustSource) -> unsafe,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -202,7 +202,7 @@ mod tests {
             "without-removes-raw",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     without = [fn_conv_raw],
                     get_raw = Self::value,
                 )]
@@ -228,7 +228,7 @@ mod tests {
             "without-removes-self-math",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     without = [self_math],
                 )]
                 #[repr(transparent)]
@@ -249,7 +249,7 @@ mod tests {
             "without-removes-self-bit",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     without = [self_bit],
                 )]
                 #[repr(transparent)]
@@ -270,7 +270,7 @@ mod tests {
             "self-operators-do-not-use-friendship",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     friends = Number(Number) -> Math,
                 )]
                 #[repr(transparent)]
@@ -287,7 +287,7 @@ mod tests {
             "without-removes-from-str",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     without = [from_str],
                 )]
                 #[repr(transparent)]
@@ -313,7 +313,7 @@ mod tests {
             "without-removes-common-integral-methods",
             r#"
                 #[typekin::integral(
-                    konst = false,
+                    konst = none,
                     without = [core_int],
                 )]
                 #[repr(transparent)]
@@ -333,7 +333,7 @@ mod tests {
         assert_rejected(
             "core-integral-methods-exclude-unsafe-operations",
             r#"
-                #[typekin::integral(konst = false)]
+                #[typekin::integral(konst = none)]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
                 struct Number(u8);

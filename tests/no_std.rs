@@ -19,13 +19,13 @@ mod tests {
     }
 
     impl FixtureDir {
-        fn new() -> Self {
+        fn new(suffix: &str) -> Self {
             let unique = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system clock before the Unix epoch")
                 .as_nanos();
             let path = env::temp_dir().join(format!(
-                "typekin-no-std-{}-{unique}",
+                "typekin-no-std-{suffix}-{}-{unique}",
                 std::process::id()
             ));
 
@@ -42,11 +42,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn generated_macros_compile_for_a_no_std_alloc_consumer() {
-        let fixture = FixtureDir::new();
+    fn assert_no_std_compiles(
+        name: &str,
+        source: &str,
+    ) {
+        let fixture = FixtureDir::new(name);
         let manifest = fixture.path.join("Cargo.toml");
-        let source = fixture.path.join("src/lib.rs");
+        let source_path = fixture.path.join("src/lib.rs");
         let typekin = Path::new(env!("CARGO_MANIFEST_DIR"))
             .canonicalize()
             .expect("canonicalize typekin root");
@@ -60,60 +62,7 @@ mod tests {
             ),
         )
             .expect("write no-std fixture manifest");
-        fs::write(
-            &source,
-            r#"#![no_std]
-
-extern crate alloc;
-
-use alloc::string::String;
-
-const fn is_even(value: u8) -> bool {
-    return value % 2 == 0;
-}
-
-fn is_slug(value: &str) -> bool {
-    return !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
-}
-
-#[typekin::integral(konst = false, valid = is_even)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-pub struct Even(u8);
-
-#[typekin::bitflag(konst = false)]
-#[repr(u8)]
-#[derive(Copy, Clone)]
-pub enum Permission {
-    Read = 0b001,
-    Write = 0b010,
-}
-
-#[typekin::text(konst = false, std = false, valid = is_slug)]
-#[repr(transparent)]
-pub struct Slug(String);
-
-pub fn build_even(value: u8) -> Result<Even, u8> {
-    return Even::try_make(value);
-}
-
-pub fn parse_even(value: &str) -> Result<Even, ()> {
-    return value.parse();
-}
-
-pub fn build_permission(value: u8) -> PermissionValue {
-    return Permission::from_bits_truncate(value);
-}
-
-pub fn build_slug(value: &str) -> Result<Slug, ()> {
-    return Slug::try_from_str(value);
-}
-"#,
-        )
-        .expect("write no-std fixture source");
+        fs::write(&source_path, source).expect("write no-std fixture source");
 
         let output = Command::new("cargo")
             .args([
@@ -131,8 +80,91 @@ pub fn build_slug(value: &str) -> Result<Slug, ()> {
 
         assert!(
             output.status.success(),
-            "no-std fixture failed:\n{}",
+            "{name} no-std fixture failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn integral_compiles_for_a_no_std_consumer() {
+        assert_no_std_compiles(
+            "integral",
+            r#"#![no_std]
+
+const fn is_even(value: u8) -> bool {
+    return value % 2 == 0;
+}
+
+#[typekin::integral(konst = none, valid = is_even)]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct Even(u8);
+
+pub fn build_even(value: u8) -> Result<Even, u8> {
+    return Even::try_make(value);
+}
+
+pub fn parse_even(value: &str) -> Result<Even, ()> {
+    return value.parse();
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn bitflag_compiles_for_a_no_std_consumer() {
+        assert_no_std_compiles(
+            "bitflag",
+            r#"#![no_std]
+#![feature(const_clone)]
+#![feature(const_cmp)]
+#![feature(const_convert)]
+#![feature(const_destruct)]
+#![feature(const_iter)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(derive_const)]
+
+#[typekin::bitflag(konst = false)]
+#[repr(u8)]
+#[derive(Copy, Clone)]
+pub enum Permission {
+    Read = 0b001,
+    Write = 0b010,
+}
+
+pub fn build_permission(value: u8) -> PermissionValue {
+    return Permission::from_bits_truncate(value);
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn text_compiles_for_a_no_std_alloc_consumer() {
+        assert_no_std_compiles(
+            "text",
+            r#"#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+
+fn is_slug(value: &str) -> bool {
+    return !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
+}
+
+#[typekin::text(konst = false, std = false, valid = is_slug)]
+#[repr(transparent)]
+pub struct Slug(String);
+
+pub fn build_slug(value: &str) -> Result<Slug, ()> {
+    return Slug::try_from_str(value);
+}
+"#,
         );
     }
 }

@@ -1,5 +1,5 @@
 #[typekin::integral(
-    konst = false,
+    konst = none,
     friends = self(u16) -> Math,
 )]
 #[repr(transparent)]

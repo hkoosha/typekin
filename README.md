@@ -11,8 +11,8 @@ input; non-`Copy` friends are moved into the conversion. Once a validated value
 enters the validated graph, it stays validated while it moves between different
 types and can be relied upon.
 
-You can find a set of working examples in the crate repository
-at [typekin/examples](./examples) directory.
+You can find a set of working examples in the crate repository at
+[typekin/examples](./examples) directory.
 
 ## Attribute Macro Inventory and Item Requirements
 
@@ -53,9 +53,9 @@ fn main() {
 ```
 
 Same-type arithmetic and bitwise operators are implemented directly and enabled
-by default. Use `without = [with_self_math]` or
-`without = [with_self_bit]` to omit the corresponding `Quantity op Quantity`
-implementations; friend capabilities apply only to other operand types.
+by default. Use `without = [self_math]` or `without = [self_bit]` to omit the
+corresponding `Quantity op Quantity` implementations; friend capabilities apply
+only to other operand types.
 
 ### Example 1 - Friendship
 
@@ -184,8 +184,8 @@ fn main() {
 ```
 
 Similarly, a type that accepts `0` but rejects `1` and `2` cannot evaluate this
-chain through the generated operators, even though its final raw result would
-be `3`:
+chain through the generated operators, even though its final raw result would be
+`3`:
 
 ```rust
 #[typekin::integral(konst = none, valid = Self::is_valid)]
@@ -227,10 +227,10 @@ impl Counter {
 }
 ```
 
-This is analogous to the usual profile-dependent integer-overflow checking:
-it can reduce release overhead, but it also means invalid values can be
-constructed in builds without the feature. It is not suitable when the
-invariant is required for safety, correctness, or an external contract.
+This is analogous to the usual profile-dependent integer-overflow checking: it
+can reduce release overhead, but it also means invalid values can be constructed
+in builds without the feature. It is not suitable when the invariant is required
+for safety, correctness, or an external contract.
 
 ## Constness Status
 
@@ -277,10 +277,10 @@ fn main() {
 
 ### Trusted friend construction
 
-Friends without `Trust` are untrusted. Integral and text `of` validate their
-converted values and panic if invalid. Granting both `Make` and `Trust` skips
+Friends without `unsafe` are untrusted. Integral and text `of` validate their
+converted values and panic if invalid. Granting both `Make` and `unsafe` skips
 only that friend-construction validation: the friend author must prove the
-converted value is already valid. `Trust` alone does not grant `Make`.
+converted value is already valid. `unsafe` alone does not grant `Make`.
 
 ```rust
 struct Verified(u32);
@@ -298,7 +298,7 @@ impl Verified {
 #[typekin::integral(
     konst = none,
     in = 1..=100,
-    friends = Verified::into_raw(Verified) -> [Make, Trust],
+    friends = Verified::into_raw(Verified) -> [Make, unsafe],
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -312,16 +312,16 @@ fn main() {
 }
 ```
 
-Trust grants no additional capabilities. Checked constructors and math/bitwise
-operation results still validate, including operations with a trusted friend
-as the right-hand operand.
+The `unsafe` capability grants no additional operations. Checked constructors
+and math/bitwise operation results still validate, including operations with a
+trusted friend as the right-hand operand.
 
-`friends` also accepts `Trust`, independently of `Make`. It generates
-`Self::of` for the relationship and every declared friend; targets provide
-`fn of_parts(relation) -> Self`, and `scope` controls where the generated
-protocol is placed. It has no generated validator to bypass: the configured
-`of_parts` function always runs, including its own checks. Relations and friend
-inputs can both be non-`Copy`.
+Standalone `friends` accepts marker capabilities, including `unsafe`,
+independently of `Make`. It generates `Self::of` for the relationship and every
+declared friend; targets provide `fn of_parts(relation) -> Self`, and `scope`
+controls where the generated protocol is placed. It has no generated validator
+to bypass: the configured `of_parts` function always runs, including its own
+checks. Relations and friend inputs can both be non-`Copy`.
 
 ### Validation
 
@@ -350,7 +350,7 @@ fn main() {
 
 Integral types also implement `FromStr`. Parsing first uses the wrapped
 primitive's parser and then applies the same validation; either failure returns
-`Err(())`. Use `without = [impl_from_str]` to omit this implementation.
+`Err(())`. Use `without = [from_str]` to omit this implementation.
 
 An unvalidated integral has raw `make`. Configuring `in` or `valid` suppresses
 that constructor and exposes `try_make(raw) -> Result<Self, Raw>` instead.
@@ -358,8 +358,8 @@ that constructor and exposes `try_make(raw) -> Result<Self, Raw>` instead.
 `in` accepts one range or a bracketed, comma-separated list:
 `in = [2..=4, 8..10]`. Bounds must be integer constants (including primitive
 `MIN`/`MAX` constants), not arbitrary expressions. `in` and `valid` conditions
-are ANDed; generated construction and enabled mathematical or bitwise
-operations reject values that fail them.
+are ANDed; generated construction and enabled mathematical or bitwise operations
+reject values that fail them.
 
 ```rust
 #[typekin::integral(
@@ -379,9 +379,9 @@ fn main() {
 ## `#[typekin::text]`
 
 `text` creates a transparent, validated `String` newtype. By default
-(`std = true`), generated paths use `::std::{string::String, vec::Vec}`.
-Set `std = false` to use the corresponding `::alloc` paths. Text needs the
-allocator crate in scope when not using std:
+(`std = true`), generated paths use `::std::{string::String, vec::Vec}`. Set
+`std = false` to use the corresponding `::alloc` paths. Text needs the allocator
+crate in scope when not using std:
 
 ```rust
 extern crate alloc;
@@ -425,13 +425,13 @@ without case or Unicode normalization. `in = []` rejects every normal input;
 
 Text friends use `conversion(Source) -> Make`, with an owning function returning
 `String`. Missing conversions are rejected during macro expansion. Friend output
-is validated by default and panics if invalid. `-> [Make, Trust]` bypasses only
+is validated by default and panics if invalid. `-> [Make, unsafe]` bypasses only
 that construction validation; use it only when validity is proved independently.
 
 ### Configuration
 
-Generation of individual features can be disabled (check
-integral's [cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
+Generation of individual features can be disabled (check integral's
+[cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
 
 ```rust
 struct Foo(u32);
@@ -441,7 +441,7 @@ const fn is_valid(value: u32) -> bool { value != 0 }
 #[typekin::integral(
   konst = none, // Required; `nightly` enables all const flags.
   friends = [
-    _(u64) -> Bit,         // Only bitwise operations, no conversion needed
+    self(u16) -> Bit,      // Only bitwise operations, using `Into<u32>`
     Foo::to_u32(Foo),      // Omitted capabilities default to Math
   ],
   without = [fn_conv_raw], // Do not generate the existing accessor below
@@ -459,9 +459,9 @@ impl Example {
 
 Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
 and `Math` enables construction, arithmetic, and bitwise operations. `Rel`
-enables `==`, `!=`, `<`, `<=`, `>`, and `>=` against `Copy` friends.
-Integral friends with no `->` capability clause default to `Math`; write
-`-> []` to grant no capabilities.
+enables `==`, `!=`, `<`, `<=`, `>`, and `>=` against `Copy` friends. Integral
+friends with no `->` capability clause default to `Math`; write `-> []` to grant
+no capabilities.
 
 ---
 
@@ -477,18 +477,17 @@ Every enum variant is mirrored as a same-named associated constant on its
 generated `{Enum}Value` type. They are constructed through generated integral
 validation, so each enum discriminant must be valid.
 
-`konst` is required. Bitflag's generated integral value type always uses
-nightly const generation; callers therefore need the nightly feature gates
-listed below. Write bitflag's option directly as `konst = true` or
-`konst = false`; use `integral = [...]` when configuring other generated
-value-type behavior. `bitflag` has its own `friends` option for enum-left
-operations; for example,
-`friends = _(u8) -> Bit` or a bracketed list of such declarations. The enum and
-generated value type are registered as friends automatically; enum arithmetic
-operators are not generated.
+`konst` is required and must be `true` or `false`. Its current value does not
+change bitflag emission: the generated integral value type always uses nightly
+const generation, so callers need the nightly feature gates listed below. Use
+`integral = [...]` when configuring other generated value-type behavior.
+`bitflag` has its own `friends` option for enum-left operations; for example,
+`friends = self(u8) -> Bit` or a bracketed list of such declarations. The enum
+and generated value type are registered as friends automatically; enum
+arithmetic operators are not generated.
 
 `suffix` and `value_name` control the generated value-type name. In the nested
-`integral = [...]` configuration, `without = [impl_core_int]` removes the large
+`integral = [...]` configuration, `without = [core_int]` removes the large
 forwarded primitive-integral-method group.
 
 ### Example
@@ -587,4 +586,3 @@ Use `konst = none` to generate plain implementations by default:
 #[derive(Copy, Clone)]
 struct Counter(u32);
 ```
-

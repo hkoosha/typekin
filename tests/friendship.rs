@@ -270,7 +270,7 @@ mod tests {
     #[typekin::friends(
         relation = ::std::string::String,
         mod = pub(crate) trusted_title_protocol,
-        friends = title_conversions::owned_title(OwnedTitle,) -> Trust,
+        friends = title_conversions::owned_title(OwnedTitle,) -> unsafe,
     )]
     pub(crate) struct TrustDocument {
         title: String,
@@ -295,7 +295,7 @@ mod tests {
 
     fn construct_trusted_title<T>(source: T) -> TrustDocument
     where
-        T: trusted_title_protocol::Make + trusted_title_protocol::Trust,
+        T: trusted_title_protocol::Make + trusted_title_protocol::UnsafeTrust,
     {
         TrustDocument::of(source)
     }
@@ -319,7 +319,7 @@ mod tests {
             mod = pub(crate) inspector_protocol,
             extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
             friends = [
-                inspector_conversions::inspector_text(InspectorSource) -> [Inspect, Trust],
+                inspector_conversions::inspector_text(InspectorSource) -> [Inspect, unsafe],
             ],
         )]
         struct Inspectable;
@@ -383,7 +383,7 @@ mod tests {
         fn inspect<T>(source: T) -> String
         where
             T: inspector_protocol::Inspect
-                + inspector_protocol::Trust
+                + inspector_protocol::UnsafeTrust
                 + inspector_protocol::ReservedScalar
                 + inspector_protocol::ReservedFirst
                 + inspector_protocol::ReservedSecond,

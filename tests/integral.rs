@@ -9,30 +9,30 @@
 mod tests {
     use core::cmp::Ordering;
 
-    #[typekin::integral(konst = true)]
+    #[typekin::integral(konst = nightly)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct My32(u32);
 
-    #[typekin::integral(konst = true)]
+    #[typekin::integral(konst = nightly)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct MyAuto64(u64);
 
-    #[typekin::integral(konst = false, with = [konst_add])]
+    #[typekin::integral(konst = none, with = [konst_add])]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct ConstAddOnly(u8);
 
     const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
 
-    #[typekin::integral(konst = true, with = [display])]
+    #[typekin::integral(konst = nightly, with = [display])]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct MyI32(i32);
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         with = [display],
         without = [fn_conv_raw],
         get_raw = Self::decoded,
@@ -65,7 +65,7 @@ mod tests {
     }
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         friends = self(u8) -> [Math, Rel],
         valid = [is_even, is_not_fifty],
         in = 2..=100,
@@ -75,7 +75,7 @@ mod tests {
     struct Even(u8);
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         friends = [self(u8) -> [Math, Rel]],
         in = [2..=4, 8..10],
         valid = accepts_ranged,
@@ -84,22 +84,22 @@ mod tests {
     #[derive(Copy, Clone)]
     struct Ranged(u8);
 
-    #[typekin::integral(konst = true, in = ..)]
+    #[typekin::integral(konst = nightly, in = ..)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct AnyU8(u8);
 
-    #[typekin::integral(konst = true, in = ..5)]
+    #[typekin::integral(konst = nightly, in = ..5)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct BelowFive(u8);
 
-    #[typekin::integral(konst = true, in = ..=5)]
+    #[typekin::integral(konst = nightly, in = ..=5)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct AtMostFive(u8);
 
-    #[typekin::integral(konst = true, in = -2..)]
+    #[typekin::integral(konst = nightly, in = -2..)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct FromNegativeTwo(i8);
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         valid = is_even_i8,
         in = [..=-6, 4..],
     )]
@@ -118,7 +118,7 @@ mod tests {
     struct SplitEven(i8);
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         valid = is_even,
         without = [fn_make_unchecked_try],
     )]
@@ -127,7 +127,7 @@ mod tests {
     struct ParsedEven(u8);
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         without = [core_int],
     )]
     #[repr(transparent)]
@@ -135,7 +135,7 @@ mod tests {
     struct CoreDisabled(u8);
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         without = [
             self_friend_math_ops,
             self_friend_math_bit,
@@ -151,7 +151,7 @@ mod tests {
     };
 
     #[typekin::integral(
-        konst = true,
+        konst = nightly,
         friends = [self(u16) -> [Math, Rel]],
         get_raw = Self::value
     )]
@@ -159,14 +159,14 @@ mod tests {
     #[derive(Copy, Clone)]
     struct CustomRaw(u16);
 
-    #[typekin::integral(konst = true)]
+    #[typekin::integral(konst = nightly)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct Wide(u128);
 
     #[typekin::integral(
-        konst = true,
-        friends = self(u8) -> [Math, Trust],
+        konst = nightly,
+        friends = self(u8) -> [Math, unsafe],
         valid = is_even,
         in = 2..=10,
     )]
@@ -301,26 +301,311 @@ mod tests {
     }
 
     #[test]
-    fn parsing_returns_unit_error_for_invalid_syntax_and_values() {
-        for source in [
-            "",
-            "-1",
-            "4_294_967_296",
-            "not a number",
-        ] {
-            assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
-        }
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_23_1_5_1()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
 
-        for source in [
-            "23", "50", "102",
-        ] {
-            assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
-        }
-        for source in [
-            "-5", "0",
-        ] {
-            assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
-        }
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_23_1_0_2()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_50_2_5_1()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_50_2_0_2()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_102_3_5_1()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_case_1_102_3_0_2()
+     {
+        let source = "";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_23_1_5_1() {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_23_1_0_2() {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_50_2_5_1() {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_50_2_0_2() {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_102_3_5_1()
+    {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_1_2_102_3_0_2()
+    {
+        let source = "-1";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_23_1_5_1()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_23_1_0_2()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_50_2_5_1()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_50_2_0_2()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_102_3_5_1()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_4_294_967_296_3_102_3_0_2()
+     {
+        let source = "4_294_967_296";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_23_1_5_1()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_23_1_0_2()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "23";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_50_2_5_1()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_50_2_0_2()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "50";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_102_3_5_1()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "-5";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
+    }
+
+    #[test]
+    fn parsing_returns_unit_error_for_invalid_syntax_and_values_not_a_number_4_102_3_0_2()
+     {
+        let source = "not a number";
+        assert_eq!(source.parse::<My32>(), Err(()), "{source:?}");
+
+        let source = "102";
+        assert_eq!(source.parse::<Even>(), Err(()), "{source:?}");
+
+        let source = "0";
+        assert_eq!(source.parse::<SplitEven>(), Err(()), "{source:?}");
     }
 
     #[test]
@@ -367,23 +652,47 @@ mod tests {
     }
 
     #[test]
-    fn checked_core_operations_reject_invalid_results() {
+    fn checked_add_returns_none_for_an_invalid_result() {
         let upper_bound = Even::try_make(100).unwrap();
         let two = Even::try_make(2).unwrap();
         assert_eq!(upper_bound.checked_add(two), None);
+    }
+
+    #[test]
+    fn saturating_add_panics_for_an_invalid_result() {
+        let upper_bound = Even::try_make(100).unwrap();
+        let two = Even::try_make(2).unwrap();
         assert_panics(|| upper_bound.saturating_add(two));
     }
 
     #[test]
-    fn core_operations_validate_every_wrapped_result() {
+    fn from_ne_bytes_panics_for_an_invalid_result() {
+        assert_panics(|| Even::from_ne_bytes([1]));
+    }
+
+    #[test]
+    fn midpoint_panics_for_an_invalid_result() {
         let two = Even::try_make(2).unwrap();
         let hundred = Even::try_make(100).unwrap();
-
-        assert_panics(|| Even::from_ne_bytes([1]));
         assert_panics(|| two.midpoint(hundred));
-        assert_panics(|| hundred.overflowing_add(two));
-        assert_panics(|| hundred.carrying_add(two, false));
+    }
 
+    #[test]
+    fn overflowing_add_panics_for_an_invalid_result() {
+        let two = Even::try_make(2).unwrap();
+        let hundred = Even::try_make(100).unwrap();
+        assert_panics(|| hundred.overflowing_add(two));
+    }
+
+    #[test]
+    fn carrying_add_panics_for_an_invalid_result() {
+        let two = Even::try_make(2).unwrap();
+        let hundred = Even::try_make(100).unwrap();
+        assert_panics(|| hundred.carrying_add(two, false));
+    }
+
+    #[test]
+    fn signed_signum_panics_for_an_invalid_result() {
         let negative = SplitEven::try_make(-6).unwrap();
         assert_panics(|| negative.signum());
     }
@@ -523,20 +832,147 @@ mod tests {
     }
 
     #[test]
-    fn open_range_union_ors_ranges_and_ands_callbacks() {
-        for value in [
-            -8, -6, 4, 6,
-        ] {
-            assert_eq!(
-                SplitEven::try_make(value).map(SplitEven::raw),
-                Ok(value)
-            );
-        }
-        for value in [
-            -7, -5, 0, 5,
-        ] {
-            assert_eq!(SplitEven::try_make(value), Err(value));
-        }
+    fn open_range_union_ors_ranges_and_ands_callbacks_8_1_7_1() {
+        let value = -8;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -7;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_8_1_5_2() {
+        let value = -8;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_8_1_0_3() {
+        let value = -8;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 0;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_8_1_5_4() {
+        let value = -8;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_2_7_1() {
+        let value = -6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -7;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_2_5_2() {
+        let value = -6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_2_0_3() {
+        let value = -6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 0;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_2_5_4() {
+        let value = -6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_4_3_7_1() {
+        let value = 4;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -7;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_4_3_5_2() {
+        let value = 4;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_4_3_0_3() {
+        let value = 4;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 0;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_4_3_5_4() {
+        let value = 4;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_4_7_1() {
+        let value = 6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -7;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_4_5_2() {
+        let value = 6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = -5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_4_0_3() {
+        let value = 6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 0;
+        assert_eq!(SplitEven::try_make(value), Err(value));
+    }
+
+    #[test]
+    fn open_range_union_ors_ranges_and_ands_callbacks_6_4_5_4() {
+        let value = 6;
+        assert_eq!(SplitEven::try_make(value).map(SplitEven::raw), Ok(value));
+
+        let value = 5;
+        assert_eq!(SplitEven::try_make(value), Err(value));
     }
 
     #[test]
@@ -545,9 +981,12 @@ mod tests {
     }
 
     #[test]
-    fn range_validation_checks_friended_construction_and_math() {
+    fn range_validation_checks_friended_construction() {
         assert_panics(|| Ranged::of(5u8));
+    }
 
+    #[test]
+    fn range_validation_checks_math_results() {
         let value = Ranged::try_make(4).unwrap();
         assert_panics(|| value + 1u8);
     }
@@ -987,13 +1426,13 @@ mod tests {
         }
 
         #[typekin::integral(
-            konst = false,
+            konst = none,
             friends = [
                 default_raw(DefaultSource) -> Make,
                 checked_raw(CheckedSource) -> [Make],
-                trusted_raw(TrustSource) -> [Math, Trust],
+                trusted_raw(TrustSource) -> [Math, unsafe],
                 math_only_raw(MathOnlySource),
-                bit_only_raw(BitOnlySource) -> [Bit, Trust],
+                bit_only_raw(BitOnlySource) -> [Bit, unsafe],
                 self(u8) -> Rel,
             ],
             valid = is_even,
@@ -1004,10 +1443,10 @@ mod tests {
         struct Number(u8);
 
         #[typekin::integral(
-            konst = false,
+            konst = none,
             friends = [
-                self(TrustSelfNumber) -> [Make, Trust],
-                self(u8) -> [Make, Trust],
+                self(TrustSelfNumber) -> [Make, unsafe],
+                self(u8) -> [Make, unsafe],
             ],
             valid = is_even,
             in = 2..=10,
@@ -1032,26 +1471,32 @@ mod tests {
         }
 
         #[test]
-        fn untrusted_owned_friends_validate_scalar_and_list_make() {
-            for raw in [
-                3, 12,
-            ] {
-                assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
-                assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
-            }
+        fn untrusted_owned_friends_validate_scalar_and_list_make_3_1() {
+            let raw = 3;
+            assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
+            assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
+
             assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
             assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
         }
 
         #[test]
-        fn trusted_owned_friend_bypasses_only_construction_validation() {
-            for raw in [
-                3, 12,
-            ] {
-                let source = TrustSource(Box::new(raw));
-                assert_eq!(Number::of(source).raw(), raw);
-                assert_eq!(Number::try_make(raw), Err(raw));
-            }
+        fn untrusted_owned_friends_validate_scalar_and_list_make_12_2() {
+            let raw = 12;
+            assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
+            assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
+
+            assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
+            assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
+        }
+
+        #[test]
+        fn trusted_owned_friend_bypasses_only_construction_validation_3_1() {
+            let raw = 3;
+            let source = TrustSource(Box::new(raw));
+            assert_eq!(Number::of(source).raw(), raw);
+            assert_eq!(Number::try_make(raw), Err(raw));
+
             assert_panics(|| {
                 let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
             });
@@ -1065,17 +1510,44 @@ mod tests {
         }
 
         #[test]
-        fn trusted_owned_assignment_results_validate_before_mutating() {
-            for rhs in [
-                1, 8,
-            ] {
-                let mut number = Number::try_make(4).unwrap();
-                assert_panics(move || number += TrustSource(Box::new(rhs)));
-                assert_eq!(number.raw(), 4);
+        fn trusted_owned_friend_bypasses_only_construction_validation_12_2() {
+            let raw = 12;
+            let source = TrustSource(Box::new(raw));
+            assert_eq!(Number::of(source).raw(), raw);
+            assert_eq!(Number::try_make(raw), Err(raw));
 
-                assert_panics(move || number |= TrustSource(Box::new(rhs)));
-                assert_eq!(number.raw(), 4);
-            }
+            assert_panics(|| {
+                let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
+            });
+            assert_panics(|| {
+                let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
+            });
+            assert_panics(|| {
+                let _ =
+                    Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
+            });
+        }
+
+        #[test]
+        fn trusted_owned_assignment_results_validate_before_mutating_1_1() {
+            let rhs = 1;
+            let mut number = Number::try_make(4).unwrap();
+            assert_panics(move || number += TrustSource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
+
+            assert_panics(move || number |= TrustSource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
+        }
+
+        #[test]
+        fn trusted_owned_assignment_results_validate_before_mutating_8_2() {
+            let rhs = 8;
+            let mut number = Number::try_make(4).unwrap();
+            assert_panics(move || number += TrustSource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
+
+            assert_panics(move || number |= TrustSource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
         }
 
         #[test]
@@ -1135,13 +1607,13 @@ mod tests {
 
     #[cfg(test)]
     mod non_const_display {
-        #[typekin::integral(konst = false, with = [display])]
+        #[typekin::integral(konst = none, with = [display])]
         #[repr(transparent)]
         #[derive(Copy, Clone)]
         struct Number(i32);
 
         #[typekin::integral(
-            konst = false,
+            konst = none,
             with = [display],
             without = [fn_conv_raw],
             get_raw = Self::decoded,

@@ -318,7 +318,7 @@ impl Maker {
                 self.cfg.flags.friendzone_friend_rel,
                 self.trait_friend_rel.clone(),
             ),
-            (true, format_ident!("Trust")),
+            (true, crate::friendship::cfg::trust_capability()),
         ]
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))
@@ -392,7 +392,7 @@ impl Maker {
             target_conversion,
             construction: Some(Construction {
                 make: self.trait_friend_make.clone(),
-                trusted: format_ident!("Trust"),
+                trusted: crate::friendship::cfg::trust_capability(),
                 checked: quote! { #checked },
             }),
             konst: self.cfg.konst_friendship(),
@@ -3006,8 +3006,56 @@ impl Parse for IntegralFriend {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum Konst {
+    #[default]
+    None,
+    Stable,
+    Nightly,
+}
+
+impl Konst {
+    const STABLE_FLAGS: &[&str] = &["try_make"];
+
+    fn enables(
+        self,
+        flags: &[&str],
+    ) -> bool {
+        return match self {
+            Self::None => false,
+            Self::Stable => {
+                flags.iter().any(|flag| Self::STABLE_FLAGS.contains(flag))
+            }
+            Self::Nightly => true,
+        };
+    }
+}
+
+impl Parse for Konst {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if !input.peek(syn::Ident) {
+            return Err(syn::Error::new(
+                input.span(),
+                "expected `none`, `stable`, or `nightly`",
+            ));
+        }
+
+        let name = input.parse::<Ident>()?;
+
+        return match name.to_string().as_str() {
+            "none" => Ok(Self::None),
+            "stable" => Ok(Self::Stable),
+            "nightly" => Ok(Self::Nightly),
+            _ => Err(syn::Error::new(
+                name.span(),
+                "expected `none`, `stable`, or `nightly`",
+            )),
+        };
+    }
+}
+
 pub(crate) struct Cfg {
-    pub(crate) konst: bool,
+    pub(crate) konst: Konst,
     konst_flags: BTreeMap<String, bool>,
     seen_flags: BTreeMap<String, bool>,
     pub(crate) get_raw: Option<Path>,
@@ -3115,7 +3163,7 @@ impl Cfg {
             }
         }
 
-        return self.konst;
+        return self.konst.enables(flags);
     }
 
     pub(crate) fn konst_friendship(&self) -> bool {
@@ -3123,10 +3171,17 @@ impl Cfg {
             return true;
         }
 
-        return Self::KONST_FLAGS.iter().any(|flag| {
-            let flag = flag.strip_prefix("konst_").unwrap();
-            return flag != "friendship" && self.konst_for(&[flag]);
-        });
+        return Self::KONST_FLAGS
+            .iter()
+            .filter(|flag| {
+                let flag = flag.strip_prefix("konst_").unwrap();
+                return flag != "friendship"
+                    && !Konst::STABLE_FLAGS.contains(&flag);
+            })
+            .any(|flag| {
+                let flag = flag.strip_prefix("konst_").unwrap();
+                return self.konst_for(&[flag]);
+            });
     }
 
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
@@ -3142,7 +3197,7 @@ impl Cfg {
                 for capability in &friend.capabilities {
                     if !matches!(
                         capability.to_string().as_str(),
-                        "Make" | "Math" | "Bit" | "Rel" | "Trust"
+                        "Make" | "Math" | "Bit" | "Rel" | "UnsafeTrust"
                     ) {
                         return capability.fail("unknown integral capability");
                     }
@@ -3172,7 +3227,7 @@ impl Cfg {
 
     pub(crate) fn parse_with_konst(
         input: ParseStream,
-        konst: bool,
+        konst: Konst,
     ) -> syn::Result<Self> {
         let mut this = Self::with_konst(konst);
 
@@ -3203,7 +3258,7 @@ impl Cfg {
         return Ok(this);
     }
 
-    pub(crate) fn with_konst(konst: bool) -> Self {
+    pub(crate) fn with_konst(konst: Konst) -> Self {
         return Self {
             konst,
             konst_flags: Default::default(),
@@ -3223,7 +3278,7 @@ impl Debug for Cfg {
     ) -> std::fmt::Result {
         write!(
             f,
-            "IntegralCfg[konst={}, get_raw={}, validation={:?}, friends={:?}, flags={:?}",
+            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, flags={:?}",
             self.konst,
             to_debug(&self.get_raw),
             self.validation,
@@ -3235,7 +3290,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::with_konst(false);
+        let mut this = Self::with_konst(Konst::None);
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
@@ -3245,7 +3300,7 @@ impl Parse for Cfg {
 
             match attr {
                 "konst" => {
-                    this.konst = rest.parse::<syn::LitBool>()?.value;
+                    this.konst = rest.parse()?;
                     has_konst = true;
                 }
                 "with" => this.parse_flags(rest, true)?,

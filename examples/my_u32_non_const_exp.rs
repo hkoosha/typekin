@@ -15,7 +15,7 @@ const _: () = {
     trait Math: Seal {}
     trait Bit: Seal {}
     trait Rel: Seal {}
-    trait Trust: Seal {}
+    unsafe trait UnsafeTrust: Seal {}
     impl Seal for MyNonConstU32 {
         #[inline(always)]
         fn conv_my_non_const_u32(self) -> u32 {
@@ -1837,7 +1837,7 @@ const _: () = {
     trait Math: Seal {}
     trait Bit: Seal {}
     trait Rel: Seal {}
-    trait Trust: Seal {}
+    unsafe trait UnsafeTrust: Seal {}
     impl Seal for Limited {
         #[inline(always)]
         fn conv_limited(self) -> u32 {
@@ -1865,7 +1865,7 @@ const _: () = {
             return Limited(raw);
         }
     }
-    impl Trust for Verified {}
+    unsafe impl UnsafeTrust for Verified {}
     impl Seal for u32 {
         #[inline(always)]
         fn conv_limited(self) -> u32 {

@@ -161,7 +161,7 @@ impl Cfg {
             for capability in &friend.capabilities {
                 match capability.to_string().as_str() {
                     "Make" => has_make = true,
-                    "Trust" => {}
+                    "UnsafeTrust" => {}
                     "Rel" => {
                         if !friend.ty.is_ident("Self") {
                             return capability
@@ -356,7 +356,7 @@ impl TextMaker {
         let bonst = runner::bonst(is_konst);
         let destruct = runner::destruct(is_konst);
         let make = format_ident!("Make");
-        let trusted = format_ident!("Trust");
+        let trusted = crate::friendship::cfg::trust_capability();
         let seal = format_ident!("TextMake");
         let friends = self
             .cfg

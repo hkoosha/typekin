@@ -11,7 +11,7 @@
 #[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
-#[typekin::integral(konst = true, friends = [
+#[typekin::integral(konst = nightly, friends = [
     id_to_header(PageId) -> [Math, Rel],
     state_to_header(PageState) -> [Math, Rel],
     PageData::to_header(PageData) -> [Math, Rel],

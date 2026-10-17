@@ -35,7 +35,7 @@ const _: () = {
     const trait Math: [const] Seal {}
     const trait Bit: [const] Seal {}
     const trait Rel: [const] Seal {}
-    const trait Trust: [const] Seal {}
+    const unsafe trait UnsafeTrust: [const] Seal {}
     const impl Seal for MyFlags {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
@@ -2531,7 +2531,7 @@ const _: () = {
     }
     const impl<T> ::core::ops::BitAnd<T> for MyFlag
     where
-        T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2547,7 +2547,7 @@ const _: () = {
     }
     const impl<T> ::core::ops::BitOr<T> for MyFlag
     where
-        T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2561,7 +2561,7 @@ const _: () = {
     }
     const impl<T> ::core::ops::BitXor<T> for MyFlag
     where
-        T: FlagBit + const FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2683,7 +2683,7 @@ const _: () = {
     const trait FlagMath: [const] FlagSeal {}
     const trait FlagBit: [const] FlagSeal {}
     const trait FlagCmp: [const] FlagSeal {}
-    const trait FlagTrust: [const] FlagSeal {}
+    const unsafe trait FlagUnsafeTrust: [const] FlagSeal {}
     const impl FlagSeal for MyFlag {
         #[inline(always)]
         fn conv_my_flag(self) -> u128 {

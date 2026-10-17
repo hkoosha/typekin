@@ -2,16 +2,17 @@
 
 ## What this repository is
 
-`typekin` is a single Rust 2024 procedural-macro crate. It generates transparent
+`typekin` is a Rust 2024 procedural-macro crate. It generates transparent
 newtypes and the relationships between them:
 
 - `integral`: integer newtypes, validation, conversions, math, and bitwise
   operations.
 - `bitflag`: an enum plus a generated `{Enum}Value` type for combined or unknown
   bits.
-- `text`: validated `alloc::string::String` newtypes.
-- `friendship` and `constructor`: explicit construction capabilities between
-  types.
+- `text`: validated `String` newtypes, using `std` or `alloc` paths as
+  configured.
+- `friends`: capability protocols and optional generated constructors.
+- `constructor`: augments a `friends` protocol with an explicit constructor.
 
 The public contract is the code generated for downstream crates. Treat
 compile-time diagnostics, generated trait implementations, ownership, layout,
@@ -22,55 +23,61 @@ constness, and runtime cost as API behavior.
 - `src/lib.rs`: proc-macro entry points.
 - `src/runner.rs`: shared parsing, flag, diagnostic, and macro-runner helpers.
 - `src/value_type.rs`: primitive integral metadata used by generators.
-- `src/{integral,bitflag,text,friendship}.rs`: parsing and emission for each
-  macro family.
+- `src/{integral,bitflag,text,friendship,constructor}.rs`: parsing and emission
+  for each macro family.
+- `src/zz.rs`: shared validation grammar, list parsing, item-shape checks, and
+  `repr` helpers.
 - `src/tests/`: parser and token-generation unit tests.
 - `tests/`: downstream-style behavioral tests against expanded macros.
-- `examples/`: small source examples and checked-in `_exp.rs` expansions.
+- `examples/`: small source examples and checked-in `_exp.rs` expansions. Do not
+  edit `_exp.rs` files directly: regenerate each one through its corresponding
+  `justfile` target, or regenerate all of them with `just all`.
 - `README.md`: practical public usage documentation.
-- `PLAN.md`: text design rationale and maintenance backlog; verify design
-  claims against current code and tests.
-- `typekin_testing/`: assembly-comparison fixtures retained from the former
-  workspace.
+- `NUTYPE.md`: a historical design investigation; it is not a backlog or API
+  specification.
+- `typekin_testing/`: separate assembly-comparison fixtures for integral
+  operations.
 
 ## Development rules
 
-- **Directly recorded:** practical usage documentation, no advertising or fluff,
-  and code examples rather than long explanations.
-- **Directly recorded:** prove runtime erasure by comparing fully optimized
-  nightly assembly for raw and wrapped math/bit operations on already-built
-  values. Retain an unoptimized negative control; successful compilation or an
-  inline annotation alone does not prove the performance claim.
-- **[INFERENCE] From the implementation and migrations:** favor explicit
-  capabilities, ownership, and constness; share actual common machinery and
-  remove superseded paths instead of accumulating parallel implementations.
+- Keep public documentation practical, concise, and code-first.
+- Preserve the optimized assembly comparison for changes that claim runtime
+  erasure. `typekin_testing` includes both optimized comparisons and an
+  unoptimized negative control; compilation or `#[inline]` alone is not that
+  proof.
+- Favor explicit capabilities, ownership, and constness. Reuse shared parsing
+  and emission machinery rather than adding parallel syntax or generators.
+- Do not create macros solely to reduce repetition.
 
 ## Design rules
 
 ### Preserve invariants on every path
 
-- A generated wrapper must not be constructible in an invalid state through its
-  ordinary safe API.
+- Generated constructors and transformations must not produce an invalid wrapper
+  through their ordinary safe API.
 - Apply all configured validators to every normal construction and
   transformation path, including friend construction and generated operations.
 - `text` must not expose `DerefMut`, `AsMut<str>`, `&mut String`, or another
   alias that can leave a live wrapper invalid. Checked mutation consumes the
   wrapper, mutates its `String`, validates, and returns `Result`.
-- A friend granted the `Trust` capability is the narrow documented exception
-  across all type families. It grants no other capabilities; do not broaden its
-  construction-only validation bypass.
+- For `integral` and `text`, `unsafe` paired with `Make` is the narrow
+  exception: it bypasses only that friend's construction validation. It grants
+  no other capability. Standalone `friends` has no generated validator to
+  bypass.
 - Unsupported attributes and combinations must produce a targeted macro
   diagnostic, not be ignored or silently downgraded.
 
 ### Make ownership and capability explicit
 
-- Friend conversions consume the friend and return the relation by value.
-  Do not restore blanket forwarding through `&T` or `&mut T`.
-- Keep capabilities explicit (`Make`, `Math`, `Bit`, and the supported
-  relation capability). Do not grant operations merely because a conversion
-  exists.
-- Equality and ordering for integral and text wrappers are same-type
-  operations unless the current public contract explicitly says otherwise.
+- Friend conversions consume the friend and return the relation by value. Do not
+  restore blanket forwarding through `&T` or `&mut T`.
+- Keep capabilities explicit. Integral recognizes `Make`, `Math`, `Bit`, `Rel`,
+  and `unsafe`; `Math` also grants `Make` and `Bit`, while `Rel` enables
+  comparisons with `Copy` friends. Text recognizes `Make`, `unsafe`, and
+  self-only `Rel`. Bitflag's root friends are protocol markers; its nested
+  integral configuration uses integral capabilities.
+- Same-type integral arithmetic and bitwise operations are controlled by
+  `self_math` and `self_bit`, not by declaring the wrapper as a friend.
 - Prefer consuming transformations over cloning or rollback allocation.
 
 ### Keep wrappers zero-cost
@@ -79,21 +86,21 @@ constness, and runtime cost as API behavior.
 - Generated wrappers must add no runtime state.
 - Continue using `#[inline(always)]` on small generated forwarding and
   conversion paths where the existing generators do.
-- Use `::core` in generated code where possible and `::alloc` for owned text.
-  Do not impose a downstream `std` dependency.
-- Avoid hidden allocation, copying, dynamic dispatch, or repeated validation.
-  Performance-sensitive changes should retain equivalent optimized assembly
-  for already-valid wrapped and raw operations.
+- Use `::core` in generated code where possible. Text chooses `::std` by default
+  and `::alloc` with `std = false`; the latter must remain usable in a `no_std`
+  consumer with `extern crate alloc`.
+- Avoid hidden allocation, copying, and dynamic dispatch. Validation is
+  intentionally performed for each checked construction and operator result.
 
 ### Constness is a caller-visible choice
 
-- `integral` and `bitflag` require explicit `konst = true|false`.
-- `text` requires explicit `konst = true|false`, matching the other primary
-  macro families.
-- `konst = true` means consistent const emission. Do not silently emit a
-  non-const subset when a requested combination is unsupported; let the
-  caller's nightly compiler diagnose it.
-- Keep stable, non-const use working independently of nightly const support.
+- `integral` requires `konst = none|stable|nightly`. `stable` enables only
+  stable `try_make` constness; `nightly` enables all const flags.
+- `bitflag` and `text` require `konst = true|false`. Bitflag currently parses
+  the boolean only to require it: its generated integral value type always uses
+  the nightly const configuration.
+- Individual `konst_*` flags override an integral or text master setting. Keep
+  non-const stable use working independently of nightly const support.
 
 ## Implementation conventions
 
@@ -103,19 +110,22 @@ constness, and runtime cost as API behavior.
   input span through the existing `MkErr`/runner machinery.
 - Reject duplicate, unknown, and removed configuration explicitly. Preserve
   accepted syntax unless making an intentional breaking change.
+- When making a breaking change, do not add compatibility checks, warnings,
+  failures, migration code, or migration diagnostics for compatibility with the
+  prior behavior unless explicitly asked to do so.
 - `friends` accepts one declaration directly or a bracketed list. Specifications
   use `conversion(SourceType) -> Capability` or a bracketed capability list.
-  `_(Type) -> Capabilities` preserves implicit conversion behavior; standalone
-  `_ -> Capabilities` declares markers with no implementing type or dummy
-  callback. Constructor friend selectors accept one type or a list of types.
-  Do not restore the obsolete `conv`/`cap` argument grammar.
+  Integral can use `self(PrimitiveType)` for a direct primitive relation; there
+  is no `_` friend syntax and no standalone marker declaration. Constructor
+  friend selectors accept one type or a list of types. Do not restore the
+  obsolete `conv`/`cap` argument grammar.
 - Keep emitted names and ordering deterministic. Use the existing primitive
   metadata and naming helpers rather than duplicating type tables.
 - Follow the established entry-point shape: parse configuration and item,
   validate the item, build through a maker, and return the original item plus
   generated code.
 - Match local style. Explicit `return` is intentional
-  (`needless_return = "allow"`). Rustfmt uses an 80-column limit, vertical
+  (`needless_return = "allow"`). rustfmt uses an 80-column limit, vertical
   imports and parameters, and `ClosingNextLine` braces.
 - Share genuinely common grammar and emission rules. Do not force integral
   ranges and text literal membership through the same parser.
@@ -126,13 +136,21 @@ Test behavior at the layer where it is observable:
 
 - Parser grammar, rejected legacy syntax, diagnostics, and token emission:
   `src/tests/`.
-- Construction, ownership, validation, traits, layout, boundaries, and
-  generated operations as a consumer sees them: `tests/`.
-- User-facing API changes: update a compact source example and `README.md`.
+- Construction, ownership, validation, traits, layout, boundaries, and generated
+  operations as a consumer sees them: `tests/`.
+- User-facing API changes: update a compact source example, its checked-in
+  expansion when applicable, and `README.md`.
 - Bugs should get a regression test that fails for the old behavior.
+- Keep unrelated behavior in separate tests. A test's name and scope should
+  identify the single behavior that can make it fail. This is not a
+  single-assertion rule: use every assertion useful to verify the smallest
+  helpful unit of behavior.
+- Do not use table-driven tests. Every case must be an individually named
+  `#[test]`, even when cases share setup or assertions. Helper functions are
+  allowed; loops over a table of test cases are not.
 - Boundary tests matter: signed/unsigned conversion limits, ranges, invalid
-  operation results, duplicate configuration, ownership of non-`Copy`
-  friends, and invariant-preserving text mutation.
+  operation results, duplicate configuration, ownership of non-`Copy` friends,
+  and invariant-preserving text mutation.
 
 Use these commands from the repository root:
 
@@ -140,16 +158,12 @@ Use these commands from the repository root:
 cargo +nightly fmt -- --check
 cargo +nightly test
 cargo +stable run --example my_text
+cd typekin_testing && just test
 ```
 
 Run a relevant example as a smoke test for the changed macro. For stable
-behavior, choose a `konst = false` source example; const examples require
-nightly features.
-
-Known tooling limitations and implementation gaps are tracked in the
-[maintenance backlog](PLAN.md#maintenance-backlog). They are not supported
-workflows or conventions to copy; do not repair them incidentally during an
-unrelated task.
+integral behavior, choose a `konst = none` example; text examples use
+`konst = false`. Const-heavy examples and bitflags require nightly features.
 
 ## Documentation and change discipline
 
@@ -161,6 +175,5 @@ unrelated task.
 - Keep configuration examples explicit and compilable.
 - Public generated-API changes require coordinated updates to implementation,
   parser tests, consumer tests, source examples, and README documentation.
-- Prefer a clean migration over compatibility aliases or parallel legacy
-  syntax. Remove obsolete parsing and generated paths once callers and tests
-  have moved.
+- Prefer a clean migration over compatibility aliases or parallel legacy syntax.
+  Remove obsolete parsing and generated paths once callers and tests have moved.

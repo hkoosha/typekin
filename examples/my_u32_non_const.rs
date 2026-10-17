@@ -1,4 +1,4 @@
-#[typekin::integral(konst = false)]
+#[typekin::integral(konst = none)]
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 pub struct MyNonConstU32(u32);
@@ -16,9 +16,9 @@ impl Verified {
 }
 
 #[typekin::integral(
-    konst = false,
+    konst = none,
     in = 1..=100,
-    friends = Verified::into_raw(Verified) -> [Make, Trust],
+    friends = Verified::into_raw(Verified) -> [Make, unsafe],
 )]
 #[derive(Copy, Clone)]
 #[repr(transparent)]

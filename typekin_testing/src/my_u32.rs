@@ -1,4 +1,4 @@
-#[typekin::integral(konst = false)]
+#[typekin::integral(konst = none)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct MyU32(u32);

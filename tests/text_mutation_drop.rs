@@ -173,7 +173,7 @@ mod tests {
         in = [],
         friends = [
             empty_set_text(EmptySetSource) -> Make,
-            trusted_empty_set_text(TrustEmptySetSource) -> [Make, Trust],
+            trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
         ],
     )]
     #[repr(transparent)]
@@ -184,7 +184,7 @@ mod tests {
     struct CallbackEmptySetText(String);
 
     #[test]
-    fn empty_membership_releases_rejected_owned_constructor_inputs() {
+    fn empty_membership_releases_rejected_owned_constructor_inputs_case_1() {
         type Construction = fn(String) -> bool;
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
@@ -196,15 +196,56 @@ mod tests {
             }),
         ];
         for (name, construct) in constructors {
-            for value in [
-                "", "safe", "é🦀",
-            ] {
-                let mut raw = String::with_capacity(64);
-                raw.push_str(value);
-                let watch = AllocationWatch::new(raw.as_ptr());
-                assert!(construct(raw), "{name} must reject {value:?}");
-                watch.assert_released();
-            }
+            let value = "";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::new(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn empty_membership_releases_rejected_owned_constructor_inputs_safe_2() {
+        type Construction = fn(String) -> bool;
+        let constructors: [(&str, Construction); 3] = [
+            ("checked", |raw| EmptySetText::try_make(raw).is_err()),
+            ("membership", |raw| {
+                CallbackEmptySetText::try_make(raw).is_err()
+            }),
+            ("untrusted friend", |raw| {
+                assert_panics(|| EmptySetText::of(EmptySetSource(raw)))
+            }),
+        ];
+        for (name, construct) in constructors {
+            let value = "safe";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::new(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn empty_membership_releases_rejected_owned_constructor_inputs_case_3() {
+        type Construction = fn(String) -> bool;
+        let constructors: [(&str, Construction); 3] = [
+            ("checked", |raw| EmptySetText::try_make(raw).is_err()),
+            ("membership", |raw| {
+                CallbackEmptySetText::try_make(raw).is_err()
+            }),
+            ("untrusted friend", |raw| {
+                assert_panics(|| EmptySetText::of(EmptySetSource(raw)))
+            }),
+        ];
+        for (name, construct) in constructors {
+            let value = "é🦀";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::new(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
         }
     }
 

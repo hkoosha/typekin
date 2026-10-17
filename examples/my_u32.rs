@@ -7,7 +7,7 @@
 #![feature(derive_const)]
 
 #[typekin::integral(
-    konst = true,
+    konst = nightly,
     friends = MyFriend::my_conv(MyFriend) -> [],
 )]
 #[repr(transparent)]

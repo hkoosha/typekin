@@ -24,7 +24,7 @@ const _: () = {
     const trait Math: [const] Seal {}
     const trait Bit: [const] Seal {}
     const trait Rel: [const] Seal {}
-    const trait Trust: [const] Seal {}
+    const unsafe trait UnsafeTrust: [const] Seal {}
     const impl Seal for PageHeader {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {
