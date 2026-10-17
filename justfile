@@ -49,18 +49,21 @@ zz-expand from to:
   touch '{{ to }}'
   expandem '{{ from }}' 'typekin::**' > '{{ to }}'
 
-new it:
-  [[ '{{ it }}' =~ ^[a-z][a-z0-9_-]*$ ]] || (echo 'bad it: {{ it }}' 1>&2; exit 1)
-  [[ ! -e 'examples/my_{{ it }}.rs'   ]] || (echo 'already exists: examples/my_{{ it }}.rs' 1>&2; exit 1)
-  printf 'fn main(){}\n' > 'examples/my_{{ it }}.rs'
-  printf 'fn main(){}\n' > 'examples/my_{{ it }}_exp.rs'
+@new it:
+  target="$(printf '%s' '{{ it }}' | tr '_' '-')"; \
+  file="$(printf '%s' '{{ it }}' | tr '-' '_')"; \
+  just z-new "$target" "$file"
+
+[group("z")]
+z-new it file:
+  printf 'fn main(){}\n' > 'examples/my_{{ file }}.rs'
+  printf 'fn main(){}\n' > 'examples/my_{{ file }}_exp.rs'
   printf \
     '[[example]]\nname = "my_%s"\npath = "examples/my_%s.rs"\n[[example]]\nname = "my_%s_exp"\npath = "examples/my_%s_exp.rs"\n' \
-    '{{ it }}' '{{ it }}' '{{ it }}' '{{ it }}' \
+    '{{ file }}' '{{ file }}' '{{ file }}' '{{ file }}' \
     >> Cargo.toml
-  target="$(printf '%s' '{{ it }}' | tr '_' '-')"; \
-  sed -i '/^all:/ s/$/ '"$target"'-expand/' j_example.justfile; \
+  sed -i '/^all:/ s/$/ {{ it }}-expand/' j_example.justfile;
   printf \
     "\n[group(\"example\")]\n%s-expand: (z-expand 'my_%s')\n[group(\"example\")]\n%s: %s-expand fmt\n" \
-    "$target" '{{ it }}' "$target" '{{ it }}' \
+    '{{ it }}' '{{ file }}' '{{ it }}' '{{ it }}' \
     >> j_example.justfile
