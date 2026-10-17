@@ -82,8 +82,8 @@ path = "examples/my_text.rs"
 name = "my_text_exp"
 path = "examples/my_text_exp.rs"
 [[example]]
-name = "my_constructor"
-path = "examples/my_constructor.rs"
+name = "my_u32_stable_const"
+path = "examples/my_u32_stable_const.rs"
 [[example]]
-name = "my_constructor_exp"
-path = "examples/my_constructor_exp.rs"
+name = "my_u32_stable_const_exp"
+path = "examples/my_u32_stable_const_exp.rs"

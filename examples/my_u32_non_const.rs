@@ -1,40 +1,27 @@
-#[typekin::integral(konst = none)]
-#[derive(Copy, Clone)]
-#[repr(transparent)]
-pub struct MyNonConstU32(u32);
-
-pub struct Verified(u32);
-
-impl Verified {
-    pub fn try_make(raw: u32) -> Option<Self> {
-        return (1..=100).contains(&raw).then_some(Self(raw));
-    }
-
-    fn into_raw(self) -> u32 {
-        return self.0;
-    }
-}
-
 #[typekin::integral(
     konst = none,
-    in = 1..=100,
-    friends = Verified::into_raw(Verified) -> [Make, unsafe],
+    friends = MyFriend::my_conv(MyFriend) -> [],
 )]
-#[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct Limited(u32);
+#[derive(Copy, Clone)]
+pub struct MyU32(u32);
+
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct MyFriend(u32);
+
+impl MyFriend {
+    const fn my_conv(self) -> u32 {
+        return self.0 * 2;
+    }
+}
 
 fn main() {
     let lhs = 0b1101u32;
     let rhs = 0b0110u32;
 
-    let lhs = MyNonConstU32::of(lhs);
-    let rhs = MyNonConstU32::of(rhs);
-    println!("{:?}", lhs + rhs);
+    let lhs = MyU32::of(lhs);
+    let rhs = MyU32::of(rhs);
 
-    let verified = Verified::try_make(42).unwrap();
-    // The non-Copy friend moves its already-validated value into Limited.
-    let limited = Limited::of(verified);
-    assert_eq!(limited.raw(), 42);
-    assert_eq!(Limited::try_make(0), Err(0));
+    println!("{:?}", lhs + rhs);
 }
