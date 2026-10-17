@@ -147,27 +147,27 @@ const _: () = {
         }
         #[must_use]
         #[inline(always)]
-        pub fn as_str(&self) -> &str {
+        pub const fn as_str(&self) -> &str {
             return self.0.as_str();
         }
         #[must_use]
         #[inline(always)]
-        pub fn as_bytes(&self) -> &[u8] {
+        pub const fn as_bytes(&self) -> &[u8] {
             return self.0.as_bytes();
         }
         #[must_use]
         #[inline(always)]
-        pub fn len(&self) -> usize {
+        pub const fn len(&self) -> usize {
             return self.0.len();
         }
         #[must_use]
         #[inline(always)]
-        pub fn is_empty(&self) -> bool {
+        pub const fn is_empty(&self) -> bool {
             return self.0.is_empty();
         }
         #[must_use]
         #[inline(always)]
-        pub fn capacity(&self) -> usize {
+        pub const fn capacity(&self) -> usize {
             return self.0.capacity();
         }
     }
@@ -300,6 +300,10 @@ const _: () = {
     }
 };
 
+const fn tag_len(tag: &MyTag) -> usize {
+    return tag.len();
+}
+
 pub struct MyHeadline<'a>(pub &'a str);
 
 fn into_my_tag(source: MyHeadline) -> String {
@@ -321,6 +325,7 @@ fn main() {
     }
 
     let it = MyTag::try_make("draft".to_string()).unwrap();
+    assert_eq!(tag_len(&it), 5);
     let it = it.try_replace_range(.., "published").unwrap();
 
     assert!(it.clone().try_clear().is_err());

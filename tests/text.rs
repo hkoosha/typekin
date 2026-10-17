@@ -30,7 +30,7 @@ mod tests {
     }
 
     #[typekin::text(
-        konst = false, std = false,
+        konst = none, std = false,
         in = ["draft", "published"],
         friends = [
             SlugSource::into_string(SlugSource) -> Make,
@@ -40,31 +40,31 @@ mod tests {
     #[repr(transparent)]
     struct Slug(String);
 
-    #[typekin::text(konst = false, std = false)]
+    #[typekin::text(konst = none, std = false)]
     #[repr(transparent)]
     struct PlainText(String);
 
     #[typekin::text(
-        konst = false, std = false,
+        konst = none, std = false,
         friends = SlugSource::into_string(SlugSource) -> Make,
         valid = is_slug,
     )]
     #[repr(transparent)]
     struct CallbackText(String);
 
-    #[typekin::text(konst = false, std = false, valid = [is_slug, is_not_reserved])]
+    #[typekin::text(konst = none, std = false, valid = [is_slug, is_not_reserved])]
     #[repr(transparent)]
     struct CallbackChainText(String);
 
-    #[typekin::text(konst = false, std = false, in = ["", "é"])]
+    #[typekin::text(konst = none, std = false, in = ["", "é"])]
     #[repr(transparent)]
     struct LiteralText(String);
 
-    #[typekin::text(konst = false, std = false, friends = self(Self) -> [Rel])]
+    #[typekin::text(konst = none, std = false, friends = self(Self) -> [Rel])]
     #[repr(transparent)]
     struct DisplayText(String);
 
-    #[typekin::text(konst = false, std = false, without = [display])]
+    #[typekin::text(konst = none, std = false, without = [display])]
     #[repr(transparent)]
     struct NoDisplayText(String);
 
@@ -86,7 +86,7 @@ mod tests {
         return !value.is_empty() && value != "b" && !value.contains('!');
     }
 
-    #[typekin::text(konst = false, std = false, valid = validate_mutation)]
+    #[typekin::text(konst = none, std = false, valid = validate_mutation)]
     #[repr(transparent)]
     struct CheckedMutationText(String);
 
@@ -95,15 +95,15 @@ mod tests {
         return value.is_empty();
     }
 
-    #[typekin::text(konst = false, std = false, valid = validate_empty_mutation)]
+    #[typekin::text(konst = none, std = false, valid = validate_empty_mutation)]
     #[repr(transparent)]
     struct CheckedEmptyText(String);
 
-    #[typekin::text(konst = false, std = false, in = ["a", "ab", "abc"])]
+    #[typekin::text(konst = none, std = false, in = ["a", "ab", "abc"])]
     #[repr(transparent)]
     struct MemberMutationText(String);
 
-    #[typekin::text(konst = false, std = false, valid = is_not_reserved)]
+    #[typekin::text(konst = none, std = false, valid = is_not_reserved)]
     #[repr(transparent)]
     struct MutationAllocationText(String);
 
@@ -1027,7 +1027,7 @@ mod tests {
 
     mod trusted_relation {
         #[typekin::text(
-            konst = false, std = false,
+            konst = none, std = false,
             valid = super::is_slug,
             friends = self(Self) -> [Rel, unsafe],
         )]
@@ -1068,7 +1068,7 @@ mod tests {
         }
 
         #[typekin::text(
-            konst = false, std = false,
+            konst = none, std = false,
             in = [],
             friends = [
                 checked_text(CheckedSource) -> Make,
@@ -1078,11 +1078,11 @@ mod tests {
         #[repr(transparent)]
         struct EmptyDomain(String);
 
-        #[typekin::text(konst = false, std = false, in = [])]
+        #[typekin::text(konst = none, std = false, in = [])]
         #[repr(transparent)]
         struct CallbackEmptyDomain(String);
 
-        #[typekin::text(konst = false, std = false, in = [""])]
+        #[typekin::text(konst = none, std = false, in = [""])]
         #[repr(transparent)]
         struct EmptyStringOnly(String);
 

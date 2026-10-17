@@ -1,10 +1,5 @@
-#![feature(const_trait_impl)]
-#![feature(const_clone)]
-#![feature(derive_const)]
-
 #[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
+#[derive(Clone, Copy)]
 pub struct MyU32(u32);
 
 #[allow(dead_code)]
@@ -200,71 +195,71 @@ const _: () = {
     }
     impl MyU32 {
         #[inline(always)]
-        pub fn rotate_left(
+        pub const fn rotate_left(
             self,
             n: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).rotate_left(n));
         }
         #[inline(always)]
-        pub fn rotate_right(
+        pub const fn rotate_right(
             self,
             n: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).rotate_right(n));
         }
         #[inline(always)]
-        pub fn swap_bytes(self) -> Self {
+        pub const fn swap_bytes(self) -> Self {
             return Self::_core_int(Self::raw(self).swap_bytes());
         }
         #[inline(always)]
-        pub fn reverse_bits(self) -> Self {
+        pub const fn reverse_bits(self) -> Self {
             return Self::_core_int(Self::raw(self).reverse_bits());
         }
         #[inline(always)]
-        pub fn isolate_highest_one(self) -> Self {
+        pub const fn isolate_highest_one(self) -> Self {
             return Self::_core_int(Self::raw(self).isolate_highest_one());
         }
         #[inline(always)]
-        pub fn isolate_lowest_one(self) -> Self {
+        pub const fn isolate_lowest_one(self) -> Self {
             return Self::_core_int(Self::raw(self).isolate_lowest_one());
         }
         #[inline(always)]
-        pub fn to_be(self) -> Self {
+        pub const fn to_be(self) -> Self {
             return Self::_core_int(Self::raw(self).to_be());
         }
         #[inline(always)]
-        pub fn to_le(self) -> Self {
+        pub const fn to_le(self) -> Self {
             return Self::_core_int(Self::raw(self).to_le());
         }
         #[inline(always)]
-        pub fn from_be(value: Self) -> Self {
+        pub const fn from_be(value: Self) -> Self {
             return Self::_core_int(u32::from_be(Self::raw(value)));
         }
         #[inline(always)]
-        pub fn from_le(value: Self) -> Self {
+        pub const fn from_le(value: Self) -> Self {
             return Self::_core_int(u32::from_le(Self::raw(value)));
         }
         #[inline(always)]
-        pub fn from_ne_bytes(
+        pub const fn from_ne_bytes(
             bytes: [u8; ::core::mem::size_of::<u32>()]
         ) -> Self {
             return Self::_core_int(u32::from_ne_bytes(bytes));
         }
         #[inline(always)]
-        pub fn from_be_bytes(
+        pub const fn from_be_bytes(
             bytes: [u8; ::core::mem::size_of::<u32>()]
         ) -> Self {
             return Self::_core_int(u32::from_be_bytes(bytes));
         }
         #[inline(always)]
-        pub fn from_le_bytes(
+        pub const fn from_le_bytes(
             bytes: [u8; ::core::mem::size_of::<u32>()]
         ) -> Self {
             return Self::_core_int(u32::from_le_bytes(bytes));
         }
         #[inline(always)]
-        pub fn checked_add(
+        pub const fn checked_add(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -276,7 +271,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_sub(
+        pub const fn checked_sub(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -288,7 +283,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_neg(self) -> ::core::option::Option<Self> {
+        pub const fn checked_neg(self) -> ::core::option::Option<Self> {
             return match Self::raw(self).checked_neg() {
                 ::core::option::Option::Some(value) => {
                     Self::_core_int_checked(value)
@@ -297,7 +292,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_mul(
+        pub const fn checked_mul(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -309,7 +304,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_div(
+        pub const fn checked_div(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -321,7 +316,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_rem(
+        pub const fn checked_rem(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -333,7 +328,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_div_euclid(
+        pub const fn checked_div_euclid(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -345,7 +340,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_rem_euclid(
+        pub const fn checked_rem_euclid(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -357,7 +352,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_shl(
+        pub const fn checked_shl(
             self,
             rhs: u32,
         ) -> ::core::option::Option<Self> {
@@ -369,7 +364,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_shr(
+        pub const fn checked_shr(
             self,
             rhs: u32,
         ) -> ::core::option::Option<Self> {
@@ -381,7 +376,7 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn checked_pow(
+        pub const fn checked_pow(
             self,
             exp: u32,
         ) -> ::core::option::Option<Self> {
@@ -395,28 +390,28 @@ const _: () = {
     }
     impl MyU32 {
         #[inline(always)]
-        pub fn midpoint(
+        pub const fn midpoint(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).midpoint(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn unbounded_shl(
+        pub const fn unbounded_shl(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).unbounded_shl(rhs));
         }
         #[inline(always)]
-        pub fn unbounded_shr(
+        pub const fn unbounded_shr(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).unbounded_shr(rhs));
         }
         #[inline(always)]
-        pub fn saturating_add(
+        pub const fn saturating_add(
             self,
             rhs: Self,
         ) -> Self {
@@ -425,7 +420,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn saturating_sub(
+        pub const fn saturating_sub(
             self,
             rhs: Self,
         ) -> Self {
@@ -434,7 +429,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn saturating_mul(
+        pub const fn saturating_mul(
             self,
             rhs: Self,
         ) -> Self {
@@ -443,7 +438,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn saturating_div(
+        pub const fn saturating_div(
             self,
             rhs: Self,
         ) -> Self {
@@ -452,14 +447,14 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn saturating_pow(
+        pub const fn saturating_pow(
             self,
             exp: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).saturating_pow(exp));
         }
         #[inline(always)]
-        pub fn wrapping_add(
+        pub const fn wrapping_add(
             self,
             rhs: Self,
         ) -> Self {
@@ -468,7 +463,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_sub(
+        pub const fn wrapping_sub(
             self,
             rhs: Self,
         ) -> Self {
@@ -477,11 +472,11 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_neg(self) -> Self {
+        pub const fn wrapping_neg(self) -> Self {
             return Self::_core_int(Self::raw(self).wrapping_neg());
         }
         #[inline(always)]
-        pub fn wrapping_mul(
+        pub const fn wrapping_mul(
             self,
             rhs: Self,
         ) -> Self {
@@ -490,7 +485,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_div(
+        pub const fn wrapping_div(
             self,
             rhs: Self,
         ) -> Self {
@@ -499,7 +494,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_rem(
+        pub const fn wrapping_rem(
             self,
             rhs: Self,
         ) -> Self {
@@ -508,7 +503,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_div_euclid(
+        pub const fn wrapping_div_euclid(
             self,
             rhs: Self,
         ) -> Self {
@@ -517,7 +512,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_rem_euclid(
+        pub const fn wrapping_rem_euclid(
             self,
             rhs: Self,
         ) -> Self {
@@ -526,92 +521,92 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn wrapping_shl(
+        pub const fn wrapping_shl(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).wrapping_shl(rhs));
         }
         #[inline(always)]
-        pub fn wrapping_shr(
+        pub const fn wrapping_shr(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).wrapping_shr(rhs));
         }
         #[inline(always)]
-        pub fn wrapping_pow(
+        pub const fn wrapping_pow(
             self,
             exp: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).wrapping_pow(exp));
         }
         #[inline(always)]
-        pub fn pow(
+        pub const fn pow(
             self,
             exp: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).pow(exp));
         }
         #[inline(always)]
-        pub fn isqrt(self) -> Self {
+        pub const fn isqrt(self) -> Self {
             return Self::_core_int(Self::raw(self).isqrt());
         }
         #[inline(always)]
-        pub fn div_euclid(
+        pub const fn div_euclid(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).div_euclid(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn rem_euclid(
+        pub const fn rem_euclid(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).rem_euclid(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_add(
+        pub const fn strict_add(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_add(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_sub(
+        pub const fn strict_sub(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_sub(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_neg(self) -> Self {
+        pub const fn strict_neg(self) -> Self {
             return Self::_core_int(Self::raw(self).strict_neg());
         }
         #[inline(always)]
-        pub fn strict_mul(
+        pub const fn strict_mul(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_mul(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_div(
+        pub const fn strict_div(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_div(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_rem(
+        pub const fn strict_rem(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_rem(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn strict_div_euclid(
+        pub const fn strict_div_euclid(
             self,
             rhs: Self,
         ) -> Self {
@@ -620,7 +615,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn strict_rem_euclid(
+        pub const fn strict_rem_euclid(
             self,
             rhs: Self,
         ) -> Self {
@@ -629,21 +624,21 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn strict_shl(
+        pub const fn strict_shl(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_shl(rhs));
         }
         #[inline(always)]
-        pub fn strict_shr(
+        pub const fn strict_shr(
             self,
             rhs: u32,
         ) -> Self {
             return Self::_core_int(Self::raw(self).strict_shr(rhs));
         }
         #[inline(always)]
-        pub fn strict_pow(
+        pub const fn strict_pow(
             self,
             exp: u32,
         ) -> Self {
@@ -652,7 +647,7 @@ const _: () = {
     }
     impl MyU32 {
         #[inline(always)]
-        pub fn overflowing_add(
+        pub const fn overflowing_add(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -661,7 +656,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_sub(
+        pub const fn overflowing_sub(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -670,12 +665,12 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_neg(self) -> (Self, bool) {
+        pub const fn overflowing_neg(self) -> (Self, bool) {
             let (value, overflowed) = Self::raw(self).overflowing_neg();
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_mul(
+        pub const fn overflowing_mul(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -684,7 +679,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_div(
+        pub const fn overflowing_div(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -693,7 +688,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_rem(
+        pub const fn overflowing_rem(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -702,7 +697,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_div_euclid(
+        pub const fn overflowing_div_euclid(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -711,7 +706,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_rem_euclid(
+        pub const fn overflowing_rem_euclid(
             self,
             rhs: Self,
         ) -> (Self, bool) {
@@ -720,7 +715,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_shl(
+        pub const fn overflowing_shl(
             self,
             rhs: u32,
         ) -> (Self, bool) {
@@ -728,7 +723,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_shr(
+        pub const fn overflowing_shr(
             self,
             rhs: u32,
         ) -> (Self, bool) {
@@ -736,7 +731,7 @@ const _: () = {
             return (Self::_core_int(value), overflowed);
         }
         #[inline(always)]
-        pub fn overflowing_pow(
+        pub const fn overflowing_pow(
             self,
             exp: u32,
         ) -> (Self, bool) {
@@ -746,57 +741,39 @@ const _: () = {
     }
     impl MyU32 {
         #[inline(always)]
-        pub fn cast_signed(self) -> i32 {
+        pub const fn cast_signed(self) -> i32 {
             return Self::raw(self).cast_signed();
         }
         #[inline(always)]
-        pub fn bit_width(self) -> u32 {
+        pub const fn bit_width(self) -> u32 {
             return Self::raw(self).bit_width();
         }
         #[inline(always)]
-        pub fn funnel_shl(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shl(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
-        pub fn funnel_shr(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shr(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
-        pub fn abs_diff(
+        pub const fn abs_diff(
             self,
             rhs: Self,
         ) -> u32 {
             return Self::raw(self).abs_diff(Self::raw(rhs));
         }
         #[inline(always)]
-        pub fn is_multiple_of(
+        pub const fn is_multiple_of(
             self,
             rhs: Self,
         ) -> bool {
             return Self::raw(self).is_multiple_of(Self::raw(rhs));
         }
         #[inline(always)]
-        pub fn is_power_of_two(self) -> bool {
+        pub const fn is_power_of_two(self) -> bool {
             return Self::raw(self).is_power_of_two();
         }
         #[inline(always)]
-        pub fn next_power_of_two(self) -> Self {
+        pub const fn next_power_of_two(self) -> Self {
             return Self::_core_int(Self::raw(self).next_power_of_two());
         }
         #[inline(always)]
-        pub fn checked_next_power_of_two(self) -> ::core::option::Option<Self> {
+        pub const fn checked_next_power_of_two(
+            self
+        ) -> ::core::option::Option<Self> {
             return match Self::raw(self).checked_next_power_of_two() {
                 ::core::option::Option::Some(value) => {
                     Self::_core_int_checked(value)
@@ -805,14 +782,14 @@ const _: () = {
             };
         }
         #[inline(always)]
-        pub fn div_ceil(
+        pub const fn div_ceil(
             self,
             rhs: Self,
         ) -> Self {
             return Self::_core_int(Self::raw(self).div_ceil(Self::raw(rhs)));
         }
         #[inline(always)]
-        pub fn next_multiple_of(
+        pub const fn next_multiple_of(
             self,
             rhs: Self,
         ) -> Self {
@@ -821,7 +798,7 @@ const _: () = {
             );
         }
         #[inline(always)]
-        pub fn checked_next_multiple_of(
+        pub const fn checked_next_multiple_of(
             self,
             rhs: Self,
         ) -> ::core::option::Option<Self> {
@@ -1742,7 +1719,7 @@ const _: () = {
         }
         #[inline(always)]
         #[track_caller]
-        pub(self) fn _core_int(value: u32) -> Self {
+        pub(self) const fn _core_int(value: u32) -> Self {
             if true {
                 return Self(value);
             }
@@ -1751,7 +1728,7 @@ const _: () = {
             }
         }
         #[inline(always)]
-        pub(self) fn _core_int_checked(
+        pub(self) const fn _core_int_checked(
             value: u32
         ) -> ::core::option::Option<Self> {
             return if true {
@@ -1816,8 +1793,7 @@ const _: () = {
 };
 
 #[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
+#[derive(Clone, Copy)]
 pub struct MyFriend(u32);
 
 impl MyFriend {
@@ -1833,5 +1809,5 @@ fn main() {
     let lhs = MyU32::of(lhs);
     let rhs = MyU32::of(rhs);
 
-    println!("{:?}", lhs + rhs);
+    println!("{}", (lhs + rhs).raw());
 }

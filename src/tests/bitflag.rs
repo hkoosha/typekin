@@ -5,42 +5,42 @@ mod tests {
     #[test]
     fn accepts_single_root_and_nested_friends_friends_crate_convert_crate_source_source_in_1()
      {
-        let input = "friends = crate::convert(crate::source::Source) -> Inspector, konst = false";
+        let input = "friends = crate::convert(crate::source::Source) -> Inspector, konst = none";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_root_and_nested_friends_konst_false_friends_crate_convert_crate_sour_2()
      {
-        let input = "konst = false, friends = crate::convert(crate::source::Source) -> [Bit, unsafe], integral = []";
+        let input = "konst = none, friends = crate::convert(crate::source::Source) -> [Bit, unsafe], integral = []";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_root_and_nested_friends_konst_false_integral_friends_foo_crate_sourc_3()
      {
-        let input = "konst = false, integral = [], friends = Foo(crate::source::Source) -> Bit";
+        let input = "konst = none, integral = [], friends = Foo(crate::source::Source) -> Bit";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_root_and_nested_friends_konst_false_integral_friends_crate_convert_c_4()
      {
-        let input = "konst = false, integral = [friends = crate::convert(crate::source::Source) -> Make, valid = is_valid]";
+        let input = "konst = none, integral = [friends = crate::convert(crate::source::Source) -> Make, valid = is_valid]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_root_and_nested_friends_konst_false_integral_valid_is_valid_friends_case_5()
      {
-        let input = "konst = false, integral = [valid = is_valid, friends = Foo(crate::source::Source) -> [Math, Bit]], suffix = \"Value\"";
+        let input = "konst = none, integral = [valid = is_valid, friends = Foo(crate::source::Source) -> [Math, Bit]], suffix = \"Value\"";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_bracketed_multiple_and_empty_friends_at_each_scope() {
         for input in [
-            "konst = false, friends = [], integral = [friends = [], valid = is_valid]",
+            "konst = none, friends = [], integral = [friends = [], valid = is_valid]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -51,7 +51,7 @@ mod tests {
      {
         let attributes =
             "friends = convert(Source) -> Bit, convert(Other) -> Bit";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -60,14 +60,14 @@ mod tests {
      {
         let attributes =
             "integral = [friends = _(Source) -> Math, _(Other) -> Math]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_single_friends_at_root_and_nested_scope_friends_3() {
         let attributes = "friends =";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -75,7 +75,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_integral_friends_4()
      {
         let attributes = "integral = [friends =]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -83,7 +83,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_friends_integral_5()
      {
         let attributes = "friends =, integral = []";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -91,7 +91,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_integral_friends_valid_is_valid_6()
      {
         let attributes = "integral = [friends =, valid = is_valid]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -99,7 +99,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_friends_convert_source_bit_1_7()
      {
         let attributes = "friends = convert(Source) -> [Bit, 1]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -107,7 +107,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_integral_friends_source_inspector_8()
      {
         let attributes = "integral = [friends = _(Source) -> Inspector]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -115,7 +115,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_friends_source_bit_unknown_true_9()
      {
         let attributes = "friends = _(Source) -> Bit, unknown = true";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -124,7 +124,7 @@ mod tests {
      {
         let attributes =
             "integral = [friends = _(Source) -> [Math, Bit], unknown = true]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -132,7 +132,7 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_friends_source_bit_friends_11()
      {
         let attributes = "friends = _(Source) -> Bit, friends = []";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -140,19 +140,53 @@ mod tests {
     fn rejects_invalid_single_friends_at_root_and_nested_scope_integral_unknown_true_12()
      {
         let attributes = "integral = [unknown = true]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn accepts_top_level_konst_values() {
-        let config = syn::parse_str::<Cfg>("konst = true")
-            .expect("top-level true konst should parse");
+        let config = syn::parse_str::<Cfg>("konst = nightly")
+            .expect("top-level nightly konst should parse");
         assert_eq!(config.int.konst, crate::integral::Konst::Nightly);
 
-        let config = syn::parse_str::<Cfg>("konst = false")
-            .expect("top-level false konst should parse");
-        assert_eq!(config.int.konst, crate::integral::Konst::Nightly);
+        let config = syn::parse_str::<Cfg>("konst = stable")
+            .expect("top-level stable konst should parse");
+        assert_eq!(config.int.konst, crate::integral::Konst::Stable);
+        assert!(config.int.konst_for(&["value"]));
+        assert!(!config.int.konst_for(&["math"]));
+
+        let config = syn::parse_str::<Cfg>("konst = none")
+            .expect("top-level none konst should parse");
+        assert_eq!(config.int.konst, crate::integral::Konst::None);
+    }
+
+    #[test]
+    fn bitflag_rejects_boolean_konst_values() {
+        let error = syn::parse_str::<Cfg>("konst = true")
+            .expect_err("boolean konst values are no longer accepted");
+        assert_eq!(
+            error.to_string(),
+            "expected `none`, `stable`, or `nightly`",
+        );
+    }
+
+    #[test]
+    fn bitflag_reconciles_forwarded_integral_konst_flags() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = stable, integral = [with = [konst_value]]",
+        )
+        .expect("matching forwarded konst flag should parse");
+        assert!(config.int.konst_for(&["value"]));
+
+        let error = syn::parse_str::<Cfg>(
+            "konst = stable, integral = [without = [konst_value]]",
+        )
+        .expect_err("incompatible forwarded konst flag must be rejected");
+        assert_eq!(
+            error.to_string(),
+            "this value is not compatible with bitflags' own konst config",
+        );
     }
 
     #[test]
@@ -167,7 +201,7 @@ mod tests {
     #[test]
     fn rejects_friendship_trait_configuration() {
         let error = match syn::parse_str::<Cfg>(
-            "with = [trait_seal], integral = [konst = false]",
+            "with = [trait_seal], integral = [konst = none]",
         ) {
             Ok(_) => panic!("bitflag must delegate friendship trait names"),
             Err(error) => error,
@@ -179,7 +213,7 @@ mod tests {
     #[test]
     fn accepts_friend_capabilities() {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [Foo(u8) -> [Bit]], integral = []",
+            "konst = none, friends = [Foo(u8) -> [Bit]], integral = []",
         )
         .expect("bitflag capabilities should parse");
         let friend = config.friends.iter().next().unwrap();
@@ -189,7 +223,7 @@ mod tests {
     #[test]
     fn rejects_legacy_friend_levels() {
         assert!(syn::parse_str::<Cfg>(
-            "konst = false, friends = [u8(conv = self, level = [Bit])], integral = []",
+            "konst = none, friends = [u8(conv = self, level = [Bit])], integral = []",
         )
             .is_err());
     }
@@ -198,7 +232,7 @@ mod tests {
     fn accepts_trusted_root_and_nested_capability_without_make_friends_foo_source_trust_1()
      {
         let attributes = "friends = [Foo(Source) -> unsafe]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -206,7 +240,7 @@ mod tests {
     fn accepts_trusted_root_and_nested_capability_without_make_friends_foo_source_trust_2()
      {
         let attributes = "friends = [Foo(Source) -> [unsafe]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -214,7 +248,7 @@ mod tests {
     fn accepts_trusted_root_and_nested_capability_without_make_friends_foo_source_bit_trust_3()
      {
         let attributes = "friends = [Foo(Source) -> [Bit, unsafe]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -222,7 +256,7 @@ mod tests {
     fn accepts_trusted_root_and_nested_capability_without_make_integral_friends_foo_source_trust_4()
      {
         let attributes = "integral = [friends = [Foo(Source) -> unsafe]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -230,7 +264,7 @@ mod tests {
     fn accepts_trusted_root_and_nested_capability_without_make_integral_friends_foo_source_trust_5()
      {
         let attributes = "integral = [friends = [Foo(Source) -> [unsafe]]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -239,7 +273,7 @@ mod tests {
      {
         let attributes =
             "integral = [friends = [Foo(Source) -> [Math, Bit, unsafe]]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -247,7 +281,7 @@ mod tests {
     fn accepts_root_marker_capabilities_without_narrowing_integral_vocabulary()
     {
         let config = syn::parse_str::<Cfg>(
-            "konst = false, friends = [convert(Source) -> Inspector], integral = [friends = [Foo(Other) -> Math]]",
+            "konst = none, friends = [convert(Source) -> Inspector], integral = [friends = [Foo(Other) -> Math]]",
         )
             .expect("bitflag root capabilities may name arbitrary markers");
         let friend = config.friends.iter().next().unwrap();
@@ -263,7 +297,7 @@ mod tests {
         let trusted = "true";
         let attributes =
             format!("friends = [Source(cap = Make, trusted = {trusted})]");
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -274,7 +308,7 @@ mod tests {
         let attributes = format!(
             "integral = [friends = [Source(cap = Make, trusted = {trusted})]]"
         );
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -284,7 +318,7 @@ mod tests {
         let trusted = "false";
         let attributes =
             format!("friends = [Source(cap = Make, trusted = {trusted})]");
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -295,49 +329,49 @@ mod tests {
         let attributes = format!(
             "integral = [friends = [Source(cap = Make, trusted = {trusted})]]"
         );
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_with_display_display_1()
      {
-        let input = "konst = false, with = [display, display]";
+        let input = "konst = none, with = [display, display]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_without_display_display_2()
      {
-        let input = "konst = false, without = [display, display]";
+        let input = "konst = none, without = [display, display]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_with_display_with_display_3()
      {
-        let input = "konst = false, with = [display], with = [display]";
+        let input = "konst = none, with = [display], with = [display]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_without_display_without_display_4()
      {
-        let input = "konst = false, without = [display], without = [display]";
+        let input = "konst = none, without = [display], without = [display]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_integral_with_display_display_5()
      {
-        let input = "konst = false, integral = [with = [display, display]]";
+        let input = "konst = none, integral = [with = [display, display]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_integral_without_display_display_6()
      {
-        let input = "konst = false, integral = [without = [display, display]]";
+        let input = "konst = none, integral = [without = [display, display]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -345,28 +379,28 @@ mod tests {
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_integral_with_display_with_displ_7()
      {
         let input =
-            "konst = false, integral = [with = [display], with = [display]]";
+            "konst = none, integral = [with = [display], with = [display]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_root_and_nested_display_flags_konst_false_integral_without_display_without_8()
      {
-        let input = "konst = false, integral = [without = [display], without = [display]]";
+        let input = "konst = none, integral = [without = [display], without = [display]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_unsupported_root_and_nested_display_flags_konst_false_with_display_display_names_1()
      {
-        let input = "konst = false, with = [display, display_names]";
+        let input = "konst = none, with = [display, display_names]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_unsupported_root_and_nested_display_flags_konst_false_without_display_names_2()
      {
-        let input = "konst = false, without = [display_names]";
+        let input = "konst = none, without = [display_names]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -374,14 +408,14 @@ mod tests {
     fn rejects_unsupported_root_and_nested_display_flags_konst_false_integral_with_display_display_na_3()
      {
         let input =
-            "konst = false, integral = [with = [display, display_names]]";
+            "konst = none, integral = [with = [display, display_names]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_unsupported_root_and_nested_display_flags_konst_false_integral_without_display_names_4()
      {
-        let input = "konst = false, integral = [without = [display_names]]";
+        let input = "konst = none, integral = [without = [display_names]]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -389,7 +423,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_with_display_without_display_1()
      {
         let attributes = "with = [display], without = [display]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -397,7 +431,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_without_display_with_display_2()
      {
         let attributes = "without = [display], with = [display]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -406,7 +440,7 @@ mod tests {
      {
         let attributes =
             "with = [display, make_value], without = [make_value, impl_value]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -415,7 +449,7 @@ mod tests {
      {
         let attributes =
             "without = [make_value, impl_value], with = [display, make_value]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -423,7 +457,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_integral_with_display_without_display_5()
      {
         let attributes = "integral = [with = [display], without = [display]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -431,7 +465,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_integral_without_display_with_display_6()
      {
         let attributes = "integral = [without = [display], with = [display]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -439,7 +473,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_integral_with_display_impl_math_add_without_case_7()
      {
         let attributes = "integral = [with = [display, impl_math_add], without = [impl_math_add, fn_conv_raw]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -447,7 +481,7 @@ mod tests {
     fn rejects_conflicting_flags_within_root_or_nested_scope_integral_without_impl_math_add_fn_conv_raw_w_8()
      {
         let attributes = "integral = [without = [impl_math_add, fn_conv_raw], with = [display, impl_math_add]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -455,7 +489,7 @@ mod tests {
     fn opposite_display_settings_in_distinct_scopes_are_legal_with_display_integral_without_display_1()
      {
         let attributes = "with = [display], integral = [without = [display]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -463,7 +497,7 @@ mod tests {
     fn opposite_display_settings_in_distinct_scopes_are_legal_integral_without_display_with_display_2()
      {
         let attributes = "integral = [without = [display]], with = [display]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -471,7 +505,7 @@ mod tests {
     fn opposite_display_settings_in_distinct_scopes_are_legal_without_display_integral_with_display_3()
      {
         let attributes = "without = [display], integral = [with = [display]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -479,7 +513,7 @@ mod tests {
     fn opposite_display_settings_in_distinct_scopes_are_legal_integral_with_display_without_display_4()
      {
         let attributes = "integral = [with = [display]], without = [display]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         syn::parse_str::<Cfg>(&input).expect(&input);
     }
 
@@ -487,7 +521,7 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_foo_source_relation_1()
      {
         let attributes = "integral = [friends = [Foo(Source) -> Relation]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -495,7 +529,7 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_foo_source_numeric_2()
      {
         let attributes = "integral = [friends = [Foo(Source) -> Numeric]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -503,7 +537,7 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_foo_source_inspector_3()
      {
         let attributes = "integral = [friends = [Foo(Source) -> Inspector]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -511,7 +545,7 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_source_relation_4()
      {
         let attributes = "integral = [friends = [_(Source) -> Relation]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -519,7 +553,7 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_source_numeric_5()
      {
         let attributes = "integral = [friends = [_(Source) -> Numeric]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -527,14 +561,14 @@ mod tests {
     fn rejects_unsupported_nested_single_capabilities_integral_friends_source_inspector_6()
      {
         let attributes = "integral = [friends = [_(Source) -> Inspector]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_root_capability_value_syntax_friends_foo_source_bit_1() {
         let attributes = "friends = [Foo(Source) -> \"Bit\"]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
@@ -542,35 +576,35 @@ mod tests {
     fn rejects_invalid_root_capability_value_syntax_friends_foo_source_bit_1_2()
     {
         let attributes = "friends = [Foo(Source) -> [Bit, 1]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_root_capability_value_syntax_friends_foo_source_bit_3() {
         let attributes = "friends = [Foo(Source) -> {Bit}]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_root_capability_value_syntax_friends_source_bit_4() {
         let attributes = "friends = [_(Source) -> \"Bit\"]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_root_capability_value_syntax_friends_source_bit_1_5() {
         let attributes = "friends = [_(Source) -> [Bit, 1]]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_invalid_root_capability_value_syntax_friends_source_bit_6() {
         let attributes = "friends = [_(Source) -> {Bit}]";
-        let input = format!("konst = false, {attributes}");
+        let input = format!("konst = none, {attributes}");
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }

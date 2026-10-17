@@ -12,7 +12,7 @@ mod tests {
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
-        konst = false,
+        konst = none,
         with = [display],
         friends = self(u8) -> Bit,
         integral = [
@@ -346,7 +346,7 @@ mod tests {
     #[repr(u8)]
     #[typekin::bitflag(
         suffix = "Holder",
-        konst = false,
+        konst = none,
         integral = [in = 0..=7],
     )]
     pub enum Thingy1 {
@@ -372,7 +372,7 @@ mod tests {
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
-    #[typekin::bitflag(value_name = "Thingies2", suffix = "", konst = false)]
+    #[typekin::bitflag(value_name = "Thingies2", suffix = "", konst = none)]
     pub enum Thingy2 {
         FirstThing = 0,
         ReadThing = 0b001,
@@ -391,7 +391,7 @@ mod tests {
         #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
         #[derive(Copy, Debug, Hash)]
         #[repr(u8)]
-        #[typekin::bitflag(konst = true)]
+        #[typekin::bitflag(konst = nightly)]
         enum ConstFlag {
             Empty = 0,
             Read = 0b001,
@@ -467,7 +467,7 @@ mod tests {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = false,
+            konst = none,
             friends = [
                 trusted_bits(TrustBits) -> [Make, Bit, unsafe],
                 bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
@@ -660,7 +660,7 @@ mod tests {
         #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = false,
+            konst = none,
             with = [display],
             integral = [without = [display]],
         )]
@@ -672,7 +672,7 @@ mod tests {
         #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = false,
+            konst = none,
             integral = [without = [display]],
             with = [display],
         )]
@@ -683,7 +683,7 @@ mod tests {
 
         #[derive(Copy, Clone)]
         #[repr(u8)]
-        #[typekin::bitflag(konst = false, integral = [with = [display]])]
+        #[typekin::bitflag(konst = none, integral = [with = [display]])]
         enum NestedOnly {
             Read = 1,
             Write = 2,
@@ -692,7 +692,7 @@ mod tests {
         #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = false,
+            konst = none,
             without = [display],
             integral = [with = [display]],
         )]
@@ -704,7 +704,7 @@ mod tests {
         #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = false,
+            konst = none,
             integral = [with = [display]],
             without = [display],
         )]
@@ -790,7 +790,7 @@ mod tests {
 
     #[cfg(test)]
     mod display_native_values {
-        #[typekin::bitflag(konst = false, with = [display])]
+        #[typekin::bitflag(konst = none, with = [display])]
         #[repr(u32)]
         #[derive(Copy, Clone)]
         enum Wide {
@@ -798,7 +798,7 @@ mod tests {
             High = 0x8000_0000,
         }
 
-        #[typekin::bitflag(konst = false, with = [display])]
+        #[typekin::bitflag(konst = none, with = [display])]
         #[repr(i16)]
         #[derive(Copy, Clone)]
         enum Signed {

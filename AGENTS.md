@@ -94,11 +94,13 @@ constness, and runtime cost as API behavior.
 
 ### Constness is a caller-visible choice
 
-- `integral` requires `konst = none|stable|nightly`. `stable` enables only
-  stable `try_make` constness; `nightly` enables all const flags.
-- `bitflag` and `text` require `konst = true|false`. Bitflag currently parses
-  the boolean only to require it: its generated integral value type always uses
-  the nightly const configuration.
+- `integral`, `bitflag`, and `text` require `konst = none|stable|nightly`.
+  Integral and bitflag `stable` enables their stable validation and value
+  operations; `nightly` enables const trait implementations and nightly-only
+  integer operations. Text `stable` enables read-only accessors, while `nightly`
+  enables supported owned operations.
+- Bitflag forwards its own const configuration to the generated integral value
+  type. A conflicting nested integral `konst_*` flag is an error at that flag.
 - Individual `konst_*` flags override an integral or text master setting. Keep
   non-const stable use working independently of nightly const support.
 
@@ -162,8 +164,9 @@ cd typekin_testing && just test
 ```
 
 Run a relevant example as a smoke test for the changed macro. For stable
-integral behavior, choose a `konst = none` example; text examples use
-`konst = false`. Const-heavy examples and bitflags require nightly features.
+integral behavior, choose a `konst = none` example. Text and bitflag examples
+with `konst = stable` should compile on stable; `konst = nightly` requires the
+corresponding feature gates.
 
 ## Documentation and change discipline
 

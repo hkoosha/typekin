@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 use proc_macro2::{
     Ident,
@@ -208,6 +211,10 @@ impl Maker {
         let konst = runner::konst(self.cfg.int.konst_for(&[
             "value", "bit",
         ]));
+        let from_konst =
+            runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
+        let iterator_konst =
+            runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
 
         let raw = self
             .cfg
@@ -228,7 +235,7 @@ impl Maker {
             }
         }
         else {
-            quote! { Self::of(bits) }
+            quote! { Self::_unchecked(bits) }
         };
 
         let named_values = self.items.iter().map(|it| {
@@ -355,7 +362,7 @@ impl Maker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn from_name(name: &str) -> Option<Self> {
+                pub #from_konst fn from_name(name: &str) -> Option<Self> {
                     return match #ty::from_name(name) {
                         Some(flag) => Some(flag.into_value()),
                         None => None,
@@ -370,7 +377,7 @@ impl Maker {
 
                     while i < max {
                         let flag = items[i];
-                        if flag.into_value() == self {
+                        if flag.into_value().bits() == self.bits() {
                             return Ok(flag);
                         }
                         i += 1;
@@ -381,7 +388,7 @@ impl Maker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn iter_known_flags(self) -> impl Iterator<Item = #ty> {
+                pub #iterator_konst fn iter_known_flags(self) -> impl Iterator<Item = #ty> {
                     return IterFlags {
                         value: self,
                         index: 0,
@@ -390,7 +397,7 @@ impl Maker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn iter(self) -> impl Iterator<Item = Self> {
+                pub #iterator_konst fn iter(self) -> impl Iterator<Item = Self> {
                     return IterValues {
                         value: self,
                         index: 0,
@@ -434,7 +441,7 @@ impl Maker {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn is_exactly_all_known_bits(self) -> bool {
-                    return self == Self::all();
+                    return self.bits() == Self::all().bits();
                 }
 
                 #[must_use]
@@ -614,19 +621,12 @@ impl Maker {
             "value", "bit",
         ]));
 
-        let from_bits = if self.cfg.int.has_validation() {
-            quote! { #vl::from_bits_retain(bits) }
-        }
-        else {
-            quote! { #vl::of(bits) }
-        };
-
         return quote! {
             impl #ty {
                 #[must_use]
                 #[inline(always)]
                 pub #konst fn from_bits_retain(bits: #el) -> #vl {
-                    return #from_bits;
+                    return #vl::from_bits_retain(bits);
                 }
 
                 #[must_use]
@@ -682,6 +682,10 @@ impl Maker {
         let konst = runner::konst(self.cfg.int.konst_for(&[
             "value", "bit",
         ]));
+        let from_konst =
+            runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
+        let iterator_konst =
+            runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
 
         let name_arms = self
             .items
@@ -723,7 +727,7 @@ impl Maker {
 
                 #[inline]
                 #[must_use]
-                pub #konst fn from_name(name: &str) -> Option<Self> {
+                pub #from_konst fn from_name(name: &str) -> Option<Self> {
                     return match name {
                         #(#from_name_arms)*
 
@@ -752,13 +756,13 @@ impl Maker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn iter() -> impl Iterator<Item = Self> {
+                pub #iterator_konst fn iter() -> impl Iterator<Item = Self> {
                     return IterItems { index: 0 };
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn iter_values() -> impl Iterator<Item = #vl> {
+                pub #iterator_konst fn iter_values() -> impl Iterator<Item = #vl> {
                     return #vl::all().iter();
                 }
 
@@ -962,9 +966,7 @@ impl Maker {
     fn ekran_iter(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let konst = runner::konst(self.cfg.int.konst_for(&[
-            "iterator", "value", "bit",
-        ]));
+        let konst = runner::konst(self.cfg.int.konst_for(&["iterator"]));
         let raw = self
             .cfg
             .int
@@ -1142,6 +1144,9 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
     pub(crate) int: Box<integral::Cfg>,
+    konst: integral::Konst,
+    konst_flags: BTreeMap<String, bool>,
+    seen_flags: BTreeMap<String, bool>,
 }
 
 impl Parse for Cfg {
@@ -1149,7 +1154,10 @@ impl Parse for Cfg {
         let mut this = Self {
             friends: Default::default(),
             bit: Box::default(),
-            int: Box::new(integral::Cfg::with_konst(integral::Konst::Nightly)),
+            int: Box::new(integral::Cfg::with_konst(integral::Konst::None)),
+            konst: integral::Konst::None,
+            konst_flags: Default::default(),
+            seen_flags: Default::default(),
         };
         let mut has_konst = false;
 
@@ -1164,11 +1172,105 @@ impl Parse for Cfg {
             ));
         }
 
+        this.apply_konst()?;
+
         return Ok(this);
     }
 }
 
 impl Cfg {
+    fn parse_flags(
+        &mut self,
+        input: ParseStream,
+        value_if_seen: bool,
+    ) -> syn::Result<()> {
+        let stuff;
+        let _ = syn::bracketed!(stuff in input);
+        let attrs =
+            syn::punctuated::Punctuated::<Ident, syn::Token![,]>::
+                parse_terminated(&stuff)?;
+
+        for attr in attrs {
+            let name = attr.to_string();
+            let span = attr.span();
+
+            if self
+                .seen_flags
+                .get(&name)
+                .is_some_and(|value| *value != value_if_seen)
+            {
+                return span
+                    .fail("flag specified in both `with` and `without`");
+            }
+            if self.seen_flags.contains_key(&name) {
+                return span.fail("duplicated flags");
+            }
+
+            if name.starts_with("konst_") {
+                if !integral::Cfg::KONST_FLAGS.contains(&name.as_str()) {
+                    return span.fail("unknown flag");
+                }
+                self.konst_flags.insert(name.clone(), value_if_seen);
+            }
+            else if self.bit.set_bool(&name, value_if_seen).is_err() {
+                return span.fail("unknown flag");
+            }
+
+            self.seen_flags.insert(name, value_if_seen);
+        }
+
+        return Ok(());
+    }
+
+    fn konst_for(
+        &self,
+        flags: &[&str],
+    ) -> bool {
+        for flag in flags {
+            let name = format!("konst_{flag}");
+            if let Some(value) = self.konst_flags.get(&name) {
+                return *value;
+            }
+        }
+
+        return self.konst.enables(flags);
+    }
+
+    fn konst_for_nightly(
+        &self,
+        flags: &[&str],
+    ) -> bool {
+        for flag in flags {
+            let name = format!("konst_{flag}");
+            if let Some(value) = self.konst_flags.get(&name) {
+                return *value;
+            }
+        }
+
+        return matches!(self.konst, integral::Konst::Nightly);
+    }
+
+    fn apply_konst(&mut self) -> syn::Result<()> {
+        for name in integral::Cfg::KONST_FLAGS {
+            let flag = name.strip_prefix("konst_").unwrap();
+            let required = self.konst_for(&[flag]);
+
+            if let Some((value, span)) = self.int.explicit_konst_flag(name)
+                && value != required
+            {
+                return Err(syn::Error::new(
+                    span,
+                    "this value is not compatible with bitflags' own konst config",
+                ));
+            }
+
+            self.int.set_konst_flag(name, required);
+        }
+
+        self.int.konst = self.konst;
+        return Ok(());
+    }
+
     fn parse_attr(
         &mut self,
         has_konst: &mut bool,
@@ -1178,10 +1280,10 @@ impl Cfg {
         match attr {
             "konst" => {
                 *has_konst = true;
-                let _ = rest.parse::<syn::LitBool>()?;
+                self.konst = rest.parse()?;
             }
-            "with" => self.bit.parse_from(rest, true)?,
-            "without" => self.bit.parse_from(rest, false)?,
+            "with" => self.parse_flags(rest, true)?,
+            "without" => self.parse_flags(rest, false)?,
             "friends" => {
                 let friends = zz::one_or_list(rest)?.set();
                 self.friends = friends;
@@ -1202,7 +1304,7 @@ impl Cfg {
 
                 *self.int = integral::Cfg::parse_with_konst(
                     &content,
-                    integral::Konst::Nightly,
+                    integral::Konst::None,
                 )?;
 
                 return Ok(true);
@@ -1212,7 +1314,7 @@ impl Cfg {
                 let as_idn: Ident = syn::parse_str(&as_str.value())?;
                 self.bit.value_name = as_idn.to_string();
             }
-            _ => {}
+            _ => return Ok(false),
         };
 
         return Ok(true);

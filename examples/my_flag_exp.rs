@@ -1,15 +1,4 @@
-#![allow(dead_code)]
-#![feature(const_clone)]
-#![feature(const_cmp)]
-#![feature(const_convert)]
-#![feature(const_destruct)]
-#![feature(const_iter)]
-#![feature(const_ops)]
-#![feature(const_trait_impl)]
-#![feature(derive_const)]
-
-#[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
-#[derive(Copy, Debug, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u128)]
 pub enum MyFlag {
     Z = 0,
@@ -17,8 +6,7 @@ pub enum MyFlag {
     B,
     C = 40,
 }
-#[derive(Copy)]
-#[derive_const(Clone)]
+#[derive(Copy, Clone)]
 #[repr(transparent)]
 pub struct MyFlags(u128);
 
@@ -26,132 +14,132 @@ pub struct MyFlags(u128);
 #[allow(unused_qualifications)]
 #[allow(clippy::unnecessary_cast)]
 const _: () = {
-    const trait Seal {
+    trait Seal {
         fn conv_my_flags(self) -> u128;
     }
-    const trait Make: [const] Seal {
+    trait Make: Seal {
         fn make(self) -> MyFlags;
     }
-    const trait Math: [const] Seal {}
-    const trait Bit: [const] Seal {}
-    const trait Rel: [const] Seal {}
-    const unsafe trait UnsafeTrust: [const] Seal {}
-    const impl Seal for MyFlags {
+    trait Math: Seal {}
+    trait Bit: Seal {}
+    trait Rel: Seal {}
+    unsafe trait UnsafeTrust: Seal {}
+    impl Seal for MyFlags {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return Self::raw(self);
         }
     }
-    const impl Seal for MyFlag {
+    impl Seal for MyFlag {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return MyFlag::raw(self);
         }
     }
-    const impl Bit for MyFlag {}
-    const impl Make for MyFlag {
+    impl Bit for MyFlag {}
+    impl Make for MyFlag {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Make for MyFlags {
+    impl Make for MyFlags {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Rel for MyFlags {}
-    const impl Seal for i16 {
+    impl Rel for MyFlags {}
+    impl Seal for i16 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for i16 {
+    impl Make for i16 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Seal for u128 {
+    impl Seal for u128 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Bit for u128 {}
-    const impl Make for u128 {
+    impl Bit for u128 {}
+    impl Make for u128 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Math for u128 {}
-    const impl Rel for u128 {}
-    const impl Seal for u16 {
+    impl Math for u128 {}
+    impl Rel for u128 {}
+    impl Seal for u16 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for u16 {
+    impl Make for u16 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Seal for u32 {
+    impl Seal for u32 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for u32 {
+    impl Make for u32 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Seal for u64 {
+    impl Seal for u64 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for u64 {
+    impl Make for u64 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Seal for u8 {
+    impl Seal for u8 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for u8 {
+    impl Make for u8 {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Seal for usize {
+    impl Seal for usize {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {
             return self as u128;
         }
     }
-    const impl Make for usize {
+    impl Make for usize {
         #[inline(always)]
         fn make(self) -> MyFlags {
             let raw = <Self as Seal>::conv_my_flags(self);
@@ -816,26 +804,6 @@ const _: () = {
             return Self::raw(self).bit_width();
         }
         #[inline(always)]
-        pub const fn funnel_shl(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shl(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
-        pub const fn funnel_shr(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shr(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
         pub const fn abs_diff(
             self,
             rhs: Self,
@@ -943,90 +911,90 @@ const _: () = {
             return (Self::_core_int(low), Self::_core_int(high));
         }
     }
-    const impl ::core::convert::Into<u128> for MyFlags {
+    impl ::core::convert::Into<u128> for MyFlags {
         #[inline(always)]
         fn into(self) -> u128 {
             return MyFlags::into_u128(self);
         }
     }
-    const impl ::core::convert::TryInto<usize> for MyFlags {
+    impl ::core::convert::TryInto<usize> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<usize, Self::Error> {
             return MyFlags::try_into_usize(self);
         }
     }
-    const impl ::core::convert::TryInto<isize> for MyFlags {
+    impl ::core::convert::TryInto<isize> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
             return MyFlags::try_into_isize(self);
         }
     }
-    const impl ::core::convert::TryInto<u8> for MyFlags {
+    impl ::core::convert::TryInto<u8> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
             return MyFlags::try_into_u8(self);
         }
     }
-    const impl ::core::convert::TryInto<u16> for MyFlags {
+    impl ::core::convert::TryInto<u16> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
             return MyFlags::try_into_u16(self);
         }
     }
-    const impl ::core::convert::TryInto<u32> for MyFlags {
+    impl ::core::convert::TryInto<u32> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<u32, Self::Error> {
             return MyFlags::try_into_u32(self);
         }
     }
-    const impl ::core::convert::TryInto<u64> for MyFlags {
+    impl ::core::convert::TryInto<u64> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<u64, Self::Error> {
             return MyFlags::try_into_u64(self);
         }
     }
-    const impl ::core::convert::TryInto<i8> for MyFlags {
+    impl ::core::convert::TryInto<i8> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
             return MyFlags::try_into_i8(self);
         }
     }
-    const impl ::core::convert::TryInto<i16> for MyFlags {
+    impl ::core::convert::TryInto<i16> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
             return MyFlags::try_into_i16(self);
         }
     }
-    const impl ::core::convert::TryInto<i32> for MyFlags {
+    impl ::core::convert::TryInto<i32> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
             return MyFlags::try_into_i32(self);
         }
     }
-    const impl ::core::convert::TryInto<i64> for MyFlags {
+    impl ::core::convert::TryInto<i64> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<i64, Self::Error> {
             return MyFlags::try_into_i64(self);
         }
     }
-    const impl ::core::convert::TryInto<i128> for MyFlags {
+    impl ::core::convert::TryInto<i128> for MyFlags {
         type Error = ();
         #[inline(always)]
         fn try_into(self) -> ::core::result::Result<i128, Self::Error> {
             return MyFlags::try_into_i128(self);
         }
     }
-    const impl ::core::ops::Shr<usize> for MyFlags {
+    impl ::core::ops::Shr<usize> for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn shr(
@@ -1036,7 +1004,7 @@ const _: () = {
             return self._shr(rhs);
         }
     }
-    const impl ::core::ops::Shl<usize> for MyFlags {
+    impl ::core::ops::Shl<usize> for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn shl(
@@ -1046,7 +1014,7 @@ const _: () = {
             return self._shl(rhs);
         }
     }
-    const impl ::core::ops::ShrAssign<usize> for MyFlags {
+    impl ::core::ops::ShrAssign<usize> for MyFlags {
         #[inline(always)]
         fn shr_assign(
             &mut self,
@@ -1055,7 +1023,7 @@ const _: () = {
             *self = self._shr(other);
         }
     }
-    const impl ::core::ops::ShlAssign<usize> for MyFlags {
+    impl ::core::ops::ShlAssign<usize> for MyFlags {
         #[inline(always)]
         fn shl_assign(
             &mut self,
@@ -1064,7 +1032,7 @@ const _: () = {
             *self = self._shl(other);
         }
     }
-    const impl ::core::ops::BitAndAssign for MyFlags {
+    impl ::core::ops::BitAndAssign for MyFlags {
         #[inline(always)]
         fn bitand_assign(
             &mut self,
@@ -1073,9 +1041,9 @@ const _: () = {
             *self = self._bitand(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitAndAssign<T> for MyFlags
+    impl<T> ::core::ops::BitAndAssign<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         #[inline(always)]
         fn bitand_assign(
@@ -1086,7 +1054,7 @@ const _: () = {
             *self = self._bitand(it);
         }
     }
-    const impl ::core::ops::AddAssign for MyFlags {
+    impl ::core::ops::AddAssign for MyFlags {
         #[inline(always)]
         fn add_assign(
             &mut self,
@@ -1095,9 +1063,9 @@ const _: () = {
             *self = self._add(rhs.0);
         }
     }
-    const impl<T> ::core::ops::AddAssign<T> for MyFlags
+    impl<T> ::core::ops::AddAssign<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         #[inline(always)]
         fn add_assign(
@@ -1108,7 +1076,7 @@ const _: () = {
             *self = self._add(it);
         }
     }
-    const impl ::core::ops::SubAssign for MyFlags {
+    impl ::core::ops::SubAssign for MyFlags {
         #[inline(always)]
         fn sub_assign(
             &mut self,
@@ -1117,9 +1085,9 @@ const _: () = {
             *self = self._sub(rhs.0);
         }
     }
-    const impl<T> ::core::ops::SubAssign<T> for MyFlags
+    impl<T> ::core::ops::SubAssign<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         #[inline(always)]
         fn sub_assign(
@@ -1130,7 +1098,7 @@ const _: () = {
             *self = self._sub(it);
         }
     }
-    const impl ::core::ops::MulAssign for MyFlags {
+    impl ::core::ops::MulAssign for MyFlags {
         #[inline(always)]
         fn mul_assign(
             &mut self,
@@ -1139,9 +1107,9 @@ const _: () = {
             *self = self._mul(rhs.0);
         }
     }
-    const impl<T> ::core::ops::MulAssign<T> for MyFlags
+    impl<T> ::core::ops::MulAssign<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         #[inline(always)]
         fn mul_assign(
@@ -1152,7 +1120,7 @@ const _: () = {
             *self = self._mul(it);
         }
     }
-    const impl ::core::ops::DivAssign for MyFlags {
+    impl ::core::ops::DivAssign for MyFlags {
         #[inline(always)]
         fn div_assign(
             &mut self,
@@ -1161,9 +1129,9 @@ const _: () = {
             *self = self._div(rhs.0);
         }
     }
-    const impl<T> ::core::ops::DivAssign<T> for MyFlags
+    impl<T> ::core::ops::DivAssign<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         #[inline(always)]
         fn div_assign(
@@ -1174,7 +1142,7 @@ const _: () = {
             *self = self._div(it);
         }
     }
-    const impl ::core::ops::RemAssign for MyFlags {
+    impl ::core::ops::RemAssign for MyFlags {
         #[inline(always)]
         fn rem_assign(
             &mut self,
@@ -1183,9 +1151,9 @@ const _: () = {
             *self = self._rem(rhs.0);
         }
     }
-    const impl<T> ::core::ops::RemAssign<T> for MyFlags
+    impl<T> ::core::ops::RemAssign<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         #[inline(always)]
         fn rem_assign(
@@ -1196,7 +1164,7 @@ const _: () = {
             *self = self._rem(it);
         }
     }
-    const impl ::core::ops::BitOrAssign for MyFlags {
+    impl ::core::ops::BitOrAssign for MyFlags {
         #[inline(always)]
         fn bitor_assign(
             &mut self,
@@ -1205,9 +1173,9 @@ const _: () = {
             *self = self._bitor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitOrAssign<T> for MyFlags
+    impl<T> ::core::ops::BitOrAssign<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         #[inline(always)]
         fn bitor_assign(
@@ -1226,8 +1194,8 @@ const _: () = {
             ::core::write!(f, "MyFlags({})", self.0)
         }
     }
-    const impl ::core::cmp::Eq for MyFlags {}
-    const impl ::core::cmp::Ord for MyFlags {
+    impl ::core::cmp::Eq for MyFlags {}
+    impl ::core::cmp::Ord for MyFlags {
         #[inline(always)]
         fn cmp(
             &self,
@@ -1243,7 +1211,7 @@ const _: () = {
     {
         panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
     };
-    const impl ::core::ops::Add for MyFlags {
+    impl ::core::ops::Add for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn add(
@@ -1253,9 +1221,9 @@ const _: () = {
             return self._add(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Add<T> for MyFlags
+    impl<T> ::core::ops::Add<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1267,7 +1235,7 @@ const _: () = {
             return self._add(it);
         }
     }
-    const impl ::core::ops::Sub for MyFlags {
+    impl ::core::ops::Sub for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn sub(
@@ -1277,9 +1245,9 @@ const _: () = {
             return self._sub(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Sub<T> for MyFlags
+    impl<T> ::core::ops::Sub<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1291,7 +1259,7 @@ const _: () = {
             return self._sub(it);
         }
     }
-    const impl ::core::ops::Mul for MyFlags {
+    impl ::core::ops::Mul for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn mul(
@@ -1301,9 +1269,9 @@ const _: () = {
             return self._mul(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Mul<T> for MyFlags
+    impl<T> ::core::ops::Mul<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1315,7 +1283,7 @@ const _: () = {
             return self._mul(it);
         }
     }
-    const impl ::core::ops::Div for MyFlags {
+    impl ::core::ops::Div for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn div(
@@ -1325,9 +1293,9 @@ const _: () = {
             return self._div(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Div<T> for MyFlags
+    impl<T> ::core::ops::Div<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1339,7 +1307,7 @@ const _: () = {
             return self._div(it);
         }
     }
-    const impl ::core::ops::Rem for MyFlags {
+    impl ::core::ops::Rem for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn rem(
@@ -1349,9 +1317,9 @@ const _: () = {
             return self._rem(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Rem<T> for MyFlags
+    impl<T> ::core::ops::Rem<T> for MyFlags
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1363,7 +1331,7 @@ const _: () = {
             return self._rem(it);
         }
     }
-    const impl ::core::ops::BitAnd for MyFlags {
+    impl ::core::ops::BitAnd for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitand(
@@ -1373,9 +1341,9 @@ const _: () = {
             return self._bitand(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitAnd<T> for MyFlags
+    impl<T> ::core::ops::BitAnd<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1387,7 +1355,7 @@ const _: () = {
             return self._bitand(it);
         }
     }
-    const impl ::core::ops::BitOr for MyFlags {
+    impl ::core::ops::BitOr for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitor(
@@ -1397,9 +1365,9 @@ const _: () = {
             return self._bitor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitOr<T> for MyFlags
+    impl<T> ::core::ops::BitOr<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1411,7 +1379,7 @@ const _: () = {
             return self._bitor(it);
         }
     }
-    const impl ::core::ops::BitXor for MyFlags {
+    impl ::core::ops::BitXor for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitxor(
@@ -1421,7 +1389,7 @@ const _: () = {
             return self._bitxor(rhs.0);
         }
     }
-    const impl ::core::ops::BitXorAssign for MyFlags {
+    impl ::core::ops::BitXorAssign for MyFlags {
         #[inline(always)]
         fn bitxor_assign(
             &mut self,
@@ -1430,9 +1398,9 @@ const _: () = {
             *self = self._bitxor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitXor<T> for MyFlags
+    impl<T> ::core::ops::BitXor<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         type Output = Self;
         #[inline(always)]
@@ -1444,9 +1412,9 @@ const _: () = {
             return self._bitxor(it);
         }
     }
-    const impl<T> ::core::ops::BitXorAssign<T> for MyFlags
+    impl<T> ::core::ops::BitXorAssign<T> for MyFlags
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + Seal,
     {
         #[inline(always)]
         fn bitxor_assign(
@@ -1503,12 +1471,9 @@ const _: () = {
             return ::core::fmt::UpperHex::fmt(&raw, f);
         }
     }
-    const impl<T> ::core::cmp::PartialEq<T> for MyFlags
+    impl<T> ::core::cmp::PartialEq<T> for MyFlags
     where
-        T: Rel
-            + [const] Seal
-            + [const] ::core::marker::Destruct
-            + ::core::marker::Copy,
+        T: Rel + Seal + ::core::marker::Copy,
     {
         #[inline(always)]
         fn eq(
@@ -1520,12 +1485,9 @@ const _: () = {
             return lhs == rhs;
         }
     }
-    const impl<T> ::core::cmp::PartialOrd<T> for MyFlags
+    impl<T> ::core::cmp::PartialOrd<T> for MyFlags
     where
-        T: Rel
-            + [const] Seal
-            + [const] ::core::marker::Destruct
-            + ::core::marker::Copy,
+        T: Rel + Seal + ::core::marker::Copy,
     {
         #[inline(always)]
         fn partial_cmp(
@@ -1540,14 +1502,14 @@ const _: () = {
     impl MyFlags {
         #[inline(always)]
         #[allow(private_bounds)]
-        pub const fn of<T>(it: T) -> MyFlags
+        pub fn of<T>(it: T) -> MyFlags
         where
-            T: [const] Make + [const] ::core::marker::Destruct,
+            T: Make,
         {
             return <T as Make>::make(it);
         }
         #[inline(always)]
-        pub const fn make(it: u128) -> MyFlags {
+        pub fn make(it: u128) -> MyFlags {
             return MyFlags::of(it);
         }
         #[must_use]
@@ -2040,7 +2002,7 @@ const _: () = {
         #[must_use]
         #[inline(always)]
         pub const fn from_bits_retain(bits: u128) -> Self {
-            return Self::of(bits);
+            return Self::_unchecked(bits);
         }
         #[must_use]
         #[inline(always)]
@@ -2128,7 +2090,7 @@ const _: () = {
         }
         #[must_use]
         #[inline(always)]
-        pub const fn from_name(name: &str) -> Option<Self> {
+        pub fn from_name(name: &str) -> Option<Self> {
             return match MyFlag::from_name(name) {
                 Some(flag) => Some(flag.into_value()),
                 None => None,
@@ -2141,7 +2103,7 @@ const _: () = {
             let mut i = 0;
             while i < max {
                 let flag = items[i];
-                if flag.into_value() == self {
+                if flag.into_value().bits() == self.bits() {
                     return Ok(flag);
                 }
                 i += 1;
@@ -2150,7 +2112,7 @@ const _: () = {
         }
         #[must_use]
         #[inline(always)]
-        pub const fn iter_known_flags(self) -> impl Iterator<Item = MyFlag> {
+        pub fn iter_known_flags(self) -> impl Iterator<Item = MyFlag> {
             return IterFlags {
                 value: self,
                 index: 0,
@@ -2158,7 +2120,7 @@ const _: () = {
         }
         #[must_use]
         #[inline(always)]
-        pub const fn iter(self) -> impl Iterator<Item = Self> {
+        pub fn iter(self) -> impl Iterator<Item = Self> {
             return IterValues {
                 value: self,
                 index: 0,
@@ -2197,7 +2159,7 @@ const _: () = {
         #[must_use]
         #[inline(always)]
         pub const fn is_exactly_all_known_bits(self) -> bool {
-            return self == Self::all();
+            return self.bits() == Self::all().bits();
         }
         #[must_use]
         #[inline(always)]
@@ -2376,7 +2338,7 @@ const _: () = {
             return flag.into_value();
         }
     }
-    const impl ::core::ops::Not for MyFlags {
+    impl ::core::ops::Not for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn not(self) -> Self::Output {
@@ -2407,7 +2369,7 @@ const _: () = {
         }
         #[inline]
         #[must_use]
-        pub const fn from_name(name: &str) -> Option<Self> {
+        pub fn from_name(name: &str) -> Option<Self> {
             return match name {
                 "Z" => Some(MyFlag::Z),
                 "A" => Some(MyFlag::A),
@@ -2440,12 +2402,12 @@ const _: () = {
         }
         #[must_use]
         #[inline(always)]
-        pub const fn iter() -> impl Iterator<Item = Self> {
+        pub fn iter() -> impl Iterator<Item = Self> {
             return IterItems { index: 0 };
         }
         #[must_use]
         #[inline(always)]
-        pub const fn iter_values() -> impl Iterator<Item = MyFlags> {
+        pub fn iter_values() -> impl Iterator<Item = MyFlags> {
             return MyFlags::all().iter();
         }
         #[must_use]
@@ -2461,7 +2423,7 @@ const _: () = {
         #[must_use]
         #[inline(always)]
         pub const fn from_bits_retain(bits: u128) -> MyFlags {
-            return MyFlags::of(bits);
+            return MyFlags::from_bits_retain(bits);
         }
         #[must_use]
         #[inline(always)]
@@ -2509,7 +2471,7 @@ const _: () = {
             return ::core::fmt::Display::fmt(self.name(), f);
         }
     }
-    const impl ::core::ops::Shr<usize> for MyFlag {
+    impl ::core::ops::Shr<usize> for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn shr(
@@ -2519,7 +2481,7 @@ const _: () = {
             return self.into_value() >> rhs;
         }
     }
-    const impl ::core::ops::Shl<usize> for MyFlag {
+    impl ::core::ops::Shl<usize> for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn shl(
@@ -2529,9 +2491,9 @@ const _: () = {
             return self.into_value() << rhs;
         }
     }
-    const impl<T> ::core::ops::BitAnd<T> for MyFlag
+    impl<T> ::core::ops::BitAnd<T> for MyFlag
     where
-        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + FlagSeal,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2545,9 +2507,9 @@ const _: () = {
                 .intersection(MyFlags::from_bits_retain(rhs));
         }
     }
-    const impl<T> ::core::ops::BitOr<T> for MyFlag
+    impl<T> ::core::ops::BitOr<T> for MyFlag
     where
-        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + FlagSeal,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2559,9 +2521,9 @@ const _: () = {
             return self.into_value().union(MyFlags::from_bits_retain(rhs));
         }
     }
-    const impl<T> ::core::ops::BitXor<T> for MyFlag
+    impl<T> ::core::ops::BitXor<T> for MyFlag
     where
-        T: FlagBit + [const] FlagSeal + [const] ::core::marker::Destruct,
+        T: FlagBit + FlagSeal,
     {
         type Output = MyFlags;
         #[inline(always)]
@@ -2575,7 +2537,7 @@ const _: () = {
                 .symmetric_difference(MyFlags::from_bits_retain(rhs));
         }
     }
-    const impl ::core::cmp::PartialEq<MyFlags> for MyFlag {
+    impl ::core::cmp::PartialEq<MyFlags> for MyFlag {
         #[inline(always)]
         fn eq(
             &self,
@@ -2584,7 +2546,7 @@ const _: () = {
             return self.raw() == rhs.raw();
         }
     }
-    const impl ::core::cmp::PartialOrd<MyFlags> for MyFlag {
+    impl ::core::cmp::PartialOrd<MyFlags> for MyFlag {
         #[inline(always)]
         fn partial_cmp(
             &self,
@@ -2593,7 +2555,7 @@ const _: () = {
             return self.raw().partial_cmp(&rhs.raw());
         }
     }
-    const impl ::core::ops::Not for MyFlag {
+    impl ::core::ops::Not for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn not(self) -> Self::Output {
@@ -2603,7 +2565,7 @@ const _: () = {
     struct IterItems {
         index: usize,
     }
-    const impl core::iter::Iterator for IterItems {
+    impl core::iter::Iterator for IterItems {
         type Item = MyFlag;
         fn next(&mut self) -> Option<Self::Item> {
             let items = MyFlag::items();
@@ -2625,7 +2587,7 @@ const _: () = {
         value: MyFlags,
         index: usize,
     }
-    const impl core::iter::Iterator for IterFlags {
+    impl core::iter::Iterator for IterFlags {
         type Item = MyFlag;
         fn next(&mut self) -> Option<Self::Item> {
             let items = MyFlag::items();
@@ -2650,7 +2612,7 @@ const _: () = {
         value: MyFlags,
         index: usize,
     }
-    const impl Iterator for IterValues {
+    impl Iterator for IterValues {
         type Item = MyFlags;
         fn next(&mut self) -> Option<Self::Item> {
             let items = MyFlag::items();
@@ -2676,38 +2638,41 @@ const _: () = {
             return (bound, Some(bound));
         }
     }
-    const trait FlagSeal {
+    trait FlagSeal {
         fn conv_my_flag(self) -> u128;
     }
-    const trait FlagMake: [const] FlagSeal {}
-    const trait FlagMath: [const] FlagSeal {}
-    const trait FlagBit: [const] FlagSeal {}
-    const trait FlagCmp: [const] FlagSeal {}
-    const unsafe trait FlagUnsafeTrust: [const] FlagSeal {}
-    const impl FlagSeal for MyFlag {
+    trait FlagMake: FlagSeal {}
+    trait FlagMath: FlagSeal {}
+    trait FlagBit: FlagSeal {}
+    trait FlagCmp: FlagSeal {}
+    unsafe trait FlagUnsafeTrust: FlagSeal {}
+    impl FlagSeal for MyFlag {
         #[inline(always)]
         fn conv_my_flag(self) -> u128 {
             return MyFlag::raw(self);
         }
     }
-    const impl FlagBit for MyFlag {}
-    const impl FlagCmp for MyFlag {}
-    const impl FlagMake for MyFlag {}
-    const impl FlagSeal for MyFlags {
+    impl FlagBit for MyFlag {}
+    impl FlagCmp for MyFlag {}
+    impl FlagMake for MyFlag {}
+    impl FlagSeal for MyFlags {
         #[inline(always)]
         fn conv_my_flag(self) -> u128 {
             return MyFlags::raw(self);
         }
     }
-    const impl FlagBit for MyFlags {}
-    const impl FlagMake for MyFlags {}
+    impl FlagBit for MyFlags {}
+    impl FlagMake for MyFlags {}
 };
+
+const A_BITS: u128 = MyFlag::A.into_value().bits();
 
 fn main() {
     let lhs = MyFlag::A;
     let rhs = MyFlag::B.into_value();
 
     assert_eq!(lhs.to_string(), "A");
+    assert_eq!(A_BITS, 10);
     assert_eq!(lhs.into_value().to_string(), "10");
     println!("{:?}", (lhs & rhs) == (lhs & rhs));
     println!("{}", rhs & lhs);

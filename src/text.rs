@@ -30,6 +30,7 @@ use syn::{
 };
 
 use crate::friendship::cfg::Friend;
+use crate::integral::Konst;
 use crate::runner::{
     self,
     MkErr,
@@ -55,7 +56,7 @@ mk_flags! {
 
 #[derive(Clone)]
 pub(crate) struct Cfg {
-    pub(crate) konst: bool,
+    pub(crate) konst: Konst,
     konst_flags: BTreeMap<String, bool>,
     seen_flags: BTreeMap<String, bool>,
     pub(crate) std: bool,
@@ -70,6 +71,7 @@ impl Cfg {
         "konst_friendship",
         "konst_from",
         "konst_text",
+        "konst_text_access",
         "konst_text_friendship",
         "konst_text_from",
     ];
@@ -122,7 +124,7 @@ impl Cfg {
         return Ok(());
     }
 
-    fn konst_for(
+    pub(crate) fn konst_for(
         &self,
         flags: &[&str],
     ) -> bool {
@@ -133,7 +135,11 @@ impl Cfg {
             }
         }
 
-        return self.konst;
+        return match self.konst {
+            Konst::None => false,
+            Konst::Stable => flags.contains(&"text_access"),
+            Konst::Nightly => true,
+        };
     }
 
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
@@ -192,7 +198,7 @@ impl Cfg {
     }
 
     pub(crate) fn new(
-        konst: bool,
+        konst: Konst,
         std: bool,
     ) -> Self {
         return Self {
@@ -227,14 +233,14 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::new(false, true);
+        let mut this = Self::new(Konst::None, true);
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
             match attr {
                 "std" => this.std = rest.parse::<LitBool>()?.value,
                 "konst" => {
-                    this.konst = rest.parse::<LitBool>()?.value;
+                    this.konst = rest.parse()?;
                     has_konst = true;
                 }
                 "valid" => {
@@ -440,8 +446,12 @@ impl TextMaker {
         };
         let is_konst = self.cfg.konst_for(&["text"]);
         let konst = runner::konst(is_konst);
-        let bonst = runner::bonst(is_konst);
-        let destruct = runner::destruct(is_konst);
+        let bonst = TokenStream::new();
+        let destruct = TokenStream::new();
+        let access_konst = runner::konst(self.cfg.konst_for(&[
+            "text_access",
+            "text",
+        ]));
         let validation = self.validation_condition();
         let display = self.cfg.flags.display.then(|| {
             quote! {
@@ -470,7 +480,7 @@ impl TextMaker {
                     }
                 }
 
-                #konst impl ::core::convert::From<&str> for #ty {
+                impl ::core::convert::From<&str> for #ty {
                     #[inline(always)]
                     fn from(value: &str) -> Self {
                         return Self(#ty_string::from(value));
@@ -500,14 +510,14 @@ impl TextMaker {
                 }
 
                 #[inline(always)]
-                pub #konst fn try_from_str(
+                pub fn try_from_str(
                     value: &str,
                 ) -> ::core::result::Result<Self, ()> {
                     return Self::try_make(#ty_string::from(value));
                 }
 
                 #[inline(always)]
-                pub #konst fn map<F>(
+                pub fn map<F>(
                     self,
                     function: F,
                 ) -> ::core::result::Result<Self, ()>
@@ -520,27 +530,27 @@ impl TextMaker {
                 }
 
                 #[inline(always)]
-                pub #konst fn try_push(self, character: char) -> ::core::result::Result<Self, ()> {
+                pub fn try_push(self, character: char) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.push(character));
                 }
 
                 #[inline(always)]
-                pub #konst fn try_push_str(self, text: &str) -> ::core::result::Result<Self, ()> {
+                pub fn try_push_str(self, text: &str) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.push_str(text));
                 }
 
                 #[inline(always)]
-                pub #konst fn try_insert(self, index: usize, character: char) -> ::core::result::Result<Self, ()> {
+                pub fn try_insert(self, index: usize, character: char) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.insert(index, character));
                 }
 
                 #[inline(always)]
-                pub #konst fn try_insert_str(self, index: usize, text: &str) -> ::core::result::Result<Self, ()> {
+                pub fn try_insert_str(self, index: usize, text: &str) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.insert_str(index, text));
                 }
 
                 #[inline(always)]
-                pub #konst fn try_replace_range<R>(self, range: R, text: &str) -> ::core::result::Result<Self, ()>
+                pub fn try_replace_range<R>(self, range: R, text: &str) -> ::core::result::Result<Self, ()>
                 where
                     R: #bonst ::core::ops::RangeBounds<usize> #destruct,
                 {
@@ -548,17 +558,17 @@ impl TextMaker {
                 }
 
                 #[inline(always)]
-                pub #konst fn try_truncate(self, length: usize) -> ::core::result::Result<Self, ()> {
+                pub fn try_truncate(self, length: usize) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.truncate(length));
                 }
 
                 #[inline(always)]
-                pub #konst fn try_clear(self) -> ::core::result::Result<Self, ()> {
+                pub fn try_clear(self) -> ::core::result::Result<Self, ()> {
                     return self.map(|value| value.clear());
                 }
 
                 #[inline(always)]
-                pub #konst fn try_retain<F>(self, mut predicate: F) -> ::core::result::Result<Self, ()>
+                pub fn try_retain<F>(self, mut predicate: F) -> ::core::result::Result<Self, ()>
                 where
                     F: #bonst ::core::ops::FnMut(char) -> bool #destruct,
                 {
@@ -566,7 +576,7 @@ impl TextMaker {
                 }
 
                 #[inline(always)]
-                pub #konst fn try_remove(self, index: usize) -> ::core::result::Result<(Self, char), ()> {
+                pub fn try_remove(self, index: usize) -> ::core::result::Result<(Self, char), ()> {
                     let mut value = self.0;
                     let removed = value.remove(index);
                     return match Self::try_make(value) {
@@ -576,7 +586,7 @@ impl TextMaker {
                 }
 
                 #[inline(always)]
-                pub #konst fn try_pop(self) -> ::core::result::Result<(Self, ::core::option::Option<char>), ()> {
+                pub fn try_pop(self) -> ::core::result::Result<(Self, ::core::option::Option<char>), ()> {
                     let mut value = self.0;
                     let popped = value.pop();
                     return match Self::try_make(value) {
@@ -599,36 +609,36 @@ impl TextMaker {
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn as_str(&self) -> &str {
+                pub #access_konst fn as_str(&self) -> &str {
                     return self.0.as_str();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn as_bytes(&self) -> &[u8] {
+                pub #access_konst fn as_bytes(&self) -> &[u8] {
                     return self.0.as_bytes();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn len(&self) -> usize {
+                pub #access_konst fn len(&self) -> usize {
                     return self.0.len();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn is_empty(&self) -> bool {
+                pub #access_konst fn is_empty(&self) -> bool {
                     return self.0.is_empty();
                 }
 
                 #[must_use]
                 #[inline(always)]
-                pub #konst fn capacity(&self) -> usize {
+                pub #access_konst fn capacity(&self) -> usize {
                     return self.0.capacity();
                 }
             }
 
-            #konst impl ::core::ops::Add<&str> for #ty {
+            impl ::core::ops::Add<&str> for #ty {
                 type Output = Self;
 
                 #[inline(always)]

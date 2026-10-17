@@ -9,6 +9,7 @@ use std::fmt::{
 
 use proc_macro2::{
     Ident,
+    Span,
     TokenStream,
 };
 use quote::{
@@ -1674,6 +1675,38 @@ impl Maker {
                         _ => unreachable!("unsigned representation"),
                     }
                 );
+                let funnel =
+                    matches!(self.cfg.konst, Konst::Nightly).then(|| {
+                        quote! {
+                            #[inline(always)]
+                            pub #konst fn funnel_shl(
+                                self,
+                                right: Self,
+                                n: u32,
+                            ) -> Self {
+                                return Self::_core_int(
+                                    #fp_get_raw(self).funnel_shl(
+                                        #fp_get_raw(right),
+                                        n,
+                                    )
+                                );
+                            }
+
+                            #[inline(always)]
+                            pub #konst fn funnel_shr(
+                                self,
+                                right: Self,
+                                n: u32,
+                            ) -> Self {
+                                return Self::_core_int(
+                                    #fp_get_raw(self).funnel_shr(
+                                        #fp_get_raw(right),
+                                        n,
+                                    )
+                                );
+                            }
+                        }
+                    });
                 let it = quote! {
                     impl #ty {
                         #[inline(always)]
@@ -1686,33 +1719,7 @@ impl Maker {
                             return #fp_get_raw(self).bit_width();
                         }
 
-                        #[inline(always)]
-                        pub #konst fn funnel_shl(
-                            self,
-                            right: Self,
-                            n: u32,
-                        ) -> Self {
-                            return Self::_core_int(
-                                #fp_get_raw(self).funnel_shl(
-                                    #fp_get_raw(right),
-                                    n,
-                                )
-                            );
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn funnel_shr(
-                            self,
-                            right: Self,
-                            n: u32,
-                        ) -> Self {
-                            return Self::_core_int(
-                                #fp_get_raw(self).funnel_shr(
-                                    #fp_get_raw(right),
-                                    n,
-                                )
-                            );
-                        }
+                        #funnel
 
                         #[inline(always)]
                         pub #konst fn abs_diff(self, rhs: Self) -> #el {
@@ -3015,9 +3022,11 @@ pub(crate) enum Konst {
 }
 
 impl Konst {
-    const STABLE_FLAGS: &[&str] = &["try_make"];
+    pub(crate) const STABLE_FLAGS: &[&str] = &[
+        "core_int", "try_make", "value",
+    ];
 
-    fn enables(
+    pub(crate) fn enables(
         self,
         flags: &[&str],
     ) -> bool {
@@ -3056,7 +3065,7 @@ impl Parse for Konst {
 
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
-    konst_flags: BTreeMap<String, bool>,
+    konst_flags: BTreeMap<String, (bool, Span)>,
     seen_flags: BTreeMap<String, bool>,
     pub(crate) get_raw: Option<Path>,
     pub(crate) validation: ValidationCfg,
@@ -3065,7 +3074,7 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
-    const KONST_FLAGS: &[&str] = &[
+    pub(crate) const KONST_FLAGS: &[&str] = &[
         "konst_add",
         "konst_add_assign",
         "konst_and",
@@ -3140,7 +3149,7 @@ impl Cfg {
                     return span.fail("unknown flag");
                 }
 
-                self.konst_flags.insert(name.clone(), value_if_seen);
+                self.konst_flags.insert(name.clone(), (value_if_seen, span));
             }
             else if self.flags.set_bool(&name, value_if_seen).is_err() {
                 return span.fail("unknown flag");
@@ -3158,12 +3167,28 @@ impl Cfg {
     ) -> bool {
         for flag in flags {
             let name = format!("konst_{flag}");
-            if let Some(value) = self.konst_flags.get(&name) {
+            if let Some((value, _)) = self.konst_flags.get(&name) {
                 return *value;
             }
         }
 
         return self.konst.enables(flags);
+    }
+
+    pub(crate) fn explicit_konst_flag(
+        &self,
+        name: &str,
+    ) -> Option<(bool, Span)> {
+        return self.konst_flags.get(name).copied();
+    }
+
+    pub(crate) fn set_konst_flag(
+        &mut self,
+        name: &str,
+        value: bool,
+    ) {
+        self.konst_flags
+            .insert(name.to_owned(), (value, Span::call_site()));
     }
 
     pub(crate) fn konst_friendship(&self) -> bool {

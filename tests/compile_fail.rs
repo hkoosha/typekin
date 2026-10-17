@@ -356,7 +356,7 @@ mod tests {
 
                 fn is_slug(value: &str) -> bool { !value.is_empty() }
 
-                #[typekin::text(konst = false, valid = is_slug)]
+                #[typekin::text(konst = none, valid = is_slug)]
                 #[repr(transparent)]
                 struct Checked(String);
 
@@ -378,7 +378,7 @@ mod tests {
 
                 fn is_slug(value: &str) -> bool { !value.is_empty() }
 
-                #[typekin::text(konst = false, valid = is_slug)]
+                #[typekin::text(konst = none, valid = is_slug)]
                 #[repr(transparent)]
                 struct Checked(String);
 
@@ -400,7 +400,7 @@ mod tests {
 
                 fn is_slug(value: &str) -> bool { !value.is_empty() }
 
-                #[typekin::text(konst = false, valid = is_slug)]
+                #[typekin::text(konst = none, valid = is_slug)]
                 #[repr(transparent)]
                 struct Checked(String);
 
@@ -422,7 +422,7 @@ mod tests {
 
                 fn is_slug(value: &str) -> bool { !value.is_empty() }
 
-                #[typekin::text(konst = false, valid = is_slug)]
+                #[typekin::text(konst = none, valid = is_slug)]
                 #[repr(transparent)]
                 struct Checked(String);
 
@@ -444,7 +444,7 @@ mod tests {
 
                 fn is_slug(value: &str) -> bool { !value.is_empty() }
 
-                #[typekin::text(konst = false, valid = is_slug)]
+                #[typekin::text(konst = none, valid = is_slug)]
                 #[repr(transparent)]
                 struct Checked(String);
 

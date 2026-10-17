@@ -237,17 +237,26 @@ for safety, correctness, or an external contract.
 
 ## Constness Status
 
-`integral` requires explicit `konst = none|stable|nightly`. `none` enables no
-optional const flags, `stable` enables `konst_try_make`, and `nightly` enables
-every const flag. `bitflag` and `text` continue to require explicit
-`konst = true|false`.
+`integral`, `bitflag`, and `text` require explicit
+`konst = none|stable|nightly`. `none` enables no optional const flags. For
+integral and bitflag, `stable` enables the stable validation and value
+operations; `nightly` additionally enables const trait implementations and
+nightly-only integer operations. For text, `stable` enables const read-only
+accessors and `nightly` additionally enables supported owned construction and
+conversion.
 
-For `integral`, `konst` is the default for individual const flags. With
-`konst = none`, opt into a family or operation with `with = [konst_math]` or
-`with = [konst_add]`; with `konst = nightly`, opt out with
-`without = [konst_math]` or `without = [konst_add]`. Individual flags always
-override the master mode. More-specific flags such as `konst_add_assign`
-override their operation and family defaults.
+For `integral` and `bitflag`, `konst` is the default for individual const flags.
+With `konst = none`, opt into a family or operation with `with = [konst_math]`
+or `with = [konst_add]`; with `konst = nightly`, opt out with
+`without = [konst_math]` or `without = [konst_add]`. Bitflag forwards its const
+flags to the generated integral value type, rejecting nested integral const
+flags that conflict with its own setting. Individual flags always override the
+master mode. More-specific flags such as `konst_add_assign` override their
+operation and family defaults.
+
+For `text`, `konst = stable` enables `as_str`, `as_bytes`, `len`, `is_empty`,
+and `capacity`. Use `with = [konst_text_access]` to enable only those accessors,
+or `with = [konst_text]` for the nightly-only owned operations.
 
 ### Friendship is consuming
 
@@ -392,7 +401,7 @@ extern crate alloc;
 use alloc::string::String;
 
 #[typekin::text(
-    konst = false,
+    konst = none,
     std = false,
     in = ["draft", "news", "medical-news"],
     // `valid = some_fn` is the alternative to literal membership.
@@ -480,9 +489,11 @@ Every enum variant is mirrored as a same-named associated constant on its
 generated `{Enum}Value` type. They are constructed through generated integral
 validation, so each enum discriminant must be valid.
 
-`konst` is required and must be `true` or `false`. Its current value does not
-change bitflag emission: the generated integral value type always uses nightly
-const generation, so callers need the nightly feature gates listed below. Use
+`konst` is required and accepts `none`, `stable`, or `nightly`. `stable` makes
+the generated value operations const where stable Rust permits it; `nightly`
+also enables const trait implementations and nightly-only integer operations.
+Bitflag applies its const configuration to the generated integral value type.
+Nested `integral` `konst_*` flags must agree with the bitflag setting. Use
 `integral = [...]` when configuring other generated value-type behavior.
 `bitflag` has its own `friends` option for enum-left operations; for example,
 `friends = self(u8) -> Bit` or a bracketed list of such declarations. The enum
@@ -498,7 +509,7 @@ forwarded primitive-integral-method group.
 ```rust
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[typekin::bitflag(konst = false)]
+#[typekin::bitflag(konst = none)]
 pub enum Perm {
     None = 0,
     Read = 0b001,
@@ -574,7 +585,7 @@ fn main() { assert_eq!(NEXT.raw(), 11); }
 #[repr(u8)]
 #[derive(Copy)]
 #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
-#[typekin::bitflag(konst = true)]
+#[typekin::bitflag(konst = nightly)]
 enum Permission {
     Read = 0b001,
     Write = 0b010,

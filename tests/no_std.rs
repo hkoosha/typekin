@@ -125,7 +125,7 @@ pub fn parse_even(value: &str) -> Result<Even, ()> {
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-#[typekin::bitflag(konst = false)]
+#[typekin::bitflag(konst = none)]
 #[repr(u8)]
 #[derive(Copy, Clone)]
 pub enum Permission {
@@ -157,7 +157,7 @@ fn is_slug(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
 }
 
-#[typekin::text(konst = false, std = false, valid = is_slug)]
+#[typekin::text(konst = none, std = false, valid = is_slug)]
 #[repr(transparent)]
 pub struct Slug(String);
 

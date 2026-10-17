@@ -234,7 +234,7 @@ mod tests {
             .expect("stable konst should parse");
 
         assert!(cfg.konst_for(&["try_make"]));
-        assert!(!cfg.konst_for(&[
+        assert!(cfg.konst_for(&[
             "core_int", "value"
         ]));
         assert!(!cfg.konst_for(&[

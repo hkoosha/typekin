@@ -5,42 +5,42 @@ mod tests {
     #[test]
     fn accepts_single_friend_without_consuming_neighboring_attributes_friends_crate_convert_crate_source_source_ma_1()
      {
-        let input = "friends = crate::convert(crate::source::Source) -> Make, konst = false";
+        let input = "friends = crate::convert(crate::source::Source) -> Make, konst = none";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_friend_without_consuming_neighboring_attributes_konst_false_friends_crate_convert_crate_sour_2()
      {
-        let input = "konst = false, friends = crate::convert(crate::source::Source) -> [Make, unsafe], valid = is_slug";
+        let input = "konst = none, friends = crate::convert(crate::source::Source) -> [Make, unsafe], valid = is_slug";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_friend_without_consuming_neighboring_attributes_konst_false_valid_is_slug_friends_foo_crate_case_3()
      {
-        let input = "konst = false, valid = is_slug, friends = Foo(crate::source::Source) -> unsafe";
+        let input = "konst = none, valid = is_slug, friends = Foo(crate::source::Source) -> unsafe";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_single_friend_without_consuming_neighboring_attributes_konst_false_friends_foo_self_rel_trust_with_case_4()
      {
-        let input = "konst = false, friends = Foo(Self) -> [Rel, unsafe], with = [display]";
+        let input = "konst = none, friends = Foo(Self) -> [Rel, unsafe], with = [display]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_bracketed_multiple_and_empty_friend_lists_konst_false_friends_convert_source_make_trus_1()
      {
-        let input = "konst = false, friends = [convert(Source) -> [Make, unsafe], Foo(Other) -> unsafe], valid = is_slug";
+        let input = "konst = none, friends = [convert(Source) -> [Make, unsafe], Foo(Other) -> unsafe], valid = is_slug";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_bracketed_multiple_and_empty_friend_lists_konst_false_friends_valid_is_slug_2()
      {
-        let input = "konst = false, friends = [], valid = is_slug";
+        let input = "konst = none, friends = [], valid = is_slug";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
@@ -152,11 +152,11 @@ mod tests {
     #[test]
     fn accepts_callback_validation_and_trusted_make_friend() {
         let cfg = syn::parse_str::<Cfg>(
-            "konst = false, valid = [is_slug, is_published], friends = [Source::into_string(Source) -> [Make, unsafe]]",
+            "konst = none, valid = [is_slug, is_published], friends = [Source::into_string(Source) -> [Make, unsafe]]",
         )
         .expect("text configuration should parse");
 
-        assert!(!cfg.konst);
+        assert_eq!(cfg.konst, crate::integral::Konst::None);
         assert_eq!(cfg.callbacks.len(), 2);
         assert!(cfg.flags.display);
     }
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn accepts_literal_membership_validation() {
         let cfg = syn::parse_str::<Cfg>(
-            r#"konst = false, in = ["draft", "published"]"#,
+            r#"konst = none, in = ["draft", "published"]"#,
         )
         .expect("literal membership configuration should parse");
         assert_eq!(cfg.values.as_ref().unwrap().len(), 2);
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn accepts_single_callback() {
-        let cfg = syn::parse_str::<Cfg>("konst = false, valid = is_slug")
+        let cfg = syn::parse_str::<Cfg>("konst = none, valid = is_slug")
             .expect("a single text callback should parse");
 
         assert_eq!(cfg.callbacks.len(), 1);
@@ -207,9 +207,31 @@ mod tests {
     }
 
     #[test]
+    fn accepts_integral_style_konst_modes() {
+        let stable = syn::parse_str::<Cfg>("konst = stable")
+            .expect("stable konst should parse");
+        assert!(stable.konst_for(&["text_access"]));
+        assert!(!stable.konst_for(&["text"]));
+
+        let nightly = syn::parse_str::<Cfg>("konst = nightly")
+            .expect("nightly konst should parse");
+        assert!(nightly.konst_for(&["text"]));
+    }
+
+    #[test]
+    fn rejects_boolean_konst_modes() {
+        let error = syn::parse_str::<Cfg>("konst = false")
+            .expect_err("boolean konst values are no longer accepted");
+        assert_eq!(
+            error.to_string(),
+            "expected `none`, `stable`, or `nightly`",
+        );
+    }
+
+    #[test]
     fn rejects_combined_validation_modes_konst_false_valid_is_slug_in_draft_1()
     {
-        let input = r#"konst = false, valid = is_slug, in = ["draft"]"#;
+        let input = r#"konst = none, valid = is_slug, in = ["draft"]"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
@@ -222,7 +244,7 @@ mod tests {
     #[test]
     fn rejects_combined_validation_modes_konst_false_in_draft_valid_is_slug_2()
     {
-        let input = r#"konst = false, in = ["draft"], valid = is_slug"#;
+        let input = r#"konst = none, in = ["draft"], valid = is_slug"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
@@ -385,7 +407,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_configuration_keys_konst_false_konst_false_1() {
-        let input = "konst = false, konst = false";
+        let input = "konst = none, konst = none";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -452,42 +474,42 @@ mod tests {
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion_konst_false_friends_self_self_rel_trust_1()
      {
-        let input = "konst = false, friends = [Self(Self) -> [Rel, unsafe]]";
+        let input = "konst = none, friends = [Self(Self) -> [Rel, unsafe]]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion_konst_false_friends_self_self_trust_2()
      {
-        let input = "konst = false, friends = [Self(Self) -> unsafe]";
+        let input = "konst = none, friends = [Self(Self) -> unsafe]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion_konst_false_friends_self_self_trust_3()
      {
-        let input = "konst = false, friends = [Self(Self) -> [unsafe]]";
+        let input = "konst = none, friends = [Self(Self) -> [unsafe]]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion_konst_false_friends_self_source_trust_4()
      {
-        let input = "konst = false, friends = [Self(Source) -> unsafe]";
+        let input = "konst = none, friends = [Self(Source) -> unsafe]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_trusted_capability_without_make_or_conversion_konst_false_friends_self_source_trust_5()
      {
-        let input = "konst = false, friends = [Self(Source) -> [unsafe]]";
+        let input = "konst = none, friends = [Self(Source) -> [unsafe]]";
         syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
     fn accepts_self_relation_with_implicit_conversion_konst_false_friends_self_self_rel_1()
      {
-        let input = "konst = false, friends = [Self(Self) -> Rel]";
+        let input = "konst = none, friends = [Self(Self) -> Rel]";
         let config = syn::parse_str::<Cfg>(input).expect(input);
         let friend = config.friends.iter().next().unwrap();
 
@@ -499,7 +521,7 @@ mod tests {
     #[test]
     fn accepts_self_relation_with_implicit_conversion_konst_false_friends_self_self_rel_2()
      {
-        let input = "konst = false, friends = [Self(Self) -> [Rel]]";
+        let input = "konst = none, friends = [Self(Self) -> [Rel]]";
         let config = syn::parse_str::<Cfg>(input).expect(input);
         let friend = config.friends.iter().next().unwrap();
 
@@ -511,7 +533,7 @@ mod tests {
     #[test]
     fn accepts_self_relation_with_implicit_conversion_konst_false_friends_self_self_rel_trust_3()
      {
-        let input = "konst = false, friends = [Self(Self,) -> [Rel, unsafe]]";
+        let input = "konst = none, friends = [Self(Self,) -> [Rel, unsafe]]";
         let config = syn::parse_str::<Cfg>(input).expect(input);
         let friend = config.friends.iter().next().unwrap();
 

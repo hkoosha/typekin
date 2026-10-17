@@ -1,5 +1,5 @@
 #[typekin::text(
-        konst = false,
+        konst = stable,
         std = true,
         in = ["draft", "published", "published-new", "archive", "-"],
         friends = into_my_tag(MyHeadline<'_>) -> Make,
@@ -7,6 +7,10 @@
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct MyTag(String);
+
+const fn tag_len(tag: &MyTag) -> usize {
+    return tag.len();
+}
 
 pub struct MyHeadline<'a>(pub &'a str);
 
@@ -29,6 +33,7 @@ fn main() {
     }
 
     let it = MyTag::try_make("draft".to_string()).unwrap();
+    assert_eq!(tag_len(&it), 5);
     let it = it.try_replace_range(.., "published").unwrap();
 
     assert!(it.clone().try_clear().is_err());
