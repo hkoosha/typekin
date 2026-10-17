@@ -59,6 +59,74 @@ mod tests {
     }
 
     #[test]
+    fn konst_flags_inherit_and_override_the_master_default() {
+        let disabled = syn::parse_str::<Cfg>("konst = false")
+            .expect("disabled konst should parse");
+        assert!(!disabled.konst_for(&[
+            "add", "math"
+        ]));
+
+        let enabled =
+            syn::parse_str::<Cfg>("konst = false, with = [konst_add]")
+                .expect("an operation can opt into constness");
+        assert!(enabled.konst_for(&[
+            "add", "math"
+        ]));
+        assert!(!enabled.konst_for(&[
+            "sub", "math"
+        ]));
+
+        let family =
+            syn::parse_str::<Cfg>("konst = false, with = [konst_math]")
+                .expect("a family can opt into constness");
+        assert!(family.konst_for(&[
+            "add", "math"
+        ]));
+
+        let operation_override = syn::parse_str::<Cfg>(
+            "konst = false, with = [konst_math], without = [konst_add]",
+        )
+        .expect("an operation can override its family");
+        assert!(!operation_override.konst_for(&[
+            "add", "math"
+        ]));
+        assert!(operation_override.konst_for(&[
+            "sub", "math"
+        ]));
+
+        let enabled = syn::parse_str::<Cfg>("konst = true")
+            .expect("enabled konst should parse");
+        assert!(enabled.konst_for(&[
+            "add", "math"
+        ]));
+
+        let disabled =
+            syn::parse_str::<Cfg>("konst = true, without = [konst_add]")
+                .expect("an operation can opt out of constness");
+        assert!(!disabled.konst_for(&[
+            "add", "math"
+        ]));
+        assert!(disabled.konst_for(&[
+            "sub", "math"
+        ]));
+    }
+
+    #[test]
+    fn defaults_self_operators_and_allows_disabling_them() {
+        let defaults = syn::parse_str::<Cfg>("konst = false")
+            .expect("default integral configuration should parse");
+        assert!(defaults.flags.self_math);
+        assert!(defaults.flags.self_bit);
+
+        let disabled = syn::parse_str::<Cfg>(
+            "konst = false, without = [self_math, self_bit]",
+        )
+        .expect("self operators should be configurable");
+        assert!(!disabled.flags.self_math);
+        assert!(!disabled.flags.self_bit);
+    }
+
+    #[test]
     fn accepts_root_validation_attributes() {
         let config =
             syn::parse_str::<Cfg>("konst = false, valid = is_even, in = 1..=4")
@@ -303,8 +371,8 @@ mod tests {
     #[test]
     fn accepts_from_str_generation_flag() {
         for input in [
-            "konst = false, with = [impl_from_str]",
-            "konst = false, without = [impl_from_str]",
+            "konst = false, with = [from_str]",
+            "konst = false, without = [from_str]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }
@@ -313,8 +381,8 @@ mod tests {
     #[test]
     fn accepts_core_integral_generation_flag() {
         for input in [
-            "konst = false, with = [impl_core_int]",
-            "konst = false, without = [impl_core_int]",
+            "konst = false, with = [core_int]",
+            "konst = false, without = [core_int]",
         ] {
             syn::parse_str::<Cfg>(input).expect(input);
         }

@@ -27,6 +27,7 @@ macro_rules! mk_flags {
         $(#[$meta])*
         $vis struct $name {
             $( pub $f_name: $f_typ, )*
+            #[allow(dead_code)]
             seen_flags: ::std::collections::BTreeMap<::std::string::String, bool>,
         }
 
@@ -53,6 +54,7 @@ macro_rules! mk_flags {
                 };
             }
 
+            #[allow(dead_code)]
             $vis fn parse_from(
                 &mut self,
                 input: syn::parse::ParseStream,

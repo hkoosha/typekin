@@ -89,7 +89,7 @@ impl Maker {
             items,
         };
 
-        this.cfg.int.flags.impl_math_not = false;
+        this.cfg.int.flags.math_not = false;
         this.fix_friendship();
 
         return this;
@@ -204,7 +204,9 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let konst = runner::konst(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "value", "bit",
+        ]));
 
         let raw = self
             .cfg
@@ -578,7 +580,9 @@ impl Maker {
     fn ekran_vl_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let konst = runner::konst(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "not", "bit",
+        ]));
 
         return quote! {
             impl ::core::convert::From<#ty> for #vl {
@@ -605,7 +609,9 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let konst = runner::konst(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "value", "bit",
+        ]));
 
         let from_bits = if self.cfg.int.has_validation() {
             quote! { #vl::from_bits_retain(bits) }
@@ -672,7 +678,9 @@ impl Maker {
         let vl = &self.vl;
         let el = &self.el;
         let all_bits = self.items.iter();
-        let konst = runner::konst(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "value", "bit",
+        ]));
 
         let name_arms = self
             .items
@@ -771,12 +779,11 @@ impl Maker {
             "conv_{}",
             runner::snake_case_of(&self.ty.to_string())
         );
-        let destruct = runner::destruct(self.cfg.int.konst);
-        let konst = runner::konst(self.cfg.int.konst);
-
-        let cond_seal = {
-            let bonst = runner::konst(self.cfg.int.konst);
-            quote! { #bonst #seal }
+        let bounds_for = |flags: &[&str]| {
+            let is_konst = self.cfg.int.konst_for(flags);
+            let bonst = runner::bonst(is_konst);
+            let destruct = runner::destruct(is_konst);
+            return quote! { #bonst #seal #destruct };
         };
 
         let mut stream = TokenStream::new();
@@ -795,7 +802,10 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_math_shr {
+        if self.cfg.int.flags.math_shr {
+            let konst = runner::konst(self.cfg.int.konst_for(&[
+                "shr", "math",
+            ]));
             stream.extend(quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
                     type Output = #value;
@@ -808,7 +818,10 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_math_shl {
+        if self.cfg.int.flags.math_shl {
+            let konst = runner::konst(self.cfg.int.konst_for(&[
+                "shl", "math",
+            ]));
             stream.extend(quote! {
                 #konst impl ::core::ops::Shl<usize> for #ty {
                     type Output = #value;
@@ -821,11 +834,16 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_math_and {
+        if self.cfg.int.flags.math_and {
+            let flags = [
+                "and", "bit",
+            ];
+            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
                 where
-                    T: #bit_capability + #cond_seal #destruct,
+                    T: #bit_capability + #bounds,
                 {
                     type Output = #value;
 
@@ -840,11 +858,16 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_math_or {
+        if self.cfg.int.flags.math_or {
+            let flags = [
+                "or", "bit",
+            ];
+            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
                 where
-                    T: #bit_capability + #cond_seal #destruct,
+                    T: #bit_capability + #bounds,
                 {
                     type Output = #value;
 
@@ -859,11 +882,16 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_math_xor {
+        if self.cfg.int.flags.math_xor {
+            let flags = [
+                "xor", "bit",
+            ];
+            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
                 where
-                    T: #bit_capability + #cond_seal #destruct,
+                    T: #bit_capability + #bounds,
                 {
                     type Output = #value;
 
@@ -878,7 +906,11 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_partial_eq {
+        if self.cfg.int.flags.partial_eq {
+            let konst = runner::konst(self.cfg.int.konst_for(&[
+                "partial_eq",
+                "comparison",
+            ]));
             stream.extend(quote! {
                 #konst impl ::core::cmp::PartialEq<#value> for #ty {
                     #[inline(always)]
@@ -889,7 +921,11 @@ impl Maker {
             });
         }
 
-        if self.cfg.int.flags.impl_partial_ord {
+        if self.cfg.int.flags.partial_ord {
+            let konst = runner::konst(self.cfg.int.konst_for(&[
+                "partial_ord",
+                "comparison",
+            ]));
             stream.extend(quote! {
                 #konst impl ::core::cmp::PartialOrd<#value> for #ty {
                     #[inline(always)]
@@ -903,6 +939,9 @@ impl Maker {
             });
         }
 
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "not", "bit",
+        ]));
         stream.extend(quote! {
             #konst impl ::core::ops::Not for #ty {
                 type Output = #value;
@@ -922,7 +961,9 @@ impl Maker {
     fn ekran_iter(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let konst = runner::konst(self.cfg.int.konst);
+        let konst = runner::konst(self.cfg.int.konst_for(&[
+            "iterator", "value", "bit",
+        ]));
         let raw = self
             .cfg
             .int
@@ -1088,7 +1129,7 @@ impl Maker {
             emit_seal: true,
             target_conversion: None,
             construction: None,
-            konst: self.cfg.int.konst,
+            konst: self.cfg.int.konst_friendship(),
         }));
     }
 }
@@ -1107,13 +1148,7 @@ impl Parse for Cfg {
         let mut this = Self {
             friends: Default::default(),
             bit: Box::default(),
-            int: Box::new(integral::Cfg {
-                konst: false,
-                get_raw: None,
-                validation: Default::default(),
-                friends: Default::default(),
-                flags: Box::default(),
-            }),
+            int: Box::new(integral::Cfg::with_konst(false)),
         };
         let mut has_konst = false;
 

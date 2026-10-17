@@ -47,7 +47,6 @@ const _: () = {
     }
     const impl Math for PageData {}
     const impl Rel for PageData {}
-    const impl Bit for PageHeader {}
     const impl Make for PageHeader {
         #[inline(always)]
         fn make(self) -> PageHeader {
@@ -55,7 +54,6 @@ const _: () = {
             return PageHeader::_unchecked(raw);
         }
     }
-    const impl Math for PageHeader {}
     const impl Rel for PageHeader {}
     const impl Seal for PageId {
         #[inline(always)]
@@ -1045,6 +1043,15 @@ const _: () = {
             *self = self._shl(other);
         }
     }
+    const impl ::core::ops::BitAndAssign for PageHeader {
+        #[inline(always)]
+        fn bitand_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitand(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitAndAssign<T> for PageHeader
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1056,6 +1063,15 @@ const _: () = {
         ) {
             let it = Seal::conv_page_header(rhs);
             *self = self._bitand(it);
+        }
+    }
+    const impl ::core::ops::AddAssign for PageHeader {
+        #[inline(always)]
+        fn add_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._add(rhs.0);
         }
     }
     const impl<T> ::core::ops::AddAssign<T> for PageHeader
@@ -1071,6 +1087,15 @@ const _: () = {
             *self = self._add(it);
         }
     }
+    const impl ::core::ops::SubAssign for PageHeader {
+        #[inline(always)]
+        fn sub_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._sub(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::SubAssign<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1082,6 +1107,15 @@ const _: () = {
         ) {
             let it = Seal::conv_page_header(rhs);
             *self = self._sub(it);
+        }
+    }
+    const impl ::core::ops::MulAssign for PageHeader {
+        #[inline(always)]
+        fn mul_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._mul(rhs.0);
         }
     }
     const impl<T> ::core::ops::MulAssign<T> for PageHeader
@@ -1097,6 +1131,15 @@ const _: () = {
             *self = self._mul(it);
         }
     }
+    const impl ::core::ops::DivAssign for PageHeader {
+        #[inline(always)]
+        fn div_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._div(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::DivAssign<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1110,6 +1153,15 @@ const _: () = {
             *self = self._div(it);
         }
     }
+    const impl ::core::ops::RemAssign for PageHeader {
+        #[inline(always)]
+        fn rem_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::RemAssign<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1121,6 +1173,15 @@ const _: () = {
         ) {
             let it = Seal::conv_page_header(rhs);
             *self = self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitOrAssign for PageHeader {
+        #[inline(always)]
+        fn bitor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitOrAssign<T> for PageHeader
@@ -1163,6 +1224,16 @@ const _: () = {
     {
         panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
     };
+    const impl ::core::ops::Add for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn add(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._add(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Add<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1175,6 +1246,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_page_header(rhs);
             return self._add(it);
+        }
+    }
+    const impl ::core::ops::Sub for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn sub(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._sub(rhs.0);
         }
     }
     const impl<T> ::core::ops::Sub<T> for PageHeader
@@ -1191,6 +1272,16 @@ const _: () = {
             return self._sub(it);
         }
     }
+    const impl ::core::ops::Mul for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn mul(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._mul(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Mul<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1203,6 +1294,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_page_header(rhs);
             return self._mul(it);
+        }
+    }
+    const impl ::core::ops::Div for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn div(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._div(rhs.0);
         }
     }
     const impl<T> ::core::ops::Div<T> for PageHeader
@@ -1219,6 +1320,16 @@ const _: () = {
             return self._div(it);
         }
     }
+    const impl ::core::ops::Rem for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn rem(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Rem<T> for PageHeader
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1231,6 +1342,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_page_header(rhs);
             return self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitAnd for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn bitand(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitand(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitAnd<T> for PageHeader
@@ -1247,6 +1368,16 @@ const _: () = {
             return self._bitand(it);
         }
     }
+    const impl ::core::ops::BitOr for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn bitor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitor(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitOr<T> for PageHeader
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1259,6 +1390,25 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_page_header(rhs);
             return self._bitor(it);
+        }
+    }
+    const impl ::core::ops::BitXor for PageHeader {
+        type Output = Self;
+        #[inline(always)]
+        fn bitxor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitxor(rhs.0);
+        }
+    }
+    const impl ::core::ops::BitXorAssign for PageHeader {
+        #[inline(always)]
+        fn bitxor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitxor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitXor<T> for PageHeader

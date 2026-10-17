@@ -56,7 +56,6 @@ const _: () = {
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Bit for MyFlags {}
     const impl Make for MyFlags {
         #[inline(always)]
         fn make(self) -> MyFlags {
@@ -64,7 +63,6 @@ const _: () = {
             return MyFlags::_unchecked(raw);
         }
     }
-    const impl Math for MyFlags {}
     const impl Rel for MyFlags {}
     const impl Seal for i16 {
         #[inline(always)]
@@ -1066,6 +1064,15 @@ const _: () = {
             *self = self._shl(other);
         }
     }
+    const impl ::core::ops::BitAndAssign for MyFlags {
+        #[inline(always)]
+        fn bitand_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitand(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitAndAssign<T> for MyFlags
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1077,6 +1084,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_flags(rhs);
             *self = self._bitand(it);
+        }
+    }
+    const impl ::core::ops::AddAssign for MyFlags {
+        #[inline(always)]
+        fn add_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._add(rhs.0);
         }
     }
     const impl<T> ::core::ops::AddAssign<T> for MyFlags
@@ -1092,6 +1108,15 @@ const _: () = {
             *self = self._add(it);
         }
     }
+    const impl ::core::ops::SubAssign for MyFlags {
+        #[inline(always)]
+        fn sub_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._sub(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::SubAssign<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1103,6 +1128,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_flags(rhs);
             *self = self._sub(it);
+        }
+    }
+    const impl ::core::ops::MulAssign for MyFlags {
+        #[inline(always)]
+        fn mul_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._mul(rhs.0);
         }
     }
     const impl<T> ::core::ops::MulAssign<T> for MyFlags
@@ -1118,6 +1152,15 @@ const _: () = {
             *self = self._mul(it);
         }
     }
+    const impl ::core::ops::DivAssign for MyFlags {
+        #[inline(always)]
+        fn div_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._div(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::DivAssign<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1131,6 +1174,15 @@ const _: () = {
             *self = self._div(it);
         }
     }
+    const impl ::core::ops::RemAssign for MyFlags {
+        #[inline(always)]
+        fn rem_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::RemAssign<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1142,6 +1194,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_flags(rhs);
             *self = self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitOrAssign for MyFlags {
+        #[inline(always)]
+        fn bitor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitOrAssign<T> for MyFlags
@@ -1182,6 +1243,16 @@ const _: () = {
     {
         panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
     };
+    const impl ::core::ops::Add for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn add(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._add(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Add<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1194,6 +1265,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_flags(rhs);
             return self._add(it);
+        }
+    }
+    const impl ::core::ops::Sub for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn sub(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._sub(rhs.0);
         }
     }
     const impl<T> ::core::ops::Sub<T> for MyFlags
@@ -1210,6 +1291,16 @@ const _: () = {
             return self._sub(it);
         }
     }
+    const impl ::core::ops::Mul for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn mul(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._mul(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Mul<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1222,6 +1313,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_flags(rhs);
             return self._mul(it);
+        }
+    }
+    const impl ::core::ops::Div for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn div(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._div(rhs.0);
         }
     }
     const impl<T> ::core::ops::Div<T> for MyFlags
@@ -1238,6 +1339,16 @@ const _: () = {
             return self._div(it);
         }
     }
+    const impl ::core::ops::Rem for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn rem(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Rem<T> for MyFlags
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1250,6 +1361,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_flags(rhs);
             return self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitAnd for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn bitand(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitand(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitAnd<T> for MyFlags
@@ -1266,6 +1387,16 @@ const _: () = {
             return self._bitand(it);
         }
     }
+    const impl ::core::ops::BitOr for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn bitor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitor(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitOr<T> for MyFlags
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1278,6 +1409,25 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_flags(rhs);
             return self._bitor(it);
+        }
+    }
+    const impl ::core::ops::BitXor for MyFlags {
+        type Output = Self;
+        #[inline(always)]
+        fn bitxor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitxor(rhs.0);
+        }
+    }
+    const impl ::core::ops::BitXorAssign for MyFlags {
+        #[inline(always)]
+        fn bitxor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitxor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitXor<T> for MyFlags

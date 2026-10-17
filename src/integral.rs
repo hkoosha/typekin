@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::fmt::{
     Debug,
     Formatter,
@@ -137,7 +140,7 @@ impl Maker {
             cfg,
         };
 
-        this.fix_friendship();
+        this.fix_friendship()?;
 
         return Ok(this);
     }
@@ -207,52 +210,64 @@ impl Maker {
         };
     }
 
-    fn fix_friendship(&mut self) {
+    fn fix_friendship(&mut self) -> syn::Result<()> {
         let target = &self.ty;
         let relation = &self.el;
         let validated = self.cfg.has_validation();
-        let has_make = self.cfg.flags.impl_self_friend_make;
+        let has_make = self.cfg.flags.self_friend_make;
+        let target_friend = Friend::from(target);
 
-        for (needle, conversion, is_validated) in [
-            (
-                Friend::from(target),
-                Some(parse_quote! { #target::raw }),
-                false,
-            ),
+        if let Some(it) = self.cfg.friends.get(&target_friend) {
+            if it.capabilities.contains(&format_ident!("Math")) {
+                return it.ty.fail(
+                    "self math operations use `with_self_math`, not `friends`",
+                );
+            }
+
+            if it.capabilities.contains(&format_ident!("Bit")) {
+                return it.ty.fail(
+                    "self bit operations use `with_self_bit`, not `friends`",
+                );
+            }
+        }
+
+        for (f_def, conv, is_validated) in [
+            (target_friend, Some(parse_quote! { #target::raw }), false),
             (
                 Friend::from(relation),
                 Some(parse_quote! { self }),
                 validated,
             ),
         ] {
-            let mut friend = self
+            let mut it = self
                 .cfg
                 .friends
-                .take(&needle)
-                .unwrap_or_else(|| needle.clone());
+                .take(&f_def)
+                .unwrap_or_else(|| f_def.clone());
 
-            if friend.conv.is_none() {
-                friend.conv = conversion;
+            if it.conv.is_none() {
+                it.conv = conv;
             }
 
             if !is_validated && has_make {
-                friend.capabilities.insert(format_ident!("Make"));
+                it.capabilities.insert(format_ident!("Make"));
             }
 
-            if self.cfg.flags.impl_self_friend_math_ops {
-                friend.capabilities.insert(format_ident!("Math"));
-            }
-
-            if needle.ty.is_ident(target) || self.cfg.flags.impl_self_friend_rel
+            if !f_def.ty.is_ident(target) && self.cfg.flags.self_friend_math_ops
             {
-                friend.capabilities.insert(format_ident!("Rel"));
+                it.capabilities.insert(format_ident!("Math"));
             }
 
-            if self.cfg.flags.impl_self_friend_math_bit {
-                friend.capabilities.insert(format_ident!("Bit"));
+            if f_def.ty.is_ident(target) || self.cfg.flags.self_friend_rel {
+                it.capabilities.insert(format_ident!("Rel"));
             }
 
-            assert!(self.cfg.friends.insert(friend));
+            if !f_def.ty.is_ident(target) && self.cfg.flags.self_friend_math_bit
+            {
+                it.capabilities.insert(format_ident!("Bit"));
+            }
+
+            assert!(self.cfg.friends.insert(it));
         }
 
         if !validated && has_make {
@@ -270,6 +285,8 @@ impl Maker {
                     assert!(self.cfg.friends.insert(friend));
                 });
         }
+
+        return Ok(());
     }
 
     fn ekran_friendship(&self) -> TokenStream {
@@ -279,26 +296,26 @@ impl Maker {
         let seal = self.trait_seal.clone();
         let conversion = self.fn_conv.clone();
         let fp_get_raw = &self.fp_get_raw;
-        let target_conversion = self.cfg.flags.impl_friend_seal.then(|| {
+        let target_conversion = self.cfg.flags.friend_seal.then(|| {
             quote! {
                 return #fp_get_raw(self);
             }
         });
         let capabilities = [
             (
-                self.cfg.flags.impl_friendzone_friend_make,
+                self.cfg.flags.friendzone_friend_make,
                 self.trait_friend_make.clone(),
             ),
             (
-                self.cfg.flags.impl_friendzone_friend_math_ops,
+                self.cfg.flags.friendzone_friend_math_ops,
                 self.trait_friend_math.clone(),
             ),
             (
-                self.cfg.flags.impl_friendzone_friend_math_bit,
+                self.cfg.flags.friendzone_friend_math_bit,
                 self.trait_friend_bit.clone(),
             ),
             (
-                self.cfg.flags.impl_friendzone_friend_rel,
+                self.cfg.flags.friendzone_friend_rel,
                 self.trait_friend_rel.clone(),
             ),
             (true, format_ident!("Trust")),
@@ -306,7 +323,7 @@ impl Maker {
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))
         .vec();
-        let friends = match self.cfg.flags.impl_friends {
+        let friends = match self.cfg.flags.friends {
             false => vec![],
             true => self
                 .cfg
@@ -371,18 +388,18 @@ impl Maker {
             conversion,
             capabilities,
             friends,
-            emit_seal: self.cfg.flags.impl_friendzone_seal,
+            emit_seal: self.cfg.flags.friendzone_seal,
             target_conversion,
             construction: Some(Construction {
                 make: self.trait_friend_make.clone(),
                 trusted: format_ident!("Trust"),
                 checked: quote! { #checked },
             }),
-            konst: self.cfg.konst,
+            konst: self.cfg.konst_friendship(),
         });
     }
 
-    pub(crate) fn make_impl_range(&self) -> TokenStream {
+    pub(crate) fn make_range(&self) -> TokenStream {
         unimplemented!("range");
     }
 
@@ -415,9 +432,13 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.cfg.flags.fn_conv_of {
-            let konst = runner::konst(self.cfg.konst);
-            let bonst = runner::bonst(self.cfg.konst);
-            let destruct = runner::destruct(self.cfg.konst);
+            let is_konst = self.cfg.konst_for(&[
+                "of",
+                "conversion",
+            ]);
+            let konst = runner::konst(is_konst);
+            let bonst = runner::bonst(is_konst);
+            let destruct = runner::destruct(is_konst);
             let what = &self.trait_friend_make;
 
             let fn_of = format_ident!("of");
@@ -438,7 +459,10 @@ impl Maker {
         }
 
         if self.cfg.flags.auto_of_raw {
-            let konst = runner::konst(self.cfg.konst);
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "of",
+                "conversion",
+            ]));
             let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
             let it = quote! {
                 #[inline(always)]
@@ -725,7 +749,7 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_make_unchecked_try && self.cfg.has_validation() {
-            let konst = runner::konst(self.cfg.konst);
+            let konst = runner::konst(self.cfg.konst_for(&["try_make"]));
             let value = quote! { it };
             let validation = self.validation_condition(&value);
             let it = quote! {
@@ -781,8 +805,10 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_core_int {
-            let konst = runner::konst(self.cfg.konst);
+        if self.cfg.flags.core_int {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "core_int", "value",
+            ]));
             let value = quote! { value };
             let validation = self.validation_condition(&value);
             let it = quote! {
@@ -830,18 +856,20 @@ impl Maker {
         let fp_friend_conv = quote! { #trait_seal::#fn_conv };
         let fp_get_raw = &self.fp_get_raw;
 
-        let konst = runner::konst(self.cfg.konst);
-        let destruct = runner::destruct(self.cfg.konst);
+        let with_self_math = self.cfg.flags.self_math;
+        let with_self_bit = self.cfg.flags.self_bit;
 
-        let cond_seal = {
-            let bonst = runner::bonst(self.cfg.konst);
-            quote! { #bonst #trait_seal }
+        let bounds_for = |flags: &[&str]| {
+            let is_konst = self.cfg.konst_for(flags);
+            let bonst = runner::bonst(is_konst);
+            let destruct = runner::destruct(is_konst);
+            return quote! { #bonst #trait_seal #destruct };
         };
 
         let mut stream = TokenStream::new();
         stream.extend(self.ekran_friendship());
 
-        if self.cfg.flags.impl_as_ref {
+        if self.cfg.flags.as_ref_ {
             let it = quote! {
                 impl ::core::convert::AsRef<#el> for #ty {
                     #[inline(always)]
@@ -853,7 +881,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_from_str {
+        if self.cfg.flags.from_str {
             stream.extend(quote! {
                 impl ::core::str::FromStr for #ty {
                     type Err = ();
@@ -881,7 +909,7 @@ impl Maker {
             });
         }
 
-        if self.cfg.flags.impl_core_int {
+        if self.cfg.flags.core_int {
             let it = quote! {
                 impl #ty {
                     /// The number of bits in the wrapped primitive integer.
@@ -984,7 +1012,9 @@ impl Maker {
             };
             stream.extend(it);
 
-            let konst = runner::konst(self.cfg.konst);
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "core_int", "value",
+            ]));
             let it = quote! {
                 impl #ty {
                     #[inline(always)]
@@ -1817,7 +1847,11 @@ impl Maker {
             }
         }
 
-        if self.cfg.flags.impl_into {
+        if self.cfg.flags.into {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "into",
+                "conversion",
+            ]));
             let it = N::items()
                 .iter()
                 .filter(|it| self.repr.can_safe_cast_to(**it))
@@ -1837,7 +1871,11 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_try_into {
+        if self.cfg.flags.try_into {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "try_into",
+                "conversion",
+            ]));
             let it = N::items()
                 .iter()
                 .filter(|it| !self.repr.can_safe_cast_to(**it))
@@ -1860,7 +1898,10 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_shr {
+        if self.cfg.flags.math_shr {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "shr", "math",
+            ]));
             let it = quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
                     type Output = Self;
@@ -1877,7 +1918,10 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_shl {
+        if self.cfg.flags.math_shl {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "shl", "math",
+            ]));
             let it = quote::quote! {
                 #konst impl ::core::ops::Shl<usize> for #ty {
                     type Output = Self;
@@ -1895,7 +1939,13 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_shr {
+        if self.cfg.flags.assign_shr {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "shr_assign",
+                "shr",
+                "assign",
+                "math",
+            ]));
             let it = quote! {
                 #konst impl ::core::ops::ShrAssign<usize> for #ty {
                     #[inline(always)]
@@ -1911,7 +1961,13 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_shl {
+        if self.cfg.flags.assign_shl {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "shl_assign",
+                "shl",
+                "assign",
+                "math",
+            ]));
             let it = quote! {
                 #konst impl ::core::ops::ShlAssign<usize> for #ty {
                     #[inline(always)]
@@ -1927,10 +1983,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_and {
+        if self.cfg.flags.assign_and {
+            let flags = [
+                "and_assign",
+                "and",
+                "assign",
+                "bit",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_bit {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::BitAndAssign for #ty {
+                        #[inline(always)]
+                        fn bitand_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._bitand(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::BitAndAssign<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+                where T: #trait_friend_bit + #bounds
                 {
                     #[inline(always)]
                     fn bitand_assign(
@@ -1946,10 +2024,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_add {
+        if self.cfg.flags.assign_add {
+            let flags = [
+                "add_assign",
+                "add",
+                "assign",
+                "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::AddAssign for #ty {
+                        #[inline(always)]
+                        fn add_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._add(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::AddAssign<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     #[inline(always)]
                     fn add_assign(
@@ -1965,10 +2065,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_sub {
+        if self.cfg.flags.assign_sub {
+            let flags = [
+                "sub_assign",
+                "sub",
+                "assign",
+                "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::SubAssign for #ty {
+                        #[inline(always)]
+                        fn sub_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._sub(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::SubAssign<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     #[inline(always)]
                     fn sub_assign(
@@ -1984,10 +2106,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_mul {
+        if self.cfg.flags.assign_mul {
+            let flags = [
+                "mul_assign",
+                "mul",
+                "assign",
+                "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::MulAssign for #ty {
+                        #[inline(always)]
+                        fn mul_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._mul(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::MulAssign<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     #[inline(always)]
                     fn mul_assign(
@@ -2003,10 +2147,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_div {
+        if self.cfg.flags.assign_div {
+            let flags = [
+                "div_assign",
+                "div",
+                "assign",
+                "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::DivAssign for #ty {
+                        #[inline(always)]
+                        fn div_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._div(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::DivAssign<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     #[inline(always)]
                     fn div_assign(
@@ -2022,10 +2188,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_rem {
+        if self.cfg.flags.assign_rem {
+            let flags = [
+                "rem_assign",
+                "rem",
+                "assign",
+                "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::RemAssign for #ty {
+                        #[inline(always)]
+                        fn rem_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._rem(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::RemAssign<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     #[inline(always)]
                     fn rem_assign(
@@ -2041,10 +2229,32 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_assign_or {
+        if self.cfg.flags.assign_or {
+            let flags = [
+                "or_assign",
+                "or",
+                "assign",
+                "bit",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_bit {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::BitOrAssign for #ty {
+                        #[inline(always)]
+                        fn bitor_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._bitor(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::BitOrAssign<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+                where T: #trait_friend_bit + #bounds
                 {
                     #[inline(always)]
                     fn bitor_assign(
@@ -2060,11 +2270,11 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_range {
-            stream.extend(self.make_impl_range());
+        if self.cfg.flags.range {
+            stream.extend(self.make_range());
         }
 
-        if self.cfg.flags.impl_debug {
+        if self.cfg.flags.debug {
             let fmt_str = format!("{}({})", ty, "{}");
             let it = quote! {
                 impl ::core::fmt::Debug for #ty {
@@ -2079,7 +2289,11 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_eq {
+        if self.cfg.flags.eq {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "eq",
+                "comparison",
+            ]));
             // TODO why can't we do derive?
             let it = quote! {
                 #konst impl ::core::cmp::Eq for #ty {}
@@ -2087,7 +2301,11 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_ord {
+        if self.cfg.flags.ord {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "ord",
+                "comparison",
+            ]));
             let it = quote! {
                 #konst impl ::core::cmp::Ord for #ty {
                     #[inline(always)]
@@ -2112,10 +2330,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_add {
+        if self.cfg.flags.math_add {
+            let flags = [
+                "add", "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::Add for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn add(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._add(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::Add<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     type Output = Self;
 
@@ -2132,10 +2371,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_sub {
+        if self.cfg.flags.math_sub {
+            let flags = [
+                "sub", "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::Sub for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn sub(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._sub(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::Sub<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     type Output = Self;
 
@@ -2152,10 +2412,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_mul {
+        if self.cfg.flags.math_mul {
+            let flags = [
+                "mul", "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::Mul for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn mul(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._mul(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::Mul<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     type Output = Self;
 
@@ -2173,10 +2454,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_div {
+        if self.cfg.flags.math_div {
+            let flags = [
+                "div", "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::Div for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn div(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._div(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::Div<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     type Output = Self;
 
@@ -2194,10 +2496,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_rem {
+        if self.cfg.flags.math_rem {
+            let flags = [
+                "rem", "math",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_math {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::Rem for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn rem(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._rem(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::Rem<T> for #ty
-                where T: #trait_friend_math + #cond_seal #destruct
+                where T: #trait_friend_math + #bounds
                 {
                     type Output = Self;
 
@@ -2215,10 +2538,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_and {
+        if self.cfg.flags.math_and {
+            let flags = [
+                "and", "bit",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_bit {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::BitAnd for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn bitand(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._bitand(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+                where T: #trait_friend_bit + #bounds
                 {
                     type Output = Self;
 
@@ -2235,10 +2579,31 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_or {
+        if self.cfg.flags.math_or {
+            let flags = [
+                "or", "bit",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            if with_self_bit {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::BitOr for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn bitor(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._bitor(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+                where T: #trait_friend_bit + #bounds
                 {
                     type Output = Self;
 
@@ -2255,10 +2620,50 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_xor {
+        if self.cfg.flags.math_xor {
+            let flags = [
+                "xor", "bit",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
+            let assign_flags = [
+                "xor_assign",
+                "xor",
+                "assign",
+                "bit",
+            ];
+            let konst_assign = runner::konst(self.cfg.konst_for(&assign_flags));
+            let assign_bounds = bounds_for(&assign_flags);
+            if with_self_bit {
+                stream.extend(quote! {
+                    #konst impl ::core::ops::BitXor for #ty {
+                        type Output = Self;
+
+                        #[inline(always)]
+                        fn bitxor(
+                            self,
+                            rhs: Self,
+                        ) -> Self::Output {
+                            return self._bitxor(rhs.0);
+                        }
+                    }
+                });
+                stream.extend(quote! {
+                    #konst_assign impl ::core::ops::BitXorAssign for #ty {
+                        #[inline(always)]
+                        fn bitxor_assign(
+                            &mut self,
+                            rhs: Self,
+                        ) {
+                            *self = self._bitxor(rhs.0);
+                        }
+                    }
+                });
+            }
+
             let it = quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+                where T: #trait_friend_bit + #bounds
                 {
                     type Output = Self;
 
@@ -2272,8 +2677,12 @@ impl Maker {
                     }
                 }
 
-                #konst impl<T> ::core::ops::BitXorAssign<T> for #ty
-                where T: #trait_friend_bit + #cond_seal #destruct
+            };
+            stream.extend(it);
+
+            let it = quote! {
+                #konst_assign impl<T> ::core::ops::BitXorAssign<T> for #ty
+                where T: #trait_friend_bit + #assign_bounds
                 {
                     #[inline(always)]
                     fn bitxor_assign(
@@ -2288,7 +2697,10 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_math_not {
+        if self.cfg.flags.math_not {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "not", "bit",
+            ]));
             let it = quote! {
                 #konst impl ::core::ops::Not for #ty {
                     type Output = Self;
@@ -2317,7 +2729,7 @@ impl Maker {
             });
         }
 
-        if self.cfg.flags.impl_fmt_binary {
+        if self.cfg.flags.fmt_binary {
             let it = quote! {
                 impl ::core::fmt::Binary for #ty {
                     fn fmt(
@@ -2332,7 +2744,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_fmt_octal {
+        if self.cfg.flags.fmt_octal {
             let it = quote! {
                 impl ::core::fmt::Octal for #ty {
                     fn fmt(
@@ -2347,7 +2759,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_fmt_hex_lower {
+        if self.cfg.flags.fmt_hex_lower {
             let it = quote! {
                 impl ::core::fmt::LowerHex for #ty {
                     fn fmt(
@@ -2362,7 +2774,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_fmt_hex_upper {
+        if self.cfg.flags.fmt_hex_upper {
             let it = quote! {
                 impl ::core::fmt::UpperHex for #ty {
                     fn fmt(
@@ -2377,10 +2789,16 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_partial_eq {
+        if self.cfg.flags.partial_eq {
+            let flags = [
+                "partial_eq",
+                "comparison",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialEq<T> for #ty
-                where T: #trait_friend_rel + #cond_seal #destruct
+                where T: #trait_friend_rel + #bounds
                     + ::core::marker::Copy
                 {
                     #[inline(always)]
@@ -2397,10 +2815,16 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.impl_partial_ord {
+        if self.cfg.flags.partial_ord {
+            let flags = [
+                "partial_ord",
+                "comparison",
+            ];
+            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let bounds = bounds_for(&flags);
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
-                where T: #trait_friend_rel + #cond_seal #destruct
+                where T: #trait_friend_rel + #bounds
                     + ::core::marker::Copy
                 {
                     #[inline(always)]
@@ -2584,6 +3008,8 @@ impl Parse for IntegralFriend {
 
 pub(crate) struct Cfg {
     pub(crate) konst: bool,
+    konst_flags: BTreeMap<String, bool>,
+    seen_flags: BTreeMap<String, bool>,
     pub(crate) get_raw: Option<Path>,
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
@@ -2591,6 +3017,118 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
+    const KONST_FLAGS: &[&str] = &[
+        "konst_add",
+        "konst_add_assign",
+        "konst_and",
+        "konst_and_assign",
+        "konst_assign",
+        "konst_bit",
+        "konst_comparison",
+        "konst_conversion",
+        "konst_core_int",
+        "konst_div",
+        "konst_div_assign",
+        "konst_eq",
+        "konst_friendship",
+        "konst_into",
+        "konst_iterator",
+        "konst_math",
+        "konst_mul",
+        "konst_mul_assign",
+        "konst_not",
+        "konst_of",
+        "konst_or",
+        "konst_or_assign",
+        "konst_ord",
+        "konst_partial_eq",
+        "konst_partial_ord",
+        "konst_rem",
+        "konst_rem_assign",
+        "konst_shl",
+        "konst_shl_assign",
+        "konst_shr",
+        "konst_shr_assign",
+        "konst_sub",
+        "konst_sub_assign",
+        "konst_try_into",
+        "konst_try_make",
+        "konst_value",
+        "konst_xor",
+        "konst_xor_assign",
+    ];
+
+    fn parse_flags(
+        &mut self,
+        input: ParseStream,
+        value_if_seen: bool,
+    ) -> syn::Result<()> {
+        let stuff;
+        let _ = syn::bracketed!(stuff in input);
+        let attrs =
+            syn::punctuated::Punctuated::<Ident, syn::Token![,]>::
+                parse_terminated(&stuff)?;
+        let mut duplicated = BTreeMap::new();
+
+        for attr in attrs {
+            let name = attr.to_string();
+            let span = attr.span();
+
+            if duplicated.insert(name.clone(), span).is_some() {
+                return span.fail("duplicated flags");
+            }
+
+            if self
+                .seen_flags
+                .get(&name)
+                .is_some_and(|value| *value != value_if_seen)
+            {
+                return span
+                    .fail("flag specified in both `with` and `without`");
+            }
+
+            if name.starts_with("konst_") {
+                if !Self::KONST_FLAGS.contains(&name.as_str()) {
+                    return span.fail("unknown flag");
+                }
+
+                self.konst_flags.insert(name.clone(), value_if_seen);
+            }
+            else if self.flags.set_bool(&name, value_if_seen).is_err() {
+                return span.fail("unknown flag");
+            }
+
+            self.seen_flags.insert(name, value_if_seen);
+        }
+
+        return Ok(());
+    }
+
+    pub(crate) fn konst_for(
+        &self,
+        flags: &[&str],
+    ) -> bool {
+        for flag in flags {
+            let name = format!("konst_{flag}");
+            if let Some(value) = self.konst_flags.get(&name) {
+                return *value;
+            }
+        }
+
+        return self.konst;
+    }
+
+    pub(crate) fn konst_friendship(&self) -> bool {
+        if self.konst_for(&["friendship"]) {
+            return true;
+        }
+
+        return Self::KONST_FLAGS.iter().any(|flag| {
+            let flag = flag.strip_prefix("konst_").unwrap();
+            return flag != "friendship" && self.konst_for(&[flag]);
+        });
+    }
+
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
         return zz::one_or_list::<IntegralFriend>(input)?
             .map(|IntegralFriend(mut friend)| {
@@ -2636,13 +3174,7 @@ impl Cfg {
         input: ParseStream,
         konst: bool,
     ) -> syn::Result<Self> {
-        let mut this = Self {
-            konst,
-            get_raw: None,
-            validation: Default::default(),
-            friends: Default::default(),
-            flags: Box::default(),
-        };
+        let mut this = Self::with_konst(konst);
 
         zz::parse_inner(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {
@@ -2654,8 +3186,8 @@ impl Cfg {
                     return attr
                         .fail("constness is specified in multiple places");
                 }
-                "with" => this.flags.parse_from(rest, true)?,
-                "without" => this.flags.parse_from(rest, false)?,
+                "with" => this.parse_flags(rest, true)?,
+                "without" => this.parse_flags(rest, false)?,
                 "friends" => {
                     this.friends = Self::parse_friends(rest)?;
                 }
@@ -2669,6 +3201,18 @@ impl Cfg {
         })?;
 
         return Ok(this);
+    }
+
+    pub(crate) fn with_konst(konst: bool) -> Self {
+        return Self {
+            konst,
+            konst_flags: Default::default(),
+            seen_flags: Default::default(),
+            get_raw: None,
+            validation: Default::default(),
+            friends: Default::default(),
+            flags: Box::default(),
+        };
     }
 }
 
@@ -2691,13 +3235,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self {
-            konst: false,
-            get_raw: None,
-            validation: Default::default(),
-            friends: Default::default(),
-            flags: Box::default(),
-        };
+        let mut this = Self::with_konst(false);
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
@@ -2710,8 +3248,8 @@ impl Parse for Cfg {
                     this.konst = rest.parse::<syn::LitBool>()?.value;
                     has_konst = true;
                 }
-                "with" => this.flags.parse_from(rest, true)?,
-                "without" => this.flags.parse_from(rest, false)?,
+                "with" => this.parse_flags(rest, true)?,
+                "without" => this.parse_flags(rest, false)?,
                 "friends" => {
                     this.friends = Self::parse_friends(rest)?;
                 }
@@ -2738,60 +3276,63 @@ mk_flags! {
     #[flag_default(bool=true, str="")]
     #[derive(Debug, Clone)]
     pub(crate) struct IntegralFlags {
-        pub impl_range: bool = false,
-        pub impl_as_ref: bool,
+        pub range: bool = false,
+        pub as_ref_: bool,
 
         pub auto_of_raw: bool,
         pub assertions: bool,
         pub bit_access: bool,
 
-        pub impl_debug: bool,
+        pub debug: bool,
         pub display: bool = false,
-        pub impl_eq: bool,
-        pub impl_fmt_binary: bool,
-        pub impl_fmt_hex_lower: bool,
-        pub impl_fmt_hex_upper: bool,
-        pub impl_fmt_octal: bool,
-        pub impl_from_str: bool,
-        pub impl_core_int: bool,
-        pub impl_into: bool,
-        pub impl_ord: bool,
-        pub impl_partial_eq: bool,
-        pub impl_partial_ord: bool,
-        pub impl_try_into: bool,
+        pub eq: bool,
+        pub fmt_binary: bool,
+        pub fmt_hex_lower: bool,
+        pub fmt_hex_upper: bool,
+        pub fmt_octal: bool,
+        pub from_str: bool,
+        pub core_int: bool,
+        pub into: bool,
+        pub ord: bool,
+        pub partial_eq: bool,
+        pub partial_ord: bool,
+        pub try_into: bool,
 
-        pub impl_assign_add: bool,
-        pub impl_assign_and: bool,
-        pub impl_assign_div: bool,
-        pub impl_assign_mul: bool,
-        pub impl_assign_or: bool,
-        pub impl_assign_rem: bool,
-        pub impl_assign_shl: bool,
-        pub impl_assign_shr: bool,
-        pub impl_assign_sub: bool,
-        pub impl_math_add: bool,
-        pub impl_math_and: bool,
-        pub impl_math_div: bool,
-        pub impl_math_mul: bool,
-        pub impl_math_not: bool,
-        pub impl_math_or: bool,
-        pub impl_math_rem: bool,
-        pub impl_math_shl: bool,
-        pub impl_math_shr: bool,
-        pub impl_math_sub: bool,
-        pub impl_math_xor: bool,
+        pub assign_add: bool,
+        pub assign_and: bool,
+        pub assign_div: bool,
+        pub assign_mul: bool,
+        pub assign_or: bool,
+        pub assign_rem: bool,
+        pub assign_shl: bool,
+        pub assign_shr: bool,
+        pub assign_sub: bool,
+        pub math_add: bool,
+        pub math_and: bool,
+        pub math_div: bool,
+        pub math_mul: bool,
+        pub math_not: bool,
+        pub math_or: bool,
+        pub math_rem: bool,
+        pub math_shl: bool,
+        pub math_shr: bool,
+        pub math_sub: bool,
+        pub math_xor: bool,
 
-        pub impl_friends: bool,
-        pub impl_self_friend_make: bool,
-        pub impl_self_friend_math_bit: bool,
-        pub impl_self_friend_math_ops: bool,
-        pub impl_self_friend_rel: bool,
-        pub impl_friend_seal: bool,
-        pub impl_friendzone_friend_make: bool,
-        pub impl_friendzone_friend_math_bit: bool,
-        pub impl_friendzone_friend_math_ops: bool,
-        pub impl_friendzone_friend_rel: bool,
-        pub impl_friendzone_seal: bool,
+        pub friends: bool,
+        pub self_friend_make: bool,
+        pub self_friend_math_bit: bool,
+        pub self_friend_math_ops: bool,
+        pub self_friend_rel: bool,
+        pub friend_seal: bool,
+        pub friendzone_friend_make: bool,
+        pub friendzone_friend_math_bit: bool,
+        pub friendzone_friend_math_ops: bool,
+        pub friendzone_friend_rel: bool,
+        pub friendzone_seal: bool,
+
+        pub self_math: bool,
+        pub self_bit: bool,
 
         pub fn_conv_into: bool,
         pub fn_conv_of: bool,

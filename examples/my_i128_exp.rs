@@ -32,7 +32,6 @@ const _: () = {
             return Self::raw(self);
         }
     }
-    const impl Bit for MyU128 {}
     const impl Make for MyU128 {
         #[inline(always)]
         fn make(self) -> MyU128 {
@@ -40,7 +39,6 @@ const _: () = {
             return MyU128::_unchecked(raw);
         }
     }
-    const impl Math for MyU128 {}
     const impl Rel for MyU128 {}
     const impl Seal for i128 {
         #[inline(always)]
@@ -1016,6 +1014,15 @@ const _: () = {
             *self = self._shl(other);
         }
     }
+    const impl ::core::ops::BitAndAssign for MyU128 {
+        #[inline(always)]
+        fn bitand_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitand(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitAndAssign<T> for MyU128
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1027,6 +1034,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u128(rhs);
             *self = self._bitand(it);
+        }
+    }
+    const impl ::core::ops::AddAssign for MyU128 {
+        #[inline(always)]
+        fn add_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._add(rhs.0);
         }
     }
     const impl<T> ::core::ops::AddAssign<T> for MyU128
@@ -1042,6 +1058,15 @@ const _: () = {
             *self = self._add(it);
         }
     }
+    const impl ::core::ops::SubAssign for MyU128 {
+        #[inline(always)]
+        fn sub_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._sub(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::SubAssign<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1053,6 +1078,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u128(rhs);
             *self = self._sub(it);
+        }
+    }
+    const impl ::core::ops::MulAssign for MyU128 {
+        #[inline(always)]
+        fn mul_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._mul(rhs.0);
         }
     }
     const impl<T> ::core::ops::MulAssign<T> for MyU128
@@ -1068,6 +1102,15 @@ const _: () = {
             *self = self._mul(it);
         }
     }
+    const impl ::core::ops::DivAssign for MyU128 {
+        #[inline(always)]
+        fn div_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._div(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::DivAssign<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1081,6 +1124,15 @@ const _: () = {
             *self = self._div(it);
         }
     }
+    const impl ::core::ops::RemAssign for MyU128 {
+        #[inline(always)]
+        fn rem_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::RemAssign<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1092,6 +1144,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u128(rhs);
             *self = self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitOrAssign for MyU128 {
+        #[inline(always)]
+        fn bitor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitOrAssign<T> for MyU128
@@ -1131,6 +1192,16 @@ const _: () = {
     if !(::core::mem::align_of::<MyU128>() == ::core::mem::align_of::<i128>()) {
         panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
     };
+    const impl ::core::ops::Add for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn add(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._add(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Add<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1143,6 +1214,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u128(rhs);
             return self._add(it);
+        }
+    }
+    const impl ::core::ops::Sub for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn sub(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._sub(rhs.0);
         }
     }
     const impl<T> ::core::ops::Sub<T> for MyU128
@@ -1159,6 +1240,16 @@ const _: () = {
             return self._sub(it);
         }
     }
+    const impl ::core::ops::Mul for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn mul(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._mul(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Mul<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1171,6 +1262,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u128(rhs);
             return self._mul(it);
+        }
+    }
+    const impl ::core::ops::Div for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn div(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._div(rhs.0);
         }
     }
     const impl<T> ::core::ops::Div<T> for MyU128
@@ -1187,6 +1288,16 @@ const _: () = {
             return self._div(it);
         }
     }
+    const impl ::core::ops::Rem for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn rem(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._rem(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::Rem<T> for MyU128
     where
         T: Math + [const] Seal + [const] ::core::marker::Destruct,
@@ -1199,6 +1310,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u128(rhs);
             return self._rem(it);
+        }
+    }
+    const impl ::core::ops::BitAnd for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitand(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitand(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitAnd<T> for MyU128
@@ -1215,6 +1336,16 @@ const _: () = {
             return self._bitand(it);
         }
     }
+    const impl ::core::ops::BitOr for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitor(rhs.0);
+        }
+    }
     const impl<T> ::core::ops::BitOr<T> for MyU128
     where
         T: Bit + [const] Seal + [const] ::core::marker::Destruct,
@@ -1227,6 +1358,25 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u128(rhs);
             return self._bitor(it);
+        }
+    }
+    const impl ::core::ops::BitXor for MyU128 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitxor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitxor(rhs.0);
+        }
+    }
+    const impl ::core::ops::BitXorAssign for MyU128 {
+        #[inline(always)]
+        fn bitxor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitxor(rhs.0);
         }
     }
     const impl<T> ::core::ops::BitXor<T> for MyU128

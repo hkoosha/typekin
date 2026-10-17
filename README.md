@@ -38,7 +38,7 @@ non-generic structs, enums, or unions.
 ### Example 0 - Integers
 
 ```rust
-#[typekin::integral(konst = false)]
+#[typekin::integral(konst = none)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Quantity(usize);
@@ -52,6 +52,11 @@ fn main() {
 }
 ```
 
+Same-type arithmetic and bitwise operators are implemented directly and enabled
+by default. Use `without = [with_self_math]` or
+`without = [with_self_bit]` to omit the corresponding `Quantity op Quantity`
+implementations; friend capabilities apply only to other operand types.
+
 ### Example 1 - Friendship
 
 With the concept of friendship, one can have full control over not only how
@@ -60,7 +65,7 @@ if `PageId(u8)`, `PageState(u8)` and `PageData(u8)` are to be combined into a
 single `PageHeader(u32)` before being written to disk,
 
 ```rust
-#[typekin::integral(konst = false, friends = [
+#[typekin::integral(konst = none, friends = [
     id_to_header(PageId) -> [Math, Rel],
     state_to_header(PageState),
     PageData::to_header(PageData),
@@ -159,7 +164,7 @@ For instance, a callback can reject any `u32` less than 3:
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 #[typekin::integral(
-  konst = false,
+  konst = none,
   valid = Self::is_gte_3,
 )]
 struct Foo(u32);
@@ -183,7 +188,7 @@ chain through the generated operators, even though its final raw result would
 be `3`:
 
 ```rust
-#[typekin::integral(konst = false, valid = Self::is_valid)]
+#[typekin::integral(konst = none, valid = Self::is_valid)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct SkipOneAndTwo(u32);
@@ -207,7 +212,7 @@ operation. When the invariant is a development-time diagnostic rather than a
 release guarantee, a validator can be enabled only by an opt-in Cargo feature:
 
 ```rust
-#[typekin::integral(konst = false, valid = Self::is_valid)]
+#[typekin::integral(konst = none, valid = Self::is_valid)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Counter(u32);
@@ -229,9 +234,17 @@ invariant is required for safety, correctness, or an external contract.
 
 ## Constness Status
 
-`integral` and `bitflag` require explicit `konst = true|false`. Set `true` for
-nightly-only const generation or `false` for ordinary stable implementations.
-`text` also requires explicit `konst = true|false`.
+`integral` requires explicit `konst = none|stable|nightly`. `none` enables no
+optional const flags, `stable` enables `konst_try_make`, and `nightly` enables
+every const flag. `bitflag` and `text` continue to require explicit
+`konst = true|false`.
+
+For `integral`, `konst` is the default for individual const flags. With
+`konst = none`, opt into a family or operation with `with = [konst_math]` or
+`with = [konst_add]`; with `konst = nightly`, opt out with
+`without = [konst_math]` or `without = [konst_add]`. Individual flags always
+override the master mode. More-specific flags such as `konst_add_assign`
+override their operation and family defaults.
 
 ### Friendship is consuming
 
@@ -242,14 +255,14 @@ friends are declared explicitly. Conversions consume their inputs. Integral and
 text equality and ordering remain same-type operations.
 
 ```rust
-#[typekin::integral(konst = false)]
+#[typekin::integral(konst = none)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Quantity(u32);
 
 #[typekin::integral(
   friends = Quantity::raw(Quantity) -> Make,
-  konst = false,
+  konst = none,
 )]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -283,7 +296,7 @@ impl Verified {
 }
 
 #[typekin::integral(
-    konst = false,
+    konst = none,
     in = 1..=100,
     friends = Verified::into_raw(Verified) -> [Make, Trust],
 )]
@@ -320,7 +333,7 @@ path or a comma-separated list in brackets; every listed callback must return
 const fn valid_port(it: u16) -> bool { it != 0 }
 
 #[typekin::integral(
-  konst = false,
+  konst = none,
   valid = valid_port,
 )]
 #[repr(transparent)]
@@ -350,7 +363,7 @@ operations reject values that fail them.
 
 ```rust
 #[typekin::integral(
-  konst = false,
+  konst = none,
   in = [1..=1023, 49_152..=65_535],
 )]
 #[repr(transparent)]
@@ -426,7 +439,7 @@ impl Foo { fn to_u32(self) -> u32 { self.0 } }
 const fn is_valid(value: u32) -> bool { value != 0 }
 
 #[typekin::integral(
-  konst = false, // Required, and `true` needs nightly const features.
+  konst = none, // Required; `nightly` enables all const flags.
   friends = [
     _(u64) -> Bit,         // Only bitwise operations, no conversion needed
     Foo::to_u32(Foo),      // Omitted capabilities default to Math
@@ -464,10 +477,12 @@ Every enum variant is mirrored as a same-named associated constant on its
 generated `{Enum}Value` type. They are constructed through generated integral
 validation, so each enum discriminant must be valid.
 
-`konst` is required and forwarded to `integral` for the generated value type.
-Write it directly as `konst = true` or `konst = false`; use `integral = [...]`
-when configuring other generated value-type behavior. `bitflag` has its own
-`friends` option for enum-left operations; for example,
+`konst` is required. Bitflag's generated integral value type always uses
+nightly const generation; callers therefore need the nightly feature gates
+listed below. Write bitflag's option directly as `konst = true` or
+`konst = false`; use `integral = [...]` when configuring other generated
+value-type behavior. `bitflag` has its own `friends` option for enum-left
+operations; for example,
 `friends = _(u8) -> Bit` or a bracketed list of such declarations. The enum and
 generated value type are registered as friends automatically; enum arithmetic
 operators are not generated.
@@ -517,9 +532,9 @@ fn main() {
 
 ## Const mode
 
-Const generation requires `konst = true`. Until the relevant const features
-stabilize, it remains nightly-only. These gates are sufficient for the
-`integral` example below:
+Full integral const generation requires `konst = nightly`. Until the relevant
+const features stabilize, it remains nightly-only. These gates are sufficient
+for the integral example below:
 
 ```rust
 #![feature(const_cmp)]
@@ -530,7 +545,7 @@ stabilize, it remains nightly-only. These gates are sufficient for the
 #![feature(const_destruct)]
 #![feature(derive_const)]
 
-#[typekin::integral(konst = true)]
+#[typekin::integral(konst = nightly)]
 #[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
@@ -542,7 +557,7 @@ const NEXT: Counter = START + 1u32;
 fn main() { assert_eq!(NEXT.raw(), 11); }
 ```
 
-`bitflag(konst = true)` needs that set plus const iterator support:
+`bitflag` needs that set plus const iterator support:
 
 ```rust
 #![feature(const_cmp)]
@@ -564,10 +579,10 @@ enum Permission {
 }
 ```
 
-Use `konst = false` to generate plain implementations instead:
+Use `konst = none` to generate plain implementations by default:
 
 ```rust
-#[typekin::integral(konst = false)]
+#[typekin::integral(konst = none)]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Counter(u32);

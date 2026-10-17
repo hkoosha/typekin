@@ -10,17 +10,7 @@ mod tests {
         marker: &str,
     ) {
         let item = syn::parse_str(source).expect("valid Rust struct syntax");
-        let error = match TextMaker::new(
-            item,
-            Cfg {
-                konst: false,
-                std: false,
-                callbacks: vec![],
-                values: None,
-                friends: Default::default(),
-                flags: Default::default(),
-            },
-        ) {
+        let error = match TextMaker::new(item, Cfg::new(false, false)) {
             Err(error) => error,
             Ok(_) => panic!("unsupported text shape accepted: {source}"),
         };

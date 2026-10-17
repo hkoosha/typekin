@@ -22,7 +22,6 @@ const _: () = {
             return Self::raw(self);
         }
     }
-    impl Bit for MyU16 {}
     impl Make for MyU16 {
         #[inline(always)]
         fn make(self) -> MyU16 {
@@ -30,7 +29,6 @@ const _: () = {
             return MyU16::_unchecked(raw);
         }
     }
-    impl Math for MyU16 {}
     impl Rel for MyU16 {}
     impl Seal for i16 {
         #[inline(always)]
@@ -970,6 +968,15 @@ const _: () = {
             *self = self._shl(other);
         }
     }
+    impl ::core::ops::BitAndAssign for MyU16 {
+        #[inline(always)]
+        fn bitand_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitand(rhs.0);
+        }
+    }
     impl<T> ::core::ops::BitAndAssign<T> for MyU16
     where
         T: Bit + Seal,
@@ -981,6 +988,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u16(rhs);
             *self = self._bitand(it);
+        }
+    }
+    impl ::core::ops::AddAssign for MyU16 {
+        #[inline(always)]
+        fn add_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._add(rhs.0);
         }
     }
     impl<T> ::core::ops::AddAssign<T> for MyU16
@@ -996,6 +1012,15 @@ const _: () = {
             *self = self._add(it);
         }
     }
+    impl ::core::ops::SubAssign for MyU16 {
+        #[inline(always)]
+        fn sub_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._sub(rhs.0);
+        }
+    }
     impl<T> ::core::ops::SubAssign<T> for MyU16
     where
         T: Math + Seal,
@@ -1007,6 +1032,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u16(rhs);
             *self = self._sub(it);
+        }
+    }
+    impl ::core::ops::MulAssign for MyU16 {
+        #[inline(always)]
+        fn mul_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._mul(rhs.0);
         }
     }
     impl<T> ::core::ops::MulAssign<T> for MyU16
@@ -1022,6 +1056,15 @@ const _: () = {
             *self = self._mul(it);
         }
     }
+    impl ::core::ops::DivAssign for MyU16 {
+        #[inline(always)]
+        fn div_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._div(rhs.0);
+        }
+    }
     impl<T> ::core::ops::DivAssign<T> for MyU16
     where
         T: Math + Seal,
@@ -1035,6 +1078,15 @@ const _: () = {
             *self = self._div(it);
         }
     }
+    impl ::core::ops::RemAssign for MyU16 {
+        #[inline(always)]
+        fn rem_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._rem(rhs.0);
+        }
+    }
     impl<T> ::core::ops::RemAssign<T> for MyU16
     where
         T: Math + Seal,
@@ -1046,6 +1098,15 @@ const _: () = {
         ) {
             let it = Seal::conv_my_u16(rhs);
             *self = self._rem(it);
+        }
+    }
+    impl ::core::ops::BitOrAssign for MyU16 {
+        #[inline(always)]
+        fn bitor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitor(rhs.0);
         }
     }
     impl<T> ::core::ops::BitOrAssign<T> for MyU16
@@ -1085,6 +1146,16 @@ const _: () = {
     if !(::core::mem::align_of::<MyU16>() == ::core::mem::align_of::<u16>()) {
         panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
     };
+    impl ::core::ops::Add for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn add(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._add(rhs.0);
+        }
+    }
     impl<T> ::core::ops::Add<T> for MyU16
     where
         T: Math + Seal,
@@ -1097,6 +1168,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u16(rhs);
             return self._add(it);
+        }
+    }
+    impl ::core::ops::Sub for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn sub(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._sub(rhs.0);
         }
     }
     impl<T> ::core::ops::Sub<T> for MyU16
@@ -1113,6 +1194,16 @@ const _: () = {
             return self._sub(it);
         }
     }
+    impl ::core::ops::Mul for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn mul(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._mul(rhs.0);
+        }
+    }
     impl<T> ::core::ops::Mul<T> for MyU16
     where
         T: Math + Seal,
@@ -1125,6 +1216,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u16(rhs);
             return self._mul(it);
+        }
+    }
+    impl ::core::ops::Div for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn div(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._div(rhs.0);
         }
     }
     impl<T> ::core::ops::Div<T> for MyU16
@@ -1141,6 +1242,16 @@ const _: () = {
             return self._div(it);
         }
     }
+    impl ::core::ops::Rem for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn rem(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._rem(rhs.0);
+        }
+    }
     impl<T> ::core::ops::Rem<T> for MyU16
     where
         T: Math + Seal,
@@ -1153,6 +1264,16 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u16(rhs);
             return self._rem(it);
+        }
+    }
+    impl ::core::ops::BitAnd for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitand(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitand(rhs.0);
         }
     }
     impl<T> ::core::ops::BitAnd<T> for MyU16
@@ -1169,6 +1290,16 @@ const _: () = {
             return self._bitand(it);
         }
     }
+    impl ::core::ops::BitOr for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitor(rhs.0);
+        }
+    }
     impl<T> ::core::ops::BitOr<T> for MyU16
     where
         T: Bit + Seal,
@@ -1181,6 +1312,25 @@ const _: () = {
         ) -> Self::Output {
             let it = Seal::conv_my_u16(rhs);
             return self._bitor(it);
+        }
+    }
+    impl ::core::ops::BitXor for MyU16 {
+        type Output = Self;
+        #[inline(always)]
+        fn bitxor(
+            self,
+            rhs: Self,
+        ) -> Self::Output {
+            return self._bitxor(rhs.0);
+        }
+    }
+    impl ::core::ops::BitXorAssign for MyU16 {
+        #[inline(always)]
+        fn bitxor_assign(
+            &mut self,
+            rhs: Self,
+        ) {
+            *self = self._bitxor(rhs.0);
         }
     }
     impl<T> ::core::ops::BitXor<T> for MyU16

@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::fmt::{
     Debug,
     Formatter,
@@ -53,6 +56,8 @@ mk_flags! {
 #[derive(Clone)]
 pub(crate) struct Cfg {
     pub(crate) konst: bool,
+    konst_flags: BTreeMap<String, bool>,
+    seen_flags: BTreeMap<String, bool>,
     pub(crate) std: bool,
     pub(crate) callbacks: Vec<Path>,
     pub(crate) values: Option<Vec<LitStr>>,
@@ -61,6 +66,76 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
+    const KONST_FLAGS: &[&str] = &[
+        "konst_friendship",
+        "konst_from",
+        "konst_text",
+        "konst_text_friendship",
+        "konst_text_from",
+    ];
+
+    fn parse_flags(
+        &mut self,
+        input: ParseStream,
+        value_if_seen: bool,
+    ) -> syn::Result<()> {
+        let stuff;
+        let _ = syn::bracketed!(stuff in input);
+        let attrs =
+            syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::
+                parse_terminated(&stuff)?;
+        let mut duplicated = BTreeMap::new();
+
+        for attr in attrs {
+            let name = attr.to_string();
+            let span = attr.span();
+
+            if duplicated.insert(name.clone(), span).is_some() {
+                return Err(syn::Error::new(span, "duplicated flags"));
+            }
+
+            if self
+                .seen_flags
+                .get(&name)
+                .is_some_and(|value| *value != value_if_seen)
+            {
+                return Err(syn::Error::new(
+                    span,
+                    "flag specified in both `with` and `without`",
+                ));
+            }
+
+            if name.starts_with("konst_") {
+                if !Self::KONST_FLAGS.contains(&name.as_str()) {
+                    return Err(syn::Error::new(span, "unknown flag"));
+                }
+
+                self.konst_flags.insert(name.clone(), value_if_seen);
+            }
+            else if self.flags.set_bool(&name, value_if_seen).is_err() {
+                return Err(syn::Error::new(span, "unknown flag"));
+            }
+
+            self.seen_flags.insert(name, value_if_seen);
+        }
+
+        return Ok(());
+    }
+
+    fn konst_for(
+        &self,
+        flags: &[&str],
+    ) -> bool {
+        for flag in flags {
+            let name = format!("konst_{flag}");
+            if let Some(value) = self.konst_flags.get(&name) {
+                return *value;
+            }
+        }
+
+        return self.konst;
+    }
+
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
         let values = zz::list::<LitStr>(input)?.vec();
 
@@ -115,6 +190,22 @@ impl Cfg {
     fn has_validation(&self) -> bool {
         return !self.callbacks.is_empty() || self.values.is_some();
     }
+
+    pub(crate) fn new(
+        konst: bool,
+        std: bool,
+    ) -> Self {
+        return Self {
+            konst,
+            konst_flags: Default::default(),
+            seen_flags: Default::default(),
+            std,
+            callbacks: vec![],
+            values: None,
+            friends: BTreeSet::new(),
+            flags: Default::default(),
+        };
+    }
 }
 
 impl Debug for Cfg {
@@ -136,14 +227,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self {
-            std: true,
-            konst: false,
-            callbacks: vec![],
-            values: None,
-            friends: BTreeSet::new(),
-            flags: Default::default(),
-        };
+        let mut this = Self::new(false, true);
         let mut has_konst = false;
 
         zz::parse_inner(input, |attr, rest| {
@@ -170,8 +254,8 @@ impl Parse for Cfg {
                     this.values = Some(Self::parse_values(rest)?);
                 }
                 "friends" => this.parse_friends(rest)?,
-                "with" => this.flags.parse_from(rest, true)?,
-                "without" => this.flags.parse_from(rest, false)?,
+                "with" => this.parse_flags(rest, true)?,
+                "without" => this.parse_flags(rest, false)?,
                 _ => return Ok(false),
             }
 
@@ -263,9 +347,14 @@ impl TextMaker {
 
     fn make_friendship(&self) -> TokenStream {
         let ty = &self.ty;
-        let konst = runner::konst(self.cfg.konst);
-        let bonst = runner::bonst(self.cfg.konst);
-        let destruct = runner::destruct(self.cfg.konst);
+        let is_konst = self.cfg.konst_for(&[
+            "text_friendship",
+            "friendship",
+            "text",
+        ]);
+        let konst = runner::konst(is_konst);
+        let bonst = runner::bonst(is_konst);
+        let destruct = runner::destruct(is_konst);
         let make = format_ident!("Make");
         let trusted = format_ident!("Trust");
         let seal = format_ident!("TextMake");
@@ -349,9 +438,10 @@ impl TextMaker {
             true => quote! { ::std::vec::Vec },
             false => quote! { ::alloc::vec::Vec },
         };
-        let konst = runner::konst(self.cfg.konst);
-        let bonst = runner::bonst(self.cfg.konst);
-        let destruct = runner::destruct(self.cfg.konst);
+        let is_konst = self.cfg.konst_for(&["text"]);
+        let konst = runner::konst(is_konst);
+        let bonst = runner::bonst(is_konst);
+        let destruct = runner::destruct(is_konst);
         let validation = self.validation_condition();
         let display = self.cfg.flags.display.then(|| {
             quote! {
@@ -367,6 +457,11 @@ impl TextMaker {
             }
         });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
+            let konst = runner::konst(self.cfg.konst_for(&[
+                "text_from",
+                "from",
+                "text",
+            ]));
             quote! {
                 #konst impl ::core::convert::From<#ty_string> for #ty {
                     #[inline(always)]

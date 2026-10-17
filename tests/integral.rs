@@ -19,6 +19,13 @@ mod tests {
     #[derive(Copy, Clone)]
     struct MyAuto64(u64);
 
+    #[typekin::integral(konst = false, with = [konst_add])]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct ConstAddOnly(u8);
+
+    const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
+
     #[typekin::integral(konst = true, with = [display])]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
@@ -121,11 +128,22 @@ mod tests {
 
     #[typekin::integral(
         konst = true,
-        without = [impl_core_int],
+        without = [core_int],
     )]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct CoreDisabled(u8);
+
+    #[typekin::integral(
+        konst = true,
+        without = [
+            self_friend_math_ops,
+            self_friend_math_bit,
+        ],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct SelfOperations(u8);
 
     const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
         Ok(number) => number,
@@ -222,6 +240,11 @@ mod tests {
     fn makes_from_raw_value() {
         let it = My32::make(23);
         assert_eq!(it.raw(), 23);
+    }
+
+    #[test]
+    fn selectively_enabled_add_is_const() {
+        assert_eq!(CONST_ADD_ONLY.raw(), 23);
     }
 
     #[test]
@@ -527,6 +550,21 @@ mod tests {
 
         let value = Ranged::try_make(4).unwrap();
         assert_panics(|| value + 1u8);
+    }
+
+    #[test]
+    fn self_operations_do_not_require_friendship() {
+        let one = SelfOperations::make(1);
+        let two = SelfOperations::make(2);
+
+        assert_eq!((one + two).raw(), 3);
+        assert_eq!((one | two).raw(), 3);
+
+        let mut value = one;
+        value += two;
+        assert_eq!(value.raw(), 3);
+        value &= SelfOperations::make(1);
+        assert_eq!(value.raw(), 1);
     }
 
     #[test]
@@ -1086,8 +1124,8 @@ mod tests {
         fn rel_friend_enables_cross_type_equality_and_ordering() {
             let value = Number::try_make(4).unwrap();
 
-            assert!(value == 4u8);
-            assert!(value != 2u8);
+            assert_eq!(value, 4u8);
+            assert_ne!(value, 2u8);
             assert!(value < 6u8);
             assert!(value <= 4u8);
             assert!(value > 2u8);

@@ -2,13 +2,13 @@
 
 ## What this repository is
 
-`typekin` is a single Rust 2024 procedural-macro crate. It generates
-transparent newtypes and the relationships between them:
+`typekin` is a single Rust 2024 procedural-macro crate. It generates transparent
+newtypes and the relationships between them:
 
 - `integral`: integer newtypes, validation, conversions, math, and bitwise
   operations.
-- `bitflag`: an enum plus a generated `{Enum}Value` type for combined or
-  unknown bits.
+- `bitflag`: an enum plus a generated `{Enum}Value` type for combined or unknown
+  bits.
 - `text`: validated `alloc::string::String` newtypes.
 - `friendship` and `constructor`: explicit construction capabilities between
   types.
@@ -36,8 +36,7 @@ constness, and runtime cost as API behavior.
 ## Development rules
 
 - **Directly recorded:** practical usage documentation, no advertising or fluff,
-  and code examples rather than long explanations. These requests recur in
-  historical `PROMPTS.md` (available at commit `5cb75a7`).
+  and code examples rather than long explanations.
 - **Directly recorded:** prove runtime erasure by comparing fully optimized
   nightly assembly for raw and wrapped math/bit operations on already-built
   values. Retain an unoptimized negative control; successful compilation or an
@@ -50,17 +49,16 @@ constness, and runtime cost as API behavior.
 
 ### Preserve invariants on every path
 
-- A generated wrapper must not be constructible in an invalid state through
-  its ordinary safe API.
+- A generated wrapper must not be constructible in an invalid state through its
+  ordinary safe API.
 - Apply all configured validators to every normal construction and
-  transformation path, including friend construction and generated
-  operations.
+  transformation path, including friend construction and generated operations.
 - `text` must not expose `DerefMut`, `AsMut<str>`, `&mut String`, or another
   alias that can leave a live wrapper invalid. Checked mutation consumes the
   wrapper, mutates its `String`, validates, and returns `Result`.
 - A friend granted the `Trust` capability is the narrow documented exception
-  across all type families. It grants no other capabilities; do not broaden
-  its construction-only validation bypass.
+  across all type families. It grants no other capabilities; do not broaden its
+  construction-only validation bypass.
 - Unsupported attributes and combinations must produce a targeted macro
   diagnostic, not be ignored or silently downgraded.
 
