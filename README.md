@@ -14,6 +14,9 @@ types and can be relied upon.
 You can find a set of working examples in the crate repository at
 [typekin/examples](./examples) directory.
 
+Please note: There is no backward compat promises between minor releases until
+the crate hits version 1.0.0.
+
 ## Attribute Macro Inventory and Item Requirements
 
 The supported public attribute macros are:
