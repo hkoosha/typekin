@@ -2,11 +2,9 @@
 mod tests {
     use quote::ToTokens;
 
-    use crate::integral::{
-        Cfg,
-        Konst,
-    };
+    use crate::integral::Cfg;
     use crate::runner::ToCollection;
+    use crate::zz::Konst;
 
     #[test]
     fn accepts_single_friend_with_scalar_or_list_capabilities_friends_crate_convert_crate_source_source_ma_1()
@@ -229,20 +227,23 @@ mod tests {
     }
 
     #[test]
-    fn default_konst_enables_only_stable_flags() {
+    fn default_konst_enables_crate_feature_flags() {
         let cfg = syn::parse_str::<Cfg>("")
-            .expect("stable konst should be the default");
-        assert_eq!(cfg.konst, Konst::Stable);
+            .expect("default konst configuration should parse");
+        assert_eq!(cfg.konst, Konst::default());
 
         assert!(cfg.konst_for(&["try_make"]));
         assert!(cfg.konst_for(&[
             "core_int", "value"
         ]));
-        assert!(!cfg.konst_for(&[
-            "add", "math"
-        ]));
-        assert!(!cfg.konst_for(&["friendship"]));
-        assert!(!cfg.konst_friendship());
+        assert_eq!(
+            cfg.konst_for(&[
+                "add", "math"
+            ]),
+            cfg!(feature = "nightly")
+        );
+        assert_eq!(cfg.konst_for(&["friendship"]), cfg!(feature = "nightly"));
+        assert_eq!(cfg.konst_friendship(), cfg!(feature = "nightly"));
 
         let cfg = syn::parse_str::<Cfg>("without = [konst_try_make]")
             .expect("explicit flags override the stable master default");
@@ -432,13 +433,13 @@ mod tests {
     }
 
     #[test]
-    fn defaults_missing_konst_to_stable() {
+    fn defaults_missing_konst_to_crate_default() {
         let config = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
-            .expect("konst should default to stable");
+            .expect("konst should default to the crate feature");
 
-        assert_eq!(config.konst, Konst::Stable);
+        assert_eq!(config.konst, Konst::default());
         assert!(config.konst_for(&["try_make"]));
-        assert!(!config.konst_for(&["math"]));
+        assert_eq!(config.konst_for(&["math"]), cfg!(feature = "nightly"));
     }
 
     #[test]

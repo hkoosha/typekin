@@ -1,4 +1,5 @@
 #[typekin::text(
+        konst = stable,
         std = true,
         in = ["draft", "published", "published-new", "archive", "-"],
         friends = into_my_tag(MyHeadline<'_>) -> Make,

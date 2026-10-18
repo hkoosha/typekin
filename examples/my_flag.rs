@@ -1,3 +1,17 @@
+#![cfg_attr(
+    feature = "nightly",
+    feature(
+        const_clone,
+        const_cmp,
+        const_convert,
+        const_destruct,
+        const_iter,
+        const_ops,
+        const_trait_impl,
+        derive_const,
+    )
+)]
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u128)]
 #[typekin::bitflag(

@@ -35,6 +35,7 @@ use crate::runner::{
     mk_flags,
 };
 use crate::value_type::N;
+use crate::zz::Konst;
 use crate::{
     integral,
     zz,
@@ -199,13 +200,12 @@ impl Maker {
     fn ekran_vl(&self) -> TokenStream {
         let ty_value = &self.vl;
         let el = &self.el;
-        let derive_clone =
-            if matches!(self.cfg.int.konst, integral::Konst::Nightly) {
-                quote! { #[derive_const(Clone)] }
-            }
-            else {
-                quote! { #[derive(Clone)] }
-            };
+        let derive_clone = if matches!(self.cfg.int.konst, Konst::Nightly) {
+            quote! { #[derive_const(Clone)] }
+        }
+        else {
+            quote! { #[derive(Clone)] }
+        };
 
         return match self.cfg.bit.make_value {
             true => quote! {
@@ -1578,7 +1578,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
     pub(crate) int: Box<integral::Cfg>,
-    konst: integral::Konst,
+    konst: Konst,
     konst_flags: BTreeMap<String, bool>,
     seen_flags: BTreeMap<String, bool>,
 }
@@ -1588,8 +1588,8 @@ impl Parse for Cfg {
         let mut this = Self {
             friends: Default::default(),
             bit: Box::default(),
-            int: Box::new(integral::Cfg::with_konst(integral::Konst::None)),
-            konst: integral::Konst::Stable,
+            int: Box::new(integral::Cfg::with_konst(Konst::None)),
+            konst: Konst::default(),
             konst_flags: Default::default(),
             seen_flags: Default::default(),
         };
@@ -1689,7 +1689,7 @@ impl Cfg {
             }
         }
 
-        return matches!(self.konst, integral::Konst::Nightly);
+        return matches!(self.konst, Konst::Nightly);
     }
 
     fn apply_konst(&mut self) -> syn::Result<()> {
@@ -1742,10 +1742,8 @@ impl Cfg {
                 let content;
                 let _ = bracketed!(content in rest);
 
-                *self.int = integral::Cfg::parse_with_konst(
-                    &content,
-                    integral::Konst::None,
-                )?;
+                *self.int =
+                    integral::Cfg::parse_with_konst(&content, Konst::None)?;
 
                 return Ok(true);
             }

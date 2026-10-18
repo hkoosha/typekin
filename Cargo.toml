@@ -16,6 +16,9 @@ needless_return = "allow"
 [lib]
 proc-macro = true
 
+[features]
+nightly = []
+
 [dependencies]
 quote = "1"
 syn = { version = "3", features = ["full", "visit-mut"] }

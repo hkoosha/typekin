@@ -148,17 +148,17 @@ mod tests {
     fn accepts_top_level_konst_values() {
         let config = syn::parse_str::<Cfg>("konst = nightly")
             .expect("top-level nightly konst should parse");
-        assert_eq!(config.int.konst, crate::integral::Konst::Nightly);
+        assert_eq!(config.int.konst, crate::zz::Konst::Nightly);
 
         let config = syn::parse_str::<Cfg>("konst = stable")
             .expect("top-level stable konst should parse");
-        assert_eq!(config.int.konst, crate::integral::Konst::Stable);
+        assert_eq!(config.int.konst, crate::zz::Konst::Stable);
         assert!(config.int.konst_for(&["value"]));
         assert!(!config.int.konst_for(&["math"]));
 
         let config = syn::parse_str::<Cfg>("konst = none")
             .expect("top-level none konst should parse");
-        assert_eq!(config.int.konst, crate::integral::Konst::None);
+        assert_eq!(config.int.konst, crate::zz::Konst::None);
     }
 
     #[test]
@@ -254,13 +254,13 @@ mod tests {
     }
 
     #[test]
-    fn defaults_missing_konst_to_stable() {
+    fn defaults_missing_konst_to_crate_default() {
         let config = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
-            .expect("konst should default to stable");
+            .expect("konst should default to the crate feature");
 
-        assert_eq!(config.int.konst, crate::integral::Konst::Stable);
+        assert_eq!(config.int.konst, crate::zz::Konst::default());
         assert!(config.int.konst_for(&["value"]));
-        assert!(!config.int.konst_for(&["math"]));
+        assert_eq!(config.int.konst_for(&["math"]), cfg!(feature = "nightly"),);
     }
 
     #[test]

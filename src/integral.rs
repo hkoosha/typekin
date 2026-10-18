@@ -43,7 +43,10 @@ use crate::runner::{
     to_debug,
 };
 use crate::value_type::N;
-use crate::zz::ValidationCfg;
+use crate::zz::{
+    Konst,
+    ValidationCfg,
+};
 use crate::{
     runner,
     zz,
@@ -3107,61 +3110,6 @@ impl Parse for IntegralFriend {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Konst {
-    None,
-    Stable,
-    Nightly,
-}
-
-impl Default for Konst {
-    fn default() -> Self {
-        return Self::Stable;
-    }
-}
-
-impl Konst {
-    pub(crate) const STABLE_FLAGS: &[&str] = &[
-        "core_int", "try_make", "value",
-    ];
-
-    pub(crate) fn enables(
-        self,
-        flags: &[&str],
-    ) -> bool {
-        return match self {
-            Self::None => false,
-            Self::Stable => {
-                flags.iter().any(|flag| Self::STABLE_FLAGS.contains(flag))
-            }
-            Self::Nightly => true,
-        };
-    }
-}
-
-impl Parse for Konst {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if !input.peek(syn::Ident) {
-            return Err(syn::Error::new(
-                input.span(),
-                "expected `none`, `stable`, or `nightly`",
-            ));
-        }
-
-        let name = input.parse::<Ident>()?;
-
-        return match name.to_string().as_str() {
-            "none" => Ok(Self::None),
-            "stable" => Ok(Self::Stable),
-            "nightly" => Ok(Self::Nightly),
-            _ => Err(syn::Error::new(
-                name.span(),
-                "expected `none`, `stable`, or `nightly`",
-            )),
-        };
-    }
-}
-
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
     konst_flags: BTreeMap<String, (bool, Span)>,
@@ -3415,7 +3363,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::with_konst(Konst::Stable);
+        let mut this = Self::with_konst(Konst::default());
 
         zz::parse_inner(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {

@@ -26,6 +26,65 @@ use syn::{
 use crate::runner::MkErr;
 use crate::value_type::N;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Konst {
+    None,
+    Stable,
+    Nightly,
+}
+
+impl Default for Konst {
+    fn default() -> Self {
+        #[cfg(feature = "nightly")]
+        return Self::Nightly;
+
+        #[cfg(not(feature = "nightly"))]
+        return Self::Stable;
+    }
+}
+
+impl Konst {
+    pub(crate) const STABLE_FLAGS: &[&str] = &[
+        "core_int", "try_make", "value",
+    ];
+
+    pub(crate) fn enables(
+        self,
+        flags: &[&str],
+    ) -> bool {
+        return match self {
+            Self::None => false,
+            Self::Stable => {
+                flags.iter().any(|flag| Self::STABLE_FLAGS.contains(flag))
+            }
+            Self::Nightly => true,
+        };
+    }
+}
+
+impl Parse for Konst {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if !input.peek(syn::Ident) {
+            return Err(syn::Error::new(
+                input.span(),
+                "expected `none`, `stable`, or `nightly`",
+            ));
+        }
+
+        let name = input.parse::<Ident>()?;
+
+        return match name.to_string().as_str() {
+            "none" => Ok(Self::None),
+            "stable" => Ok(Self::Stable),
+            "nightly" => Ok(Self::Nightly),
+            _ => Err(syn::Error::new(
+                name.span(),
+                "expected `none`, `stable`, or `nightly`",
+            )),
+        };
+    }
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct ValidationCfg {
     pub(crate) callbacks: Vec<Path>,

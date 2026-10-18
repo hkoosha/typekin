@@ -155,7 +155,7 @@ mod tests {
         )
         .expect("text configuration should parse");
 
-        assert_eq!(cfg.konst, crate::integral::Konst::None);
+        assert_eq!(cfg.konst, crate::zz::Konst::None);
         assert_eq!(cfg.callbacks.len(), 2);
         assert!(cfg.flags.display);
     }
@@ -233,13 +233,13 @@ mod tests {
     }
 
     #[test]
-    fn defaults_missing_konst_to_stable() {
+    fn defaults_missing_konst_to_crate_default() {
         let cfg = syn::parse_str::<Cfg>("valid = is_slug")
-            .expect("konst should default to stable");
+            .expect("konst should default to the crate feature");
 
-        assert_eq!(cfg.konst, crate::integral::Konst::Stable);
+        assert_eq!(cfg.konst, crate::zz::Konst::default());
         assert!(cfg.konst_for(&["text_access"]));
-        assert!(!cfg.konst_for(&["text"]));
+        assert_eq!(cfg.konst_for(&["text"]), cfg!(feature = "nightly"));
     }
 
     #[test]

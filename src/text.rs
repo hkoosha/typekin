@@ -30,7 +30,6 @@ use syn::{
 };
 
 use crate::friendship::cfg::Friend;
-use crate::integral::Konst;
 use crate::runner::{
     self,
     MkErr,
@@ -38,6 +37,7 @@ use crate::runner::{
     mk_flags,
 };
 use crate::zz;
+use crate::zz::Konst;
 
 pub(crate) fn ekran(
     attr: Cfg,
@@ -234,7 +234,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::new(Konst::Stable, true);
+        let mut this = Self::new(Konst::default(), true);
 
         zz::parse_inner(input, |attr, rest| {
             match attr {
