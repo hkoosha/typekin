@@ -189,26 +189,33 @@ mod tests {
     }
 
     #[test]
-    fn defaults_layout_and_copy_traits_and_allows_disabling_them() {
+    fn defaults_layout_and_traits_and_allows_disabling_them() {
         let defaults = syn::parse_str::<Cfg>("konst = none")
             .expect("default bitflag configuration should parse");
         assert!(defaults.bit.clone);
         assert!(defaults.bit.copy);
+        assert!(defaults.bit.hash);
+        assert!(defaults.bit.debug);
         assert!(defaults.bit.repr);
 
-        let enabled =
-            syn::parse_str::<Cfg>("konst = none, with = [clone, copy, repr]")
-                .expect("layout and copy traits should be configurable");
+        let enabled = syn::parse_str::<Cfg>(
+            "konst = none, with = [clone, copy, hash, debug, repr]",
+        )
+        .expect("layout and traits should be configurable");
         assert!(enabled.bit.clone);
         assert!(enabled.bit.copy);
+        assert!(enabled.bit.hash);
+        assert!(enabled.bit.debug);
         assert!(enabled.bit.repr);
 
         let disabled = syn::parse_str::<Cfg>(
-            "konst = none, without = [clone, copy, repr]",
+            "konst = none, without = [clone, copy, hash, debug, repr]",
         )
-        .expect("layout and copy traits should be configurable");
+        .expect("layout and traits should be configurable");
         assert!(!disabled.bit.clone);
         assert!(!disabled.bit.copy);
+        assert!(!disabled.bit.hash);
+        assert!(!disabled.bit.debug);
         assert!(!disabled.bit.repr);
     }
 

@@ -62,7 +62,9 @@ mk_flags! {
     #[derive(Debug, Clone)]
     pub(crate) struct TextFlags {
         pub clone: bool,
+        pub debug: bool,
         pub display: bool,
+        pub hash: bool,
         pub repr: bool,
         pub serde: bool = false,
     }
@@ -468,6 +470,43 @@ impl TextMaker {
                 }
             }
         });
+        let debug = self.cfg.flags.debug.then(|| {
+            let fmt_str = format!("{}({{:?}})", ty);
+            quote! {
+                impl ::core::fmt::Debug for #ty {
+                    #[inline(always)]
+                    fn fmt(
+                        &self,
+                        formatter: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        return ::core::write!(
+                            formatter,
+                            #fmt_str,
+                            self.as_str(),
+                        );
+                    }
+                }
+            }
+        });
+        let hash = self.cfg.flags.hash.then(|| {
+            quote! {
+                impl ::core::hash::Hash for #ty {
+                    #[inline(always)]
+                    fn hash<H>(
+                        &self,
+                        state: &mut H,
+                    )
+                    where
+                        H: ::core::hash::Hasher,
+                    {
+                        return ::core::hash::Hash::hash(
+                            self.as_str(),
+                            state,
+                        );
+                    }
+                }
+            }
+        });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "text_from",
@@ -721,28 +760,9 @@ impl TextMaker {
                 }
             }
 
-            impl ::core::fmt::Debug for #ty {
-                #[inline(always)]
-                fn fmt(
-                    &self,
-                    formatter: &mut ::core::fmt::Formatter<'_>,
-                ) -> ::core::fmt::Result {
-                    return ::core::fmt::Debug::fmt(self.as_str(), formatter);
-                }
-            }
+            #debug
 
-            impl ::core::hash::Hash for #ty {
-                #[inline(always)]
-                fn hash<H>(
-                    &self,
-                    state: &mut H,
-                )
-                where
-                    H: ::core::hash::Hasher,
-                {
-                    return ::core::hash::Hash::hash(self.as_str(), state);
-                }
-            }
+            #hash
 
             impl ::core::cmp::PartialEq for #ty {
                 #[inline(always)]

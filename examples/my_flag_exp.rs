@@ -12,7 +12,7 @@
     )
 )]
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Copy, Debug, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Copy, Hash, Debug)]
 #[repr(u128)]
 pub enum MyFlag {
     Z = 0,
@@ -1188,6 +1188,17 @@ const _: () = {
             f: &mut ::core::fmt::Formatter<'_>,
         ) -> ::core::fmt::Result {
             ::core::write!(f, "MyFlags({})", self.0)
+        }
+    }
+    impl ::core::hash::Hash for MyFlags {
+        #[inline(always)]
+        fn hash<H>(
+            &self,
+            state: &mut H,
+        ) where
+            H: ::core::hash::Hasher,
+        {
+            return ::core::hash::Hash::hash(&self.0, state);
         }
     }
     impl ::core::cmp::Eq for MyFlags {}

@@ -1135,6 +1135,17 @@ const _: () = {
             ::core::write!(f, "MyPlain({})", self.0)
         }
     }
+    impl ::core::hash::Hash for MyPlain {
+        #[inline(always)]
+        fn hash<H>(
+            &self,
+            state: &mut H,
+        ) where
+            H: ::core::hash::Hasher,
+        {
+            return ::core::hash::Hash::hash(&self.0, state);
+        }
+    }
     const impl ::core::cmp::Eq for MyPlain {}
     const impl ::core::cmp::Ord for MyPlain {
         #[inline(always)]

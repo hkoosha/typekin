@@ -154,6 +154,12 @@ mod tests {
     }
 
     #[test]
+    fn formats_debug_with_the_type_name() {
+        let text = FullyGeneratedText::try_from_str("full").unwrap();
+        assert_eq!(format!("{text:?}"), r#"FullyGeneratedText("full")"#,);
+    }
+
+    #[test]
     fn text_layout_and_clone_can_be_supplied_manually() {
         fn accepts_traits<T: Clone>() {}
 

@@ -1134,6 +1134,17 @@ const _: () = {
             ::core::write!(f, "MyU32({})", self.0)
         }
     }
+    impl ::core::hash::Hash for MyU32 {
+        #[inline(always)]
+        fn hash<H>(
+            &self,
+            state: &mut H,
+        ) where
+            H: ::core::hash::Hasher,
+        {
+            return ::core::hash::Hash::hash(&self.0, state);
+        }
+    }
     impl ::core::cmp::Eq for MyU32 {}
     impl ::core::cmp::Ord for MyU32 {
         #[inline(always)]

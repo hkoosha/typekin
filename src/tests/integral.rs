@@ -273,26 +273,33 @@ mod tests {
     }
 
     #[test]
-    fn defaults_layout_and_copy_traits_and_allows_disabling_them() {
+    fn defaults_layout_and_traits_and_allows_disabling_them() {
         let defaults = syn::parse_str::<Cfg>("konst = none")
             .expect("default integral configuration should parse");
         assert!(defaults.flags.clone);
         assert!(defaults.flags.copy);
+        assert!(defaults.flags.debug);
+        assert!(defaults.flags.hash);
         assert!(defaults.flags.repr);
 
-        let enabled =
-            syn::parse_str::<Cfg>("konst = none, with = [clone, copy, repr]")
-                .expect("layout and copy traits should be configurable");
+        let enabled = syn::parse_str::<Cfg>(
+            "konst = none, with = [clone, copy, debug, hash, repr]",
+        )
+        .expect("layout and traits should be configurable");
         assert!(enabled.flags.clone);
         assert!(enabled.flags.copy);
+        assert!(enabled.flags.debug);
+        assert!(enabled.flags.hash);
         assert!(enabled.flags.repr);
 
         let disabled = syn::parse_str::<Cfg>(
-            "konst = none, without = [clone, copy, repr]",
+            "konst = none, without = [clone, copy, debug, hash, repr]",
         )
-        .expect("layout and copy traits should be configurable");
+        .expect("layout and traits should be configurable");
         assert!(!disabled.flags.clone);
         assert!(!disabled.flags.copy);
+        assert!(!disabled.flags.debug);
+        assert!(!disabled.flags.hash);
         assert!(!disabled.flags.repr);
     }
 

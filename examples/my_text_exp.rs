@@ -217,7 +217,7 @@ const _: () = {
             &self,
             formatter: &mut ::core::fmt::Formatter<'_>,
         ) -> ::core::fmt::Result {
-            return ::core::fmt::Debug::fmt(self.as_str(), formatter);
+            return ::core::write!(formatter, "MyTag({:?})", self.as_str(),);
         }
     }
     impl ::core::hash::Hash for MyTag {

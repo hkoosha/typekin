@@ -2414,6 +2414,24 @@ impl Maker {
             stream.extend(it);
         }
 
+        if self.cfg.flags.hash {
+            let it = quote! {
+                impl ::core::hash::Hash for #ty {
+                    #[inline(always)]
+                    fn hash<H>(
+                        &self,
+                        state: &mut H,
+                    )
+                    where
+                        H: ::core::hash::Hasher,
+                    {
+                        return ::core::hash::Hash::hash(&self.0, state);
+                    }
+                }
+            };
+            stream.extend(it);
+        }
+
         if self.cfg.flags.eq {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "eq",
@@ -3432,6 +3450,7 @@ mk_flags! {
 
         pub debug: bool,
         pub display: bool = false,
+        pub hash: bool,
         pub eq: bool,
         pub fmt_binary: bool,
         pub fmt_hex_lower: bool,

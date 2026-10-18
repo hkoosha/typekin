@@ -144,6 +144,15 @@ mod tests {
     }
 
     #[test]
+    fn formats_debug_for_flags_and_values() {
+        assert_eq!(format!("{:?}", FullyGeneratedFlag::Read), "Read");
+        assert_eq!(
+            format!("{:?}", FullyGeneratedFlag::Read.into_value()),
+            "FullyGeneratedFlagValue(1)",
+        );
+    }
+
+    #[test]
     fn bitflag_copy_and_clone_can_be_supplied_manually() {
         fn accepts_traits<T: Copy + Clone>() {}
 

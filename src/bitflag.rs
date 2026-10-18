@@ -58,11 +58,14 @@ pub(crate) fn bitflag(
         }
     };
     let derive_copy = attr.bit.copy.then(|| quote! { #[derive(Copy)] });
+    let derive_hash = attr.bit.hash.then(|| quote! { #[derive(Hash)] });
+    let derive_debug = attr.bit.debug.then(|| quote! { #[derive(Debug)] });
     let attributes = quote! {
         #derive_clone
         #derive_comparison
         #derive_copy
-        #[derive(Debug, Hash)]
+        #derive_hash
+        #derive_debug
     };
 
     return ekran(attr, item, attributes);
@@ -1829,6 +1832,8 @@ mk_flags! {
     pub(crate) struct BitFlags {
         pub clone: bool,
         pub copy: bool,
+        pub hash: bool,
+        pub debug: bool,
         pub make_value: bool,
         pub impl_value: bool,
         pub display: bool = false,
