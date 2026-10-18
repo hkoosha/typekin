@@ -1,50 +1,58 @@
 # Typekin
 
-Typekin is a set of proc-macros for defining new types with relations between
-them. Out of the box, it comes with integer and enum-backed bitflags without the
-need to hand-write their conversions and operator implementations, validated
-text newtypes over `std::string::String` or `alloc::string::String`.
+Typekin is a Rust procedural-macro crate for defining transparent newtypes and
+explicit relationships between them. It makes construction, permitted
+operations, and validation boundaries explicit while staying zero-cost.
 
-The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
-tight control over construction of values. Friend conversions consume their
-input; non-`Copy` friends are moved into the conversion. Once a validated value
-enters the validated graph, it stays validated while it moves between different
-types and can be relied upon. Friendship is an infallible contract: a friend
-conversion that produces an invalid value panics. If conversion rejection is an
-expected outcome, rust's own `TryFrom` or `TryInto` is better suited for
-creating the relations.
+Friendship controls construction and cross-type operations. Friend conversions
+consume their input. Once a value enters the validated graph through an ordinary
+safe path, generated construction and transformation APIs preserve its
+invariant. Friendship is an infallible contract, not an expected-failure
+conversion mechanism. If conversion failure is expected, Rust's `TryFrom` or
+`TryInto` is likely better suited.
 
-You can find a set of working examples in the crate repository at
-[typekin/examples](./examples) directory.
+The generated code adds no runtime dependencies. Optimized assembly comparisons
+for covered integral operations verify that wrapper code matches primitive
+equivalents after inlining. The annotated types are not hidden and remain in
+scope, so additional inherent implementations and derive attributes remain
+available. Currently, Typekin provides:
 
-Please note: There is no backward compat promises between minor releases until
-the crate hits version 1.0.0.
+- friendship protocols for capability-gated construction and operations;
+- integer newtypes with validation and generated conversions, mathematical
+  operations, and bitwise operations;
+- enum-backed bitflags modeled after the
+  [`bitflags`](https://crates.io/crates/bitflags) crate;
+- validated `String` newtypes over `std` or `alloc`, which allocate only when
+  their underlying `String` operation does;
+- configurable const support. By default, all stable const features are enabled.
+  Additional constness for math operations requires `konst = nightly`;
+- allocation-free generated integral and bitflag code: it requires neither
+  `std` nor `alloc` and does not allocate. Allocation in caller-provided
+  callbacks, conversions, or Serde backends is outside Typekin's generated code;
+- individual feature flags for disabling generation of specific features.
+
+Working examples are available in the repository's [examples](./examples)
+directory. This crate makes no backward-compatibility guarantees before version
+1.0.0.
 
 ## Attribute Macro Inventory and Item Requirements
 
 The supported public attribute macros are:
 
-- `#[typekin::integral]`
-- `#[typekin::bitflag]`
-- `#[typekin::text]`
-- `#[typekin::friends]`
-
-The crate also exposes an incomplete attribute macro:
-
-- `#[typekin::constructor]`
-
-`integral` requires a one-field tuple struct whose field is a primitive integer.
-`text` requires a non-generic one-field tuple struct whose field is an
-unqualified `String`. Their `repr` attribute is optional and not interpreted by
-the macro. `bitflag` requires a unit enum with an integral `repr`. `friends`
-accepts concrete, non-generic structs, enums, or unions.
+- `#[typekin::integral]`: over a one-field tuple struct whose field is a
+  primitive integer.
+- `#[typekin::bitflag]`: over a unit enum with an integral `repr`.
+- `#[typekin::text]` over non-generic one-field tuple struct whose field is an
+  unqualified `String`.
+- `#[typekin::friends]`: over concrete, non-generic structs, enums, or unions.
+  This is the underlying machinery of other macros.
 
 ## Examples
 
 ### Example 0 - Integers
 
 ```rust
-#[typekin::integral(konst = none)]
+#[typekin::integral]
 #[derive(Copy, Clone)]
 struct Quantity(usize);
 
@@ -57,25 +65,21 @@ fn main() {
 }
 ```
 
-Same-type arithmetic and bitwise operators are implemented directly and enabled
-by default. Use `without = [self_math]` or `without = [self_bit]` to omit the
-corresponding `Quantity op Quantity` implementations; friend capabilities apply
-only to other operand types.
-
 ### Example 1 - Friendship
 
-With the concept of friendship, one can have full control over not only how
-different types are cast to each other but also how they interact. For example,
-if `PageId(u8)`, `PageState(u8)` and `PageData(u8)` are to be combined into a
-single `PageHeader(u32)` before being written to disk,
+With friendships, one can have full control over _how_ different types are cast
+to each other and how they interact. For example, if `PageId(u8)`,
+`PageState(u8)` and `PageData(u8)` are to be combined into a single
+`PageHeader(u32)` before being written to disk:
 
 ```rust
-#[typekin::integral(konst = none, friends = [
-    id_to_header(PageId) -> [Math, Rel],
+// The friend syntax is: CONVERSION_FN(FRIEND_TYPE) -> [CAPABILITY, ...]
+// With no explicit capability, the default is assumed.
+#[typekin::integral(friends = [
+    id_to_header(PageId) -> [Math, Rel], 
     state_to_header(PageState),
     PageData::to_header(PageData),
 ])]
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;
@@ -83,14 +87,20 @@ struct PageHeader(u32);
 
 #[derive(Copy, Clone)]
 struct PageId(u8);
+#[inline(always)]
+fn id_to_header(it: PageId) -> u32 { (it.0 as u32) << 24 }
+
 #[derive(Copy, Clone)]
 struct PageState(u8);
+#[inline(always)]
+fn state_to_header(it: PageState) -> u32 { (it.0 as u32) << 16 }
+
 #[derive(Copy, Clone)]
 struct PageData(u8);
-
-fn id_to_header(it: PageId) -> u32 { (it.0 as u32) << 24 }
-fn state_to_header(it: PageState) -> u32 { (it.0 as u32) << 16 }
-impl PageData { fn to_header(self) -> u32 { self.0 as u32 } }
+impl PageData {
+    #[inline(always)]
+    fn to_header(self) -> u32 { self.0 as u32 }
+}
 
 fn main() {
     let id = PageId(0b0000_0101);
@@ -128,13 +138,11 @@ and `Target::of` passes the resulting relation to `Target::of_parts`:
 struct Target(u8);
 
 impl Target {
-    #[inline(always)]
     fn of_parts(relation: u8) -> Self { Self(relation) }
 }
 
 struct Source(u8);
 impl Source {
-    #[inline(always)]
     fn into_relation(self) -> u8 { self.0 }
 }
 
@@ -142,7 +150,9 @@ fn main() {
     // The generated `of` method accepts instances of `Source` and knows how to
     // extract the relation value and construct a Target using the defined
     // `of_parts`
-    assert_eq!(Target::of(Source(7)).0, 7);
+    let source = Source(7);
+    let target = Target::of(source);
+    assert_eq!(target.0, 7);
 }
 ```
 
@@ -163,58 +173,30 @@ value. To validate only a final result, extract the raw value, do the primitive
 operations (using checked arithmetic when overflow must be handled), and
 reconstruct with `try_make`.
 
-For instance, a callback can reject any `u32` less than 3:
+The validations can still incur a runtime cost, hence the validation function
+can be disabled in certain profiles such as release; just as how rust disables
+overflow checks at runtime:
 
 ```rust
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-#[typekin::integral(
-  konst = none,
-  valid = Self::is_gte_3,
-)]
-struct Foo(u32);
+#[inline(always)]
+const fn is_div_by_3(raw: usize) -> bool {
+    // In debug profile, raw is always validated before creating the type `Foo`:
+    #[cfg(debug_assertions)] return raw % 3 == 0;
 
-impl Foo {
-    #[inline(always)]
-    const fn is_gte_3(value: u32) -> bool { value >= 3 }
+    // Inlines to NO-OP and vanishes in release:
+    #[cfg(not(debug_assertions))] return true;
 }
+
+#[derive(Copy, Clone)]
+#[typekin::integral(valid = is_div_by_3)]
+struct Foo(usize);
 
 fn main() {
     let lhs = Foo::try_make(5).unwrap();
     let rhs = Foo::try_make(3).unwrap();
 
-    // Panics: 5 - 3 = 2, which fails `is_gte_3`:
+    // Panics: 5 - 3 = 2, which fails `is_div_by_3`:
     let _: Foo = lhs - rhs;
-}
-```
-
-Similarly, a type that accepts `0` but rejects `1` and `2` cannot evaluate this
-chain through the generated operators, even though its final raw result would be
-`3`:
-
-```rust
-#[typekin::integral(konst = none, valid = Self::is_valid)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct SkipOneAndTwo(u32);
-
-impl SkipOneAndTwo {
-    const fn is_valid(value: u32) -> bool { value != 1 && value != 2 }
-}
-
-fn main() {
-    let start = SkipOneAndTwo::try_make(0).unwrap();
-    // Parses as `(start + 1) + 2`; the first `+` must create `SkipOneAndTwo(1)`.
-    let _: SkipOneAndTwo = start + 1 + 2; // Panics.
-
-    // Validate only the final raw result instead.
-    let value = start.try_map(|raw| raw + 1 + 2).unwrap();
-    assert_eq!(value.raw(), 3);
-
-    let value = SkipOneAndTwo::try_make(0)
-        .unwrap()
-        .map(|raw| raw + 1 + 2);
-    assert_eq!(value.raw(), 3);
 }
 ```
 
@@ -224,34 +206,9 @@ once and intermediate primitive values are not validated. Primitive overflow and
 closure panics retain their normal Rust behavior. Use `without = [map]` to omit
 both methods.
 
-The methods are non-const by default. `with = [with_const_map_fn]` makes them
-const for nightly callers using const closures and the corresponding Rust
-feature gates.
-
 Validation has a runtime cost on every checked construction and generated
 operation. When the invariant is a development-time diagnostic rather than a
 release guarantee, a validator can be enabled only by an opt-in Cargo feature:
-
-```rust
-#[typekin::integral(konst = none, valid = Self::is_valid)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct Counter(u32);
-
-impl Counter {
-    #[cfg(feature = "validate")]
-    const fn is_valid(value: u32) -> bool { value <= 1_000 }
-
-    #[cfg(not(feature = "validate"))]
-    #[inline(always)]
-    const fn is_valid(_: u32) -> bool { true }
-}
-```
-
-This is analogous to the usual profile-dependent integer-overflow checking: it
-can reduce release overhead, but it also means invalid values can be constructed
-in builds without the feature. It is not suitable when the invariant is required
-for safety, correctness, or an external contract.
 
 ## Constness Status
 
@@ -262,19 +219,6 @@ and bitflag, `stable` enables stable validation and value operations. For text,
 it enables const read-only accessors; `nightly` additionally enables supported
 owned construction and conversion.
 
-For `integral` and `bitflag`, `konst` is the default for individual const flags.
-With `konst = none`, opt into a family or operation with `with = [konst_math]`
-or `with = [konst_add]`; with `konst = nightly`, opt out with
-`without = [konst_math]` or `without = [konst_add]`. Bitflag forwards its const
-flags to the generated integral value type, rejecting nested integral const
-flags that conflict with its own setting. Individual flags always override the
-master mode. More-specific flags such as `konst_add_assign` override their
-operation and family defaults.
-
-For text, the stable default enables `as_str`, `as_bytes`, `len`, `is_empty`,
-and `capacity`. Use `with = [konst_text_access]` to enable only those accessors,
-or `with = [konst_text]` for the nightly-only owned operations.
-
 ### Friendship is consuming
 
 Friend capabilities gate construction and operations. Integral automatically
@@ -283,63 +227,12 @@ construction when unvalidated; bitflag registers its enum/value pair. Additional
 friends are declared explicitly. Conversions consume their inputs. Integral and
 text equality and ordering remain same-type operations.
 
-```rust
-#[typekin::integral(konst = none)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct Quantity(u32);
-
-#[typekin::integral(
-  friends = Quantity::raw(Quantity) -> Make,
-  konst = none,
-)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct Limit(u32);
-
-fn main() {
-    let quantity = Quantity::make(5);
-    let limit = Limit::of(quantity);
-    assert_eq!(limit.raw(), 5);
-}
-```
-
 ### Trusted friend construction
 
 Friends without `unsafe` are untrusted. Integral and text `of` validate their
 converted values and panic if invalid. Granting both `Make` and `unsafe` skips
 only that friend-construction validation: the friend author must prove the
 converted value is already valid. `unsafe` alone does not grant `Make`.
-
-```rust
-struct Verified(u32);
-
-impl Verified {
-    #[inline(always)]
-    fn try_make(raw: u32) -> Option<Self> {
-        (1..=100).contains(&raw).then_some(Self(raw))
-    }
-
-    #[inline(always)]
-    fn into_raw(self) -> u32 { self.0 }
-}
-
-#[typekin::integral(
-    konst = none,
-    in = 1..=100,
-    friends = Verified::into_raw(Verified) -> [Make, unsafe],
-)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct Limited(u32);
-
-fn main() {
-    let verified = Verified::try_make(42).unwrap();
-    let limited = Limited::of(verified); // Consumes the non-Copy friend.
-    assert_eq!(limited.raw(), 42);
-    assert_eq!(Limited::try_make(0), Err(0));
-}
-```
 
 The `unsafe` capability grants no additional operations. Checked constructors
 and math/bitwise operation results still validate, including operations with a
@@ -356,16 +249,12 @@ checks. Relations and friend inputs can both be non-`Copy`.
 
 Place each constraint at the macro root. `valid` accepts either one callback
 path or a comma-separated list in brackets; every listed callback must return
-`true`.
+`true` for the value to be considered valid.
 
 ```rust
-const fn valid_port(it: u16) -> bool { it != 0 }
+const fn is_valid_port(it: u16) -> bool { it != 0 }
 
-#[typekin::integral(
-  konst = none,
-  valid = valid_port,
-)]
-#[repr(transparent)]
+#[typekin::integral(valid = is_valid_port)]
 #[derive(Copy, Clone)]
 struct Port(u16);
 
@@ -392,10 +281,8 @@ reject values that fail them.
 
 ```rust
 #[typekin::integral(
-  konst = none,
   in = [1..=1023, 49_152..=65_535],
 )]
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Port(u16);
 
@@ -415,7 +302,8 @@ error values.
 `text` creates a validated `String` newtype. By default (`std = true`),
 generated paths use `::std::{string::String, vec::Vec}`. Set `std = false` to
 use the corresponding `::alloc` paths. Text needs the allocator crate in scope
-when not using std:
+when not using std. Unlike other types, `Display` is generated by default for
+`text`; use `without = [display]` to opt out.
 
 ```rust
 extern crate alloc;
@@ -423,7 +311,6 @@ extern crate alloc;
 use alloc::string::String;
 
 #[typekin::text(
-    konst = none,
     std = false,
     in = ["draft", "news", "medical-news"],
     // `valid = some_fn` is the alternative to literal membership.
@@ -448,19 +335,6 @@ fn main() {
 }
 ```
 
-`konst` defaults to `stable`. Choose exactly one validation mode: `valid`
-accepts one callback path or a bracketed list of callbacks, while `in` accepts a
-duplicate-free list of string literals. Membership compares exact strings
-without case or Unicode normalization. `in = []` rejects every normal input;
-`in = [""]` admits the empty string.
-
-`Display` is generated by default; use `without = [display]` to opt out.
-
-Text friends use `conversion(Source) -> Make`, with an owning function returning
-`String`. Missing conversions are rejected during macro expansion. Friend output
-is validated by default and panics if invalid. `-> [Make, unsafe]` bypasses only
-that construction validation; use it only when validity is proved independently.
-
 ### Serde
 
 Use `with = [serde]` on `integral`, `text`, or `bitflag` to generate `Serialize`
@@ -484,7 +358,7 @@ impl Foo { fn to_u32(self) -> u32 { self.0 } }
 const fn is_valid(value: u32) -> bool { value != 0 }
 
 #[typekin::integral(
-  konst = none, // Required; `nightly` enables all const flags.
+  konst = nightly,         // Enables all const flags.
   friends = [
     self(u16) -> Bit,      // Only bitwise operations, using `Into<u32>`
     Foo::to_u32(Foo),      // Omitted capabilities default to Math
@@ -493,7 +367,6 @@ const fn is_valid(value: u32) -> bool { value != 0 }
   get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
   valid = is_valid,        // Reject invalid raw values in checked construction
 )]
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Example(u32);
 
@@ -526,9 +399,7 @@ value-type name.
 ```rust
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[typekin::bitflag(
-    with = [display]
-)]
+#[typekin::bitflag(with = [display])]
 pub enum Perm {
     None = 0,
     Read = 0b001,
@@ -580,7 +451,6 @@ for the integral example below:
 #![feature(derive_const)]
 
 #[typekin::integral(konst = nightly)]
-#[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
 pub struct Counter(u32);
@@ -613,11 +483,16 @@ enum Permission {
 }
 ```
 
-Use `konst = none` to generate plain implementations by default:
+Use `konst = none` to generate plain implementations by default, for instance
+when the validator cannot be const:
 
 ```rust
+// Not a const fn:
+fn is_valid(it: u32) -> bool {
+  return true;
+}
+
 #[typekin::integral(konst = none)]
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Counter(u32);
 ```
