@@ -220,6 +220,28 @@ mod tests {
     }
 
     #[test]
+    fn accepts_one_root_generation_flag_without_brackets() {
+        let input = "konst = none, with = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(config.bit.display);
+
+        let input = "konst = none, without = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(!config.bit.display);
+    }
+
+    #[test]
+    fn accepts_one_nested_integral_flag_without_brackets() {
+        let input = "konst = none, integral = [with = display]";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(config.int.flags.display);
+
+        let input = "konst = none, integral = [without = display]";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(!config.int.flags.display);
+    }
+
+    #[test]
     fn rejects_matching_repr_on_both_bitflag_and_enum() {
         let error = resolve_repr(
             Some(N::U008),

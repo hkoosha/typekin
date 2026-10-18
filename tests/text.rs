@@ -73,7 +73,7 @@ mod tests {
     #[typekin::text(konst = none, std = false, friends = self(Self) -> [Rel])]
     struct DisplayText(String);
 
-    #[typekin::text(konst = none, std = false, without = [display])]
+    #[typekin::text(konst = none, std = false, without = display)]
     struct NoDisplayText(String);
 
     impl core::fmt::Display for NoDisplayText {
@@ -119,7 +119,7 @@ mod tests {
         konst = none,
         std = false,
         valid = is_serde_text_valid,
-        with = [serde],
+        with = serde,
     )]
     struct SerdeText(String);
 

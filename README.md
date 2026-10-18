@@ -331,7 +331,7 @@ fn main() {
 
 ### Serde
 
-Use `with = [serde]` on `integral`, `text`, or `bitflag` to generate `Serialize`
+Use `with = serde` on `integral`, `text`, or `bitflag` to generate `Serialize`
 and `Deserialize`. Deserialization applies every configured validator. Typekin
 has no Serde Cargo feature and does not provide Serde as a normal dependency:
 the consuming crate must add `serde` directly and apply any desired `cfg` gating

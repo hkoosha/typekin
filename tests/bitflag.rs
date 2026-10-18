@@ -857,8 +857,8 @@ mod tests {
     mod display_configuration {
         #[repr(u8)]
         #[typekin::bitflag(
-            with = [display],
-            integral = [without = [display]],
+            with = display,
+            integral = [without = display],
         )]
         enum RootBeforeNested {
             Read = 1,
@@ -867,8 +867,8 @@ mod tests {
 
         #[repr(u8)]
         #[typekin::bitflag(
-            integral = [without = [display]],
-            with = [display],
+            integral = [without = display],
+            with = display,
         )]
         enum NestedBeforeRoot {
             Read = 1,
@@ -876,7 +876,7 @@ mod tests {
         }
 
         #[repr(u8)]
-        #[typekin::bitflag(integral = [with = [display]])]
+        #[typekin::bitflag(integral = [with = display])]
         enum NestedOnly {
             Read = 1,
             Write = 2,
@@ -884,8 +884,8 @@ mod tests {
 
         #[repr(u8)]
         #[typekin::bitflag(
-            without = [display],
-            integral = [with = [display]],
+            without = display,
+            integral = [with = display],
         )]
         enum DisabledRootBeforeNested {
             Read = 1,
@@ -894,8 +894,8 @@ mod tests {
 
         #[repr(u8)]
         #[typekin::bitflag(
-            integral = [with = [display]],
-            without = [display],
+            integral = [with = display],
+            without = display,
         )]
         enum NestedBeforeDisabledRoot {
             Read = 1,

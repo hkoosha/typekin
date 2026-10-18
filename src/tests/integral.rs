@@ -647,6 +647,17 @@ mod tests {
     }
 
     #[test]
+    fn accepts_one_generation_flag_without_brackets() {
+        let input = "konst = none, with = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(config.flags.display);
+
+        let input = "konst = none, without = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(!config.flags.display);
+    }
+
+    #[test]
     fn accepts_core_integral_generation_flag_konst_none_with_core_int_1() {
         let input = "konst = none, with = [core_int]";
         syn::parse_str::<Cfg>(input).expect(input);

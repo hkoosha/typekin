@@ -1684,11 +1684,7 @@ impl Cfg {
         input: ParseStream,
         value_if_seen: bool,
     ) -> syn::Result<()> {
-        let stuff;
-        let _ = syn::bracketed!(stuff in input);
-        let attrs =
-            syn::punctuated::Punctuated::<Ident, syn::Token![,]>::
-                parse_terminated(&stuff)?;
+        let attrs = zz::one_or_list::<Ident>(input)?;
 
         for attr in attrs {
             let name = attr.to_string();

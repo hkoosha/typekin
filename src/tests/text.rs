@@ -187,6 +187,17 @@ mod tests {
     }
 
     #[test]
+    fn accepts_one_generation_flag_without_brackets() {
+        let input = "konst = none, with = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(config.flags.display);
+
+        let input = "konst = none, without = display";
+        let config = syn::parse_str::<Cfg>(input).expect(input);
+        assert!(!config.flags.display);
+    }
+
+    #[test]
     fn defaults_layout_and_traits_and_allows_disabling_them() {
         let defaults = syn::parse_str::<Cfg>("konst = none")
             .expect("default text configuration should parse");

@@ -25,7 +25,7 @@ mod tests {
     #[typekin::integral(konst = nightly)]
     struct MyAuto64(u64);
 
-    #[typekin::integral(konst = none, with = [konst_add])]
+    #[typekin::integral(konst = none, with = konst_add)]
     struct ConstAddOnly(u8);
 
     const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
@@ -69,7 +69,7 @@ mod tests {
 
     #[typekin::integral(
         konst = none,
-        without = [fn_conv_raw],
+        without = fn_conv_raw,
         get_raw = Self::decoded,
     )]
     struct AccessedMap(u8);
