@@ -76,7 +76,12 @@ fn ekran(
     return zz_runner::catching(move || {
         let attrs = &item.attrs;
         let span = item.span();
-        let repr = zz::find_repr_n(attrs, span)?;
+        let item_repr = zz::find_repr_n_optional(attrs, &span)?;
+        let repr = resolve_repr(attr.repr, item_repr, span)?;
+        let repr_attr = attr.repr.map(|it| {
+            let it = format_ident!("{}", it.rust_name());
+            quote! { #[repr(#it)] }
+        });
         let ty = item.ident.clone();
         let items = item.variants.iter().map(|it| it.ident.clone()).vec();
 
@@ -89,8 +94,27 @@ fn ekran(
         }
 
         let stream = Maker::new(ty, repr, attr, items).ekran()?;
-        return Ok(quote! { #attributes #item #stream });
+        return Ok(quote! { #attributes #repr_attr #item #stream });
     });
+}
+
+pub(crate) fn resolve_repr(
+    attr_repr: Option<N>,
+    item_repr: Option<N>,
+    span: impl Spanned,
+) -> syn::Result<N> {
+    if attr_repr.is_some() && item_repr.is_some() {
+        return span
+            .fail("repr cannot be specified on both bitflag and the enum");
+    }
+
+    return match attr_repr.or(item_repr) {
+        Some(repr) => Ok(repr),
+        None => span.fail(
+            "bitflag requires `repr = <numeric type>` or \
+             `#[repr(<numeric type>)]` on the enum",
+        ),
+    };
 }
 
 pub(crate) struct Maker {
@@ -1607,6 +1631,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
     pub(crate) int: Box<integral::Cfg>,
+    repr: Option<N>,
     konst: Konst,
     konst_flags: BTreeMap<String, bool>,
     seen_flags: BTreeMap<String, bool>,
@@ -1618,6 +1643,7 @@ impl Parse for Cfg {
             friends: Default::default(),
             bit: Box::default(),
             int: Box::new(integral::Cfg::with_konst(Konst::None)),
+            repr: None,
             konst: Konst::default(),
             konst_flags: Default::default(),
             seen_flags: Default::default(),
@@ -1750,6 +1776,13 @@ impl Cfg {
         match attr {
             "konst" => {
                 self.konst = rest.parse()?;
+            }
+            "repr" => {
+                let repr: Ident = rest.parse()?;
+                self.repr = N::of(repr.to_string());
+                if self.repr.is_none() {
+                    return repr.fail("repr must be a Rust numeric type");
+                }
             }
             "with" => self.parse_flags(rest, true)?,
             "without" => self.parse_flags(rest, false)?,

@@ -277,9 +277,7 @@ are ANDed; generated construction and enabled mathematical or bitwise operations
 reject values that fail them.
 
 ```rust
-#[typekin::integral(
-  in = [1..=1023, 49_152..=65_535],
-)]
+#[typekin::integral(in = [1..=1023, 49_152..=65_535])]
 struct Port(u16);
 
 fn main() {
@@ -293,7 +291,7 @@ fn main() {
 option reserves the configuration surface without changing existing constructor
 error values.
 
-## `#[typekin::text]`
+## Text - `#[typekin::text]`
 
 `text` creates a validated `String` newtype. By default (`std = true`),
 generated paths use `::std::{string::String, vec::Vec}`. Set `std = false` to
@@ -378,7 +376,7 @@ no capabilities.
 
 ---
 
-## `#[typekin::bitflag]`
+## Bitflag - `#[typekin::bitflag]`
 
 Apply `bitflag` to a unit enum with an integral `repr`. It generates the enum, a
 `{Enum}Value` type that represents combined or unknown bits, and flag/value
@@ -392,8 +390,7 @@ value-type name.
 ### Example
 
 ```rust
-#[repr(u8)]
-#[typekin::bitflag(with = [display])]
+#[typekin::bitflag(repr = u8, with = [display])]
 pub enum Perm {
     None = 0,
     Read = 0b001,

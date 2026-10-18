@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use crate::bitflag::Cfg;
+    use crate::bitflag::{
+        Cfg,
+        resolve_repr,
+    };
+    use crate::zz_value_type::N;
 
     #[test]
     fn accepts_single_root_and_nested_friends_friends_crate_convert_crate_source_source_in_1()
@@ -206,6 +210,21 @@ mod tests {
         assert!(!disabled.bit.clone);
         assert!(!disabled.bit.copy);
         assert!(!disabled.bit.repr);
+    }
+
+    #[test]
+    fn rejects_matching_repr_on_both_bitflag_and_enum() {
+        let error = resolve_repr(
+            Some(N::U008),
+            Some(N::U008),
+            proc_macro2::Span::call_site(),
+        )
+        .expect_err("matching repr values must not be specified twice");
+
+        assert_eq!(
+            error.to_string(),
+            "repr cannot be specified on both bitflag and the enum",
+        );
     }
 
     #[test]

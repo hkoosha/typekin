@@ -12,8 +12,8 @@
     )
 )]
 
-#[repr(u128)]
 #[typekin::bitflag(
+    repr = u128,
     suffix = "s",
     with = [display],
 )]

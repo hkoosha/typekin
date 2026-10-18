@@ -438,10 +438,10 @@ pub(crate) fn tuple<T: Parse>(
     return Ok(many);
 }
 
-pub(crate) fn find_repr_n(
+pub(crate) fn find_repr_n_optional(
     attrs: &[Attribute],
-    span: impl Spanned,
-) -> syn::Result<N> {
+    span: &impl Spanned,
+) -> syn::Result<Option<N>> {
     let mut repr = None::<N>;
 
     for_repr(attrs, |it| {
@@ -458,7 +458,15 @@ pub(crate) fn find_repr_n(
         return Ok(());
     })?;
 
-    return match repr {
+    return Ok(repr);
+}
+
+#[cfg(test)]
+pub(crate) fn find_repr_n(
+    attrs: &[Attribute],
+    span: impl Spanned,
+) -> syn::Result<N> {
+    return match find_repr_n_optional(attrs, &span)? {
         None => return span.fail("missing numeric repr"),
         Some(it) => Ok(it),
     };
