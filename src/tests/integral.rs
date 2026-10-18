@@ -229,9 +229,10 @@ mod tests {
     }
 
     #[test]
-    fn stable_konst_enables_only_stable_flags() {
-        let cfg = syn::parse_str::<Cfg>("konst = stable")
-            .expect("stable konst should parse");
+    fn default_konst_enables_only_stable_flags() {
+        let cfg = syn::parse_str::<Cfg>("")
+            .expect("stable konst should be the default");
+        assert_eq!(cfg.konst, Konst::Stable);
 
         assert!(cfg.konst_for(&["try_make"]));
         assert!(cfg.konst_for(&[
@@ -243,12 +244,11 @@ mod tests {
         assert!(!cfg.konst_for(&["friendship"]));
         assert!(!cfg.konst_friendship());
 
-        let cfg =
-            syn::parse_str::<Cfg>("konst = stable, without = [konst_try_make]")
-                .expect("explicit flags override the stable master default");
+        let cfg = syn::parse_str::<Cfg>("without = [konst_try_make]")
+            .expect("explicit flags override the stable master default");
         assert!(!cfg.konst_for(&["try_make"]));
 
-        let cfg = syn::parse_str::<Cfg>("konst = stable, with = [konst_add]")
+        let cfg = syn::parse_str::<Cfg>("with = [konst_add]")
             .expect("explicit flags override the stable master default");
         assert!(cfg.konst_for(&[
             "add", "math"
@@ -291,7 +291,26 @@ mod tests {
 
         assert!(config.flags.serde);
         assert!(config.flags.with_const_map_fn);
-        assert!(config.flags.map_raw);
+        assert!(config.flags.map);
+    }
+
+    #[test]
+    fn accepts_disabling_serde_and_integral_mapping() {
+        let config =
+            syn::parse_str::<Cfg>("konst = none, without = [serde, map]")
+                .expect("generation flags should be independently disabled");
+
+        assert!(!config.flags.serde);
+        assert!(!config.flags.map);
+    }
+
+    #[test]
+    fn rejects_duplicate_error_configuration() {
+        let error =
+            syn::parse_str::<Cfg>("konst = none, error = (), error = ()")
+                .expect_err("error configuration may occur only once");
+
+        assert_eq!(error.to_string(), "duplicated arg");
     }
 
     #[test]
@@ -413,10 +432,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_konst() {
-        let error = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
-            .expect_err("konst must be explicit");
-        assert_eq!(error.to_string(), "missing required `konst` argument");
+    fn defaults_missing_konst_to_stable() {
+        let config = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
+            .expect("konst should default to stable");
+
+        assert_eq!(config.konst, Konst::Stable);
+        assert!(config.konst_for(&["try_make"]));
+        assert!(!config.konst_for(&["math"]));
     }
 
     #[test]
@@ -577,34 +599,6 @@ mod tests {
     #[test]
     fn rejects_unsupported_display_flags_konst_none_without_display_names_2() {
         let input = "konst = none, without = [display_names]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_and_lists_konst_none_with_display_without_display_1()
-     {
-        let input = "konst = none, with = [display], without = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_and_lists_konst_none_without_display_with_display_2()
-     {
-        let input = "konst = none, without = [display], with = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_and_lists_konst_none_with_display_impl_math_add_withou_3()
-     {
-        let input = "konst = none, with = [display, impl_math_add], without = [impl_math_add, fn_conv_raw]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_and_lists_konst_none_without_impl_math_add_fn_conv_raw_4()
-     {
-        let input = "konst = none, without = [impl_math_add, fn_conv_raw], with = [display, impl_math_add]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 

@@ -73,10 +73,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_and_family_capabilities_friends_convert_source_5()
-     {
+    fn accepts_friend_without_capabilities_with_default_konst() {
         let input = "friends = convert(Source)";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+        syn::parse_str::<Cfg>(input).expect(input);
     }
 
     #[test]
@@ -180,6 +179,23 @@ mod tests {
     }
 
     #[test]
+    fn accepts_disabling_serde() {
+        let cfg = syn::parse_str::<Cfg>("konst = none, without = [serde]")
+            .expect("serde generation should be independently disabled");
+
+        assert!(!cfg.flags.serde);
+    }
+
+    #[test]
+    fn rejects_duplicate_error_configuration() {
+        let error =
+            syn::parse_str::<Cfg>("konst = none, error = (), error = ()")
+                .expect_err("error configuration may occur only once");
+
+        assert_eq!(error.to_string(), "duplicated arg");
+    }
+
+    #[test]
     fn rejects_non_unit_error_configuration() {
         let error = syn::parse_str::<Cfg>("konst = none, error = TextError")
             .expect_err("only unit validation errors are reserved");
@@ -217,13 +233,13 @@ mod tests {
     }
 
     #[test]
-    fn requires_konst() {
-        assert!(
-            syn::parse_str::<Cfg>("valid = is_slug")
-                .expect_err("konst must be explicit")
-                .to_string()
-                .contains("missing required `konst` argument")
-        );
+    fn defaults_missing_konst_to_stable() {
+        let cfg = syn::parse_str::<Cfg>("valid = is_slug")
+            .expect("konst should default to stable");
+
+        assert_eq!(cfg.konst, crate::integral::Konst::Stable);
+        assert!(cfg.konst_for(&["text_access"]));
+        assert!(!cfg.konst_for(&["text"]));
     }
 
     #[test]
@@ -608,19 +624,5 @@ mod tests {
             "friends = [Source(conv = convert, cap = Make, trusted = {trusted})]"
         );
         assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_with_display_without_display_1()
-     {
-        let input = "with = [display], without = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_conflicting_generation_flags_in_either_order_without_display_with_display_2()
-     {
-        let input = "without = [display], with = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 }

@@ -23,6 +23,44 @@ pub extern "C" fn wrapped_add_u32(
 
 #[unsafe(no_mangle)]
 #[inline(never)]
+pub extern "C" fn raw_map_add_u32(
+    value: u32,
+    rhs: u32,
+) -> u32 {
+    return value + rhs;
+}
+
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub extern "C" fn wrapped_map_add_u32(
+    value: MyU32,
+    rhs: u32,
+) -> MyU32 {
+    return value.map(|raw| raw + rhs);
+}
+
+#[allow(improper_ctypes_definitions)]
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub extern "C" fn raw_try_map_add_u32(
+    value: u32,
+    rhs: u32,
+) -> Result<u32, u32> {
+    return Ok(value + rhs);
+}
+
+#[allow(improper_ctypes_definitions)]
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub extern "C" fn wrapped_try_map_add_u32(
+    value: MyU32,
+    rhs: u32,
+) -> Result<MyU32, u32> {
+    return value.try_map(|raw| raw + rhs);
+}
+
+#[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn raw_sub_u32(
     lhs: u32,
     rhs: u32,
@@ -213,6 +251,14 @@ fn main() {
     assert_eq!(
         wrapped_add_u32(lhs_wrapped, rhs_wrapped).0,
         raw_add_u32(lhs, rhs)
+    );
+    assert_eq!(
+        wrapped_map_add_u32(lhs_wrapped, rhs).0,
+        raw_map_add_u32(lhs, rhs),
+    );
+    assert_eq!(
+        wrapped_try_map_add_u32(lhs_wrapped, rhs).map(|value| value.0),
+        raw_try_map_add_u32(lhs, rhs),
     );
     assert_eq!(
         wrapped_sub_u32(lhs_wrapped, rhs_wrapped).0,

@@ -508,7 +508,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.map_raw {
+        if self.cfg.flags.map {
             let is_konst = self.cfg.flags.with_const_map_fn;
             let konst = runner::konst(is_konst);
             let bonst = runner::bonst(is_konst);
@@ -517,7 +517,7 @@ impl Maker {
             let validation = self.validation_condition(&value);
             let it = quote! {
                 #[inline(always)]
-                pub #konst fn try_map_raw<F>(
+                pub #konst fn try_map<F>(
                     self,
                     function: F,
                 ) -> ::core::result::Result<Self, #el>
@@ -535,14 +535,14 @@ impl Maker {
 
                 #[inline(always)]
                 #[track_caller]
-                pub #konst fn map_raw<F>(
+                pub #konst fn map<F>(
                     self,
                     function: F,
                 ) -> Self
                 where
                     F: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
                 {
-                    return match self.try_map_raw(function) {
+                    return match self.try_map(function) {
                         ::core::result::Result::Ok(value) => value,
                         ::core::result::Result::Err(_) => {
                             ::core::panic!(
@@ -3107,12 +3107,17 @@ impl Parse for IntegralFriend {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Konst {
-    #[default]
     None,
     Stable,
     Nightly,
+}
+
+impl Default for Konst {
+    fn default() -> Self {
+        return Self::Stable;
+    }
 }
 
 impl Konst {
@@ -3410,8 +3415,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::with_konst(Konst::None);
-        let mut has_konst = false;
+        let mut this = Self::with_konst(Konst::Stable);
 
         zz::parse_inner(input, |attr, rest| {
             if this.validation.parse_attr(attr, rest)? {
@@ -3421,7 +3425,6 @@ impl Parse for Cfg {
             match attr {
                 "konst" => {
                     this.konst = rest.parse()?;
-                    has_konst = true;
                 }
                 "error" => zz::parse_unit_error(rest)?,
                 "with" => this.parse_flags(rest, true)?,
@@ -3437,10 +3440,6 @@ impl Parse for Cfg {
 
             return Ok(true);
         })?;
-
-        if !has_konst {
-            return input.span().fail("missing required `konst` argument");
-        }
 
         return Ok(this);
     }
@@ -3469,7 +3468,7 @@ mk_flags! {
         pub from_str: bool,
         pub core_int: bool,
         pub into: bool,
-        pub map_raw: bool,
+        pub map: bool,
         pub ord: bool,
         pub partial_eq: bool,
         pub partial_ord: bool,

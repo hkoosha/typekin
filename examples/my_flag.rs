@@ -1,6 +1,9 @@
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u128)]
-#[typekin::bitflag(konst = stable, suffix = "s", with = [display])]
+#[typekin::bitflag(
+    suffix = "s",
+    with = [display],
+)]
 pub enum MyFlag {
     Z = 0,
     A = 10,

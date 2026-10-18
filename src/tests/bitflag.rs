@@ -198,6 +198,20 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_or_duplicate_serde_representation_flags() {
+        let unknown =
+            syn::parse_str::<Cfg>("konst = none, with = [serde_with_compact]")
+                .expect_err("unknown serde representation flags must fail");
+        assert_eq!(unknown.to_string(), "unknown flag");
+
+        let duplicate = syn::parse_str::<Cfg>(
+            "konst = none, with = [serde_with_auto, serde_with_auto]",
+        )
+        .expect_err("duplicate serde representation flags must fail");
+        assert_eq!(duplicate.to_string(), "duplicated flags");
+    }
+
+    #[test]
     fn accepts_nested_unit_error_and_rejects_other_types() {
         syn::parse_str::<Cfg>("konst = none, integral = [error = ()]")
             .expect("unit errors should be accepted in nested integral config");
@@ -224,16 +238,15 @@ mod tests {
 
     #[test]
     fn bitflag_reconciles_forwarded_integral_konst_flags() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = stable, integral = [with = [konst_value]]",
-        )
-        .expect("matching forwarded konst flag should parse");
+        let config = syn::parse_str::<Cfg>("integral = [with = [konst_value]]")
+            .expect("matching forwarded konst flag should parse");
         assert!(config.int.konst_for(&["value"]));
 
-        let error = syn::parse_str::<Cfg>(
-            "konst = stable, integral = [without = [konst_value]]",
-        )
-        .expect_err("incompatible forwarded konst flag must be rejected");
+        let error =
+            syn::parse_str::<Cfg>("integral = [without = [konst_value]]")
+                .expect_err(
+                    "incompatible forwarded konst flag must be rejected",
+                );
         assert_eq!(
             error.to_string(),
             "this value is not compatible with bitflags' own konst config",
@@ -241,12 +254,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_konst() {
-        let error = match syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]") {
-            Ok(_) => panic!("konst must be explicit"),
-            Err(error) => error,
-        };
-        assert_eq!(error.to_string(), "missing required `konst` argument",);
+    fn defaults_missing_konst_to_stable() {
+        let config = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
+            .expect("konst should default to stable");
+
+        assert_eq!(config.int.konst, crate::integral::Konst::Stable);
+        assert!(config.int.konst_for(&["value"]));
+        assert!(!config.int.konst_for(&["math"]));
     }
 
     #[test]

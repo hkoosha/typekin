@@ -1589,22 +1589,12 @@ impl Parse for Cfg {
             friends: Default::default(),
             bit: Box::default(),
             int: Box::new(integral::Cfg::with_konst(integral::Konst::None)),
-            konst: integral::Konst::None,
+            konst: integral::Konst::Stable,
             konst_flags: Default::default(),
             seen_flags: Default::default(),
         };
-        let mut has_konst = false;
 
-        zz::parse_inner(input, |attr, rest| {
-            return this.parse_attr(&mut has_konst, attr, rest);
-        })?;
-
-        if !has_konst {
-            return Err(syn::Error::new(
-                input.span(),
-                "missing required `konst` argument",
-            ));
-        }
+        zz::parse_inner(input, |attr, rest| this.parse_attr(attr, rest))?;
 
         let serde_modes = [
             this.bit.serde_with_auto,
@@ -1725,13 +1715,11 @@ impl Cfg {
 
     fn parse_attr(
         &mut self,
-        has_konst: &mut bool,
         attr: &str,
         rest: ParseStream,
     ) -> syn::Result<bool> {
         match attr {
             "konst" => {
-                *has_konst = true;
                 self.konst = rest.parse()?;
             }
             "with" => self.parse_flags(rest, true)?,

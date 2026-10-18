@@ -234,15 +234,13 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::new(Konst::None, true);
-        let mut has_konst = false;
+        let mut this = Self::new(Konst::Stable, true);
 
         zz::parse_inner(input, |attr, rest| {
             match attr {
                 "std" => this.std = rest.parse::<LitBool>()?.value,
                 "konst" => {
                     this.konst = rest.parse()?;
-                    has_konst = true;
                 }
                 "error" => zz::parse_unit_error(rest)?,
                 "valid" => {
@@ -269,13 +267,6 @@ impl Parse for Cfg {
 
             return Ok(true);
         })?;
-
-        if !has_konst {
-            return Err(syn::Error::new(
-                input.span(),
-                "missing required `konst` argument",
-            ));
-        }
 
         return Ok(this);
     }

@@ -9,7 +9,10 @@ mod tests {
         ItemStruct,
     };
 
-    use crate::runner::ToCollection;
+    use crate::runner::{
+        ToCollection,
+        mk_flags,
+    };
     use crate::value_type::N;
     use crate::{
         runner,
@@ -18,10 +21,60 @@ mod tests {
 
     struct OneOrList(Vec<Ident>);
 
+    mk_flags! {
+        #[flag_default(bool=true, str="")]
+        struct TestFlags {
+            pub display: bool,
+        }
+    }
+
     impl Parse for OneOrList {
         fn parse(input: ParseStream) -> syn::Result<Self> {
             return Ok(Self(zz::one_or_list(input)?.vec()));
         }
+    }
+
+    #[derive(Debug)]
+    struct FlagLists;
+
+    impl Parse for FlagLists {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let mut flags = TestFlags::new();
+
+            let with = input.parse::<Ident>()?;
+            if with != "with" {
+                return Err(syn::Error::new(with.span(), "expected `with`"));
+            }
+            input.parse::<syn::Token![=]>()?;
+            flags.parse_from(input, true)?;
+
+            input.parse::<syn::Token![,]>()?;
+
+            let without = input.parse::<Ident>()?;
+            if without != "without" {
+                return Err(syn::Error::new(
+                    without.span(),
+                    "expected `without`",
+                ));
+            }
+            input.parse::<syn::Token![=]>()?;
+            flags.parse_from(input, false)?;
+
+            return Ok(Self);
+        }
+    }
+
+    #[test]
+    fn rejects_flags_enabled_and_disabled_in_the_shared_flag_parser() {
+        let error = syn::parse_str::<FlagLists>(
+            "with = [display], without = [display]",
+        )
+        .expect_err("a generation flag cannot be both enabled and disabled");
+
+        assert_eq!(
+            error.to_string(),
+            "flag specified in both `with` and `without`",
+        );
     }
 
     #[test]

@@ -9,7 +9,10 @@ The concept of [friendship](https://en.wikipedia.org/wiki/Friend_class) means
 tight control over construction of values. Friend conversions consume their
 input; non-`Copy` friends are moved into the conversion. Once a validated value
 enters the validated graph, it stays validated while it moves between different
-types and can be relied upon.
+types and can be relied upon. Friendship is an infallible contract: a friend
+conversion that produces an invalid value panics. If conversion rejection is an
+expected outcome, rust's own `TryFrom` or `TryInto` is better suited for
+creating the relations.
 
 You can find a set of working examples in the crate repository at
 [typekin/examples](./examples) directory.
@@ -205,16 +208,21 @@ fn main() {
     let _: SkipOneAndTwo = start + 1 + 2; // Panics.
 
     // Validate only the final raw result instead.
-    let value = start.try_map_raw(|raw| raw + 1 + 2).unwrap();
+    let value = start.try_map(|raw| raw + 1 + 2).unwrap();
+    assert_eq!(value.raw(), 3);
+
+    let value = SkipOneAndTwo::try_make(0)
+        .unwrap()
+        .map(|raw| raw + 1 + 2);
     assert_eq!(value.raw(), 3);
 }
 ```
 
-Integral wrappers generate `try_map_raw`, which returns the rejected final raw
-value, and `map_raw`, which panics when final validation fails. The closure runs
+Integral wrappers generate `try_map`, which returns the rejected final raw
+value, and `map`, which panics when final validation fails. The closure runs
 once and intermediate primitive values are not validated. Primitive overflow and
-closure panics retain their normal Rust behavior. Use `without = [map_raw]` to
-omit both methods.
+closure panics retain their normal Rust behavior. Use `without = [map]` to omit
+both methods.
 
 The methods are non-const by default. `with = [with_const_map_fn]` makes them
 const for nightly callers using const closures and the corresponding Rust
@@ -247,13 +255,12 @@ for safety, correctness, or an external contract.
 
 ## Constness Status
 
-`integral`, `bitflag`, and `text` require explicit
-`konst = none|stable|nightly`. `none` enables no optional const flags. For
-integral and bitflag, `stable` enables the stable validation and value
-operations; `nightly` additionally enables const trait implementations and
-nightly-only integer operations. For text, `stable` enables const read-only
-accessors and `nightly` additionally enables supported owned construction and
-conversion.
+`integral`, `bitflag`, and `text` default to `konst = stable`. Set
+`konst = none` to disable optional const flags, or `konst = nightly` to enable
+const trait implementations and nightly-only integer operations. For integral
+and bitflag, `stable` enables stable validation and value operations. For text,
+it enables const read-only accessors; `nightly` additionally enables supported
+owned construction and conversion.
 
 For `integral` and `bitflag`, `konst` is the default for individual const flags.
 With `konst = none`, opt into a family or operation with `with = [konst_math]`
@@ -264,7 +271,7 @@ flags that conflict with its own setting. Individual flags always override the
 master mode. More-specific flags such as `konst_add_assign` override their
 operation and family defaults.
 
-For `text`, `konst = stable` enables `as_str`, `as_bytes`, `len`, `is_empty`,
+For text, the stable default enables `as_str`, `as_bytes`, `len`, `is_empty`,
 and `capacity`. Use `with = [konst_text_access]` to enable only those accessors,
 or `with = [konst_text]` for the nightly-only owned operations.
 
@@ -441,8 +448,8 @@ fn main() {
 }
 ```
 
-`konst` is required. Choose exactly one validation mode: `valid` accepts one
-callback path or a bracketed list of callbacks, while `in` accepts a
+`konst` defaults to `stable`. Choose exactly one validation mode: `valid`
+accepts one callback path or a bracketed list of callbacks, while `in` accepts a
 duplicate-free list of string literals. Membership compares exact strings
 without case or Unicode normalization. `in = []` rejects every normal input;
 `in = [""]` admits the empty string.
@@ -511,44 +518,17 @@ helpers such as `name()`, `items()`, `from_name()`, and `contains()`. It is
 modeled after [bitflags](https://crates.io/crates/bitflags), but with a
 different implementation.
 
-Every enum variant is mirrored as a same-named associated constant on its
-generated `{Enum}Value` type. They are constructed through generated integral
-validation, so each enum discriminant must be valid.
-
-`konst` is required and accepts `none`, `stable`, or `nightly`. `stable` makes
-the generated value operations const where stable Rust permits it; `nightly`
-also enables const trait implementations and nightly-only integer operations.
-Bitflag applies its const configuration to the generated integral value type.
-Nested `integral` `konst_*` flags must agree with the bitflag setting. Use
-`integral = [...]` when configuring other generated value-type behavior.
-`bitflag` has its own `friends` option for enum-left operations; for example,
-`friends = self(u8) -> Bit` or a bracketed list of such declarations. The enum
-and generated value type are registered as friends automatically; enum
-arithmetic operators are not generated.
-
-`suffix` and `value_name` control the generated value-type name. In the nested
-`integral = [...]` configuration, `without = [core_int]` removes the large
-forwarded primitive-integral-method group.
-
-Generated enum and value types implement `FromStr` by default. Enum parsing
-accepts one exact declared name. Value parsing uses the `bitflags` retain-mode
-grammar: names are separated by `|`, hexadecimal entries such as `0x80` retain
-unknown bits, and surrounding whitespace is ignored. Value `Display`, enabled
-with `with = [display]`, emits the same allocation-free, round-trippable format.
-Empty values format as an empty string.
-
-With `with = [serde]`, human-readable serializers use that text format and
-compact serializers use the raw integer. Add `serde_with_name` to force text or
-`serde_with_value` to force the integer for every serializer and deserializer.
-`serde_with_auto` explicitly selects the default. The three representation flags
-are mutually exclusive and each also enables Serde generation.
+`konst` defaults to `stable`. `suffix` and `value_name` control the generated
+value-type name.
 
 ### Example
 
 ```rust
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[typekin::bitflag(konst = none, with = [display])]
+#[typekin::bitflag(
+    with = [display]
+)]
 pub enum Perm {
     None = 0,
     Read = 0b001,

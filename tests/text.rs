@@ -3,6 +3,13 @@ extern crate alloc;
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
+    use serde_test::{
+        Configure,
+        Token,
+        assert_de_tokens_error,
+        assert_tokens,
+    };
+
     fn is_slug(value: &str) -> bool {
         return !value.is_empty()
             && value
@@ -106,6 +113,35 @@ mod tests {
     #[typekin::text(konst = none, std = false, valid = is_not_reserved)]
     #[repr(transparent)]
     struct MutationAllocationText(String);
+
+    fn is_serde_text_valid(value: &str) -> bool {
+        return value == "valid";
+    }
+
+    #[typekin::text(
+        konst = none,
+        std = false,
+        valid = is_serde_text_valid,
+        with = [serde],
+    )]
+    #[repr(transparent)]
+    struct SerdeText(String);
+
+    #[test]
+    fn text_serde_uses_owned_strings_and_revalidates() {
+        assert_tokens(
+            &SerdeText::try_from_str("valid").unwrap().readable(),
+            &[Token::Str("valid")],
+        );
+        assert_tokens(
+            &SerdeText::try_from_str("valid").unwrap().compact(),
+            &[Token::Str("valid")],
+        );
+        assert_de_tokens_error::<SerdeText>(
+            &[Token::Str("invalid")],
+            "invalid value",
+        );
+    }
 
     #[test]
     fn validates_literal_membership_draft_1_draft_1() {

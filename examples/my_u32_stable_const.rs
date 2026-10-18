@@ -1,5 +1,4 @@
 #[typekin::integral(
-    konst = stable,
     friends = MyFriend::my_conv(MyFriend) -> [],
 )]
 #[repr(transparent)]

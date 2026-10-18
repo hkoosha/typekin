@@ -1497,7 +1497,7 @@ const _: () = {
             return it as u128;
         }
         #[inline(always)]
-        pub fn try_map_raw<F>(
+        pub fn try_map<F>(
             self,
             function: F,
         ) -> ::core::result::Result<Self, u128>
@@ -1514,14 +1514,14 @@ const _: () = {
         }
         #[inline(always)]
         #[track_caller]
-        pub fn map_raw<F>(
+        pub fn map<F>(
             self,
             function: F,
         ) -> Self
         where
             F: ::core::ops::FnOnce(u128) -> u128,
         {
-            return match self.try_map_raw(function) {
+            return match self.try_map(function) {
                 ::core::result::Result::Ok(value) => value,
                 ::core::result::Result::Err(_) => {
                     ::core::panic!("integral mapping produced an invalid value")

@@ -43,6 +43,15 @@ pub(crate) const U32_OPERATIONS: &[Operation] = &[
     Operation::new("shr", "raw_shr_u32", "wrapped_shr_u32"),
 ];
 
+pub(crate) const U32_MAP_OPERATIONS: &[Operation] = &[
+    Operation::new("map_add", "raw_map_add_u32", "wrapped_map_add_u32"),
+    Operation::new(
+        "try_map_add",
+        "raw_try_map_add_u32",
+        "wrapped_try_map_add_u32",
+    ),
+];
+
 pub(crate) fn make_dir(prefix: &str) -> PathBuf {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

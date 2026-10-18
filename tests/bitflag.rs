@@ -9,6 +9,17 @@
 
 #[cfg(test)]
 mod tests {
+    use core::str::FromStr;
+
+    use serde_test::{
+        Compact,
+        Configure,
+        Readable,
+        Token,
+        assert_de_tokens_error,
+        assert_tokens,
+    };
+
     #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
@@ -24,6 +35,57 @@ mod tests {
         ReadThing = 0b001,
         WritersBlock = 0b010,
         Execute = 0b100,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(konst = none, with = [serde])]
+    enum AutoSerdeFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(
+        konst = none,
+        with = [serde_with_name],
+    )]
+    enum NameSerdeFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(
+        konst = none,
+        with = [serde_with_value],
+    )]
+    enum ValueSerdeFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(
+        konst = none,
+        with = [serde],
+        integral = [in = 0..=7],
+    )]
+    enum ValidatedSerdeFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[repr(u8)]
+    #[typekin::bitflag(konst = none, with = [display])]
+    enum CompositeFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+        ReadWrite = 0b0011,
     }
 
     const THINGY_READ_VALUE: ThingyValue = ThingyValue::ReadThing;
@@ -310,6 +372,108 @@ mod tests {
         assert_eq!(
             format!("{}", Thingy::from_bits_retain(0b1011)),
             "ReadThing | WritersBlock | 0x8"
+        );
+    }
+
+    #[test]
+    fn value_text_parses_empty_known_composite_and_unknown_bits() {
+        assert_eq!(ThingyValue::empty().to_string(), "");
+        assert_eq!(ThingyValue::from_str(""), Ok(ThingyValue::empty()));
+
+        assert_eq!(ThingyValue::ReadThing.to_string(), "ReadThing");
+        assert_eq!(
+            ThingyValue::from_str("ReadThing"),
+            Ok(ThingyValue::ReadThing),
+        );
+        assert_eq!(Thingy::from_str("ReadThing"), Ok(Thingy::ReadThing));
+
+        let combined = ThingyValue::ReadThing | ThingyValue::WritersBlock;
+        assert_eq!(combined.to_string(), "ReadThing | WritersBlock");
+        assert_eq!(
+            ThingyValue::from_str(" ReadThing | WritersBlock "),
+            Ok(combined),
+        );
+
+        let unknown = ThingyValue::from_bits_retain(0b1000);
+        assert_eq!(unknown.to_string(), "0x8");
+        assert_eq!(ThingyValue::from_str("0x8"), Ok(unknown));
+        assert_eq!(
+            ThingyValue::from_str("ReadThing | 0x8"),
+            Ok(ThingyValue::ReadThing | unknown),
+        );
+
+        let composite = CompositeFlagValue::from_str("ReadWrite").unwrap();
+        assert_eq!(composite.raw(), 0b0011);
+        assert_eq!(composite.to_string(), "Read | Write");
+    }
+
+    #[test]
+    fn value_text_rejects_malformed_unknown_overflow_and_invalid_values() {
+        assert_eq!(ThingyValue::from_str("ReadThing || WritersBlock"), Err(()));
+        assert_eq!(ThingyValue::from_str("Unknown"), Err(()));
+        assert_eq!(ThingyValue::from_str("0x"), Err(()));
+        assert_eq!(ThingyValue::from_str("0x100"), Err(()));
+        assert_eq!(Thingy1Holder::from_str("0x8"), Err(()));
+    }
+
+    #[test]
+    fn value_text_round_trips_known_unknown_and_all_bits() {
+        fn assert_round_trip(bits: u8) {
+            let value = ThingyValue::from_bits_retain(bits);
+            assert_eq!(
+                ThingyValue::from_str(&value.to_string()),
+                Ok(value),
+                "{bits:#x}",
+            );
+        }
+
+        assert_round_trip(0);
+        assert_round_trip(0b0001);
+        assert_round_trip(0b0010);
+        assert_round_trip(0b0100);
+        assert_round_trip(0b1000);
+        assert_round_trip(0b1_0000);
+        assert_round_trip(0b10_0000);
+        assert_round_trip(0b100_0000);
+        assert_round_trip(u8::MAX);
+    }
+
+    #[test]
+    fn bitflag_serde_auto_uses_text_for_readable_and_bits_for_compact_formats()
+    {
+        let value = AutoSerdeFlagValue::from_bits_retain(0b1011);
+        assert_tokens(&value.readable(), &[Token::Str("Read | Write | 0x8")]);
+        assert_tokens(&value.compact(), &[Token::U8(0b1011)]);
+        assert_tokens(&AutoSerdeFlag::Read.readable(), &[Token::Str("Read")]);
+        assert_tokens(&AutoSerdeFlag::Read.compact(), &[Token::U8(1)]);
+        assert_de_tokens_error::<Compact<AutoSerdeFlag>>(
+            &[Token::U8(3)],
+            "raw value is not a declared flag",
+        );
+    }
+
+    #[test]
+    fn bitflag_serde_name_and_value_modes_are_forced() {
+        let named = NameSerdeFlag::Read | NameSerdeFlag::Write;
+        assert_tokens(&named.readable(), &[Token::Str("Read | Write")]);
+        assert_tokens(&named.compact(), &[Token::Str("Read | Write")]);
+
+        let valued = ValueSerdeFlag::Read | ValueSerdeFlag::Write;
+        assert_tokens(&valued.readable(), &[Token::U8(3)]);
+        assert_tokens(&valued.compact(), &[Token::U8(3)]);
+    }
+
+    #[test]
+    fn bitflag_serde_retains_unknown_bits_and_revalidates_values() {
+        let unknown = AutoSerdeFlagValue::from_bits_retain(0b1000);
+        assert_tokens(&unknown.compact(), &[Token::U8(0b1000)]);
+        assert_de_tokens_error::<Compact<ValidatedSerdeFlagValue>>(
+            &[Token::U8(0b1000)],
+            "invalid value",
+        );
+        assert_de_tokens_error::<Readable<ValidatedSerdeFlagValue>>(
+            &[Token::Str("0x8")],
+            "invalid value",
         );
     }
 

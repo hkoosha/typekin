@@ -10,6 +10,13 @@
 mod tests {
     use core::cmp::Ordering;
 
+    use serde_test::{
+        Configure,
+        Token,
+        assert_de_tokens_error,
+        assert_tokens,
+    };
+
     #[typekin::integral(konst = nightly)]
     #[repr(transparent)]
     #[derive(Copy, Clone)]
@@ -35,8 +42,39 @@ mod tests {
     #[derive(Copy, Clone)]
     struct ConstMap(u8);
 
-    const CONST_MAPPED: ConstMap =
-        ConstMap(20).map_raw(const |value| value + 3);
+    const CONST_MAPPED: ConstMap = ConstMap(20).map(const |value| value + 3);
+
+    const fn accepts_final_mapping(value: u8) -> bool {
+        return value == 0 || value >= 3;
+    }
+
+    #[typekin::integral(
+        konst = none,
+        valid = accepts_final_mapping,
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct Mapped(u8);
+
+    #[typekin::integral(konst = none)]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct PlainMapped(u8);
+
+    #[typekin::integral(
+        konst = none,
+        without = [fn_conv_raw],
+        get_raw = Self::decoded,
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct AccessedMap(u8);
+
+    impl AccessedMap {
+        const fn decoded(self) -> u8 {
+            return self.0 - 100;
+        }
+    }
 
     #[typekin::integral(konst = nightly, with = [display])]
     #[repr(transparent)]
@@ -71,6 +109,15 @@ mod tests {
     const fn is_not_fifty(value: u8) -> bool {
         return value != 50;
     }
+
+    #[typekin::integral(
+        konst = none,
+        valid = is_even,
+        with = [serde],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct SerdeIntegral(u8);
 
     const fn accepts_ranged(_: u8) -> bool {
         return true;
@@ -302,6 +349,71 @@ mod tests {
     fn try_make_accepts_unvalidated_value() {
         let it = My32::make(23);
         assert_eq!(My32::try_make(23), Ok(it));
+    }
+
+    #[test]
+    fn map_validates_only_the_final_value_and_calls_once() {
+        let calls = core::cell::Cell::new(0);
+        let mapped = Mapped::try_make(0)
+            .unwrap()
+            .try_map(|value| {
+                calls.set(calls.get() + 1);
+                return value + 1 + 2;
+            })
+            .unwrap();
+
+        assert_eq!(mapped.raw(), 3);
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn map_returns_rejected_final_value_and_panics_in_infallible_form() {
+        assert_eq!(Mapped::try_make(3).unwrap().try_map(|_| 1), Err(1));
+        assert_panics(|| {
+            let _ = Mapped::try_make(3).unwrap().map(|_| 1);
+        });
+    }
+
+    #[test]
+    fn map_uses_the_configured_raw_accessor() {
+        let mapped = AccessedMap::make(123).map(|value| {
+            assert_eq!(value, 23);
+            return 42;
+        });
+
+        assert_eq!(mapped.0, 42);
+    }
+
+    #[test]
+    fn map_preserves_closure_panic_and_primitive_overflow_behavior() {
+        assert_panics(|| {
+            let _ = PlainMapped::make(1).map(|_| panic!("closure panic"));
+        });
+        assert_panics(|| {
+            let _ = PlainMapped::make(u8::MAX).map(|value| value + 1);
+        });
+    }
+
+    #[test]
+    fn map_works_for_unvalidated_and_const_integrals() {
+        assert_eq!(PlainMapped::make(2).map(|value| value + 4).raw(), 6);
+        assert_eq!(CONST_MAPPED.raw(), 23);
+    }
+
+    #[test]
+    fn integral_serde_serializes_raw_values_and_revalidates() {
+        assert_tokens(
+            &SerdeIntegral::try_make(4).unwrap().readable(),
+            &[Token::U8(4)],
+        );
+        assert_tokens(
+            &SerdeIntegral::try_make(4).unwrap().compact(),
+            &[Token::U8(4)],
+        );
+        assert_de_tokens_error::<SerdeIntegral>(
+            &[Token::U8(3)],
+            "invalid value",
+        );
     }
 
     #[test]
