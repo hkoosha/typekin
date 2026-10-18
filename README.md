@@ -26,9 +26,9 @@ available. Currently, Typekin provides:
   their underlying `String` operation does;
 - configurable const support. By default, all stable const features are enabled.
   Additional constness for math operations requires `konst = nightly`;
-- allocation-free generated integral and bitflag code: it requires neither
-  `std` nor `alloc` and does not allocate. Allocation in caller-provided
-  callbacks, conversions, or Serde backends is outside Typekin's generated code;
+- allocation-free generated integral and bitflag code: it requires neither `std`
+  nor `alloc` and does not allocate. Allocation in caller-provided callbacks,
+  conversions, or Serde backends is outside Typekin's generated code;
 - individual feature flags for disabling generation of specific features.
 
 Working examples are available in the repository's [examples](./examples)
