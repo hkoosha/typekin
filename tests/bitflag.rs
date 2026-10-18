@@ -20,16 +20,14 @@ mod tests {
         assert_tokens,
     };
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    #[repr(u8)]
     #[typekin::bitflag(
-        konst = none,
         with = [display],
         friends = self(u8) -> Bit,
         integral = [
             friends = self(u8) -> [Math, Rel],
         ],
     )]
+    #[repr(u8)]
     pub enum Thingy {
         FirstThing = 0,
         ReadThing = 0b001,
@@ -37,59 +35,46 @@ mod tests {
         Execute = 0b100,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[typekin::bitflag(with = [serde])]
     #[repr(u8)]
-    #[typekin::bitflag(konst = none, with = [serde])]
     enum AutoSerdeFlag {
         Read = 0b0001,
         Write = 0b0010,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[typekin::bitflag(with = [serde_with_name])]
     #[repr(u8)]
-    #[typekin::bitflag(
-        konst = none,
-        with = [serde_with_name],
-    )]
     enum NameSerdeFlag {
         Read = 0b0001,
         Write = 0b0010,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[typekin::bitflag(with = [serde_with_value])]
     #[repr(u8)]
-    #[typekin::bitflag(
-        konst = none,
-        with = [serde_with_value],
-    )]
     enum ValueSerdeFlag {
         Read = 0b0001,
         Write = 0b0010,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    #[repr(u8)]
     #[typekin::bitflag(
-        konst = none,
         with = [serde],
         integral = [in = 0..=7],
     )]
+    #[repr(u8)]
     enum ValidatedSerdeFlag {
         Read = 0b0001,
         Write = 0b0010,
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[typekin::bitflag(with = [display])]
     #[repr(u8)]
-    #[typekin::bitflag(konst = none, with = [display])]
     enum CompositeFlag {
         Read = 0b0001,
         Write = 0b0010,
         ReadWrite = 0b0011,
     }
 
-    #[repr(u8)]
-    #[typekin::bitflag(konst = none)]
+    #[typekin::bitflag(repr = u8)]
     enum FullyGeneratedFlag {
         Read = 0b0001,
         Write = 0b0010,
@@ -562,11 +547,9 @@ mod tests {
     }
 
     // =============================================================================
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
     #[typekin::bitflag(
         suffix = "Holder",
-        konst = none,
         integral = [in = 0..=7],
     )]
     pub enum Thingy1 {
@@ -590,9 +573,8 @@ mod tests {
 
     // =============================================================================
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
     #[repr(u8)]
-    #[typekin::bitflag(value_name = "Thingies2", suffix = "", konst = none)]
+    #[typekin::bitflag(value_name = "Thingies2", suffix = "")]
     pub enum Thingy2 {
         FirstThing = 0,
         ReadThing = 0b001,
@@ -608,8 +590,6 @@ mod tests {
 
     #[cfg(test)]
     mod const_bitflag {
-        #[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
-        #[derive(Copy, Debug, Hash)]
         #[repr(u8)]
         #[typekin::bitflag(konst = nightly)]
         enum ConstFlag {
@@ -684,10 +664,8 @@ mod tests {
             bits % 2 == 0
         }
 
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = none,
             friends = [
                 trusted_bits(TrustBits) -> [Make, Bit, unsafe],
                 bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
@@ -877,10 +855,8 @@ mod tests {
 
     #[cfg(test)]
     mod display_configuration {
-        #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = none,
             with = [display],
             integral = [without = [display]],
         )]
@@ -889,10 +865,8 @@ mod tests {
             Write = 2,
         }
 
-        #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = none,
             integral = [without = [display]],
             with = [display],
         )]
@@ -901,18 +875,15 @@ mod tests {
             Write = 2,
         }
 
-        #[derive(Copy, Clone)]
         #[repr(u8)]
-        #[typekin::bitflag(konst = none, integral = [with = [display]])]
+        #[typekin::bitflag(integral = [with = [display]])]
         enum NestedOnly {
             Read = 1,
             Write = 2,
         }
 
-        #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = none,
             without = [display],
             integral = [with = [display]],
         )]
@@ -921,10 +892,8 @@ mod tests {
             Write = 2,
         }
 
-        #[derive(Copy, Clone)]
         #[repr(u8)]
         #[typekin::bitflag(
-            konst = none,
             integral = [with = [display]],
             without = [display],
         )]
@@ -1259,17 +1228,15 @@ mod tests {
     mod display_retain_values {
         use core::str::FromStr;
 
-        #[typekin::bitflag(konst = none, with = [display])]
+        #[typekin::bitflag(with = [display])]
         #[repr(u32)]
-        #[derive(Copy, Clone)]
         enum Wide {
             Low = 1,
             High = 0x8000_0000,
         }
 
-        #[typekin::bitflag(konst = none, with = [display])]
+        #[typekin::bitflag(with = [display])]
         #[repr(i16)]
-        #[derive(Copy, Clone)]
         enum Signed {
             Positive = 1,
             Negative = -1,

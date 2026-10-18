@@ -20,18 +20,12 @@ mod tests {
     };
 
     #[typekin::integral(konst = nightly)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct My32(u32);
 
     #[typekin::integral(konst = nightly)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct MyAuto64(u64);
 
     #[typekin::integral(konst = none, with = [konst_add])]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct ConstAddOnly(u8);
 
     const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
@@ -40,8 +34,6 @@ mod tests {
         konst = none,
         with = [with_const_map_fn],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct ConstMap(u8);
 
     const CONST_MAPPED: ConstMap = ConstMap(20).map(const |value| value + 3);
@@ -54,13 +46,9 @@ mod tests {
         konst = none,
         valid = accepts_final_mapping,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct Mapped(u8);
 
     #[typekin::integral(konst = none)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct PlainMapped(u8);
 
     #[typekin::integral(konst = none)]
@@ -76,7 +64,6 @@ mod tests {
         konst = none,
         without = [clone, copy, repr],
     )]
-    #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct ManuallyDerivedIntegral(u8);
 
@@ -85,8 +72,6 @@ mod tests {
         without = [fn_conv_raw],
         get_raw = Self::decoded,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct AccessedMap(u8);
 
     impl AccessedMap {
@@ -96,8 +81,6 @@ mod tests {
     }
 
     #[typekin::integral(konst = nightly, with = [display])]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct MyI32(i32);
 
     #[typekin::integral(
@@ -106,8 +89,6 @@ mod tests {
         without = [fn_conv_raw],
         get_raw = Self::decoded,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct EncodedDisplay(i32);
 
     impl EncodedDisplay {
@@ -134,8 +115,6 @@ mod tests {
         valid = is_even,
         with = [serde],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct SerdeIntegral(u8);
 
     const fn accepts_ranged(_: u8) -> bool {
@@ -148,8 +127,6 @@ mod tests {
         valid = [is_even, is_not_fifty],
         in = 2..=100,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct Even(u8);
 
     #[typekin::integral(
@@ -158,28 +135,18 @@ mod tests {
         in = [2..=4, 8..10],
         valid = accepts_ranged,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct Ranged(u8);
 
     #[typekin::integral(konst = nightly, in = ..)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct AnyU8(u8);
 
     #[typekin::integral(konst = nightly, in = ..5)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct BelowFive(u8);
 
     #[typekin::integral(konst = nightly, in = ..=5)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct AtMostFive(u8);
 
     #[typekin::integral(konst = nightly, in = -2..)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct FromNegativeTwo(i8);
 
     const fn is_even_i8(value: i8) -> bool {
@@ -191,8 +158,6 @@ mod tests {
         valid = is_even_i8,
         in = [..=-6, 4..],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct SplitEven(i8);
 
     #[typekin::integral(
@@ -200,16 +165,12 @@ mod tests {
         valid = is_even,
         without = [fn_make_unchecked_try],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct ParsedEven(u8);
 
     #[typekin::integral(
         konst = nightly,
         without = [core_int],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct CoreDisabled(u8);
 
     #[typekin::integral(
@@ -219,8 +180,6 @@ mod tests {
             self_friend_math_bit,
         ],
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct SelfOperations(u8);
 
     const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
@@ -233,13 +192,9 @@ mod tests {
         friends = [self(u16) -> [Math, Rel]],
         get_raw = Self::value
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct CustomRaw(u16);
 
     #[typekin::integral(konst = nightly)]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct Wide(u128);
 
     #[typekin::integral(
@@ -248,8 +203,6 @@ mod tests {
         valid = is_even,
         in = 2..=10,
     )]
-    #[repr(transparent)]
-    #[derive(Copy, Clone)]
     struct TrustEven(u8);
 
     const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
@@ -333,8 +286,8 @@ mod tests {
         fn accepts_traits<T: Copy + Clone + core::hash::Hash>() {}
 
         accepts_traits::<FullyGenerated>();
-        assert_eq!(core::mem::size_of::<FullyGenerated>(), 1);
-        assert_eq!(core::mem::align_of::<FullyGenerated>(), 1);
+        assert_eq!(size_of::<FullyGenerated>(), 1);
+        assert_eq!(align_of::<FullyGenerated>(), 1);
         assert_eq!(FULLY_GENERATED_CLONE.raw(), 23);
     }
 
@@ -1599,8 +1552,6 @@ mod tests {
             valid = is_even,
             in = 2..=10,
         )]
-        #[repr(transparent)]
-        #[derive(Copy, Clone)]
         struct Number(u8);
 
         #[typekin::integral(
@@ -1612,8 +1563,6 @@ mod tests {
             valid = is_even,
             in = 2..=10,
         )]
-        #[repr(transparent)]
-        #[derive(Copy, Clone)]
         struct TrustSelfNumber(u8);
 
         #[test]
@@ -1769,8 +1718,6 @@ mod tests {
     #[cfg(test)]
     mod non_const_display {
         #[typekin::integral(konst = none, with = [display])]
-        #[repr(transparent)]
-        #[derive(Copy, Clone)]
         struct Number(i32);
 
         #[typekin::integral(
@@ -1779,8 +1726,6 @@ mod tests {
             without = [fn_conv_raw],
             get_raw = Self::decoded,
         )]
-        #[repr(transparent)]
-        #[derive(Copy, Clone)]
         struct EncodedDisplay(i32);
 
         impl EncodedDisplay {

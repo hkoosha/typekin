@@ -7,9 +7,6 @@
 #![feature(derive_const)]
 
 #[typekin::integral(konst = nightly)]
-#[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
 pub struct MyU32Const(u32);
 
 #[unsafe(no_mangle)]

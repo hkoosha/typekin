@@ -97,15 +97,14 @@ mod tests {
     fn integral_compiles_for_a_no_std_consumer() {
         assert_no_std_compiles(
             "integral",
-            r#"#![no_std]
+            r#"
+#![no_std]
 
 const fn is_even(value: u8) -> bool {
     return value % 2 == 0;
 }
 
-#[typekin::integral(konst = none, valid = is_even)]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
+#[typekin::integral(valid = is_even)]
 pub struct Even(u8);
 
 pub fn build_even(value: u8) -> Result<Even, u8> {
@@ -133,9 +132,7 @@ pub fn parse_even(value: &str) -> Result<Even, ()> {
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-#[typekin::bitflag(konst = none)]
-#[repr(u8)]
-#[derive(Copy, Clone)]
+#[typekin::bitflag(repr = u8)]
 pub enum Permission {
     Read = 0b001,
     Write = 0b010,
@@ -166,7 +163,6 @@ fn is_slug(value: &str) -> bool {
 }
 
 #[typekin::text(konst = none, std = false, valid = is_slug)]
-#[repr(transparent)]
 pub struct Slug(String);
 
 pub fn build_slug(value: &str) -> Result<Slug, ()> {
@@ -191,21 +187,16 @@ const fn is_even(value: u8) -> bool {
     return value % 2 == 0;
 }
 
-#[typekin::integral(konst = none, valid = is_even, with = [serde])]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
+#[typekin::integral(valid = is_even, with = [serde])]
 pub struct Even(u8);
 
-#[typekin::text(konst = none, std = false, with = [serde])]
-#[repr(transparent)]
+#[typekin::text(std = false, with = [serde])]
 pub struct Text(String);
 
 #[typekin::bitflag(
-    konst = none,
+    repr = u8,
     with = [serde, serde_with_name],
 )]
-#[repr(u8)]
-#[derive(Copy, Clone)]
 pub enum Permission {
     Read = 0b001,
     Write = 0b010,
