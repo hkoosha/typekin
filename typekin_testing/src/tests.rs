@@ -3,7 +3,6 @@ use std::process::Command;
 use crate::*;
 
 const MANIFEST: &str = env!("CARGO_MANIFEST_DIR");
-// let _ = std::fs::remove_dir_all(&dir);
 
 #[test]
 fn unoptimized_integral() {
@@ -18,10 +17,10 @@ fn unoptimized_integral() {
     exe("bin", Command::new(&bin));
 
     let (expected, unexpected) = assert_diff(&bin, OPS);
-    // if !expected.is_empty() {
-    //     let it = format!("expected found:\n\n{}", expected.join("\n"));
-    //     eprintln!("{}", it);
-    // }
+    if !expected.is_empty() {
+        let it = format!("expected found:\n\n{}", expected.join("\n"));
+        eprintln!("{}", it);
+    }
     if !unexpected.is_empty() {
         let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
         panic!("{}", it);
@@ -41,10 +40,10 @@ fn optimized_integral() {
     exe("bin", Command::new(&bin));
 
     let (expected, unexpected) = assert_match(&bin, OPS);
-    // if !expected.is_empty() {
-    //     let it = format!("expected found:\n\n{}", expected.join("\n"));
-    //     eprintln!("{}", it);
-    // }
+    if !expected.is_empty() {
+        let it = format!("expected found:\n\n{}", expected.join("\n"));
+        eprintln!("{}", it);
+    }
     if !unexpected.is_empty() {
         let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
         panic!("{}", it);
@@ -64,10 +63,10 @@ fn optimized_integral_const() {
     exe("bin", Command::new(&bin));
 
     let (expected, unexpected) = assert_match(&bin, OPS);
-    // if !expected.is_empty() {
-    //     let it = format!("expected found:\n\n{}", expected.join("\n"));
-    //     eprintln!("{}", it);
-    // }
+    if !expected.is_empty() {
+        let it = format!("expected found:\n\n{}", expected.join("\n"));
+        eprintln!("{}", it);
+    }
     if !unexpected.is_empty() {
         let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
         panic!("{}", it);

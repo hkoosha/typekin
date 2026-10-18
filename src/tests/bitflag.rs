@@ -162,6 +162,57 @@ mod tests {
     }
 
     #[test]
+    fn accepts_serde_and_each_representation_mode() {
+        for mode in [
+            "serde_with_auto",
+            "serde_with_name",
+            "serde_with_value",
+        ] {
+            let input = format!("konst = none, with = [{mode}]");
+            let config = syn::parse_str::<Cfg>(&input).expect(&input);
+            assert!(config.bit.serde);
+        }
+    }
+
+    #[test]
+    fn defaults_serde_representation_to_auto() {
+        let config = syn::parse_str::<Cfg>("konst = none, with = [serde]")
+            .expect("serde should not require an explicit representation");
+
+        assert!(config.bit.serde);
+        assert!(!config.bit.serde_with_name);
+        assert!(!config.bit.serde_with_value);
+    }
+
+    #[test]
+    fn rejects_multiple_serde_representation_modes() {
+        let error = syn::parse_str::<Cfg>(
+            "konst = none, with = [serde_with_name, serde_with_value]",
+        )
+        .expect_err("serde representations are mutually exclusive");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag serde representation flags are mutually exclusive",
+        );
+    }
+
+    #[test]
+    fn accepts_nested_unit_error_and_rejects_other_types() {
+        syn::parse_str::<Cfg>("konst = none, integral = [error = ()]")
+            .expect("unit errors should be accepted in nested integral config");
+
+        let error = syn::parse_str::<Cfg>(
+            "konst = none, integral = [error = FlagError]",
+        )
+        .expect_err("other error types remain unsupported");
+        assert_eq!(
+            error.to_string(),
+            "only `()` is currently supported for `error`",
+        );
+    }
+
+    #[test]
     fn bitflag_rejects_boolean_konst_values() {
         let error = syn::parse_str::<Cfg>("konst = true")
             .expect_err("boolean konst values are no longer accepted");

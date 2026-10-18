@@ -17,6 +17,7 @@ use syn::{
     ExprRange,
     Path,
     Token,
+    Type,
     Visibility,
     bracketed,
     parenthesized,
@@ -63,6 +64,16 @@ impl ValidationCfg {
 
         return Ok(true);
     }
+}
+
+pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
+    let error: Type = input.parse()?;
+
+    if matches!(&error, Type::Tuple(tuple) if tuple.elems.is_empty()) {
+        return Ok(());
+    }
+
+    return error.fail("only `()` is currently supported for `error`");
 }
 
 pub(crate) use ranges::parse_ranges;
@@ -404,19 +415,6 @@ fn for_repr(
         .try_for_each(|it| it.parse_nested_meta(&mut exe))?;
 
     return Ok(());
-}
-
-pub(crate) fn find_repr_transparent(attrs: &[Attribute]) -> syn::Result<bool> {
-    let mut found = false;
-
-    for_repr(attrs, |it| {
-        if it.path.is_ident("transparent") {
-            found = true;
-        }
-        return Ok(());
-    })?;
-
-    return Ok(found);
 }
 
 // TODO cleanup the mess...

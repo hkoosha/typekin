@@ -25,19 +25,6 @@ mod tests {
     }
 
     #[test]
-    fn missing_transparency_points_to_the_struct_name_struct_value_string_1() {
-        let source = "struct Value(String);";
-        reject_at(source, "Value");
-    }
-
-    #[test]
-    fn missing_transparency_points_to_the_struct_name_repr_c_nstruct_value_string_2()
-     {
-        let source = "#[repr(C)]\nstruct Value(String);";
-        reject_at(source, "Value");
-    }
-
-    #[test]
     fn unsupported_field_shapes_point_to_the_fields_repr_transparent_nstruct_value_1()
      {
         let (source, marker) = ("#[repr(transparent)]\nstruct Value;", "Value");

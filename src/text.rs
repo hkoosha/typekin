@@ -51,6 +51,7 @@ mk_flags! {
     #[derive(Debug, Clone)]
     pub(crate) struct TextFlags {
         pub display: bool,
+        pub serde: bool = false,
     }
 }
 
@@ -243,6 +244,7 @@ impl Parse for Cfg {
                     this.konst = rest.parse()?;
                     has_konst = true;
                 }
+                "error" => zz::parse_unit_error(rest)?,
                 "valid" => {
                     if this.values.is_some() {
                         return rest
@@ -298,10 +300,6 @@ impl TextMaker {
         }
         if let Some(clause) = &item.generics.where_clause {
             return clause.fail("text does not support generic structs");
-        }
-        let attrs = &item.attrs;
-        if !zz::find_repr_transparent(attrs)? {
-            return item.ident.fail("expecting #[repr(transparent, ...)]");
         }
         let shape_error =
             "expected a tuple struct with exactly one String field";
@@ -489,6 +487,45 @@ impl TextMaker {
             }
         });
         let friendship = self.make_friendship();
+        let serde = self.cfg.flags.serde.then(|| {
+            quote! {
+                impl ::serde::Serialize for #ty {
+                    #[inline(always)]
+                    fn serialize<S>(
+                        &self,
+                        serializer: S,
+                    ) -> ::core::result::Result<S::Ok, S::Error>
+                    where
+                        S: ::serde::Serializer,
+                    {
+                        return <str as ::serde::Serialize>::serialize(
+                            self.as_str(),
+                            serializer,
+                        );
+                    }
+                }
+
+                impl<'de> ::serde::Deserialize<'de> for #ty {
+                    #[inline(always)]
+                    fn deserialize<D>(
+                        deserializer: D,
+                    ) -> ::core::result::Result<Self, D::Error>
+                    where
+                        D: ::serde::Deserializer<'de>,
+                    {
+                        let value =
+                            <#ty_string as ::serde::Deserialize<'de>>::
+                                deserialize(deserializer)?;
+
+                        return Self::try_make(value).map_err(|_| {
+                            <D::Error as ::serde::de::Error>::custom(
+                                "invalid value",
+                            )
+                        });
+                    }
+                }
+            }
+        });
 
         let generated = quote! {
             impl #ty {
@@ -745,6 +782,7 @@ impl TextMaker {
             #infallible_from
             #display
             #friendship
+            #serde
         };
 
         return Ok(quote! {

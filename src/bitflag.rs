@@ -65,6 +65,7 @@ pub(crate) fn ekran(
 }
 
 pub(crate) struct Maker {
+    repr: N,
     el: Ident,
     ty: Ident,
     vl: Ident,
@@ -87,6 +88,7 @@ impl Maker {
                 (prefix, suffix) => format_ident!("{}{}", prefix, suffix),
             },
             el: format_ident!("{}", repr.rust_name()),
+            repr,
             ty: ty.clone(),
             cfg,
             items,
@@ -143,7 +145,15 @@ impl Maker {
         let ty_impls = self.ekran_ty_impls();
         let iter_impl = self.ekran_iter();
         let friends = self.ekran_friendship()?;
-        self.cfg.int.flags.display |= self.cfg.bit.display;
+        let value_display = self.cfg.int.flags.display || self.cfg.bit.display;
+        let value_from_str = self.cfg.int.flags.from_str;
+        let text_impls = self.ekran_text_impls(value_display, value_from_str);
+        let serde_impls = self.ekran_serde();
+        self.cfg.int.flags.display = false;
+        self.cfg.int.flags.from_str = false;
+        if self.cfg.bit.serde {
+            self.cfg.int.flags.serde = false;
+        }
 
         let impl_int = match self.cfg.bit.impl_value {
             false => TokenStream::new(),
@@ -174,6 +184,10 @@ impl Maker {
                 #iter_impl
 
                 #friends
+
+                #text_impls
+
+                #serde_impls
             };
         };
 
@@ -580,6 +594,426 @@ impl Maker {
                 #[inline(always)]
                 pub #konst fn complement(&mut self) {
                     *self = self.complemented();
+                }
+            }
+        };
+    }
+
+    fn ekran_text_impls(
+        &self,
+        display: bool,
+        from_str: bool,
+    ) -> TokenStream {
+        let ty = &self.ty;
+        let vl = &self.vl;
+        let el = &self.el;
+        let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
+        let value = quote! { bits };
+        let validation =
+            integral::Maker::validation_condition_for(&self.cfg.int, &value);
+
+        let display = display.then(|| {
+            quote! {
+                impl ::core::fmt::Display for #vl {
+                    #[inline]
+                    fn fmt(
+                        &self,
+                        formatter: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        let mut remaining = self.bits();
+                        let mut first = true;
+                        let items = #ty::items();
+                        let mut index = 0;
+
+                        while index < items.len() {
+                            let flag = items[index];
+                            let bits = flag.raw();
+                            index += 1;
+
+                            if bits != 0 && remaining & bits == bits {
+                                if !first {
+                                    formatter.write_str(" | ")?;
+                                }
+                                formatter.write_str(flag.name())?;
+                                first = false;
+                                remaining &= !bits;
+                            }
+                        }
+
+                        if remaining != 0 {
+                            if !first {
+                                formatter.write_str(" | ")?;
+                            }
+                            return ::core::fmt::Write::write_fmt(
+                                formatter,
+                                ::core::format_args!(
+                                    "0x{:x}",
+                                    remaining as #unsigned,
+                                ),
+                            );
+                        }
+
+                        return ::core::result::Result::Ok(());
+                    }
+                }
+            }
+        });
+
+        let from_str = from_str.then(|| {
+            quote! {
+                impl ::core::str::FromStr for #ty {
+                    type Err = ();
+
+                    #[inline]
+                    fn from_str(
+                        source: &str,
+                    ) -> ::core::result::Result<Self, Self::Err> {
+                        return Self::from_name(source.trim()).ok_or(());
+                    }
+                }
+
+                impl ::core::str::FromStr for #vl {
+                    type Err = ();
+
+                    #[inline]
+                    fn from_str(
+                        source: &str,
+                    ) -> ::core::result::Result<Self, Self::Err> {
+                        let source = source.trim();
+                        let mut bits: #el = 0;
+
+                        if !source.is_empty() {
+                            for part in source.split('|') {
+                                let part = part.trim();
+                                if part.is_empty() {
+                                    return ::core::result::Result::Err(());
+                                }
+
+                                let value = if let Some(hex) =
+                                    part.strip_prefix("0x")
+                                {
+                                    if hex.is_empty() {
+                                        return ::core::result::Result::Err(());
+                                    }
+                                    match <#unsigned>::from_str_radix(hex, 16) {
+                                        ::core::result::Result::Ok(value) => {
+                                            value as #el
+                                        }
+                                        ::core::result::Result::Err(_) => {
+                                            return ::core::result::Result::Err(());
+                                        }
+                                    }
+                                }
+                                else {
+                                    match #ty::from_name(part) {
+                                        ::core::option::Option::Some(flag) => {
+                                            flag.raw()
+                                        }
+                                        ::core::option::Option::None => {
+                                            return ::core::result::Result::Err(());
+                                        }
+                                    }
+                                };
+
+                                bits |= value;
+                            }
+                        }
+
+                        return if #validation {
+                            ::core::result::Result::Ok(Self(bits))
+                        }
+                        else {
+                            ::core::result::Result::Err(())
+                        };
+                    }
+                }
+            }
+        });
+
+        return quote! {
+            #display
+            #from_str
+        };
+    }
+
+    fn ekran_serde(&self) -> TokenStream {
+        if !self.cfg.bit.serde {
+            return TokenStream::new();
+        }
+
+        let ty = &self.ty;
+        let vl = &self.vl;
+        let el = &self.el;
+        let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
+        let bits = quote! { bits };
+        let validation =
+            integral::Maker::validation_condition_for(&self.cfg.int, &bits);
+        let serialize_as_name = if self.cfg.bit.serde_with_name {
+            quote! { true }
+        }
+        else if self.cfg.bit.serde_with_value {
+            quote! { false }
+        }
+        else {
+            quote! { serializer.is_human_readable() }
+        };
+        let deserialize_as_name = if self.cfg.bit.serde_with_name {
+            quote! { true }
+        }
+        else if self.cfg.bit.serde_with_value {
+            quote! { false }
+        }
+        else {
+            quote! { deserializer.is_human_readable() }
+        };
+
+        return quote! {
+            struct SerdeFlagValue(#vl);
+
+            impl ::core::fmt::Display for SerdeFlagValue {
+                fn fmt(
+                    &self,
+                    formatter: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    let mut remaining = self.0.bits();
+                    let mut first = true;
+                    let items = #ty::items();
+                    let mut index = 0;
+
+                    while index < items.len() {
+                        let flag = items[index];
+                        let bits = flag.raw();
+                        index += 1;
+
+                        if bits != 0 && remaining & bits == bits {
+                            if !first {
+                                formatter.write_str(" | ")?;
+                            }
+                            formatter.write_str(flag.name())?;
+                            first = false;
+                            remaining &= !bits;
+                        }
+                    }
+
+                    if remaining != 0 {
+                        if !first {
+                            formatter.write_str(" | ")?;
+                        }
+                        return ::core::fmt::Write::write_fmt(
+                            formatter,
+                            ::core::format_args!(
+                                "0x{:x}",
+                                remaining as #unsigned,
+                            ),
+                        );
+                    }
+
+                    return ::core::result::Result::Ok(());
+                }
+            }
+
+            struct SerdeFlagVisitor;
+
+            impl<'de> ::serde::de::Visitor<'de> for SerdeFlagVisitor {
+                type Value = #ty;
+
+                fn expecting(
+                    &self,
+                    formatter: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    return formatter.write_str("a declared flag name");
+                }
+
+                fn visit_str<E>(
+                    self,
+                    value: &str,
+                ) -> ::core::result::Result<Self::Value, E>
+                where
+                    E: ::serde::de::Error,
+                {
+                    return #ty::from_name(value).ok_or_else(|| {
+                        E::custom("unknown flag name")
+                    });
+                }
+            }
+
+            struct SerdeFlagValueVisitor;
+
+            impl<'de> ::serde::de::Visitor<'de> for SerdeFlagValueVisitor {
+                type Value = #vl;
+
+                fn expecting(
+                    &self,
+                    formatter: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    return formatter.write_str(
+                        "a `|` separated string of flag names and hexadecimal bits",
+                    );
+                }
+
+                fn visit_str<E>(
+                    self,
+                    source: &str,
+                ) -> ::core::result::Result<Self::Value, E>
+                where
+                    E: ::serde::de::Error,
+                {
+                    let source = source.trim();
+                    let mut bits: #el = 0;
+
+                    if !source.is_empty() {
+                        for part in source.split('|') {
+                            let part = part.trim();
+                            if part.is_empty() {
+                                return ::core::result::Result::Err(
+                                    E::custom("empty flag"),
+                                );
+                            }
+
+                            let value = if let Some(hex) =
+                                part.strip_prefix("0x")
+                            {
+                                if hex.is_empty() {
+                                    return ::core::result::Result::Err(
+                                        E::custom("invalid hexadecimal flag bits"),
+                                    );
+                                }
+                                match <#unsigned>::from_str_radix(hex, 16) {
+                                    ::core::result::Result::Ok(value) => {
+                                        value as #el
+                                    }
+                                    ::core::result::Result::Err(_) => {
+                                        return ::core::result::Result::Err(
+                                            E::custom(
+                                                "invalid hexadecimal flag bits",
+                                            ),
+                                        );
+                                    }
+                                }
+                            }
+                            else {
+                                match #ty::from_name(part) {
+                                    ::core::option::Option::Some(flag) => {
+                                        flag.raw()
+                                    }
+                                    ::core::option::Option::None => {
+                                        return ::core::result::Result::Err(
+                                            E::custom("unknown flag name"),
+                                        );
+                                    }
+                                }
+                            };
+
+                            bits |= value;
+                        }
+                    }
+
+                    return if #validation {
+                        ::core::result::Result::Ok(#vl(bits))
+                    }
+                    else {
+                        ::core::result::Result::Err(
+                            E::custom("invalid value"),
+                        )
+                    };
+                }
+            }
+
+            impl ::serde::Serialize for #ty {
+                fn serialize<S>(
+                    &self,
+                    serializer: S,
+                ) -> ::core::result::Result<S::Ok, S::Error>
+                where
+                    S: ::serde::Serializer,
+                {
+                    if #serialize_as_name {
+                        return serializer.serialize_str(self.name());
+                    }
+                    return <#el as ::serde::Serialize>::serialize(
+                        &self.raw(),
+                        serializer,
+                    );
+                }
+            }
+
+            impl<'de> ::serde::Deserialize<'de> for #ty {
+                fn deserialize<D>(
+                    deserializer: D,
+                ) -> ::core::result::Result<Self, D::Error>
+                where
+                    D: ::serde::Deserializer<'de>,
+                {
+                    if #deserialize_as_name {
+                        return deserializer.deserialize_str(SerdeFlagVisitor);
+                    }
+
+                    let bits =
+                        <#el as ::serde::Deserialize<'de>>::deserialize(
+                            deserializer,
+                        )?;
+                    let items = Self::items();
+                    let mut index = 0;
+                    while index < items.len() {
+                        let flag = items[index];
+                        if flag.raw() == bits {
+                            return ::core::result::Result::Ok(flag);
+                        }
+                        index += 1;
+                    }
+                    return ::core::result::Result::Err(
+                        <D::Error as ::serde::de::Error>::custom(
+                            "raw value is not a declared flag",
+                        ),
+                    );
+                }
+            }
+
+            impl ::serde::Serialize for #vl {
+                fn serialize<S>(
+                    &self,
+                    serializer: S,
+                ) -> ::core::result::Result<S::Ok, S::Error>
+                where
+                    S: ::serde::Serializer,
+                {
+                    if #serialize_as_name {
+                        return serializer.collect_str(&SerdeFlagValue(*self));
+                    }
+                    return <#el as ::serde::Serialize>::serialize(
+                        &self.bits(),
+                        serializer,
+                    );
+                }
+            }
+
+            impl<'de> ::serde::Deserialize<'de> for #vl {
+                fn deserialize<D>(
+                    deserializer: D,
+                ) -> ::core::result::Result<Self, D::Error>
+                where
+                    D: ::serde::Deserializer<'de>,
+                {
+                    if #deserialize_as_name {
+                        return deserializer.deserialize_str(
+                            SerdeFlagValueVisitor,
+                        );
+                    }
+
+                    let bits =
+                        <#el as ::serde::Deserialize<'de>>::deserialize(
+                            deserializer,
+                        )?;
+                    return if #validation {
+                        ::core::result::Result::Ok(Self(bits))
+                    }
+                    else {
+                        ::core::result::Result::Err(
+                            <D::Error as ::serde::de::Error>::custom(
+                                "invalid value",
+                            ),
+                        )
+                    };
                 }
             }
         };
@@ -1172,6 +1606,24 @@ impl Parse for Cfg {
             ));
         }
 
+        let serde_modes = [
+            this.bit.serde_with_auto,
+            this.bit.serde_with_name,
+            this.bit.serde_with_value,
+        ]
+        .into_iter()
+        .filter(|enabled| *enabled)
+        .count();
+        if serde_modes > 1 {
+            return Err(syn::Error::new(
+                input.span(),
+                "bitflag serde representation flags are mutually exclusive",
+            ));
+        }
+        if serde_modes == 1 {
+            this.bit.serde = true;
+        }
+
         this.apply_konst()?;
 
         return Ok(this);
@@ -1330,6 +1782,10 @@ mk_flags! {
         pub make_value: bool,
         pub impl_value: bool,
         pub display: bool = false,
+        pub serde: bool = false,
+        pub serde_with_auto: bool = false,
+        pub serde_with_name: bool = false,
+        pub serde_with_value: bool = false,
 
         pub value_name: String,
         pub suffix: String = "Value",

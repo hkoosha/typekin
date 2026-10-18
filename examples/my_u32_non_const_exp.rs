@@ -749,26 +749,6 @@ const _: () = {
             return Self::raw(self).bit_width();
         }
         #[inline(always)]
-        pub fn funnel_shl(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shl(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
-        pub fn funnel_shr(
-            self,
-            right: Self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).funnel_shr(Self::raw(right), n),
-            );
-        }
-        #[inline(always)]
         pub fn abs_diff(
             self,
             rhs: Self,
@@ -1512,6 +1492,38 @@ const _: () = {
         pub const fn into_i128(self) -> i128 {
             let it = Self::raw(self);
             return it as i128;
+        }
+        #[inline(always)]
+        pub fn try_map_raw<F>(
+            self,
+            function: F,
+        ) -> ::core::result::Result<Self, u32>
+        where
+            F: ::core::ops::FnOnce(u32) -> u32,
+        {
+            let value = function(Self::raw(self));
+            return if true {
+                ::core::result::Result::Ok(Self(value))
+            }
+            else {
+                ::core::result::Result::Err(value)
+            };
+        }
+        #[inline(always)]
+        #[track_caller]
+        pub fn map_raw<F>(
+            self,
+            function: F,
+        ) -> Self
+        where
+            F: ::core::ops::FnOnce(u32) -> u32,
+        {
+            return match self.try_map_raw(function) {
+                ::core::result::Result::Ok(value) => value,
+                ::core::result::Result::Err(_) => {
+                    ::core::panic!("integral mapping produced an invalid value")
+                }
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]

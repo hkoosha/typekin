@@ -46,6 +46,14 @@ mod tests {
         name: &str,
         source: &str,
     ) {
+        return assert_no_std_compiles_with(name, "", source);
+    }
+
+    fn assert_no_std_compiles_with(
+        name: &str,
+        dependencies: &str,
+        source: &str,
+    ) {
         let fixture = FixtureDir::new(name);
         let manifest = fixture.path.join("Cargo.toml");
         let source_path = fixture.path.join("src/lib.rs");
@@ -58,7 +66,7 @@ mod tests {
         fs::write(
             &manifest,
             format!(
-                "[package]\nname = \"typekin_no_std_fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\ntypekin = {{ path = {typekin:?} }}\n"
+                "[package]\nname = \"typekin_no_std_fixture\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[dependencies]\ntypekin = {{ path = {typekin:?} }}\n{dependencies}"
             ),
         )
             .expect("write no-std fixture manifest");
@@ -163,6 +171,44 @@ pub struct Slug(String);
 
 pub fn build_slug(value: &str) -> Result<Slug, ()> {
     return Slug::try_from_str(value);
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn serde_compiles_for_a_no_std_alloc_consumer() {
+        assert_no_std_compiles_with(
+            "serde",
+            "serde = { version = \"1\", default-features = false, features = [\"alloc\"] }\n",
+            r#"#![no_std]
+
+extern crate alloc;
+
+use alloc::string::String;
+
+const fn is_even(value: u8) -> bool {
+    return value % 2 == 0;
+}
+
+#[typekin::integral(konst = none, valid = is_even, with = [serde])]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct Even(u8);
+
+#[typekin::text(konst = none, std = false, with = [serde])]
+#[repr(transparent)]
+pub struct Text(String);
+
+#[typekin::bitflag(
+    konst = none,
+    with = [serde, serde_with_name],
+)]
+#[repr(u8)]
+#[derive(Copy, Clone)]
+pub enum Permission {
+    Read = 0b001,
+    Write = 0b010,
 }
 "#,
         );

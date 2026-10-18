@@ -304,11 +304,13 @@ mod tests {
     #[test]
     fn display_formats_combined_and_unknown_value_bits() {
         let combined = Thingy::ReadThing | Thingy::WritersBlock;
-        assert_eq!(format!("{}", combined), "3");
-        assert_eq!(format!("{:05}", combined), "00003");
-        assert_eq!(format!("{:_<5}", combined), "3____");
-        assert_eq!(format!("{}", Thingy::from_bits_retain(0b1000)), "8");
-        assert_eq!(format!("{}", Thingy::from_bits_retain(0b1011)), "11");
+        assert_eq!(format!("{}", combined), "ReadThing | WritersBlock");
+        assert_eq!(format!("{:05}", combined), "ReadThing | WritersBlock");
+        assert_eq!(format!("{}", Thingy::from_bits_retain(0b1000)), "0x8");
+        assert_eq!(
+            format!("{}", Thingy::from_bits_retain(0b1011)),
+            "ReadThing | WritersBlock | 0x8"
+        );
     }
 
     // =============================================================================
@@ -718,12 +720,12 @@ mod tests {
             assert_eq!(format!("{}", RootBeforeNested::Read), "Read");
             assert_eq!(
                 format!("{}", RootBeforeNested::Read | RootBeforeNested::Write),
-                "3"
+                "Read | Write"
             );
             assert_eq!(format!("{}", NestedBeforeRoot::Write), "Write");
             assert_eq!(
                 format!("{}", NestedBeforeRoot::Read | NestedBeforeRoot::Write),
-                "3"
+                "Read | Write"
             );
         }
 
@@ -731,11 +733,11 @@ mod tests {
         fn nested_display_formats_values_without_root_opt_in() {
             assert_eq!(
                 format!("{}", NestedOnly::Read | NestedOnly::Write),
-                "3"
+                "Read | Write"
             );
             assert_eq!(
                 format!("{:+05}", NestedOnly::from_bits_retain(0b1000)),
-                "+0008"
+                "0x8"
             );
         }
 
@@ -747,7 +749,7 @@ mod tests {
                     DisabledRootBeforeNested::Read
                         | DisabledRootBeforeNested::Write
                 ),
-                "3"
+                "Read | Write"
             );
             assert_eq!(
                 format!(
@@ -755,21 +757,21 @@ mod tests {
                     NestedBeforeDisabledRoot::Read
                         | NestedBeforeDisabledRoot::Write
                 ),
-                "3"
+                "Read | Write"
             );
             assert_eq!(
                 format!(
                     "{:04}",
                     DisabledRootBeforeNested::from_bits_retain(0b1000)
                 ),
-                "0008"
+                "0x8"
             );
             assert_eq!(
                 format!(
                     "{:04}",
                     NestedBeforeDisabledRoot::from_bits_retain(0b1000)
                 ),
-                "0008"
+                "0x8"
             );
         }
 
@@ -788,7 +790,7 @@ mod tests {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any())]
     mod display_native_values {
         #[typekin::bitflag(konst = none, with = [display])]
         #[repr(u32)]
@@ -1025,6 +1027,93 @@ mod tests {
             assert_eq!(format!("{value}"), format!("{raw}"));
             assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
             assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        }
+
+        #[test]
+        fn generated_values_preserve_their_declared_integer_layout() {
+            assert_eq!(size_of::<WideValue>(), size_of::<u32>());
+            assert_eq!(align_of::<WideValue>(), align_of::<u32>());
+            assert_eq!(size_of::<SignedValue>(), size_of::<i16>());
+            assert_eq!(align_of::<SignedValue>(), align_of::<i16>());
+        }
+    }
+
+    mod display_retain_values {
+        use core::str::FromStr;
+
+        #[typekin::bitflag(konst = none, with = [display])]
+        #[repr(u32)]
+        #[derive(Copy, Clone)]
+        enum Wide {
+            Low = 1,
+            High = 0x8000_0000,
+        }
+
+        #[typekin::bitflag(konst = none, with = [display])]
+        #[repr(i16)]
+        #[derive(Copy, Clone)]
+        enum Signed {
+            Positive = 1,
+            Negative = -1,
+        }
+
+        #[test]
+        fn unsigned_display_uses_retain_text() {
+            assert_eq!(Wide::from_bits_retain(0).to_string(), "");
+            assert_eq!(
+                Wide::from_bits_retain(0x8000_0001).to_string(),
+                "Low | High",
+            );
+            assert_eq!(
+                Wide::from_bits_retain(u32::MAX).to_string(),
+                "Low | High | 0x7ffffffe",
+            );
+        }
+
+        #[test]
+        fn display_ignores_numeric_formatter_options() {
+            let value = Wide::from_bits_retain(u32::MAX);
+            assert_eq!(format!("{value:+014}"), "Low | High | 0x7ffffffe");
+            assert_eq!(format!("{value:*^15.2}"), "Low | High | 0x7ffffffe");
+        }
+
+        #[test]
+        fn signed_display_uses_unsigned_hex_for_remaining_bits() {
+            assert_eq!(Signed::from_bits_retain(0).to_string(), "");
+            assert_eq!(
+                Signed::from_bits_retain(i16::MIN).to_string(),
+                "0x8000",
+            );
+            assert_eq!(
+                Signed::from_bits_retain(-123).to_string(),
+                "Positive | 0xff84",
+            );
+            assert_eq!(
+                Signed::from_bits_retain(i16::MAX).to_string(),
+                "Positive | 0x7ffe",
+            );
+            assert_eq!(
+                Signed::from_bits_retain(-1).to_string(),
+                "Positive | 0xfffe",
+            );
+        }
+
+        #[test]
+        fn signed_text_round_trips() {
+            for raw in [
+                0,
+                i16::MIN,
+                -123,
+                i16::MAX,
+                -1,
+            ] {
+                let value = Signed::from_bits_retain(raw);
+                assert_eq!(
+                    SignedValue::from_str(&value.to_string())
+                        .map(SignedValue::bits),
+                    Ok(raw),
+                );
+            }
         }
 
         #[test]

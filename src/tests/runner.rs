@@ -67,16 +67,6 @@ mod tests {
     }
 
     #[test]
-    fn transparent_repr_helper_recognizes_transparent_types() {
-        let item = syn::parse_str::<ItemStruct>(
-            "#[repr(C, transparent, u8)] struct Value(u8);",
-        )
-        .unwrap();
-        let attrs1 = &item.attrs;
-        assert!(zz::find_repr_transparent(attrs1).unwrap());
-    }
-
-    #[test]
     fn numeric_repr_helper_rejects_missing_numeric_repr() {
         let item = syn::parse_str::<ItemStruct>("#[repr(C)] struct Value(u8);")
             .unwrap();
@@ -85,14 +75,6 @@ mod tests {
             zz::find_repr_n(attrs, &item).unwrap_err().to_string(),
             "missing numeric repr"
         );
-    }
-
-    #[test]
-    fn transparent_repr_helper_rejects_nontransparent_types() {
-        let item = syn::parse_str::<ItemStruct>("#[repr(C)] struct Value(u8);")
-            .unwrap();
-        let attrs1 = &item.attrs;
-        assert!(!zz::find_repr_transparent(attrs1).unwrap());
     }
 
     #[test]

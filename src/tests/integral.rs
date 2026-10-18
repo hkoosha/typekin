@@ -283,6 +283,29 @@ mod tests {
     }
 
     #[test]
+    fn accepts_new_generation_flags_and_unit_error() {
+        let config = syn::parse_str::<Cfg>(
+            "konst = none, error = (), with = [serde, with_const_map_fn]",
+        )
+        .expect("new integral options should parse");
+
+        assert!(config.flags.serde);
+        assert!(config.flags.with_const_map_fn);
+        assert!(config.flags.map_raw);
+    }
+
+    #[test]
+    fn rejects_non_unit_error_type() {
+        let error = syn::parse_str::<Cfg>("konst = none, error = MyError")
+            .expect_err("only unit validation errors are reserved");
+
+        assert_eq!(
+            error.to_string(),
+            "only `()` is currently supported for `error`",
+        );
+    }
+
+    #[test]
     fn accepts_root_validation_lists() {
         let config = syn::parse_str::<Cfg>(
             "konst = none, valid = [is_even, is_not_fifty], in = [1..=4, 8..10, ..=0]",

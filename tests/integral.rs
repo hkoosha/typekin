@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(const_closures)]
 #![feature(const_cmp)]
 #![feature(const_convert)]
 #![feature(const_destruct)]
@@ -25,6 +26,17 @@ mod tests {
     struct ConstAddOnly(u8);
 
     const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
+
+    #[typekin::integral(
+        konst = none,
+        with = [with_const_map_fn],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct ConstMap(u8);
+
+    const CONST_MAPPED: ConstMap =
+        ConstMap(20).map_raw(const |value| value + 3);
 
     #[typekin::integral(konst = nightly, with = [display])]
     #[repr(transparent)]

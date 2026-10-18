@@ -1509,6 +1509,38 @@ const _: () = {
             return it as i128;
         }
         #[inline(always)]
+        pub fn try_map_raw<F>(
+            self,
+            function: F,
+        ) -> ::core::result::Result<Self, i128>
+        where
+            F: ::core::ops::FnOnce(i128) -> i128,
+        {
+            let value = function(Self::raw(self));
+            return if true {
+                ::core::result::Result::Ok(Self(value))
+            }
+            else {
+                ::core::result::Result::Err(value)
+            };
+        }
+        #[inline(always)]
+        #[track_caller]
+        pub fn map_raw<F>(
+            self,
+            function: F,
+        ) -> Self
+        where
+            F: ::core::ops::FnOnce(i128) -> i128,
+        {
+            return match self.try_map_raw(function) {
+                ::core::result::Result::Ok(value) => value,
+                ::core::result::Result::Err(_) => {
+                    ::core::panic!("integral mapping produced an invalid value")
+                }
+            };
+        }
+        #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_i128(self) -> ::core::result::Result<i128, ()> {
             return ::core::result::Result::Ok(Self::raw(self) as i128);

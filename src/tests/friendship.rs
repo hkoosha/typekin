@@ -67,6 +67,18 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_friendship_generation_flags() {
+        let error = match syn::parse_str::<Cfg>(
+            "relation = u8, friends = convert(Source) -> Make, with = [serde]",
+        ) {
+            Ok(_) => panic!("friendship cannot infer a serde representation"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), "unknown attribute");
+    }
+
+    #[test]
     fn rejects_overlapping_capabilities_for_a_source_type_relation_u8_friends_into_make_source_make_in_1()
      {
         let input = "relation = u8, friends = [into_make(Source) -> Make, into_other(Source) -> Make]";

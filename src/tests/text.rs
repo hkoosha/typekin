@@ -171,6 +171,26 @@ mod tests {
     }
 
     #[test]
+    fn accepts_serde_and_unit_error_configuration() {
+        let cfg =
+            syn::parse_str::<Cfg>("konst = none, error = (), with = [serde]")
+                .expect("new text options should parse");
+
+        assert!(cfg.flags.serde);
+    }
+
+    #[test]
+    fn rejects_non_unit_error_configuration() {
+        let error = syn::parse_str::<Cfg>("konst = none, error = TextError")
+            .expect_err("only unit validation errors are reserved");
+
+        assert_eq!(
+            error.to_string(),
+            "only `()` is currently supported for `error`",
+        );
+    }
+
+    #[test]
     fn accepts_single_callback() {
         let cfg = syn::parse_str::<Cfg>("konst = none, valid = is_slug")
             .expect("a single text callback should parse");

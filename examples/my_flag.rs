@@ -16,7 +16,11 @@ fn main() {
 
     assert_eq!(lhs.to_string(), "A");
     assert_eq!(A_BITS, 10);
-    assert_eq!(lhs.into_value().to_string(), "10");
+    assert_eq!(lhs.into_value().to_string(), "A");
+    assert_eq!(
+        "A | 0x1".parse::<MyFlags>().unwrap().bits(),
+        MyFlag::B.raw(),
+    );
     println!("{:?}", (lhs & rhs) == (lhs & rhs));
     println!("{}", rhs & lhs);
     println!("{}", lhs & rhs);

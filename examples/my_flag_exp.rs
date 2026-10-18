@@ -152,24 +152,6 @@ const _: () = {
             return &self.0;
         }
     }
-    impl ::core::str::FromStr for MyFlags {
-        type Err = ();
-        #[inline(always)]
-        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
-            let value = match <u128 as ::core::str::FromStr>::from_str(source) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(_) => {
-                    return ::core::result::Result::Err(());
-                }
-            };
-            return if true {
-                ::core::result::Result::Ok(Self(value))
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
-        }
-    }
     impl MyFlags {
         #[doc = r" The number of bits in the wrapped primitive integer."]
         pub const BITS: u32 = u128::BITS;
@@ -1425,16 +1407,6 @@ const _: () = {
             *self = self._bitxor(it);
         }
     }
-    impl ::core::fmt::Display for MyFlags {
-        #[inline(always)]
-        fn fmt(
-            &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
-            let raw = Self::raw(*self);
-            return ::core::fmt::Display::fmt(&raw, f);
-        }
-    }
     impl ::core::fmt::Binary for MyFlags {
         fn fmt(
             &self,
@@ -1523,6 +1495,38 @@ const _: () = {
         pub const fn into_u128(self) -> u128 {
             let it = Self::raw(self);
             return it as u128;
+        }
+        #[inline(always)]
+        pub fn try_map_raw<F>(
+            self,
+            function: F,
+        ) -> ::core::result::Result<Self, u128>
+        where
+            F: ::core::ops::FnOnce(u128) -> u128,
+        {
+            let value = function(Self::raw(self));
+            return if true {
+                ::core::result::Result::Ok(Self(value))
+            }
+            else {
+                ::core::result::Result::Err(value)
+            };
+        }
+        #[inline(always)]
+        #[track_caller]
+        pub fn map_raw<F>(
+            self,
+            function: F,
+        ) -> Self
+        where
+            F: ::core::ops::FnOnce(u128) -> u128,
+        {
+            return match self.try_map_raw(function) {
+                ::core::result::Result::Ok(value) => value,
+                ::core::result::Result::Err(_) => {
+                    ::core::panic!("integral mapping produced an invalid value")
+                }
+            };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -2663,6 +2667,90 @@ const _: () = {
     }
     impl FlagBit for MyFlags {}
     impl FlagMake for MyFlags {}
+    impl ::core::fmt::Display for MyFlags {
+        #[inline]
+        fn fmt(
+            &self,
+            formatter: &mut ::core::fmt::Formatter<'_>,
+        ) -> ::core::fmt::Result {
+            let mut remaining = self.bits();
+            let mut first = true;
+            let items = MyFlag::items();
+            let mut index = 0;
+            while index < items.len() {
+                let flag = items[index];
+                let bits = flag.raw();
+                index += 1;
+                if bits != 0 && remaining & bits == bits {
+                    if !first {
+                        formatter.write_str(" | ")?;
+                    }
+                    formatter.write_str(flag.name())?;
+                    first = false;
+                    remaining &= !bits;
+                }
+            }
+            if remaining != 0 {
+                if !first {
+                    formatter.write_str(" | ")?;
+                }
+                return ::core::fmt::Write::write_fmt(
+                    formatter,
+                    ::core::format_args!("0x{:x}", remaining as u128,),
+                );
+            }
+            return ::core::result::Result::Ok(());
+        }
+    }
+    impl ::core::str::FromStr for MyFlag {
+        type Err = ();
+        #[inline]
+        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
+            return Self::from_name(source.trim()).ok_or(());
+        }
+    }
+    impl ::core::str::FromStr for MyFlags {
+        type Err = ();
+        #[inline]
+        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
+            let source = source.trim();
+            let mut bits: u128 = 0;
+            if !source.is_empty() {
+                for part in source.split('|') {
+                    let part = part.trim();
+                    if part.is_empty() {
+                        return ::core::result::Result::Err(());
+                    }
+                    let value = if let Some(hex) = part.strip_prefix("0x") {
+                        if hex.is_empty() {
+                            return ::core::result::Result::Err(());
+                        }
+                        match <u128>::from_str_radix(hex, 16) {
+                            ::core::result::Result::Ok(value) => value as u128,
+                            ::core::result::Result::Err(_) => {
+                                return ::core::result::Result::Err(());
+                            }
+                        }
+                    }
+                    else {
+                        match MyFlag::from_name(part) {
+                            ::core::option::Option::Some(flag) => flag.raw(),
+                            ::core::option::Option::None => {
+                                return ::core::result::Result::Err(());
+                            }
+                        }
+                    };
+                    bits |= value;
+                }
+            }
+            return if true {
+                ::core::result::Result::Ok(Self(bits))
+            }
+            else {
+                ::core::result::Result::Err(())
+            };
+        }
+    }
 };
 
 const A_BITS: u128 = MyFlag::A.into_value().bits();
@@ -2673,7 +2761,11 @@ fn main() {
 
     assert_eq!(lhs.to_string(), "A");
     assert_eq!(A_BITS, 10);
-    assert_eq!(lhs.into_value().to_string(), "10");
+    assert_eq!(lhs.into_value().to_string(), "A");
+    assert_eq!(
+        "A | 0x1".parse::<MyFlags>().unwrap().bits(),
+        MyFlag::B.raw(),
+    );
     println!("{:?}", (lhs & rhs) == (lhs & rhs));
     println!("{}", rhs & lhs);
     println!("{}", lhs & rhs);

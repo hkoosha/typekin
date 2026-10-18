@@ -70,11 +70,6 @@ pub(crate) fn integral(
             );
         };
 
-        let attrs = &item.attrs;
-        if !zz::find_repr_transparent(attrs)? {
-            return item.fail("expecting #[repr(transparent, ...)]");
-        }
-
         let it = Maker::new(ty, el, attr)?.ekran()?;
 
         let stream = quote::quote! {
@@ -182,19 +177,17 @@ impl Maker {
         };
     }
 
-    fn validation_condition(
-        &self,
+    pub(crate) fn validation_condition_for(
+        cfg: &Cfg,
         value: &TokenStream,
     ) -> TokenStream {
-        let callbacks = self
-            .cfg
+        let callbacks = cfg
             .validation
             .callbacks
             .iter()
             .map(|callback| quote! { #callback(#value) })
             .reduce(|left, right| quote! { (#left) && (#right) });
-        let ranges = self
-            .cfg
+        let ranges = cfg
             .validation
             .ranges
             .iter()
@@ -209,6 +202,13 @@ impl Maker {
             (None, Some(ranges)) => quote! { #ranges },
             (None, None) => quote! { true },
         };
+    }
+
+    fn validation_condition(
+        &self,
+        value: &TokenStream,
+    ) -> TokenStream {
+        return Self::validation_condition_for(&self.cfg, value);
     }
 
     fn fix_friendship(&mut self) -> syn::Result<()> {
@@ -505,6 +505,53 @@ impl Maker {
                     };
                 })
                 .merged();
+            stream.extend(it);
+        }
+
+        if self.cfg.flags.map_raw {
+            let is_konst = self.cfg.flags.with_const_map_fn;
+            let konst = runner::konst(is_konst);
+            let bonst = runner::bonst(is_konst);
+            let destruct = runner::destruct(is_konst);
+            let value = quote! { value };
+            let validation = self.validation_condition(&value);
+            let it = quote! {
+                #[inline(always)]
+                pub #konst fn try_map_raw<F>(
+                    self,
+                    function: F,
+                ) -> ::core::result::Result<Self, #el>
+                where
+                    F: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                {
+                    let value = function(#fp_get_raw(self));
+                    return if #validation {
+                        ::core::result::Result::Ok(Self(value))
+                    }
+                    else {
+                        ::core::result::Result::Err(value)
+                    };
+                }
+
+                #[inline(always)]
+                #[track_caller]
+                pub #konst fn map_raw<F>(
+                    self,
+                    function: F,
+                ) -> Self
+                where
+                    F: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                {
+                    return match self.try_map_raw(function) {
+                        ::core::result::Result::Ok(value) => value,
+                        ::core::result::Result::Err(_) => {
+                            ::core::panic!(
+                                "integral mapping produced an invalid value"
+                            )
+                        }
+                    };
+                }
+            };
             stream.extend(it);
         }
 
@@ -904,6 +951,53 @@ impl Maker {
                         }
                         else {
                             ::core::result::Result::Err(())
+                        };
+                    }
+                }
+            });
+        }
+
+        if self.cfg.flags.serde {
+            stream.extend(quote! {
+                impl ::serde::Serialize for #ty {
+                    #[inline(always)]
+                    fn serialize<S>(
+                        &self,
+                        serializer: S,
+                    ) -> ::core::result::Result<S::Ok, S::Error>
+                    where
+                        S: ::serde::Serializer,
+                    {
+                        let value = #fp_get_raw(*self);
+                        return <#el as ::serde::Serialize>::serialize(
+                            &value,
+                            serializer,
+                        );
+                    }
+                }
+
+                impl<'de> ::serde::Deserialize<'de> for #ty {
+                    #[inline(always)]
+                    fn deserialize<D>(
+                        deserializer: D,
+                    ) -> ::core::result::Result<Self, D::Error>
+                    where
+                        D: ::serde::Deserializer<'de>,
+                    {
+                        let value =
+                            <#el as ::serde::Deserialize<'de>>::deserialize(
+                                deserializer,
+                            )?;
+
+                        return if #validation {
+                            ::core::result::Result::Ok(Self(value))
+                        }
+                        else {
+                            ::core::result::Result::Err(
+                                <D::Error as ::serde::de::Error>::custom(
+                                    "invalid value",
+                                ),
+                            )
                         };
                     }
                 }
@@ -3266,6 +3360,7 @@ impl Cfg {
                     return attr
                         .fail("constness is specified in multiple places");
                 }
+                "error" => zz::parse_unit_error(rest)?,
                 "with" => this.parse_flags(rest, true)?,
                 "without" => this.parse_flags(rest, false)?,
                 "friends" => {
@@ -3328,6 +3423,7 @@ impl Parse for Cfg {
                     this.konst = rest.parse()?;
                     has_konst = true;
                 }
+                "error" => zz::parse_unit_error(rest)?,
                 "with" => this.parse_flags(rest, true)?,
                 "without" => this.parse_flags(rest, false)?,
                 "friends" => {
@@ -3373,10 +3469,13 @@ mk_flags! {
         pub from_str: bool,
         pub core_int: bool,
         pub into: bool,
+        pub map_raw: bool,
         pub ord: bool,
         pub partial_eq: bool,
         pub partial_ord: bool,
+        pub serde: bool = false,
         pub try_into: bool,
+        pub with_const_map_fn: bool = false,
 
         pub assign_add: bool,
         pub assign_and: bool,

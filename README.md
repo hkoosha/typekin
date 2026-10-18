@@ -30,11 +30,11 @@ The crate also exposes an incomplete attribute macro:
 
 - `#[typekin::constructor]`
 
-`integral` requires a `#[repr(transparent)]` one-field tuple struct whose field
-is a primitive integer. `text` requires a non-generic, `#[repr(transparent)]`
-one-field tuple struct whose field is an unqualified `String`. `bitflag`
-requires a unit enum with an integral `repr`. `friends` accepts concrete,
-non-generic structs, enums, or unions.
+`integral` requires a one-field tuple struct whose field is a primitive integer.
+`text` requires a non-generic one-field tuple struct whose field is an
+unqualified `String`. Their `repr` attribute is optional and not interpreted by
+the macro. `bitflag` requires a unit enum with an integral `repr`. `friends`
+accepts concrete, non-generic structs, enums, or unions.
 
 ## Examples
 
@@ -42,7 +42,6 @@ non-generic structs, enums, or unions.
 
 ```rust
 #[typekin::integral(konst = none)]
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct Quantity(usize);
 
@@ -206,9 +205,20 @@ fn main() {
     let _: SkipOneAndTwo = start + 1 + 2; // Panics.
 
     // Validate only the final raw result instead.
-    let value = SkipOneAndTwo::try_make(start.raw() + 1 + 2).unwrap();
+    let value = start.try_map_raw(|raw| raw + 1 + 2).unwrap();
+    assert_eq!(value.raw(), 3);
 }
 ```
+
+Integral wrappers generate `try_map_raw`, which returns the rejected final raw
+value, and `map_raw`, which panics when final validation fails. The closure runs
+once and intermediate primitive values are not validated. Primitive overflow and
+closure panics retain their normal Rust behavior. Use `without = [map_raw]` to
+omit both methods.
+
+The methods are non-const by default. `with = [with_const_map_fn]` makes them
+const for nightly callers using const closures and the corresponding Rust
+feature gates.
 
 Validation has a runtime cost on every checked construction and generated
 operation. When the invariant is a development-time diagnostic rather than a
@@ -388,12 +398,17 @@ fn main() {
 }
 ```
 
+`error = ()` is accepted by `integral`, `text`, and a bitflag's nested
+`integral` configuration. Unit is currently the only supported error type; the
+option reserves the configuration surface without changing existing constructor
+error values.
+
 ## `#[typekin::text]`
 
-`text` creates a transparent, validated `String` newtype. By default
-(`std = true`), generated paths use `::std::{string::String, vec::Vec}`. Set
-`std = false` to use the corresponding `::alloc` paths. Text needs the allocator
-crate in scope when not using std:
+`text` creates a validated `String` newtype. By default (`std = true`),
+generated paths use `::std::{string::String, vec::Vec}`. Set `std = false` to
+use the corresponding `::alloc` paths. Text needs the allocator crate in scope
+when not using std:
 
 ```rust
 extern crate alloc;
@@ -406,7 +421,6 @@ use alloc::string::String;
     in = ["draft", "news", "medical-news"],
     // `valid = some_fn` is the alternative to literal membership.
 )]
-#[repr(transparent)]
 struct Tag(String);
 
 fn main() {
@@ -439,6 +453,18 @@ Text friends use `conversion(Source) -> Make`, with an owning function returning
 `String`. Missing conversions are rejected during macro expansion. Friend output
 is validated by default and panics if invalid. `-> [Make, unsafe]` bypasses only
 that construction validation; use it only when validity is proved independently.
+
+### Serde
+
+Use `with = [serde]` on `integral`, `text`, or `bitflag` to generate `Serialize`
+and `Deserialize`. Deserialization applies every configured validator. Typekin
+has no Serde Cargo feature and does not provide Serde as a normal dependency:
+the consuming crate must add `serde` directly and apply any desired `cfg` gating
+to the macro invocation.
+
+Integral wrappers serialize as their raw integer, while text wrappers serialize
+as strings. Do not also derive the same Serde traits on a wrapper using this
+option.
 
 ### Configuration
 
@@ -482,8 +508,8 @@ no capabilities.
 Apply `bitflag` to a unit enum with an integral `repr`. It generates the enum, a
 `{Enum}Value` type that represents combined or unknown bits, and flag/value
 helpers such as `name()`, `items()`, `from_name()`, and `contains()`. It is
-modeled after [bitflag](https://crates.io/crates/bitflag), but with a different
-implementation.
+modeled after [bitflags](https://crates.io/crates/bitflags), but with a
+different implementation.
 
 Every enum variant is mirrored as a same-named associated constant on its
 generated `{Enum}Value` type. They are constructed through generated integral
@@ -504,12 +530,25 @@ arithmetic operators are not generated.
 `integral = [...]` configuration, `without = [core_int]` removes the large
 forwarded primitive-integral-method group.
 
+Generated enum and value types implement `FromStr` by default. Enum parsing
+accepts one exact declared name. Value parsing uses the `bitflags` retain-mode
+grammar: names are separated by `|`, hexadecimal entries such as `0x80` retain
+unknown bits, and surrounding whitespace is ignored. Value `Display`, enabled
+with `with = [display]`, emits the same allocation-free, round-trippable format.
+Empty values format as an empty string.
+
+With `with = [serde]`, human-readable serializers use that text format and
+compact serializers use the raw integer. Add `serde_with_name` to force text or
+`serde_with_value` to force the integer for every serializer and deserializer.
+`serde_with_auto` explicitly selects the default. The three representation flags
+are mutually exclusive and each also enables Serde generation.
+
 ### Example
 
 ```rust
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[typekin::bitflag(konst = none)]
+#[typekin::bitflag(konst = none, with = [display])]
 pub enum Perm {
     None = 0,
     Read = 0b001,
@@ -538,6 +577,8 @@ fn main() {
     assert_eq!(PermValue::from_bits(0b1011), None);
     assert_eq!(mixed.raw(), 0b1011);
     assert_eq!(PermValue::from_bits_truncate(0b1011).raw(), 0b0011);
+    assert_eq!(mixed.to_string(), "Read | Write | 0x8");
+    assert_eq!("Read | Write | 0x8".parse::<PermValue>(), Ok(mixed));
     assert_eq!(PermValue::Read.into_flag(), Ok(Perm::Read));
     assert_eq!(mixed.into_flag(), Err(mixed));
 }
