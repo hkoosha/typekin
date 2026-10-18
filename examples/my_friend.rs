@@ -8,9 +8,6 @@
 
 // VALUE:   0b00000000_00000000_00000000_00000000;
 // FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
-#[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
 #[typekin::integral(konst = nightly, friends = [
     id_to_header(PageId) -> [Math, Rel],
     state_to_header(PageState) -> [Math, Rel],
@@ -18,15 +15,12 @@
 ])]
 struct PageHeader(u32);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageId(u8);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageState(u8);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageData(u8);
 

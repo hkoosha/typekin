@@ -2,8 +2,6 @@
     konst = none,
     friends = self(u16) -> Math,
 )]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
 pub struct MyU16(u16);
 
 fn main() {

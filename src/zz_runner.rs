@@ -83,12 +83,12 @@ macro_rules! mk_flags {
                     .reduce(|a, b| a.join(b).expect("bad spans"))
                 {
                     let err = "duplicated flags";
-                    return $crate::runner::MkErr::fail(&span, err);
+                    return $crate::zz_runner::MkErr::fail(&span, err);
                 };
 
                 for (name, (_, span)) in &attrs {
                     if self.seen_flags.get(name).is_some_and(|setting| *setting != value_if_seen) {
-                        return $crate::runner::MkErr::fail(
+                        return $crate::zz_runner::MkErr::fail(
                             span,
                             "flag specified in both `with` and `without`",
                         );
@@ -109,7 +109,7 @@ macro_rules! mk_flags {
                     .reduce(|a, b| a.join(b).expect("bad spans"))
                 {
                     let err = "unknown flag";
-                    return $crate::runner::MkErr::fail(&span, err);
+                    return $crate::zz_runner::MkErr::fail(&span, err);
                 };
 
                 return Ok(());

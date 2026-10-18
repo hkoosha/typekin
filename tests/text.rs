@@ -44,35 +44,36 @@ mod tests {
             TrustSlugSource::into_string(TrustSlugSource) -> [Make, unsafe],
         ],
     )]
-    #[repr(transparent)]
     struct Slug(String);
 
     #[typekin::text(konst = none, std = false)]
-    #[repr(transparent)]
     struct PlainText(String);
+
+    #[typekin::text(konst = none, std = false)]
+    struct FullyGeneratedText(String);
+
+    #[typekin::text(konst = none, std = false, without = [clone, repr])]
+    #[repr(transparent)]
+    #[derive(Clone)]
+    struct ManuallyDerivedText(String);
 
     #[typekin::text(
         konst = none, std = false,
         friends = SlugSource::into_string(SlugSource) -> Make,
         valid = is_slug,
     )]
-    #[repr(transparent)]
     struct CallbackText(String);
 
     #[typekin::text(konst = none, std = false, valid = [is_slug, is_not_reserved])]
-    #[repr(transparent)]
     struct CallbackChainText(String);
 
     #[typekin::text(konst = none, std = false, in = ["", "é"])]
-    #[repr(transparent)]
     struct LiteralText(String);
 
     #[typekin::text(konst = none, std = false, friends = self(Self) -> [Rel])]
-    #[repr(transparent)]
     struct DisplayText(String);
 
     #[typekin::text(konst = none, std = false, without = [display])]
-    #[repr(transparent)]
     struct NoDisplayText(String);
 
     impl core::fmt::Display for NoDisplayText {
@@ -94,7 +95,6 @@ mod tests {
     }
 
     #[typekin::text(konst = none, std = false, valid = validate_mutation)]
-    #[repr(transparent)]
     struct CheckedMutationText(String);
 
     fn validate_empty_mutation(value: &str) -> bool {
@@ -103,15 +103,12 @@ mod tests {
     }
 
     #[typekin::text(konst = none, std = false, valid = validate_empty_mutation)]
-    #[repr(transparent)]
     struct CheckedEmptyText(String);
 
     #[typekin::text(konst = none, std = false, in = ["a", "ab", "abc"])]
-    #[repr(transparent)]
     struct MemberMutationText(String);
 
     #[typekin::text(konst = none, std = false, valid = is_not_reserved)]
-    #[repr(transparent)]
     struct MutationAllocationText(String);
 
     fn is_serde_text_valid(value: &str) -> bool {
@@ -124,7 +121,6 @@ mod tests {
         valid = is_serde_text_valid,
         with = [serde],
     )]
-    #[repr(transparent)]
     struct SerdeText(String);
 
     #[test]
@@ -141,6 +137,29 @@ mod tests {
             &[Token::Str("invalid")],
             "invalid value",
         );
+    }
+
+    #[test]
+    fn full_text_generates_layout_and_clone() {
+        fn accepts_traits<
+            T: Clone + core::fmt::Debug + Eq + Ord + core::hash::Hash,
+        >() {
+        }
+
+        accepts_traits::<FullyGeneratedText>();
+        let text = FullyGeneratedText::try_from_str("full").unwrap().clone();
+        assert_eq!(text.as_str(), "full");
+        assert_eq!(size_of::<FullyGeneratedText>(), size_of::<String>());
+        assert_eq!(align_of::<FullyGeneratedText>(), align_of::<String>());
+    }
+
+    #[test]
+    fn text_layout_and_clone_can_be_supplied_manually() {
+        fn accepts_traits<T: Clone>() {}
+
+        accepts_traits::<ManuallyDerivedText>();
+        let text = ManuallyDerivedText::try_from_str("manual").unwrap().clone();
+        assert_eq!(text.as_str(), "manual");
     }
 
     #[test]
@@ -1067,7 +1086,6 @@ mod tests {
             valid = super::is_slug,
             friends = self(Self) -> [Rel, unsafe],
         )]
-        #[repr(transparent)]
         struct RelatedText(String);
 
         #[test]
@@ -1111,15 +1129,12 @@ mod tests {
                 trusted_text(TrustSource) -> [Make, unsafe],
             ],
         )]
-        #[repr(transparent)]
         struct EmptyDomain(String);
 
         #[typekin::text(konst = none, std = false, in = [])]
-        #[repr(transparent)]
         struct CallbackEmptyDomain(String);
 
         #[typekin::text(konst = none, std = false, in = [""])]
-        #[repr(transparent)]
         struct EmptyStringOnly(String);
 
         #[test]

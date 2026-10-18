@@ -7,9 +7,6 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
-#[derive_const(Clone)]
-#[derive(Copy)]
-#[repr(transparent)]
 #[typekin::integral(konst = nightly)]
 pub struct MyPlain(i64);
 

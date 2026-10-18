@@ -1,5 +1,5 @@
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct MyU32(u32);
 
 #[allow(dead_code)]
@@ -1824,7 +1824,6 @@ const _: () = {
     }
 };
 
-#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct MyFriend(u32);
 

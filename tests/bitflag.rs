@@ -88,6 +88,32 @@ mod tests {
         ReadWrite = 0b0011,
     }
 
+    #[repr(u8)]
+    #[typekin::bitflag(konst = none)]
+    enum FullyGeneratedFlag {
+        Read = 0b0001,
+        Write = 0b0010,
+    }
+
+    #[repr(u8)]
+    #[typekin::bitflag(konst = nightly)]
+    enum FullyGeneratedConstFlag {
+        Read = 0b0001,
+    }
+
+    const FULLY_GENERATED_FLAG_CLONE: FullyGeneratedConstFlag =
+        FullyGeneratedConstFlag::Read.clone();
+
+    #[derive(Copy, Clone)]
+    #[repr(u8)]
+    #[typekin::bitflag(
+        konst = none,
+        without = [clone, copy, repr],
+    )]
+    enum ManuallyDerivedFlag {
+        Read = 0b0001,
+    }
+
     const THINGY_READ_VALUE: ThingyValue = ThingyValue::ReadThing;
 
     // =============================================================================
@@ -104,6 +130,25 @@ mod tests {
         assert_eq!(ThingyValue::FirstThing.raw(), Thingy::FirstThing.raw());
         assert_eq!(ThingyValue::WritersBlock.raw(), Thingy::WritersBlock.raw());
         assert_eq!(ThingyValue::Execute.raw(), Thingy::Execute.raw());
+    }
+
+    #[test]
+    fn full_bitflag_generates_common_enum_traits() {
+        fn accepts_traits<
+            T: Copy + Clone + core::fmt::Debug + Eq + Ord + core::hash::Hash,
+        >() {
+        }
+
+        accepts_traits::<FullyGeneratedFlag>();
+        assert_eq!(FULLY_GENERATED_FLAG_CLONE.raw(), 0b0001);
+    }
+
+    #[test]
+    fn bitflag_copy_and_clone_can_be_supplied_manually() {
+        fn accepts_traits<T: Copy + Clone>() {}
+
+        accepts_traits::<ManuallyDerivedFlag>();
+        assert_eq!(ManuallyDerivedFlag::Read.raw(), 0b0001);
     }
 
     #[test]

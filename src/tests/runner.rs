@@ -9,14 +9,14 @@ mod tests {
         ItemStruct,
     };
 
-    use crate::runner::{
+    use crate::zz_runner::{
         ToCollection,
         mk_flags,
     };
-    use crate::value_type::N;
+    use crate::zz_value_type::N;
     use crate::{
-        runner,
         zz,
+        zz_runner,
     };
 
     struct OneOrList(Vec<Ident>);
@@ -133,27 +133,27 @@ mod tests {
     #[test]
     fn snake_case_handles_single_capitals_and_acronym_boundaries_t_1() {
         let (input, expected) = ("T", "t");
-        assert_eq!(runner::snake_case_of(input), expected);
+        assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 
     #[test]
     fn snake_case_handles_single_capitals_and_acronym_boundaries_httpserver_2()
     {
         let (input, expected) = ("HTTPServer", "http_server");
-        assert_eq!(runner::snake_case_of(input), expected);
+        assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 
     #[test]
     fn snake_case_handles_single_capitals_and_acronym_boundaries_myurlvalue_3()
     {
         let (input, expected) = ("MyURLValue", "my_url_value");
-        assert_eq!(runner::snake_case_of(input), expected);
+        assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 
     #[test]
     fn snake_case_handles_single_capitals_and_acronym_boundaries_x509certificate_4()
      {
         let (input, expected) = ("X509Certificate", "x509_certificate");
-        assert_eq!(runner::snake_case_of(input), expected);
+        assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 }

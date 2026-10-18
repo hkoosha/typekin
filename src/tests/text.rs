@@ -187,6 +187,26 @@ mod tests {
     }
 
     #[test]
+    fn defaults_layout_and_clone_and_allows_disabling_them() {
+        let defaults = syn::parse_str::<Cfg>("konst = none")
+            .expect("default text configuration should parse");
+        assert!(defaults.flags.clone);
+        assert!(defaults.flags.repr);
+
+        let enabled =
+            syn::parse_str::<Cfg>("konst = none, with = [clone, repr]")
+                .expect("layout and clone should be configurable");
+        assert!(enabled.flags.clone);
+        assert!(enabled.flags.repr);
+
+        let disabled =
+            syn::parse_str::<Cfg>("konst = none, without = [clone, repr]")
+                .expect("layout and clone should be configurable");
+        assert!(!disabled.flags.clone);
+        assert!(!disabled.flags.repr);
+    }
+
+    #[test]
     fn rejects_duplicate_error_configuration() {
         let error =
             syn::parse_str::<Cfg>("konst = none, error = (), error = ()")

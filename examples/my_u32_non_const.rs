@@ -2,11 +2,8 @@
     konst = none,
     friends = MyFriend::my_conv(MyFriend) -> [],
 )]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
 pub struct MyU32(u32);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct MyFriend(u32);
 

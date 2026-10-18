@@ -21,8 +21,9 @@ constness, and runtime cost as API behavior.
 ## Repository map
 
 - `src/lib.rs`: proc-macro entry points.
-- `src/runner.rs`: shared parsing, flag, diagnostic, and macro-runner helpers.
-- `src/value_type.rs`: primitive integral metadata used by generators.
+- `src/zz_runner.rs`: shared parsing, flag, diagnostic, and macro-runner
+  helpers.
+- `src/zz_value_type.rs`: primitive integral metadata used by generators.
 - `src/{integral,bitflag,text,friendship,constructor}.rs`: parsing and emission
   for each macro family.
 - `src/zz.rs`: shared validation grammar, list parsing, item-shape checks, and

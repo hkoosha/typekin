@@ -1,4 +1,18 @@
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#![cfg_attr(
+    feature = "nightly",
+    feature(
+        const_clone,
+        const_cmp,
+        const_convert,
+        const_destruct,
+        const_iter,
+        const_ops,
+        const_trait_impl,
+        derive_const,
+    )
+)]
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Copy, Debug, Hash)]
 #[repr(u128)]
 pub enum MyFlag {
     Z = 0,
@@ -6,7 +20,7 @@ pub enum MyFlag {
     B,
     C = 40,
 }
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct MyFlags(u128);
 

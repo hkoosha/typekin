@@ -53,7 +53,6 @@ The supported public attribute macros are:
 
 ```rust
 #[typekin::integral]
-#[derive(Copy, Clone)]
 struct Quantity(usize);
 
 fn main() {
@@ -80,7 +79,6 @@ to each other and how they interact. For example, if `PageId(u8)`,
     state_to_header(PageState),
     PageData::to_header(PageData),
 ])]
-#[derive(Copy, Clone)]
 struct PageHeader(u32);
 // VALUE:   0b00000000_00000000_00000000_00000000;
 // FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
@@ -255,7 +253,6 @@ path or a comma-separated list in brackets; every listed callback must return
 const fn is_valid_port(it: u16) -> bool { it != 0 }
 
 #[typekin::integral(valid = is_valid_port)]
-#[derive(Copy, Clone)]
 struct Port(u16);
 
 fn main() {
@@ -283,7 +280,6 @@ reject values that fail them.
 #[typekin::integral(
   in = [1..=1023, 49_152..=65_535],
 )]
-#[derive(Copy, Clone)]
 struct Port(u16);
 
 fn main() {
@@ -350,7 +346,7 @@ option.
 ### Configuration
 
 Generation of individual features can be disabled (check integral's
-[cfg](./src/integral.rs) and bitflag's [cfg](./src/bitflag.rs))
+[cfg](src/integral.rs) and bitflag's [cfg](src/bitflag.rs))
 
 ```rust
 struct Foo(u32);
@@ -367,7 +363,6 @@ const fn is_valid(value: u32) -> bool { value != 0 }
   get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
   valid = is_valid,        // Reject invalid raw values in checked construction
 )]
-#[derive(Copy, Clone)]
 struct Example(u32);
 
 impl Example {
@@ -398,7 +393,6 @@ value-type name.
 
 ```rust
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[typekin::bitflag(with = [display])]
 pub enum Perm {
     None = 0,
@@ -451,8 +445,6 @@ for the integral example below:
 #![feature(derive_const)]
 
 #[typekin::integral(konst = nightly)]
-#[derive(Copy)]
-#[derive_const(Clone)]
 pub struct Counter(u32);
 
 const START: Counter = Counter::make(10);
@@ -474,8 +466,6 @@ fn main() { assert_eq!(NEXT.raw(), 11); }
 #![feature(const_iter)]
 
 #[repr(u8)]
-#[derive(Copy)]
-#[derive_const(Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[typekin::bitflag(konst = nightly)]
 enum Permission {
     Read = 0b001,
@@ -493,6 +483,5 @@ fn is_valid(it: u32) -> bool {
 }
 
 #[typekin::integral(konst = none)]
-#[derive(Copy, Clone)]
 struct Counter(u32);
 ```

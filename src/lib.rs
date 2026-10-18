@@ -11,10 +11,10 @@ pub(crate) mod bitflag;
 pub(crate) mod constructor;
 pub(crate) mod friendship;
 pub(crate) mod integral;
-pub(crate) mod runner;
 pub(crate) mod text;
-pub(crate) mod value_type;
 pub(crate) mod zz;
+pub(crate) mod zz_runner;
+pub(crate) mod zz_value_type;
 
 #[cfg(test)]
 mod tests;
@@ -38,7 +38,7 @@ pub fn bitflag(
     let attr = Box::new(parse_macro_input!(attr as bitflag::Cfg));
     let item = parse_macro_input!(item as ItemEnum);
 
-    return bitflag::ekran(attr, item);
+    return bitflag::bitflag(attr, item);
 }
 
 /// - `of_relation`: Path;
@@ -61,7 +61,7 @@ pub fn text(
     let attr = parse_macro_input!(attr as text::Cfg);
     let item = parse_macro_input!(item as ItemStruct);
 
-    return text::ekran(attr, item);
+    return text::text(attr, item);
 }
 
 /// Mandatory attributes:

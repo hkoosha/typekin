@@ -10,12 +10,8 @@
     konst = nightly,
     friends = MyFriend::my_conv(MyFriend) -> [],
 )]
-#[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
 pub struct MyU32(u32);
 
-#[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
 pub struct MyFriend(u32);

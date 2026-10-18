@@ -1,12 +1,8 @@
 #[typekin::integral(
-    konst = stable,
-    friends = MyFriend::my_conv(MyFriend) -> [],
+    friends = MyFriend::my_conv(MyFriend) -> []
 )]
-#[repr(transparent)]
-#[derive(Clone, Copy)]
 pub struct MyU32(u32);
 
-#[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct MyFriend(u32);
 

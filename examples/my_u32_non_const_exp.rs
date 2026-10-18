@@ -1822,7 +1822,6 @@ const _: () = {
     }
 };
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct MyFriend(u32);
 

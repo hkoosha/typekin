@@ -19,10 +19,10 @@ use syn::{
     Token,
 };
 
-use crate::runner::ToCollection;
+use crate::zz_runner::ToCollection;
 use crate::{
-    runner,
     zz,
+    zz_runner,
 };
 
 #[derive(Clone)]
@@ -245,7 +245,7 @@ pub(crate) fn ekran(
     attr: Cfg,
     mut item: Item,
 ) -> proc_macro::TokenStream {
-    return runner::catching(move || {
+    return zz_runner::catching(move || {
         let (_, _, attrs) = zz::get_concrete_type(&mut item)?;
         let friendship = zz::pop_attr(attrs, "friendship")?
             .ok_or_else(|| {

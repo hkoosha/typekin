@@ -1,11 +1,8 @@
 #[typekin::text(
-        konst = stable,
-        std = true,
-        in = ["draft", "published", "published-new", "archive", "-"],
-        friends = into_my_tag(MyHeadline<'_>) -> Make,
-    )]
-#[repr(transparent)]
-#[derive(Clone)]
+    std = true,
+    in = ["draft", "published", "published-new", "archive", "-"],
+    friends = into_my_tag(MyHeadline<'_>) -> Make,
+)]
 pub struct MyTag(String);
 
 const fn tag_len(tag: &MyTag) -> usize {

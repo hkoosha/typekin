@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[typekin::friends(
-        relation = ::std::string::String,
+        relation = String,
         mod = pub(crate) trusted_title_protocol,
         friends = title_conversions::owned_title(OwnedTitle,) -> unsafe,
     )]
@@ -315,7 +315,7 @@ mod tests {
         use std::rc::Rc;
 
         #[typekin::friends(
-            relation = ::std::string::String,
+            relation = String,
             mod = pub(crate) inspector_protocol,
             extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
             friends = [

@@ -28,24 +28,52 @@ use crate::friendship::{
     Protocol,
     ProtocolFriend,
 };
-use crate::runner::{
+use crate::zz::Konst;
+use crate::zz_runner::{
     self,
     MkErr,
     ToCollection,
     mk_flags,
 };
-use crate::value_type::N;
-use crate::zz::Konst;
+use crate::zz_value_type::N;
 use crate::{
     integral,
     zz,
 };
 
-pub(crate) fn ekran(
+pub(crate) fn bitflag(
     attr: Box<Cfg>,
     item: ItemEnum,
 ) -> proc_macro::TokenStream {
-    return runner::catching(move || {
+    let derive_clone = attr.bit.clone.then(|| match attr.konst {
+        Konst::Nightly => quote! { #[derive_const(Clone)] },
+        Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
+    });
+    let derive_comparison = match attr.konst {
+        Konst::Nightly => {
+            quote! { #[derive_const(Eq, PartialEq, Ord, PartialOrd)] }
+        }
+        Konst::None | Konst::Stable => {
+            quote! { #[derive(Eq, PartialEq, Ord, PartialOrd)] }
+        }
+    };
+    let derive_copy = attr.bit.copy.then(|| quote! { #[derive(Copy)] });
+    let attributes = quote! {
+        #derive_clone
+        #derive_comparison
+        #derive_copy
+        #[derive(Debug, Hash)]
+    };
+
+    return ekran(attr, item, attributes);
+}
+
+fn ekran(
+    attr: Box<Cfg>,
+    item: ItemEnum,
+    attributes: TokenStream,
+) -> proc_macro::TokenStream {
+    return zz_runner::catching(move || {
         let attrs = &item.attrs;
         let span = item.span();
         let repr = zz::find_repr_n(attrs, span)?;
@@ -61,7 +89,7 @@ pub(crate) fn ekran(
         }
 
         let stream = Maker::new(ty, repr, attr, items).ekran()?;
-        return Ok(quote! { #item #stream });
+        return Ok(quote! { #attributes #item #stream });
     });
 }
 
@@ -206,12 +234,13 @@ impl Maker {
         else {
             quote! { #[derive(Clone)] }
         };
+        let repr = self.cfg.bit.repr.then(|| quote! { #[repr(transparent)] });
 
         return match self.cfg.bit.make_value {
             true => quote! {
-                #[derive(Copy)]
                 #derive_clone
-                #[repr(transparent)]
+                #[derive(Copy)]
+                #repr
                 pub struct #ty_value(#el);
             },
             false => TokenStream::new(),
@@ -222,13 +251,13 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let konst = runner::konst(self.cfg.int.konst_for(&[
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&[
             "value", "bit",
         ]));
         let from_konst =
-            runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
+            zz_runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
         let iterator_konst =
-            runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
+            zz_runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
 
         let raw = self
             .cfg
@@ -1022,7 +1051,7 @@ impl Maker {
     fn ekran_vl_impls(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let konst = runner::konst(self.cfg.int.konst_for(&[
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&[
             "not", "bit",
         ]));
 
@@ -1051,7 +1080,7 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let el = &self.el;
-        let konst = runner::konst(self.cfg.int.konst_for(&[
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&[
             "value", "bit",
         ]));
 
@@ -1113,13 +1142,13 @@ impl Maker {
         let vl = &self.vl;
         let el = &self.el;
         let all_bits = self.items.iter();
-        let konst = runner::konst(self.cfg.int.konst_for(&[
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&[
             "value", "bit",
         ]));
         let from_konst =
-            runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
+            zz_runner::konst(self.cfg.konst_for_nightly(&["conversion"]));
         let iterator_konst =
-            runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
+            zz_runner::konst(self.cfg.konst_for_nightly(&["iterator"]));
 
         let name_arms = self
             .items
@@ -1216,12 +1245,12 @@ impl Maker {
         let bit_capability = format_ident!("FlagBit");
         let fn_conv = format_ident!(
             "conv_{}",
-            runner::snake_case_of(&self.ty.to_string())
+            zz_runner::snake_case_of(&self.ty.to_string())
         );
         let bounds_for = |flags: &[&str]| {
             let is_konst = self.cfg.int.konst_for(flags);
-            let bonst = runner::bonst(is_konst);
-            let destruct = runner::destruct(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
             return quote! { #bonst #seal #destruct };
         };
 
@@ -1242,7 +1271,7 @@ impl Maker {
         }
 
         if self.cfg.int.flags.math_shr {
-            let konst = runner::konst(self.cfg.int.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&[
                 "shr", "math",
             ]));
             stream.extend(quote! {
@@ -1258,7 +1287,7 @@ impl Maker {
         }
 
         if self.cfg.int.flags.math_shl {
-            let konst = runner::konst(self.cfg.int.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&[
                 "shl", "math",
             ]));
             stream.extend(quote! {
@@ -1277,7 +1306,7 @@ impl Maker {
             let flags = [
                 "and", "bit",
             ];
-            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&flags));
             let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
@@ -1301,7 +1330,7 @@ impl Maker {
             let flags = [
                 "or", "bit",
             ];
-            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&flags));
             let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
@@ -1325,7 +1354,7 @@ impl Maker {
             let flags = [
                 "xor", "bit",
             ];
-            let konst = runner::konst(self.cfg.int.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&flags));
             let bounds = bounds_for(&flags);
             stream.extend(quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
@@ -1346,7 +1375,7 @@ impl Maker {
         }
 
         if self.cfg.int.flags.partial_eq {
-            let konst = runner::konst(self.cfg.int.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&[
                 "partial_eq",
                 "comparison",
             ]));
@@ -1361,7 +1390,7 @@ impl Maker {
         }
 
         if self.cfg.int.flags.partial_ord {
-            let konst = runner::konst(self.cfg.int.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.int.konst_for(&[
                 "partial_ord",
                 "comparison",
             ]));
@@ -1378,7 +1407,7 @@ impl Maker {
             });
         }
 
-        let konst = runner::konst(self.cfg.int.konst_for(&[
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&[
             "not", "bit",
         ]));
         stream.extend(quote! {
@@ -1400,7 +1429,7 @@ impl Maker {
     fn ekran_iter(&self) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
-        let konst = runner::konst(self.cfg.int.konst_for(&["iterator"]));
+        let konst = zz_runner::konst(self.cfg.int.konst_for(&["iterator"]));
         let raw = self
             .cfg
             .int
@@ -1553,7 +1582,7 @@ impl Maker {
             seal: format_ident!("FlagSeal"),
             conversion: format_ident!(
                 "conv_{}",
-                runner::snake_case_of(&self.ty.to_string())
+                zz_runner::snake_case_of(&self.ty.to_string())
             ),
             capabilities: vec![
                 format_ident!("FlagMake"),
@@ -1765,9 +1794,12 @@ mk_flags! {
     #[flag_default(bool=true, str="")]
     #[derive(Debug, Clone)]
     pub(crate) struct BitFlags {
+        pub clone: bool,
+        pub copy: bool,
         pub make_value: bool,
         pub impl_value: bool,
         pub display: bool = false,
+        pub repr: bool,
         pub serde: bool = false,
         pub serde_with_auto: bool = false,
         pub serde_with_name: bool = false,

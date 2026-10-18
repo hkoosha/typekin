@@ -35,57 +35,78 @@ use crate::friendship::{
     Protocol,
     ProtocolFriend,
 };
-use crate::runner::{
+use crate::zz::{
+    Konst,
+    ValidationCfg,
+};
+use crate::zz_runner::{
     Merged,
     MkErr,
     ToCollection,
     mk_flags,
     to_debug,
 };
-use crate::value_type::N;
-use crate::zz::{
-    Konst,
-    ValidationCfg,
-};
+use crate::zz_value_type::N;
 use crate::{
-    runner,
     zz,
+    zz_runner,
 };
 
 pub(crate) fn integral(
     attr: Box<Cfg>,
     item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    return runner::catching(move || {
-        let ty = item.ident.clone();
+    return zz_runner::catching(move || ekran(attr, &item));
+}
 
-        let el = if let Fields::Unnamed(fields) = &item.fields
-            && fields.unnamed.len() == 1
-            && let Type::Path(field) = &fields.unnamed[0].ty
-            && let Some(id) = field.path.get_ident()
-            && N::rust_names().contains(&id.to_string().as_str())
-        {
-            id.clone()
-        }
-        else {
-            return item.fail(
-                "expected a tuple struct with exactly one field of primitive integral type",
-            );
+fn ekran(
+    attr: Box<Cfg>,
+    item: &ItemStruct,
+) -> syn::Result<TokenStream> {
+    let ty = item.ident.clone();
+
+    let repr: Option<TokenStream> =
+        attr.flags.repr.then(|| quote! { #[repr(transparent)] });
+    let derive_copy: Option<TokenStream> =
+        attr.flags.copy.then(|| quote! { #[derive(Copy)] });
+    let derive_clone: Option<TokenStream> =
+        attr.flags.clone.then(|| match attr.konst {
+            Konst::Nightly => quote! { #[derive_const(Clone)] },
+            Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
+        });
+
+    let el = if let Fields::Unnamed(fields) = &item.fields
+        && fields.unnamed.len() == 1
+        && let Type::Path(field) = &fields.unnamed[0].ty
+        && let Some(id) = field.path.get_ident()
+        && N::rust_names().contains(&id.to_string().as_str())
+    {
+        id.clone()
+    }
+    else {
+        return item.fail(
+            "expected a tuple struct with exactly one field \
+            of primitive integral type",
+        );
+    };
+
+    let it = Maker::new(ty, el, attr)?.ekran()?;
+
+    let stream = quote::quote! {
+        #repr
+        #derive_copy
+        #derive_clone
+        #item
+
+        #[allow(dead_code)]
+        #[allow(unused_qualifications)]
+        #[allow(clippy::unnecessary_cast)]
+        const _: () = {
+            #it
         };
+    };
 
-        let it = Maker::new(ty, el, attr)?.ekran()?;
-
-        let stream = quote::quote! {
-            #[allow(dead_code)]
-            #[allow(unused_qualifications)]
-            #[allow(clippy::unnecessary_cast)]
-            const _: () = {
-                #it
-            };
-        };
-
-        return Ok(quote! { #item #stream });
-    });
+    return Ok(stream);
 }
 
 pub(crate) struct Maker {
@@ -128,7 +149,7 @@ impl Maker {
                 .unwrap_or_else(|| parse_quote! { Self::raw }),
             fn_conv: format_ident!(
                 "conv_{}",
-                runner::snake_case_of(&ty.to_string())
+                zz_runner::snake_case_of(&ty.to_string())
             ),
 
             repr: N::of(el.to_string()).ok_or_else(|| {
@@ -440,9 +461,9 @@ impl Maker {
                 "of",
                 "conversion",
             ]);
-            let konst = runner::konst(is_konst);
-            let bonst = runner::bonst(is_konst);
-            let destruct = runner::destruct(is_konst);
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
             let what = &self.trait_friend_make;
 
             let fn_of = format_ident!("of");
@@ -463,7 +484,7 @@ impl Maker {
         }
 
         if self.cfg.flags.auto_of_raw {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "of",
                 "conversion",
             ]));
@@ -513,9 +534,9 @@ impl Maker {
 
         if self.cfg.flags.map {
             let is_konst = self.cfg.flags.with_const_map_fn;
-            let konst = runner::konst(is_konst);
-            let bonst = runner::bonst(is_konst);
-            let destruct = runner::destruct(is_konst);
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
             let value = quote! { value };
             let validation = self.validation_condition(&value);
             let it = quote! {
@@ -800,7 +821,7 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_make_unchecked_try && self.cfg.has_validation() {
-            let konst = runner::konst(self.cfg.konst_for(&["try_make"]));
+            let konst = zz_runner::konst(self.cfg.konst_for(&["try_make"]));
             let value = quote! { it };
             let validation = self.validation_condition(&value);
             let it = quote! {
@@ -857,7 +878,7 @@ impl Maker {
         }
 
         if self.cfg.flags.core_int {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "core_int", "value",
             ]));
             let value = quote! { value };
@@ -912,8 +933,8 @@ impl Maker {
 
         let bounds_for = |flags: &[&str]| {
             let is_konst = self.cfg.konst_for(flags);
-            let bonst = runner::bonst(is_konst);
-            let destruct = runner::destruct(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
             return quote! { #bonst #trait_seal #destruct };
         };
 
@@ -1110,7 +1131,7 @@ impl Maker {
             };
             stream.extend(it);
 
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "core_int", "value",
             ]));
             let it = quote! {
@@ -1952,7 +1973,7 @@ impl Maker {
         }
 
         if self.cfg.flags.into {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "into",
                 "conversion",
             ]));
@@ -1976,7 +1997,7 @@ impl Maker {
         }
 
         if self.cfg.flags.try_into {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "try_into",
                 "conversion",
             ]));
@@ -2003,7 +2024,7 @@ impl Maker {
         }
 
         if self.cfg.flags.math_shr {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "shr", "math",
             ]));
             let it = quote! {
@@ -2023,7 +2044,7 @@ impl Maker {
         }
 
         if self.cfg.flags.math_shl {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "shl", "math",
             ]));
             let it = quote::quote! {
@@ -2044,7 +2065,7 @@ impl Maker {
         }
 
         if self.cfg.flags.assign_shr {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "shr_assign",
                 "shr",
                 "assign",
@@ -2066,7 +2087,7 @@ impl Maker {
         }
 
         if self.cfg.flags.assign_shl {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "shl_assign",
                 "shl",
                 "assign",
@@ -2094,7 +2115,7 @@ impl Maker {
                 "assign",
                 "bit",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
@@ -2135,7 +2156,7 @@ impl Maker {
                 "assign",
                 "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2176,7 +2197,7 @@ impl Maker {
                 "assign",
                 "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2217,7 +2238,7 @@ impl Maker {
                 "assign",
                 "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2258,7 +2279,7 @@ impl Maker {
                 "assign",
                 "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2299,7 +2320,7 @@ impl Maker {
                 "assign",
                 "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2340,7 +2361,7 @@ impl Maker {
                 "assign",
                 "bit",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
@@ -2394,7 +2415,7 @@ impl Maker {
         }
 
         if self.cfg.flags.eq {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "eq",
                 "comparison",
             ]));
@@ -2406,7 +2427,7 @@ impl Maker {
         }
 
         if self.cfg.flags.ord {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "ord",
                 "comparison",
             ]));
@@ -2438,7 +2459,7 @@ impl Maker {
             let flags = [
                 "add", "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2479,7 +2500,7 @@ impl Maker {
             let flags = [
                 "sub", "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2520,7 +2541,7 @@ impl Maker {
             let flags = [
                 "mul", "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2562,7 +2583,7 @@ impl Maker {
             let flags = [
                 "div", "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2604,7 +2625,7 @@ impl Maker {
             let flags = [
                 "rem", "math",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2646,7 +2667,7 @@ impl Maker {
             let flags = [
                 "and", "bit",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
@@ -2687,7 +2708,7 @@ impl Maker {
             let flags = [
                 "or", "bit",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
@@ -2728,7 +2749,7 @@ impl Maker {
             let flags = [
                 "xor", "bit",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             let assign_flags = [
                 "xor_assign",
@@ -2736,7 +2757,8 @@ impl Maker {
                 "assign",
                 "bit",
             ];
-            let konst_assign = runner::konst(self.cfg.konst_for(&assign_flags));
+            let konst_assign =
+                zz_runner::konst(self.cfg.konst_for(&assign_flags));
             let assign_bounds = bounds_for(&assign_flags);
             if with_self_bit {
                 stream.extend(quote! {
@@ -2802,7 +2824,7 @@ impl Maker {
         }
 
         if self.cfg.flags.math_not {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "not", "bit",
             ]));
             let it = quote! {
@@ -2898,7 +2920,7 @@ impl Maker {
                 "partial_eq",
                 "comparison",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialEq<T> for #ty
@@ -2924,7 +2946,7 @@ impl Maker {
                 "partial_ord",
                 "comparison",
             ];
-            let konst = runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             let it = quote! {
                 #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
@@ -3171,7 +3193,7 @@ impl Cfg {
         let _ = syn::bracketed!(stuff in input);
         let attrs =
             syn::punctuated::Punctuated::<Ident, syn::Token![,]>::
-                parse_terminated(&stuff)?;
+            parse_terminated(&stuff)?;
         let mut duplicated = BTreeMap::new();
 
         for attr in attrs {
@@ -3405,6 +3427,8 @@ mk_flags! {
         pub auto_of_raw: bool,
         pub assertions: bool,
         pub bit_access: bool,
+        pub clone: bool,
+        pub copy: bool,
 
         pub debug: bool,
         pub display: bool = false,
@@ -3420,6 +3444,7 @@ mk_flags! {
         pub ord: bool,
         pub partial_eq: bool,
         pub partial_ord: bool,
+        pub repr: bool,
         pub serde: bool = false,
         pub try_into: bool,
         pub with_const_map_fn: bool = false,

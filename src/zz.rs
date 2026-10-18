@@ -23,8 +23,8 @@ use syn::{
     parenthesized,
 };
 
-use crate::runner::MkErr;
-use crate::value_type::N;
+use crate::zz_runner::MkErr;
+use crate::zz_value_type::N;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Konst {
@@ -137,7 +137,7 @@ pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
 
 pub(crate) use ranges::parse_ranges;
 
-use crate::runner::{
+use crate::zz_runner::{
     ToCollection,
     to_debug,
 };
@@ -154,16 +154,16 @@ mod ranges {
         UnOp,
     };
 
-    use crate::runner::{
+    use crate::zz::one_or_list;
+    use crate::zz_runner::{
         MkErr,
         ToCollection,
     };
-    use crate::value_type::{
+    use crate::zz_value_type::{
         Int,
         N,
         RangeEnding,
     };
-    use crate::zz::one_or_list;
 
     pub(crate) fn parse_ranges(
         input: ParseStream

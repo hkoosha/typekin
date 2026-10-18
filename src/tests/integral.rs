@@ -3,8 +3,8 @@ mod tests {
     use quote::ToTokens;
 
     use crate::integral::Cfg;
-    use crate::runner::ToCollection;
     use crate::zz::Konst;
+    use crate::zz_runner::ToCollection;
 
     #[test]
     fn accepts_single_friend_with_scalar_or_list_capabilities_friends_crate_convert_crate_source_source_ma_1()
@@ -270,6 +270,30 @@ mod tests {
         .expect("self operators should be configurable");
         assert!(!disabled.flags.self_math);
         assert!(!disabled.flags.self_bit);
+    }
+
+    #[test]
+    fn defaults_layout_and_copy_traits_and_allows_disabling_them() {
+        let defaults = syn::parse_str::<Cfg>("konst = none")
+            .expect("default integral configuration should parse");
+        assert!(defaults.flags.clone);
+        assert!(defaults.flags.copy);
+        assert!(defaults.flags.repr);
+
+        let enabled =
+            syn::parse_str::<Cfg>("konst = none, with = [clone, copy, repr]")
+                .expect("layout and copy traits should be configurable");
+        assert!(enabled.flags.clone);
+        assert!(enabled.flags.copy);
+        assert!(enabled.flags.repr);
+
+        let disabled = syn::parse_str::<Cfg>(
+            "konst = none, without = [clone, copy, repr]",
+        )
+        .expect("layout and copy traits should be configurable");
+        assert!(!disabled.flags.clone);
+        assert!(!disabled.flags.copy);
+        assert!(!disabled.flags.repr);
     }
 
     #[test]

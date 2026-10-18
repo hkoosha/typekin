@@ -145,7 +145,6 @@ mod tests {
     }
 
     #[typekin::text(konst = none, std = false, valid = valid_owned_text)]
-    #[repr(transparent)]
     struct OwnedText(String);
 
     fn tracked_text(value: &str) -> (OwnedText, AllocationWatch) {
@@ -176,11 +175,9 @@ mod tests {
             trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
         ],
     )]
-    #[repr(transparent)]
     struct EmptySetText(String);
 
     #[typekin::text(konst = none, std = false, in = [])]
-    #[repr(transparent)]
     struct CallbackEmptySetText(String);
 
     #[test]

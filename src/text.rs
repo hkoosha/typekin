@@ -30,27 +30,40 @@ use syn::{
 };
 
 use crate::friendship::cfg::Friend;
-use crate::runner::{
+use crate::zz;
+use crate::zz::Konst;
+use crate::zz_runner::{
     self,
     MkErr,
     ToCollection,
     mk_flags,
 };
-use crate::zz;
-use crate::zz::Konst;
 
-pub(crate) fn ekran(
+pub(crate) fn text(
     attr: Cfg,
     item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    return runner::catching(move || TextMaker::new(item, attr)?.ekran());
+    return zz_runner::catching(move || {
+        let repr = attr.flags.repr.then(|| quote! { #[repr(transparent)] });
+        let derive_clone =
+            attr.flags.clone.then(|| quote! { #[derive(Clone)] });
+        let stream = TextMaker::new(item, attr)?.ekran()?;
+
+        return Ok(quote! {
+            #repr
+            #derive_clone
+            #stream
+        });
+    });
 }
 
 mk_flags! {
     #[flag_default(bool=true, str="")]
     #[derive(Debug, Clone)]
     pub(crate) struct TextFlags {
+        pub clone: bool,
         pub display: bool,
+        pub repr: bool,
         pub serde: bool = false,
     }
 }
@@ -347,9 +360,9 @@ impl TextMaker {
             "friendship",
             "text",
         ]);
-        let konst = runner::konst(is_konst);
-        let bonst = runner::bonst(is_konst);
-        let destruct = runner::destruct(is_konst);
+        let konst = zz_runner::konst(is_konst);
+        let bonst = zz_runner::bonst(is_konst);
+        let destruct = zz_runner::destruct(is_konst);
         let make = format_ident!("Make");
         let trusted = crate::friendship::cfg::trust_capability();
         let seal = format_ident!("TextMake");
@@ -434,10 +447,10 @@ impl TextMaker {
             false => quote! { ::alloc::vec::Vec },
         };
         let is_konst = self.cfg.konst_for(&["text"]);
-        let konst = runner::konst(is_konst);
+        let konst = zz_runner::konst(is_konst);
         let bonst = TokenStream::new();
         let destruct = TokenStream::new();
-        let access_konst = runner::konst(self.cfg.konst_for(&[
+        let access_konst = zz_runner::konst(self.cfg.konst_for(&[
             "text_access",
             "text",
         ]));
@@ -456,7 +469,7 @@ impl TextMaker {
             }
         });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
-            let konst = runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.cfg.konst_for(&[
                 "text_from",
                 "from",
                 "text",

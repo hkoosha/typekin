@@ -14,12 +14,12 @@ use syn::{
 
 pub(crate) use self::cfg::Cfg;
 use crate::friendship::cfg::Friend;
-use crate::runner::MkErr;
-use crate::value_type::N;
+use crate::zz_runner::MkErr;
+use crate::zz_value_type::N;
 use crate::{
     constructor,
-    runner,
     zz,
+    zz_runner,
 };
 
 pub(crate) mod cfg {
@@ -44,13 +44,13 @@ pub(crate) mod cfg {
         Type,
     };
 
-    use crate::runner::{
-        MkErr,
-        ToCollection,
-    };
     use crate::zz::{
         arg_or_list,
         one_or_list,
+    };
+    use crate::zz_runner::{
+        MkErr,
+        ToCollection,
     };
     use crate::{
         constructor,
@@ -373,8 +373,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     let relation = &protocol.relation;
     let seal = &protocol.seal;
     let conversion = &protocol.conversion;
-    let konst = runner::konst(protocol.konst);
-    let bonst = runner::bonst(protocol.konst);
+    let konst = zz_runner::konst(protocol.konst);
+    let bonst = zz_runner::bonst(protocol.konst);
 
     let seal_declaration = protocol.emit_seal.then(|| {
         quote! {
@@ -477,7 +477,7 @@ pub(crate) fn ekran(
     attr: Cfg,
     item: Item,
 ) -> proc_macro::TokenStream {
-    return runner::catching(move || {
+    return zz_runner::catching(move || {
         let constructor = attr.constructor();
         let scope = constructor.scope.clone();
 
@@ -578,7 +578,7 @@ fn expand(
                 );
 
             name.map(|name| {
-                format_ident!("to_{}", runner::snake_case_of(&name))
+                format_ident!("to_{}", zz_runner::snake_case_of(&name))
             })
             .unwrap_or_else(|| format_ident!("convert"))
         });
@@ -693,7 +693,7 @@ pub(crate) fn emit_friendship(
             _ => None,
         };
 
-        name.map(|name| format_ident!("to_{}", runner::snake_case_of(&name)))
+        name.map(|name| format_ident!("to_{}", zz_runner::snake_case_of(&name)))
             .unwrap_or_else(|| format_ident!("convert"))
     });
 

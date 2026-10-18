@@ -12,7 +12,6 @@
     )
 )]
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(u128)]
 #[typekin::bitflag(
     suffix = "s",

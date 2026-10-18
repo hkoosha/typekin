@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 #![feature(const_closures)]
 #![feature(const_cmp)]
+#![feature(const_clone)]
 #![feature(const_convert)]
 #![feature(const_destruct)]
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
+#![feature(derive_const)]
 
 #[cfg(test)]
 mod tests {
@@ -60,6 +62,23 @@ mod tests {
     #[repr(transparent)]
     #[derive(Copy, Clone)]
     struct PlainMapped(u8);
+
+    #[typekin::integral(konst = none)]
+    struct FullyGenerated(u8);
+
+    #[typekin::integral(konst = nightly)]
+    struct FullyGeneratedConst(u8);
+
+    const FULLY_GENERATED_CLONE: FullyGeneratedConst =
+        FullyGeneratedConst::make(23).clone();
+
+    #[typekin::integral(
+        konst = none,
+        without = [clone, copy, repr],
+    )]
+    #[repr(transparent)]
+    #[derive(Copy, Clone)]
+    struct ManuallyDerivedIntegral(u8);
 
     #[typekin::integral(
         konst = none,
@@ -261,6 +280,14 @@ mod tests {
     }
 
     #[test]
+    fn integral_layout_and_copy_traits_can_be_supplied_manually() {
+        fn accepts_traits<T: Copy + Clone>() {}
+
+        accepts_traits::<ManuallyDerivedIntegral>();
+        assert_eq!(ManuallyDerivedIntegral::make(7).raw(), 7);
+    }
+
+    #[test]
     fn bit_accessors_split_u32() {
         let it = My32::make(0xa1_b2_c3_d4);
         assert_eq!(it.lo16(), 0xc3d4);
@@ -299,6 +326,16 @@ mod tests {
     fn makes_from_raw_value() {
         let it = My32::make(23);
         assert_eq!(it.raw(), 23);
+    }
+
+    #[test]
+    fn full_integral_generates_layout_and_common_traits() {
+        fn accepts_traits<T: Copy + Clone + core::hash::Hash>() {}
+
+        accepts_traits::<FullyGenerated>();
+        assert_eq!(core::mem::size_of::<FullyGenerated>(), 1);
+        assert_eq!(core::mem::align_of::<FullyGenerated>(), 1);
+        assert_eq!(FULLY_GENERATED_CLONE.raw(), 23);
     }
 
     #[test]

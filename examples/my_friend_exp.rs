@@ -6,9 +6,9 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
+#[repr(transparent)]
 #[derive(Copy)]
 #[derive_const(Clone)]
-#[repr(transparent)]
 struct PageHeader(u32);
 
 #[allow(dead_code)]
@@ -1904,15 +1904,12 @@ const _: () = {
     }
 };
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageId(u8);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageState(u8);
 
-#[repr(transparent)]
 #[derive(Copy, Clone)]
 struct PageData(u8);
 
