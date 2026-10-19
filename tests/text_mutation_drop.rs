@@ -207,7 +207,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_membership_releases_rejected_owned_constructor_inputs_case_1() {
+    fn empty_membership_releases_rejected_empty_inputs() {
         type Construction = fn(String) -> bool;
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_membership_releases_rejected_owned_constructor_inputs_safe_2() {
+    fn empty_membership_releases_rejected_ascii_inputs() {
         type Construction = fn(String) -> bool;
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_membership_releases_rejected_owned_constructor_inputs_case_3() {
+    fn empty_membership_releases_rejected_unicode_inputs() {
         type Construction = fn(String) -> bool;
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),

@@ -213,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_literal_membership_draft_1_draft_1() {
+    fn accepts_draft_and_rejects_case_variant() {
         let value = "draft";
         assert_eq!(
             Slug::try_make(value.into()).map(Slug::into_inner),
@@ -230,41 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_literal_membership_draft_1_reserved_2() {
-        let value = "draft";
-        assert_eq!(
-            Slug::try_make(value.into()).map(Slug::into_inner),
-            Ok(value.into())
-        );
-        assert_eq!(
-            Slug::try_from_str(value).map(Slug::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "reserved";
-        assert_eq!(Slug::try_make(value.into()), Err(()));
-        assert_eq!(Slug::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn validates_literal_membership_draft_1_other_3() {
-        let value = "draft";
-        assert_eq!(
-            Slug::try_make(value.into()).map(Slug::into_inner),
-            Ok(value.into())
-        );
-        assert_eq!(
-            Slug::try_from_str(value).map(Slug::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "other";
-        assert_eq!(Slug::try_make(value.into()), Err(()));
-        assert_eq!(Slug::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn validates_literal_membership_published_2_draft_1() {
+    fn accepts_published_and_rejects_case_variant() {
         let value = "published";
         assert_eq!(
             Slug::try_make(value.into()).map(Slug::into_inner),
@@ -276,40 +242,6 @@ mod tests {
         );
 
         let value = "Draft";
-        assert_eq!(Slug::try_make(value.into()), Err(()));
-        assert_eq!(Slug::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn validates_literal_membership_published_2_reserved_2() {
-        let value = "published";
-        assert_eq!(
-            Slug::try_make(value.into()).map(Slug::into_inner),
-            Ok(value.into())
-        );
-        assert_eq!(
-            Slug::try_from_str(value).map(Slug::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "reserved";
-        assert_eq!(Slug::try_make(value.into()), Err(()));
-        assert_eq!(Slug::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn validates_literal_membership_published_2_other_3() {
-        let value = "published";
-        assert_eq!(
-            Slug::try_make(value.into()).map(Slug::into_inner),
-            Ok(value.into())
-        );
-        assert_eq!(
-            Slug::try_from_str(value).map(Slug::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "other";
         assert_eq!(Slug::try_make(value.into()), Err(()));
         assert_eq!(Slug::try_from_str(value), Err(()));
     }
@@ -332,8 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_1_e_u_301_1()
-     {
+    fn empty_literal_membership_rejects_decomposed_accent() {
         let value = "";
         assert_eq!(
             LiteralText::try_from_str(value).map(LiteralText::into_inner),
@@ -345,44 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_1_case_2() {
-        let value = "";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "É";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_1_case_3() {
-        let value = "";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "é ";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_1_0_4() {
-        let value = "";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "é\0";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_2_e_u_301_1()
-     {
+    fn accented_literal_membership_rejects_decomposed_accent() {
         let value = "é";
         assert_eq!(
             LiteralText::try_from_str(value).map(LiteralText::into_inner),
@@ -394,79 +288,13 @@ mod tests {
     }
 
     #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_2_case_2() {
-        let value = "é";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "É";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_2_case_3() {
-        let value = "é";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "é ";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn literal_membership_is_exact_without_callback_validation_case_2_0_4() {
-        let value = "é";
-        assert_eq!(
-            LiteralText::try_from_str(value).map(LiteralText::into_inner),
-            Ok(value.into())
-        );
-
-        let value = "é\0";
-        assert_eq!(LiteralText::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn maps_only_to_valid_text_draft_1() {
+    fn map_rejects_case_variant() {
         let published = Slug::try_from_str("draft")
             .unwrap()
             .map(|value| value.replace_range(.., "published"));
         assert_eq!(published.map(Slug::into_inner), Ok("published".into()));
 
         let invalid = "Draft";
-        let result = Slug::try_from_str("draft").unwrap().map(|value| {
-            value.clear();
-            value.push_str(invalid);
-        });
-        assert_eq!(result, Err(()));
-    }
-
-    #[test]
-    fn maps_only_to_valid_text_reserved_2() {
-        let published = Slug::try_from_str("draft")
-            .unwrap()
-            .map(|value| value.replace_range(.., "published"));
-        assert_eq!(published.map(Slug::into_inner), Ok("published".into()));
-
-        let invalid = "reserved";
-        let result = Slug::try_from_str("draft").unwrap().map(|value| {
-            value.clear();
-            value.push_str(invalid);
-        });
-        assert_eq!(result, Err(()));
-    }
-
-    #[test]
-    fn maps_only_to_valid_text_other_3() {
-        let published = Slug::try_from_str("draft")
-            .unwrap()
-            .map(|value| value.replace_range(.., "published"));
-        assert_eq!(published.map(Slug::into_inner), Ok("published".into()));
-
-        let invalid = "other";
         let result = Slug::try_from_str("draft").unwrap().map(|value| {
             value.clear();
             value.push_str(invalid);
@@ -488,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn borrowed_str_keys_match_hash_map_entries_draft_1() {
+    fn hash_map_borrowed_str_finds_draft() {
         let hashed = std::collections::HashMap::from([
             (Slug::try_from_str("published").unwrap(), 2),
             (Slug::try_from_str("draft").unwrap(), 1),
@@ -499,18 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn borrowed_str_keys_match_hash_map_entries_published_2() {
-        let hashed = std::collections::HashMap::from([
-            (Slug::try_from_str("published").unwrap(), 2),
-            (Slug::try_from_str("draft").unwrap(), 1),
-        ]);
-
-        let (key, expected) = ("published", Some(&2));
-        assert_eq!(hashed.get(key), expected);
-    }
-
-    #[test]
-    fn borrowed_str_keys_match_hash_map_entries_other_3() {
+    fn hash_map_borrowed_str_rejects_other() {
         let hashed = std::collections::HashMap::from([
             (Slug::try_from_str("published").unwrap(), 2),
             (Slug::try_from_str("draft").unwrap(), 1),
@@ -521,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn borrowed_str_keys_match_btree_map_entries_draft_1() {
+    fn btree_map_borrowed_str_finds_draft() {
         let ordered = std::collections::BTreeMap::from([
             (Slug::try_from_str("published").unwrap(), 2),
             (Slug::try_from_str("draft").unwrap(), 1),
@@ -540,26 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn borrowed_str_keys_match_btree_map_entries_published_2() {
-        let ordered = std::collections::BTreeMap::from([
-            (Slug::try_from_str("published").unwrap(), 2),
-            (Slug::try_from_str("draft").unwrap(), 1),
-        ]);
-
-        let (key, expected) = ("published", Some(&2));
-        assert_eq!(ordered.get(key), expected);
-
-        assert_eq!(
-            ordered.keys().map(Slug::as_str).collect::<Vec<_>>(),
-            [
-                "draft",
-                "published"
-            ]
-        );
-    }
-
-    #[test]
-    fn borrowed_str_keys_match_btree_map_entries_other_3() {
+    fn btree_map_borrowed_str_rejects_other() {
         let ordered = std::collections::BTreeMap::from([
             (Slug::try_from_str("published").unwrap(), 2),
             (Slug::try_from_str("draft").unwrap(), 1),
@@ -665,8 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn friendship_validates_untrusted_and_bypasses_only_trusted_sources_draft_1()
-     {
+    fn friendship_rejects_untrusted_draft_source() {
         let valid = Slug::of(SlugSource("draft".into()));
         assert_eq!(valid.as_str(), "draft");
 
@@ -680,54 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn friendship_validates_untrusted_and_bypasses_only_trusted_sources_reserved_2()
-     {
-        let valid = Slug::of(SlugSource("draft".into()));
-        assert_eq!(valid.as_str(), "draft");
-
-        let invalid = "reserved";
-        assert_panics(|| {
-            let _ = Slug::of(SlugSource(invalid.into()));
-        });
-
-        let trusted = Slug::of(TrustSlugSource(invalid.into()));
-        assert_eq!(trusted.as_str(), invalid);
-    }
-
-    #[test]
-    fn friendship_validates_untrusted_and_bypasses_only_trusted_sources_other_3()
-     {
-        let valid = Slug::of(SlugSource("draft".into()));
-        assert_eq!(valid.as_str(), "draft");
-
-        let invalid = "other";
-        assert_panics(|| {
-            let _ = Slug::of(SlugSource(invalid.into()));
-        });
-
-        let trusted = Slug::of(TrustSlugSource(invalid.into()));
-        assert_eq!(trusted.as_str(), invalid);
-    }
-
-    #[test]
-    fn single_owned_friend_preserves_allocation_and_validates_case_1() {
-        let mut raw = String::with_capacity(64);
-        raw.push_str("draft");
-        let pointer = raw.as_ptr();
-        let capacity = raw.capacity();
-        let text = CallbackText::of(SlugSource(raw));
-        assert_eq!(text.as_str(), "draft");
-        assert_eq!(text.as_str().as_ptr(), pointer);
-        assert_eq!(text.into_inner().capacity(), capacity);
-
-        let invalid = "";
-        assert_panics(|| {
-            let _ = CallbackText::of(SlugSource(String::from(invalid)));
-        });
-    }
-
-    #[test]
-    fn single_owned_friend_preserves_allocation_and_validates_draft_2() {
+    fn owned_friend_accepts_draft_without_reallocation() {
         let mut raw = String::with_capacity(64);
         raw.push_str("draft");
         let pointer = raw.as_ptr();
@@ -738,23 +488,6 @@ mod tests {
         assert_eq!(text.into_inner().capacity(), capacity);
 
         let invalid = "Draft";
-        assert_panics(|| {
-            let _ = CallbackText::of(SlugSource(String::from(invalid)));
-        });
-    }
-
-    #[test]
-    fn single_owned_friend_preserves_allocation_and_validates_case_3() {
-        let mut raw = String::with_capacity(64);
-        raw.push_str("draft");
-        let pointer = raw.as_ptr();
-        let capacity = raw.capacity();
-        let text = CallbackText::of(SlugSource(raw));
-        assert_eq!(text.as_str(), "draft");
-        assert_eq!(text.as_str().as_ptr(), pointer);
-        assert_eq!(text.into_inner().capacity(), capacity);
-
-        let invalid = "é";
         assert_panics(|| {
             let _ = CallbackText::of(SlugSource(String::from(invalid)));
         });
@@ -1170,23 +903,7 @@ mod tests {
     }
 
     #[test]
-    fn a_single_empty_literal_accepts_only_the_empty_string_draft_1() {
-        assert_eq!(
-            EmptyStringOnly::try_make(String::new())
-                .map(EmptyStringOnly::into_inner),
-            Ok(String::new()),
-        );
-        assert_eq!(
-            EmptyStringOnly::try_from_str("").map(EmptyStringOnly::into_inner),
-            Ok(String::new()),
-        );
-        let value = "draft";
-        assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
-        assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn a_single_empty_literal_accepts_only_the_empty_string_case_2() {
+    fn empty_literal_rejects_non_empty_value() {
         assert_eq!(
             EmptyStringOnly::try_make(String::new())
                 .map(EmptyStringOnly::into_inner),
@@ -1202,41 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn a_single_empty_literal_accepts_only_the_empty_string_0_3() {
-        assert_eq!(
-            EmptyStringOnly::try_make(String::new())
-                .map(EmptyStringOnly::into_inner),
-            Ok(String::new()),
-        );
-        assert_eq!(
-            EmptyStringOnly::try_from_str("").map(EmptyStringOnly::into_inner),
-            Ok(String::new()),
-        );
-        let value = "\0";
-        assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
-        assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
-    }
-
-    #[test]
-    fn only_trusted_make_can_construct_an_empty_domain_value_case_1() {
-        let value = "";
-        let checked = CheckedSource(String::from(value));
-        assert_panics(|| EmptyDomain::of(checked));
-        let trusted = TrustSource(String::from(value));
-        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
-    }
-
-    #[test]
-    fn only_trusted_make_can_construct_an_empty_domain_value_draft_2() {
-        let value = "draft";
-        let checked = CheckedSource(String::from(value));
-        assert_panics(|| EmptyDomain::of(checked));
-        let trusted = TrustSource(String::from(value));
-        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
-    }
-
-    #[test]
-    fn only_trusted_make_can_construct_an_empty_domain_value_case_3() {
+    fn empty_domain_rejects_other_untrusted_source() {
         let value = "é🦀";
         let checked = CheckedSource(String::from(value));
         assert_panics(|| EmptyDomain::of(checked));

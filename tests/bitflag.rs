@@ -896,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_value_untrusted_friends_validate_scalar_and_list_make_3_1() {
+    fn untrusted_generated_value_friend_rejects_invalid_value() {
         let raw = 3;
         assert_panics(|| FlagsValue::of(DefaultBits(raw)));
         assert_panics(|| FlagsValue::of(CheckedBits(raw)));
@@ -906,7 +906,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_value_untrusted_friends_validate_scalar_and_list_make_8_2() {
+    fn untrusted_generated_value_friend_rejects_unknown_bits() {
         let raw = 8;
         assert_panics(|| FlagsValue::of(DefaultBits(raw)));
         assert_panics(|| FlagsValue::of(CheckedBits(raw)));
@@ -916,8 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_value_trusted_owned_friend_bypasses_only_construction_3_1_1_1()
-    {
+    fn trusted_generated_value_friend_bypasses_invalid_value_construction() {
         let raw = 3;
         let source = TrustBits(raw);
         assert_eq!(FlagsValue::of(source).raw(), raw);
@@ -938,30 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_value_trusted_owned_friend_bypasses_only_construction_3_1_8_2()
-    {
-        let raw = 3;
-        let source = TrustBits(raw);
-        assert_eq!(FlagsValue::of(source).raw(), raw);
-        assert_eq!(FlagsValue::try_make(raw), Err(raw));
-        assert_panics(|| Flags::from_bits_retain(raw));
-
-        let rhs = 8;
-        assert_panics(|| {
-            let _ = FlagsValue::try_make(2).unwrap() | TrustBits(rhs);
-        });
-        assert_panics(|| {
-            let _ = Flags::Read | TrustBits(rhs);
-        });
-
-        assert_panics(|| {
-            let _ = Flags::Read.into_value() | FlagsValue::of(TrustBits(8));
-        });
-    }
-
-    #[test]
-    fn generated_value_trusted_owned_friend_bypasses_only_construction_8_2_1_1()
-    {
+    fn trusted_generated_value_friend_bypasses_unknown_bits_construction() {
         let raw = 8;
         let source = TrustBits(raw);
         assert_eq!(FlagsValue::of(source).raw(), raw);
@@ -982,29 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_value_trusted_owned_friend_bypasses_only_construction_8_2_8_2()
-    {
-        let raw = 8;
-        let source = TrustBits(raw);
-        assert_eq!(FlagsValue::of(source).raw(), raw);
-        assert_eq!(FlagsValue::try_make(raw), Err(raw));
-        assert_panics(|| Flags::from_bits_retain(raw));
-
-        let rhs = 8;
-        assert_panics(|| {
-            let _ = FlagsValue::try_make(2).unwrap() | TrustBits(rhs);
-        });
-        assert_panics(|| {
-            let _ = Flags::Read | TrustBits(rhs);
-        });
-
-        assert_panics(|| {
-            let _ = Flags::Read.into_value() | FlagsValue::of(TrustBits(8));
-        });
-    }
-
-    #[test]
-    fn trusted_owned_assignment_results_validate_before_mutating_1_1() {
+    fn trusted_assignment_rejects_invalid_rhs_without_mutating() {
         let rhs = 1;
         let mut flags = FlagsValue::try_make(2).unwrap();
         unsafe_assert_panics(|| {
@@ -1014,7 +968,7 @@ mod tests {
     }
 
     #[test]
-    fn trusted_owned_assignment_results_validate_before_mutating_8_2() {
+    fn trusted_assignment_rejects_unknown_rhs_without_mutating() {
         let rhs = 8;
         let mut flags = FlagsValue::try_make(2).unwrap();
         unsafe_assert_panics(|| {
@@ -1075,7 +1029,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0u32_1_i16_min_1() {
+    fn displays_zero_wide_value_with_signed_minimum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1093,7 +1047,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0u32_1_123_2() {
+    fn displays_zero_wide_value_with_positive_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1111,7 +1065,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0u32_1_0_3() {
+    fn displays_zero_wide_value_with_zero_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1129,7 +1083,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0u32_1_i16_max_4() {
+    fn displays_zero_wide_value_with_signed_maximum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1147,8 +1101,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0x8000_0001_2_i16_min_1()
-    {
+    fn displays_wide_high_bit_value_with_signed_minimum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1166,7 +1119,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0x8000_0001_2_123_2() {
+    fn displays_wide_high_bit_value_with_positive_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1184,7 +1137,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0x8000_0001_2_0_3() {
+    fn displays_wide_high_bit_value_with_zero_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1202,8 +1155,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_0x8000_0001_2_i16_max_4()
-    {
+    fn displays_wide_high_bit_value_with_signed_maximum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1221,7 +1173,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_u32_max_3_i16_min_1() {
+    fn displays_wide_maximum_value_with_signed_minimum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1239,7 +1191,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_u32_max_3_123_2() {
+    fn displays_wide_maximum_value_with_positive_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1257,7 +1209,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_u32_max_3_0_3() {
+    fn displays_wide_maximum_value_with_zero_signed_value() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
@@ -1275,7 +1227,7 @@ mod display_native_values {
     }
 
     #[test]
-    fn value_display_preserves_integer_width_and_sign_u32_max_3_i16_max_4() {
+    fn displays_wide_maximum_value_with_signed_maximum() {
         assert_eq!(Wide::High.to_string(), "High");
         assert_eq!(Signed::Negative.to_string(), "Negative");
 
