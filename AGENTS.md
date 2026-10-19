@@ -155,6 +155,25 @@ Test behavior at the layer where it is observable:
   operation results, duplicate configuration, ownership of non-`Copy` friends,
   and invariant-preserving text mutation.
 
+### Test conventions
+
+- Give each test a concise, behavior-focused name. Do not encode its complete
+  input or generated case number in the name.
+- Bind meaningful inputs to local variables rather than inlining them in the
+  operation under test. Use the same variable in assertion debug messages.
+- Format multiline fixture strings as ordinary Rust strings, without `\` line
+  continuations. Lay out structured fixture content as it would appear in source
+  code.
+- Extract a fallible operation's result before asserting on it. For example,
+  parser tests should use `let this = syn::parse_str::<Cfg>(it);` followed by
+  `assert!(this.is_err(), "{it}");` or `assert!(this.is_ok(), "{it}");`; do not
+  invoke the fallible operation directly inside `assert!`.
+- Do not use `expect(input)` solely to assert success. Assert that the extracted
+  result is `Ok`; if its value is needed afterward, assert first and then unwrap
+  it.
+- When checking an error, obtain it with `unwrap_err()` and assert its relevant
+  properties. Do not pattern-match a `Result` solely to extract its error.
+
 Use these commands from the repository root:
 
 ```sh

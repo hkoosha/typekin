@@ -8,6 +8,262 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 
+#[typekin::integral(konst = nightly)]
+struct My32(u32);
+
+#[typekin::integral(konst = nightly)]
+struct MyAuto64(u64);
+
+#[typekin::integral(konst = none, with = konst_add)]
+struct ConstAddOnly(u8);
+
+const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
+
+#[typekin::integral(konst = nightly)]
+struct ConstMap(u8);
+
+const CONST_MAPPED: ConstMap = ConstMap(20).map(const |value| value + 3);
+
+const fn accepts_final_mapping(value: u8) -> bool {
+    return value == 0 || value >= 3;
+}
+
+#[typekin::integral(valid = accepts_final_mapping)]
+struct Mapped(u8);
+
+#[typekin::integral(konst = none)]
+struct PlainMapped(u8);
+
+#[typekin::integral]
+struct FullyGenerated(u8);
+
+#[typekin::integral(konst = nightly)]
+struct FullyGeneratedConst(u8);
+
+const FULLY_GENERATED_CLONE: FullyGeneratedConst =
+    FullyGeneratedConst::make(23).clone();
+
+#[typekin::integral(without = [clone, copy, repr])]
+#[derive(Copy, Clone)]
+struct ManuallyDerivedIntegral(u8);
+
+#[typekin::integral(
+    without = fn_conv_raw,
+    get_raw = Self::decoded,
+)]
+struct AccessedMap(u8);
+
+impl AccessedMap {
+    const fn decoded(self) -> u8 {
+        return self.0 - 100;
+    }
+}
+
+#[typekin::integral(konst = nightly, with = display)]
+struct MyI32(i32);
+
+#[typekin::integral(
+    konst = nightly,
+    with = display,
+    without = fn_conv_raw,
+    get_raw = Self::decoded,
+)]
+struct EncodedDisplay(i32);
+
+impl EncodedDisplay {
+    const fn decoded(self) -> i32 {
+        self.0 - 100
+    }
+}
+
+const CONST_NUMBER: My32 = match My32::try_make(23) {
+    Ok(number) => number,
+    Err(_) => panic!("valid number rejected"),
+};
+
+const fn is_even(value: u8) -> bool {
+    return value % 2 == 0;
+}
+
+const fn is_not_fifty(value: u8) -> bool {
+    return value != 50;
+}
+
+#[typekin::integral(
+    valid = is_even,
+    with = serde,
+)]
+struct SerdeIntegral(u8);
+
+const fn accepts_ranged(_: u8) -> bool {
+    return true;
+}
+
+#[typekin::integral(
+    konst = nightly,
+    friends = self(u8) -> [Math, Rel],
+    valid = [is_even, is_not_fifty],
+    in = 2..=100,
+)]
+struct Even(u8);
+
+#[typekin::integral(
+    konst = nightly,
+    friends = [self(u8) -> [Math, Rel]],
+    in = [2..=4, 8..10],
+    valid = accepts_ranged,
+)]
+struct Ranged(u8);
+
+#[typekin::integral(konst = nightly, in = ..)]
+struct AnyU8(u8);
+
+#[typekin::integral(konst = nightly, in = ..5)]
+struct BelowFive(u8);
+
+#[typekin::integral(konst = nightly, in = ..=5)]
+struct AtMostFive(u8);
+
+#[typekin::integral(konst = nightly, in = -2..)]
+struct FromNegativeTwo(i8);
+
+const fn is_even_i8(value: i8) -> bool {
+    return value % 2 == 0;
+}
+
+#[typekin::integral(
+    konst = nightly,
+    valid = is_even_i8,
+    in = [..=-6, 4..],
+)]
+struct SplitEven(i8);
+
+#[typekin::integral(
+    konst = nightly,
+    valid = is_even,
+    without = fn_make_unchecked_try,
+)]
+struct ParsedEven(u8);
+
+#[typekin::integral(
+    konst = nightly,
+    without = core_int,
+)]
+struct CoreDisabled(u8);
+
+#[typekin::integral(
+    konst = nightly,
+    without = [
+        self_friend_math_ops,
+        self_friend_math_bit,
+    ],
+)]
+struct SelfOperations(u8);
+
+const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
+    Ok(number) => number,
+    Err(_) => panic!("valid ranged number rejected"),
+};
+
+#[typekin::integral(
+    konst = nightly,
+    friends = self(u16) -> [Math, Rel],
+    get_raw = Self::value
+)]
+struct CustomRaw(u16);
+
+#[typekin::integral(konst = nightly)]
+struct Wide(u128);
+
+#[typekin::integral(
+    konst = nightly,
+    friends = self(u8) -> [Math, unsafe],
+    valid = is_even,
+    in = 2..=10,
+)]
+struct TrustEven(u8);
+
+const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
+
+// ==============================================================================
+
+struct DefaultSource(Box<u8>);
+struct CheckedSource(Box<u8>);
+struct TrustSource(Box<u8>);
+struct MathOnlySource(Box<u8>);
+struct BitOnlySource(Box<u8>);
+
+fn default_raw(source: DefaultSource) -> u8 {
+    *source.0
+}
+
+fn checked_raw(source: CheckedSource) -> u8 {
+    *source.0
+}
+
+fn trusted_raw(source: TrustSource) -> u8 {
+    *source.0
+}
+
+fn math_only_raw(source: MathOnlySource) -> u8 {
+    *source.0
+}
+
+fn bit_only_raw(source: BitOnlySource) -> u8 {
+    *source.0
+}
+
+#[typekin::integral(
+    friends = [
+        default_raw(DefaultSource) -> Make,
+        checked_raw(CheckedSource) -> [Make],
+        trusted_raw(TrustSource) -> [Math, unsafe],
+        math_only_raw(MathOnlySource),
+        bit_only_raw(BitOnlySource) -> [Bit, unsafe],
+        self(u8) -> Rel,
+    ],
+    valid = is_even,
+    in = 2..=10,
+)]
+struct Number(u8);
+
+#[typekin::integral(
+    friends = [
+        self(TrustSelfNumber) -> [Make, unsafe],
+        self(u8) -> [Make, unsafe],
+    ],
+    valid = is_even,
+    in = 2..=10,
+)]
+struct TrustSelfNumber(u8);
+
+// ==============================================================================
+
+#[typekin::integral(with = display)]
+struct NumWithDisplay(i32);
+
+#[typekin::integral(
+    with = display,
+    without = fn_conv_raw,
+    get_raw = Self::decoded,
+)]
+struct EncodedWithDisplay(i32);
+
+impl EncodedWithDisplay {
+    const fn decoded(self) -> i32 {
+        self.0 - 100
+    }
+}
+
+// ==============================================================================
+
+fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
+    std::panic::set_hook(Box::new(move |_| {}));
+    let result = std::panic::catch_unwind(f);
+    let _ = std::panic::take_hook();
+    assert!(result.is_err());
+}
+
 #[cfg(test)]
 mod tests {
     use core::cmp::Ordering;
@@ -19,193 +275,7 @@ mod tests {
         assert_tokens,
     };
 
-    #[typekin::integral(konst = nightly)]
-    struct My32(u32);
-
-    #[typekin::integral(konst = nightly)]
-    struct MyAuto64(u64);
-
-    #[typekin::integral(konst = none, with = konst_add)]
-    struct ConstAddOnly(u8);
-
-    const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
-
-    #[typekin::integral(
-        konst = none,
-        with = [with_const_map_fn],
-    )]
-    struct ConstMap(u8);
-
-    const CONST_MAPPED: ConstMap = ConstMap(20).map(const |value| value + 3);
-
-    const fn accepts_final_mapping(value: u8) -> bool {
-        return value == 0 || value >= 3;
-    }
-
-    #[typekin::integral(
-        konst = none,
-        valid = accepts_final_mapping,
-    )]
-    struct Mapped(u8);
-
-    #[typekin::integral(konst = none)]
-    struct PlainMapped(u8);
-
-    #[typekin::integral(konst = none)]
-    struct FullyGenerated(u8);
-
-    #[typekin::integral(konst = nightly)]
-    struct FullyGeneratedConst(u8);
-
-    const FULLY_GENERATED_CLONE: FullyGeneratedConst =
-        FullyGeneratedConst::make(23).clone();
-
-    #[typekin::integral(
-        konst = none,
-        without = [clone, copy, repr],
-    )]
-    #[derive(Copy, Clone)]
-    struct ManuallyDerivedIntegral(u8);
-
-    #[typekin::integral(
-        konst = none,
-        without = fn_conv_raw,
-        get_raw = Self::decoded,
-    )]
-    struct AccessedMap(u8);
-
-    impl AccessedMap {
-        const fn decoded(self) -> u8 {
-            return self.0 - 100;
-        }
-    }
-
-    #[typekin::integral(konst = nightly, with = [display])]
-    struct MyI32(i32);
-
-    #[typekin::integral(
-        konst = nightly,
-        with = [display],
-        without = [fn_conv_raw],
-        get_raw = Self::decoded,
-    )]
-    struct EncodedDisplay(i32);
-
-    impl EncodedDisplay {
-        const fn decoded(self) -> i32 {
-            self.0 - 100
-        }
-    }
-
-    const CONST_NUMBER: My32 = match My32::try_make(23) {
-        Ok(number) => number,
-        Err(_) => panic!("valid number rejected"),
-    };
-
-    const fn is_even(value: u8) -> bool {
-        return value % 2 == 0;
-    }
-
-    const fn is_not_fifty(value: u8) -> bool {
-        return value != 50;
-    }
-
-    #[typekin::integral(
-        konst = none,
-        valid = is_even,
-        with = [serde],
-    )]
-    struct SerdeIntegral(u8);
-
-    const fn accepts_ranged(_: u8) -> bool {
-        return true;
-    }
-
-    #[typekin::integral(
-        konst = nightly,
-        friends = self(u8) -> [Math, Rel],
-        valid = [is_even, is_not_fifty],
-        in = 2..=100,
-    )]
-    struct Even(u8);
-
-    #[typekin::integral(
-        konst = nightly,
-        friends = [self(u8) -> [Math, Rel]],
-        in = [2..=4, 8..10],
-        valid = accepts_ranged,
-    )]
-    struct Ranged(u8);
-
-    #[typekin::integral(konst = nightly, in = ..)]
-    struct AnyU8(u8);
-
-    #[typekin::integral(konst = nightly, in = ..5)]
-    struct BelowFive(u8);
-
-    #[typekin::integral(konst = nightly, in = ..=5)]
-    struct AtMostFive(u8);
-
-    #[typekin::integral(konst = nightly, in = -2..)]
-    struct FromNegativeTwo(i8);
-
-    const fn is_even_i8(value: i8) -> bool {
-        return value % 2 == 0;
-    }
-
-    #[typekin::integral(
-        konst = nightly,
-        valid = is_even_i8,
-        in = [..=-6, 4..],
-    )]
-    struct SplitEven(i8);
-
-    #[typekin::integral(
-        konst = nightly,
-        valid = is_even,
-        without = [fn_make_unchecked_try],
-    )]
-    struct ParsedEven(u8);
-
-    #[typekin::integral(
-        konst = nightly,
-        without = [core_int],
-    )]
-    struct CoreDisabled(u8);
-
-    #[typekin::integral(
-        konst = nightly,
-        without = [
-            self_friend_math_ops,
-            self_friend_math_bit,
-        ],
-    )]
-    struct SelfOperations(u8);
-
-    const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
-        Ok(number) => number,
-        Err(_) => panic!("valid ranged number rejected"),
-    };
-
-    #[typekin::integral(
-        konst = nightly,
-        friends = [self(u16) -> [Math, Rel]],
-        get_raw = Self::value
-    )]
-    struct CustomRaw(u16);
-
-    #[typekin::integral(konst = nightly)]
-    struct Wide(u128);
-
-    #[typekin::integral(
-        konst = nightly,
-        friends = self(u8) -> [Math, unsafe],
-        valid = is_even,
-        in = 2..=10,
-    )]
-    struct TrustEven(u8);
-
-    const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
+    use super::*;
 
     #[test]
     fn trusted_const_construction_bypasses_callback_and_range_validation() {
@@ -1464,7 +1534,7 @@ mod tests {
 
     #[test]
     fn const_mode_display_uses_configured_raw_accessor() {
-        let value = EncodedDisplay::make(123);
+        let value = EncodedWithDisplay::make(123);
         assert_eq!(value.0, 123);
         assert_eq!(format!("{}", value), "23");
         assert_eq!(format!("{:+06}", value), "+00023");
@@ -1505,261 +1575,173 @@ mod tests {
         assert_eq!(size_of::<My32>(), size_of::<u32>());
     }
 
-    #[cfg(test)]
-    mod non_const_trust {
-        use super::assert_panics;
+    #[test]
+    fn same_type_construction_requires_explicit_target_trust_to_bypass_validation()
+     {
+        for raw in [
+            3, 12,
+        ] {
+            let untrusted_target = Number::of(TrustSource(Box::new(raw)));
+            assert_panics(|| Number::of(untrusted_target));
 
-        struct DefaultSource(Box<u8>);
-        struct CheckedSource(Box<u8>);
-        struct TrustSource(Box<u8>);
-        struct MathOnlySource(Box<u8>);
-        struct BitOnlySource(Box<u8>);
-
-        fn default_raw(source: DefaultSource) -> u8 {
-            *source.0
-        }
-
-        fn checked_raw(source: CheckedSource) -> u8 {
-            *source.0
-        }
-
-        fn trusted_raw(source: TrustSource) -> u8 {
-            *source.0
-        }
-
-        fn math_only_raw(source: MathOnlySource) -> u8 {
-            *source.0
-        }
-
-        fn bit_only_raw(source: BitOnlySource) -> u8 {
-            *source.0
-        }
-
-        const fn is_even(value: u8) -> bool {
-            value % 2 == 0
-        }
-
-        #[typekin::integral(
-            konst = none,
-            friends = [
-                default_raw(DefaultSource) -> Make,
-                checked_raw(CheckedSource) -> [Make],
-                trusted_raw(TrustSource) -> [Math, unsafe],
-                math_only_raw(MathOnlySource),
-                bit_only_raw(BitOnlySource) -> [Bit, unsafe],
-                self(u8) -> Rel,
-            ],
-            valid = is_even,
-            in = 2..=10,
-        )]
-        struct Number(u8);
-
-        #[typekin::integral(
-            konst = none,
-            friends = [
-                self(TrustSelfNumber) -> [Make, unsafe],
-                self(u8) -> [Make, unsafe],
-            ],
-            valid = is_even,
-            in = 2..=10,
-        )]
-        struct TrustSelfNumber(u8);
-
-        #[test]
-        fn same_type_construction_requires_explicit_target_trust_to_bypass_validation()
-         {
-            for raw in [
-                3, 12,
-            ] {
-                let untrusted_target = Number::of(TrustSource(Box::new(raw)));
-                assert_panics(|| Number::of(untrusted_target));
-
-                let trusted_target = TrustSelfNumber::of(raw);
-                assert_eq!(TrustSelfNumber::of(trusted_target).raw(), raw);
-                assert_eq!(TrustSelfNumber::try_make(raw), Err(raw));
-            }
-        }
-
-        #[test]
-        fn untrusted_owned_friends_validate_scalar_and_list_make_3_1() {
-            let raw = 3;
-            assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
-            assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
-
-            assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
-            assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
-        }
-
-        #[test]
-        fn untrusted_owned_friends_validate_scalar_and_list_make_12_2() {
-            let raw = 12;
-            assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
-            assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
-
-            assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
-            assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
-        }
-
-        #[test]
-        fn trusted_owned_friend_bypasses_only_construction_validation_3_1() {
-            let raw = 3;
-            let source = TrustSource(Box::new(raw));
-            assert_eq!(Number::of(source).raw(), raw);
-            assert_eq!(Number::try_make(raw), Err(raw));
-
-            assert_panics(|| {
-                let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
-            });
-            assert_panics(|| {
-                let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
-            });
-            assert_panics(|| {
-                let _ =
-                    Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
-            });
-        }
-
-        #[test]
-        fn trusted_owned_friend_bypasses_only_construction_validation_12_2() {
-            let raw = 12;
-            let source = TrustSource(Box::new(raw));
-            assert_eq!(Number::of(source).raw(), raw);
-            assert_eq!(Number::try_make(raw), Err(raw));
-
-            assert_panics(|| {
-                let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
-            });
-            assert_panics(|| {
-                let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
-            });
-            assert_panics(|| {
-                let _ =
-                    Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
-            });
-        }
-
-        #[test]
-        fn trusted_owned_assignment_results_validate_before_mutating_1_1() {
-            let rhs = 1;
-            let mut number = Number::try_make(4).unwrap();
-            assert_panics(move || number += TrustSource(Box::new(rhs)));
-            assert_eq!(number.raw(), 4);
-
-            assert_panics(move || number |= TrustSource(Box::new(rhs)));
-            assert_eq!(number.raw(), 4);
-        }
-
-        #[test]
-        fn trusted_owned_assignment_results_validate_before_mutating_8_2() {
-            let rhs = 8;
-            let mut number = Number::try_make(4).unwrap();
-            assert_panics(move || number += TrustSource(Box::new(rhs)));
-            assert_eq!(number.raw(), 4);
-
-            assert_panics(move || number |= TrustSource(Box::new(rhs)));
-            assert_eq!(number.raw(), 4);
-        }
-
-        #[test]
-        fn trusted_operation_only_friends_consume_sources_and_validate_results()
-        {
-            let math_source = MathOnlySource(Box::new(2));
-            assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
-            let bit_source = BitOnlySource(Box::new(2));
-            assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
-
-            for rhs in [
-                1, 8,
-            ] {
-                assert_panics(|| {
-                    let _ = Number::try_make(4).unwrap()
-                        + MathOnlySource(Box::new(rhs));
-                });
-                assert_panics(|| {
-                    let _ = Number::try_make(4).unwrap()
-                        | BitOnlySource(Box::new(rhs));
-                });
-
-                let mut number = Number::try_make(4).unwrap();
-                assert_panics(move || number += MathOnlySource(Box::new(rhs)));
-                assert_eq!(number.raw(), 4);
-                assert_panics(move || number |= BitOnlySource(Box::new(rhs)));
-                assert_eq!(number.raw(), 4);
-            }
-            assert_eq!(Number::try_make(3), Err(3));
-            assert_eq!(Number::try_make(12), Err(12));
-        }
-
-        #[test]
-        fn math_friend_enables_construction_math_and_bit_operations() {
-            let construction_source = MathOnlySource(Box::new(2));
-            assert_eq!(Number::of(construction_source).raw(), 2);
-
-            let math_source = MathOnlySource(Box::new(2));
-            assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
-
-            let bit_source = MathOnlySource(Box::new(2));
-            assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
-        }
-
-        #[test]
-        fn rel_friend_enables_cross_type_equality_and_ordering() {
-            let value = Number::try_make(4).unwrap();
-
-            assert_eq!(value, 4u8);
-            assert_ne!(value, 2u8);
-            assert!(value < 6u8);
-            assert!(value <= 4u8);
-            assert!(value > 2u8);
-            assert!(value >= 4u8);
+            let trusted_target = TrustSelfNumber::of(raw);
+            assert_eq!(TrustSelfNumber::of(trusted_target).raw(), raw);
+            assert_eq!(TrustSelfNumber::try_make(raw), Err(raw));
         }
     }
 
-    #[cfg(test)]
-    mod non_const_display {
-        #[typekin::integral(konst = none, with = [display])]
-        struct Number(i32);
+    #[test]
+    fn untrusted_owned_friends_validate_scalar_and_list_make_3_1() {
+        let raw = 3;
+        assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
+        assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
 
-        #[typekin::integral(
-            konst = none,
-            with = [display],
-            without = [fn_conv_raw],
-            get_raw = Self::decoded,
-        )]
-        struct EncodedDisplay(i32);
-
-        impl EncodedDisplay {
-            const fn decoded(self) -> i32 {
-                self.0 - 100
-            }
-        }
-
-        #[test]
-        fn display_is_signed_decimal_and_preserves_formatter_flags() {
-            let negative = Number::make(-23);
-            assert_eq!(format!("{}", negative), "-23");
-            assert_eq!(format!("{}", Number::make(i32::MIN)), "-2147483648");
-            assert_eq!(format!("{:+}", Number::make(23)), "+23");
-            assert_eq!(format!("{:+06}", Number::make(23)), "+00023");
-            assert_eq!(format!("{:06}", negative), "-00023");
-            assert_eq!(format!("{:_<7}", negative), "-23____");
-            assert_eq!(format!("{:*^7}", negative), "**-23**");
-            assert_eq!(format!("{:>6}", negative), "   -23");
-        }
-
-        #[test]
-        fn display_uses_configured_raw_accessor() {
-            let value = EncodedDisplay::make(123);
-            assert_eq!(value.0, 123);
-            assert_eq!(format!("{}", value), "23");
-            assert_eq!(format!("{:+06}", value), "+00023");
-        }
+        assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
+        assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
     }
 
-    pub fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
-        std::panic::set_hook(Box::new(move |_| {}));
-        let result = std::panic::catch_unwind(f);
-        let _ = std::panic::take_hook();
-        assert!(result.is_err());
+    #[test]
+    fn untrusted_owned_friends_validate_scalar_and_list_make_12_2() {
+        let raw = 12;
+        assert_panics(|| Number::of(DefaultSource(Box::new(raw))));
+        assert_panics(|| Number::of(CheckedSource(Box::new(raw))));
+
+        assert_eq!(Number::of(DefaultSource(Box::new(4))).raw(), 4);
+        assert_eq!(Number::of(CheckedSource(Box::new(4))).raw(), 4);
+    }
+
+    #[test]
+    fn trusted_owned_friend_bypasses_only_construction_validation_3_1() {
+        let raw = 3;
+        let source = TrustSource(Box::new(raw));
+        assert_eq!(Number::of(source).raw(), raw);
+        assert_eq!(Number::try_make(raw), Err(raw));
+
+        assert_panics(|| {
+            let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
+        });
+        assert_panics(|| {
+            let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
+        });
+        assert_panics(|| {
+            let _ = Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
+        });
+    }
+
+    #[test]
+    fn trusted_owned_friend_bypasses_only_construction_validation_12_2() {
+        let raw = 12;
+        let source = TrustSource(Box::new(raw));
+        assert_eq!(Number::of(source).raw(), raw);
+        assert_eq!(Number::try_make(raw), Err(raw));
+
+        assert_panics(|| {
+            let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
+        });
+        assert_panics(|| {
+            let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
+        });
+        assert_panics(|| {
+            let _ = Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
+        });
+    }
+
+    #[test]
+    fn trusted_owned_assignment_results_validate_before_mutating_1_1() {
+        let rhs = 1;
+        let mut number = Number::try_make(4).unwrap();
+        assert_panics(move || number += TrustSource(Box::new(rhs)));
+        assert_eq!(number.raw(), 4);
+
+        assert_panics(move || number |= TrustSource(Box::new(rhs)));
+        assert_eq!(number.raw(), 4);
+    }
+
+    #[test]
+    fn trusted_owned_assignment_results_validate_before_mutating_8_2() {
+        let rhs = 8;
+        let mut number = Number::try_make(4).unwrap();
+        assert_panics(move || number += TrustSource(Box::new(rhs)));
+        assert_eq!(number.raw(), 4);
+
+        assert_panics(move || number |= TrustSource(Box::new(rhs)));
+        assert_eq!(number.raw(), 4);
+    }
+
+    #[test]
+    fn trusted_operation_only_friends_consume_sources_and_validate_results() {
+        let math_source = MathOnlySource(Box::new(2));
+        assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
+        let bit_source = BitOnlySource(Box::new(2));
+        assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
+
+        for rhs in [
+            1, 8,
+        ] {
+            assert_panics(|| {
+                let _ = Number::try_make(4).unwrap()
+                    + MathOnlySource(Box::new(rhs));
+            });
+            assert_panics(|| {
+                let _ =
+                    Number::try_make(4).unwrap() | BitOnlySource(Box::new(rhs));
+            });
+
+            let mut number = Number::try_make(4).unwrap();
+            assert_panics(move || number += MathOnlySource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
+            assert_panics(move || number |= BitOnlySource(Box::new(rhs)));
+            assert_eq!(number.raw(), 4);
+        }
+        assert_eq!(Number::try_make(3), Err(3));
+        assert_eq!(Number::try_make(12), Err(12));
+    }
+
+    #[test]
+    fn math_friend_enables_construction_math_and_bit_operations() {
+        let construction_source = MathOnlySource(Box::new(2));
+        assert_eq!(Number::of(construction_source).raw(), 2);
+
+        let math_source = MathOnlySource(Box::new(2));
+        assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
+
+        let bit_source = MathOnlySource(Box::new(2));
+        assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
+    }
+
+    #[test]
+    fn rel_friend_enables_cross_type_equality_and_ordering() {
+        let value = Number::try_make(4).unwrap();
+
+        assert_eq!(value, 4u8);
+        assert_ne!(value, 2u8);
+        assert!(value < 6u8);
+        assert!(value <= 4u8);
+        assert!(value > 2u8);
+        assert!(value >= 4u8);
+    }
+
+    #[test]
+    fn display_is_signed_decimal_and_preserves_formatter_flags() {
+        let negative = NumWithDisplay::make(-23);
+        assert_eq!(format!("{}", negative), "-23");
+        assert_eq!(
+            format!("{}", NumWithDisplay::make(i32::MIN)),
+            "-2147483648"
+        );
+        assert_eq!(format!("{:+}", NumWithDisplay::make(23)), "+23");
+        assert_eq!(format!("{:+06}", NumWithDisplay::make(23)), "+00023");
+        assert_eq!(format!("{:06}", negative), "-00023");
+        assert_eq!(format!("{:_<7}", negative), "-23____");
+        assert_eq!(format!("{:*^7}", negative), "**-23**");
+        assert_eq!(format!("{:>6}", negative), "   -23");
+    }
+
+    #[test]
+    fn display_uses_configured_raw_accessor() {
+        let value = EncodedWithDisplay::make(123);
+        assert_eq!(value.0, 123);
+        assert_eq!(format!("{}", value), "23");
+        assert_eq!(format!("{:+06}", value), "+00023");
     }
 }

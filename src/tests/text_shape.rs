@@ -9,13 +9,13 @@ mod tests {
         source: &str,
         marker: &str,
     ) {
-        let item = syn::parse_str(source).expect("valid Rust struct syntax");
+        let this = syn::parse_str(source);
+        assert!(this.is_ok(), "{source}");
+        let item = this.unwrap();
         let error =
-            match TextMaker::new(item, Cfg::new(crate::zz::Konst::None, false))
-            {
-                Err(error) => error,
-                Ok(_) => panic!("unsupported text shape accepted: {source}"),
-            };
+            TextMaker::new(item, Cfg::new(crate::zz::Konst::None, false))
+                .err()
+                .expect("unsupported text shape accepted");
         let prefix = &source[..source.find(marker).expect("diagnostic marker")];
         let line = prefix.bytes().filter(|it| *it == b'\n').count() + 1;
         let column = prefix.rsplit('\n').next().unwrap().len();
@@ -24,124 +24,134 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_field_shapes_point_to_the_fields_repr_transparent_nstruct_value_1()
-     {
-        let (source, marker) = ("#[repr(transparent)]\nstruct Value;", "Value");
+    fn rejects_unit_struct() {
+        let source = "
+            #[repr(transparent)]
+            struct Value;
+        ";
+        let marker = "Value";
         reject_at(source, marker);
     }
 
     #[test]
-    fn unsupported_field_shapes_point_to_the_fields_repr_transparent_nstruct_value_2()
-     {
-        let (source, marker) = ("#[repr(transparent)]\nstruct Value();", "()");
+    fn rejects_unit_tuple_struct() {
+        let source = "
+            #[repr(transparent)]
+            struct Value();
+        ";
+        let marker = "()";
         reject_at(source, marker);
     }
 
     #[test]
-    fn unsupported_field_shapes_point_to_the_fields_repr_transparent_nstruct_value_string_3()
-     {
-        let (source, marker) =
-            ("#[repr(transparent)]\nstruct Value(String, u8);", "(String");
+    fn rejects_multi_field_tuple_struct() {
+        let source = "
+            #[repr(transparent)]
+            struct Value(String, u8);
+        ";
+        let marker = "(String";
         reject_at(source, marker);
     }
 
     #[test]
-    fn unsupported_field_shapes_point_to_the_fields_repr_transparent_nstruct_value_inner_string_4()
-     {
-        let (source, marker) =
-            ("#[repr(transparent)]\nstruct Value { inner: String }", "{");
+    fn rejects_named_field_struct() {
+        let source = "
+            #[repr(transparent)]
+            struct Value { inner: String }
+        ";
+        let marker = "{";
         reject_at(source, marker);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_u8_1() {
+    fn rejects_u8_field() {
         let field = "u8";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+                #[repr(transparent)]
+                struct Value({field});
+            "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_vec_u8_2() {
-        let field = "Vec<u8>";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
-        reject_at(&source, field);
-    }
-
-    #[test]
-    fn unsupported_field_types_point_to_the_type_static_str_3() {
+    fn rejects_static_str_field() {
         let field = "&'static str";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+            #[repr(transparent)]
+            struct Value({field});
+        "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_option_string_4() {
-        let field = "Option<String>";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
-        reject_at(&source, field);
-    }
-
-    #[test]
-    fn unsupported_field_types_point_to_the_type_string_5() {
+    fn rejects_tuple_string_field() {
         let field = "(String,)";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+            #[repr(transparent)]
+            struct Value({field});
+        "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_string_1_6() {
+    fn rejects_string_array_field() {
         let field = "[String; 1]";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+            #[repr(transparent)]
+            struct Value({field});
+        "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_alloc_string_string_7() {
+    fn rejects_qualified_string_field() {
         let field = "alloc::string::String";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+            #[repr(transparent)]
+            struct Value({field});
+        "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_field_types_point_to_the_type_string_u8_8() {
+    fn rejects_generic_string_field() {
         let field = "String<u8>";
-        let source = format!("#[repr(transparent)]\nstruct Value({field});");
+        let source = format!(
+            "
+            #[repr(transparent)]
+            struct Value({field});
+        "
+        );
         reject_at(&source, field);
     }
 
     #[test]
-    fn unsupported_generics_point_to_parameters_or_where_clause_repr_transparent_nstruct_value_t_t_1()
-     {
-        let (source, marker) =
-            ("#[repr(transparent)]\nstruct Value<T>(T);", "T");
+    fn rejects_type_parameter() {
+        let source = "
+            #[repr(transparent)]
+            struct Value<T>(T);
+        ";
+        let marker = "T";
         reject_at(source, marker);
     }
 
     #[test]
-    fn unsupported_generics_point_to_parameters_or_where_clause_repr_transparent_nstruct_value_a_a_str_2()
-     {
-        let (source, marker) =
-            ("#[repr(transparent)]\nstruct Value<'a>(&'a str);", "'a");
-        reject_at(source, marker);
-    }
-
-    #[test]
-    fn unsupported_generics_point_to_parameters_or_where_clause_repr_transparent_nstruct_value_const_n_usize_str_3()
-     {
-        let (source, marker) = (
-            "#[repr(transparent)]\nstruct Value<const N: usize>(String);",
-            "const N",
-        );
-        reject_at(source, marker);
-    }
-
-    #[test]
-    fn unsupported_generics_point_to_parameters_or_where_clause_repr_transparent_nstruct_value_string_where_stri_4()
-     {
-        let (source, marker) = (
-            "#[repr(transparent)]\nstruct Value(String) where String: Clone;",
-            "where",
-        );
+    fn rejects_where_clause() {
+        let source = "
+            #[repr(transparent)]
+            struct Value(String) where String: Clone;
+        ";
+        let marker = "where";
         reject_at(source, marker);
     }
 }

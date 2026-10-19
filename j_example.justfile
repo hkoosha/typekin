@@ -1,5 +1,5 @@
 [parallel]
-all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand
+all: u32-expand u16-expand non-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand unchecked-expand
   just fmt
 
 [group("example")]
@@ -56,3 +56,8 @@ text: text-expand fmt
 u32-stable-const-expand: (z-expand 'my_u32_stable_const')
 [group("example")]
 u32-stable-const: u32-stable-const-expand fmt
+
+[group("example")]
+unchecked-expand: (z-expand 'my_unchecked')
+[group("example")]
+unchecked: unchecked-expand fmt

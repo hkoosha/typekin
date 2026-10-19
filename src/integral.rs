@@ -533,7 +533,8 @@ impl Maker {
         }
 
         if self.cfg.flags.map {
-            let is_konst = self.cfg.flags.with_const_map_fn;
+            let is_konst = self.cfg.konst_for(&["map"])
+                || self.cfg.flags.with_const_map_fn;
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
@@ -3177,6 +3178,7 @@ impl Cfg {
         "konst_friendship",
         "konst_into",
         "konst_iterator",
+        "konst_map",
         "konst_math",
         "konst_mul",
         "konst_mul_assign",

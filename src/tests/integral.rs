@@ -7,166 +7,237 @@ mod tests {
     use crate::zz_runner::ToCollection;
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_friends_crate_convert_crate_source_source_ma_1()
-     {
-        let input = "friends = crate::convert(crate::source::Source) -> Make, konst = none";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_friend_with_single_capability() {
+        let input = "
+            friends = crate::convert(crate::source::Source) -> Make,
+            konst = none
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_konst_none_friends_crate_convert_crate_sourc_2()
-     {
-        let input = "konst = none, friends = crate::convert(crate::source::Source) -> [Make, unsafe], valid = is_valid";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_friend_with_multiple_capabilities() {
+        let input = "
+            konst = none,
+            friends = crate::convert(crate::source::Source) -> [Make, unsafe],
+            valid = is_valid
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_konst_none_valid_is_valid_friends_foo_crate_case_3()
-     {
-        let input = "konst = none, valid = is_valid, friends = Foo(crate::source::Source) -> Bit";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_friend_with_custom_conversion() {
+        let input = "
+            konst = none,
+            valid = is_valid,
+            friends = Foo(crate::source::Source) -> Bit
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_konst_none_friends_foo_crate_source_source_m_4()
-     {
-        let input = "konst = none, friends = Foo(crate::source::Source) -> [Math, Bit], in = 1..=4";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_friend_with_multiple_capabilities_and_range() {
+        let input = "
+            konst = none,
+            friends = Foo(crate::source::Source) -> [Math, Bit],
+            in = 1..=4
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_konst_none_friends_self_foo_math_5()
-     {
-        let input = "konst = none, friends = Self(Foo) -> Math";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_implicit_friend() {
+        let input = "
+            konst = none,
+            friends = _(Foo) -> Math
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_single_friend_with_scalar_or_list_capabilities_konst_none_friends_self_foo_math_bit_with_di_6()
-     {
-        let input = "konst = none, friends = Self(Foo) -> [Math, Bit], with = [display]";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_implicit_friend_with_multiple_capabilities() {
+        let input = "
+            konst = none,
+            friends = _(Foo) -> [Math, Bit],
+            with = [display]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_bracketed_multiple_and_empty_friend_lists_konst_none_friends_convert_source_make_foo_o_1()
-     {
-        let input = "konst = none, friends = [convert(Source) -> Make, Foo(Other) -> [Math, Bit]], valid = is_valid";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_multiple_friends() {
+        let input = "
+            konst = none,
+            friends = [convert(Source) -> Make, Foo(Other) -> [Math, Bit]],
+            valid = is_valid
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_bracketed_multiple_and_empty_friend_lists_konst_none_friends_valid_is_valid_2()
-     {
-        let input = "konst = none, friends = [], valid = is_valid";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_empty_friends() {
+        let input = "
+            konst = none,
+            friends = [],
+            valid = is_valid
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_convert_source_make_conve_1()
-     {
-        let input = "konst = none, friends = convert(Source) -> Make, convert(Other) -> Make";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_multiple_single_explicit_friends() {
+        let input = "
+            konst = none,
+            friends = convert(Source) -> Make,
+            convert(Other) -> Make
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_source_bit_other_bit_2()
-     {
-        let input = "konst = none, friends = _(Source) -> Bit, _(Other) -> Bit";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_multiple_single_implicit_friends() {
+        let input = "
+            konst = none,
+            friends = _(Source) -> Bit,
+            _(Other) -> Bit
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_3() {
-        let input = "konst = none, friends =";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_missing_single_friend() {
+        let input = "
+            konst = none,
+            friends =
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_valid_is_valid_4()
-     {
-        let input = "konst = none, friends =, valid = is_valid";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_missing_single_friend_before_validation() {
+        let input = "
+            konst = none,
+            friends =,
+            valid = is_valid
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_convert_make_5()
-     {
-        let input = "konst = none, friends = convert() -> Make";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_conversion_without_source() {
+        let input = "
+            konst = none,
+            friends = convert() -> Make
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_convert_source_6()
-     {
-        let input = "konst = none, friends = convert(Source) ->";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_conversion_without_capabilities() {
+        let input = "
+            konst = none,
+            friends = convert(Source) ->
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_convert_source_make_1_7()
-     {
-        let input = "konst = none, friends = convert(Source) -> [Make, 1]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_non_identifier_friend_capability() {
+        let input = "
+            konst = none,
+            friends = convert(Source) -> [Make, 1]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_source_unknown_8()
-     {
-        let input = "konst = none, friends = _(Source) -> Unknown";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_unknown_friend_capability() {
+        let input = "
+            konst = none,
+            friends = _(Source) -> Unknown
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_source_bit_unknown_true_9()
-     {
-        let input =
-            "konst = none, friends = _(Source) -> [Bit], unknown = true";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_unknown_attribute_after_implicit_friend() {
+        let input = "
+            konst = none,
+            friends = _(Source) -> [Bit],
+            unknown = true
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_invalid_single_friend_boundaries_konst_none_friends_source_bit_friends_10()
-     {
-        let input = "konst = none, friends = _(Source) -> Bit, friends = []";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_duplicate_friends_after_implicit_friend() {
+        let input = "
+            konst = none,
+            friends = _(Source) -> Bit,
+            friends = []
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn accepts_explicit_konst_modes_konst_none_1() {
-        let (input, expected) = ("konst = none", Konst::None);
-        let cfg = syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_konst_none() {
+        let input = "
+            konst = none
+        ";
+        let expected = Konst::None;
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let cfg = this.unwrap();
         assert_eq!(cfg.konst, expected);
     }
 
     #[test]
-    fn accepts_explicit_konst_modes_konst_stable_2() {
-        let (input, expected) = ("konst = stable", Konst::Stable);
-        let cfg = syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_konst_stable() {
+        let input = "
+            konst = stable
+        ";
+        let expected = Konst::Stable;
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let cfg = this.unwrap();
         assert_eq!(cfg.konst, expected);
     }
 
     #[test]
-    fn accepts_explicit_konst_modes_konst_nightly_3() {
-        let (input, expected) = ("konst = nightly", Konst::Nightly);
-        let cfg = syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_konst_nightly() {
+        let input = "
+            konst = nightly
+        ";
+        let expected = Konst::Nightly;
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let cfg = this.unwrap();
         assert_eq!(cfg.konst, expected);
     }
 
     #[test]
-    fn rejects_boolean_konst_modes_konst_true_1() {
-        let input = "konst = true";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("boolean konst values are no longer accepted");
-        assert_eq!(
-            error.to_string(),
-            "expected `none`, `stable`, or `nightly`",
-        );
-    }
-
-    #[test]
-    fn rejects_boolean_konst_modes_konst_false_2() {
-        let input = "konst = false";
+    fn rejects_boolean_konst_true() {
+        let input = "
+            konst = true
+        ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("boolean konst values are no longer accepted");
         assert_eq!(
@@ -224,6 +295,15 @@ mod tests {
         assert!(disabled.konst_for(&[
             "sub", "math"
         ]));
+
+        let map = syn::parse_str::<Cfg>("konst = none, with = [konst_map]")
+            .expect("mapping can opt into constness");
+        assert!(map.konst_for(&["map"]));
+
+        let map =
+            syn::parse_str::<Cfg>("konst = nightly, without = [konst_map]")
+                .expect("mapping can opt out of constness");
+        assert!(!map.konst_for(&["map"]));
     }
 
     #[test]
@@ -397,24 +477,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_constant_range_bounds_konst_none_in_max_4_1() {
-        let input = "konst = none, in = [MAX..4]";
+    fn rejects_path_range_bound() {
+        let input = "
+            konst = none,
+            in = [MAX..4]
+        ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("range bounds must be integer constants");
         assert_eq!(error.to_string(), "range bounds must be integer constants");
     }
 
     #[test]
-    fn rejects_non_constant_range_bounds_konst_none_in_foo_2() {
-        let input = "konst = none, in = [foo..]";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("range bounds must be integer constants");
-        assert_eq!(error.to_string(), "range bounds must be integer constants");
-    }
-
-    #[test]
-    fn rejects_non_constant_range_bounds_konst_none_in_1_1_4_3() {
-        let input = "konst = none, in = [1 + 1..4]";
+    fn rejects_expression_range_bound() {
+        let input = "
+            konst = none,
+            in = [1 + 1..4]
+        ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("range bounds must be integer constants");
         assert_eq!(error.to_string(), "range bounds must be integer constants");
@@ -544,171 +622,164 @@ mod tests {
     }
 
     #[test]
-    fn accepts_trusted_capability_without_make_trust_1() {
+    fn accepts_unsafe_friend_capability() {
         let capabilities = "unsafe";
-        let input =
-            format!("konst = none, friends = [Foo(Source) -> {capabilities}]");
-        syn::parse_str::<Cfg>(&input).expect(&input);
+        let input = format!(
+            "
+                konst = none,
+                friends = [Foo(Source) -> {capabilities}]
+            "
+        );
+        let this = syn::parse_str::<Cfg>(&input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_trusted_capability_without_make_trust_2() {
+    fn accepts_bracketed_unsafe_friend_capability() {
         let capabilities = "[unsafe]";
-        let input =
-            format!("konst = none, friends = [Foo(Source) -> {capabilities}]");
-        syn::parse_str::<Cfg>(&input).expect(&input);
+        let input = format!(
+            "
+                konst = none,
+                friends = [Foo(Source) -> {capabilities}]
+            "
+        );
+        let this = syn::parse_str::<Cfg>(&input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_trusted_capability_without_make_math_trust_3() {
+    fn accepts_math_and_unsafe_friend_capabilities() {
         let capabilities = "[Math, unsafe]";
-        let input =
-            format!("konst = none, friends = [Foo(Source) -> {capabilities}]");
-        syn::parse_str::<Cfg>(&input).expect(&input);
+        let input = format!(
+            "
+                konst = none,
+                friends = [Foo(Source) -> {capabilities}]
+            "
+        );
+        let this = syn::parse_str::<Cfg>(&input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_trusted_capability_without_make_bit_rel_trust_4() {
+    fn accepts_bit_rel_and_unsafe_friend_capabilities() {
         let capabilities = "[Bit, Rel, unsafe]";
-        let input =
-            format!("konst = none, friends = [Foo(Source) -> {capabilities}]");
-        syn::parse_str::<Cfg>(&input).expect(&input);
+        let input = format!(
+            "
+                konst = none,
+                friends = [Foo(Source) -> {capabilities}]
+            "
+        );
+        let this = syn::parse_str::<Cfg>(&input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn rejects_legacy_trusted_argument_true_1() {
+    fn rejects_legacy_trusted_argument_true() {
         let trusted = "true";
         let input = format!(
-            "konst = none, friends = [Source(cap = Make, trusted = {trusted})]"
+            "
+                konst = none,
+                friends = [Source(cap = Make, trusted = {trusted})]
+            "
         );
-        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
+        let this = syn::parse_str::<Cfg>(&input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_legacy_trusted_argument_false_2() {
-        let trusted = "false";
-        let input = format!(
-            "konst = none, friends = [Source(cap = Make, trusted = {trusted})]"
-        );
-        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
+    fn rejects_duplicate_with_display_flags() {
+        let input = "
+            konst = none,
+            with = [display, display]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_duplicate_display_flags_and_generation_arguments_konst_none_with_display_display_1()
-     {
-        let input = "konst = none, with = [display, display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn rejects_unsupported_with_display_flag() {
+        let input = "
+            konst = none,
+            with = [display, display_names]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
-    fn rejects_duplicate_display_flags_and_generation_arguments_konst_none_without_display_display_2()
-     {
-        let input = "konst = none, without = [display, display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn accepts_with_from_str_flag() {
+        let input = "
+            konst = none,
+            with = [from_str]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn rejects_duplicate_display_flags_and_generation_arguments_konst_none_with_display_with_display_3()
-     {
-        let input = "konst = none, with = [display], with = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_duplicate_display_flags_and_generation_arguments_konst_none_without_display_without_display_4()
-     {
-        let input = "konst = none, without = [display], without = [display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_unsupported_display_flags_konst_none_with_display_display_names_1()
-     {
-        let input = "konst = none, with = [display, display_names]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_unsupported_display_flags_konst_none_without_display_names_2() {
-        let input = "konst = none, without = [display_names]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn accepts_from_str_generation_flag_konst_none_with_from_str_1() {
-        let input = "konst = none, with = [from_str]";
-        syn::parse_str::<Cfg>(input).expect(input);
-    }
-
-    #[test]
-    fn accepts_from_str_generation_flag_konst_none_without_from_str_2() {
-        let input = "konst = none, without = [from_str]";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_without_from_str_flag() {
+        let input = "
+            konst = none,
+            without = [from_str]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
     fn accepts_one_generation_flag_without_brackets() {
-        let input = "konst = none, with = display";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
+        let input = "
+            konst = none,
+            with = display
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
         assert!(config.flags.display);
 
-        let input = "konst = none, without = display";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
+        let input = "
+            konst = none,
+            without = display
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
         assert!(!config.flags.display);
     }
 
     #[test]
-    fn accepts_core_integral_generation_flag_konst_none_with_core_int_1() {
-        let input = "konst = none, with = [core_int]";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_with_core_int_flag() {
+        let input = "
+            konst = none,
+            with = [core_int]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn accepts_core_integral_generation_flag_konst_none_without_core_int_2() {
-        let input = "konst = none, without = [core_int]";
-        syn::parse_str::<Cfg>(input).expect(input);
+    fn accepts_without_core_int_flag() {
+        let input = "
+            konst = none,
+            without = [core_int]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
-    fn rejects_undocumented_with_aliases_konst_none_with_impl_core_int_impl_core_int_1()
-     {
-        let input = "konst = none, with_impl_core_int = [impl_core_int]";
+    fn rejects_with_impl_core_int_attribute() {
+        let input = "
+            konst = none,
+            with_impl_core_int = [impl_core_int]
+        ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("generation options use `with = [...]`");
         assert_eq!(error.to_string(), "unknown attribute");
     }
 
     #[test]
-    fn rejects_undocumented_with_aliases_konst_none_with_display_display_2() {
-        let input = "konst = none, with_display = [display]";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("generation options use `with = [...]`");
-        assert_eq!(error.to_string(), "unknown attribute");
-    }
-
-    #[test]
-    fn rejects_unsupported_single_capabilities_konst_none_friends_source_relation_1()
-     {
-        let input = "konst = none, friends = [_(Source) -> Relation]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_unsupported_single_capabilities_konst_none_friends_source_numeric_2()
-     {
-        let input = "konst = none, friends = [_(Source) -> Numeric]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_unsupported_single_capabilities_konst_none_friends_source_inspector_3()
-     {
-        let input = "konst = none, friends = [_(Source) -> Inspector]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn shared_friend_parser_accepts_qualified_conversion_and_source_paths() {
+    fn accepts_qualified_friend_paths() {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(
             "crate::conversions::own(crate::sources::Source) -> [Make, unsafe]",
         )
@@ -747,8 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities_trust_1()
-    {
+    fn accepts_friend_unsafe_capability() {
         let (capabilities, expected) = ("unsafe", vec!["UnsafeTrust"]);
         let input = format!("convert(Source) -> {capabilities}");
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
@@ -763,8 +833,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities_trust_2()
-    {
+    fn accepts_friend_bracketed_unsafe_capability() {
         let (capabilities, expected) = ("[unsafe]", vec!["UnsafeTrust"]);
         let input = format!("convert(Source) -> {capabilities}");
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
@@ -779,8 +848,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities_make_3()
-    {
+    fn accepts_friend_make_and_unsafe_capabilities() {
         let (capabilities, expected) = (
             "[Make, unsafe]",
             vec![
@@ -801,8 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities_make_4()
-    {
+    fn accepts_friend_capabilities_with_trailing_comma() {
         let (capabilities, expected) = (
             "[Make, unsafe,]",
             vec![
@@ -823,8 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_scalar_list_and_empty_capabilities_case_5()
-    {
+    fn accepts_friend_empty_capabilities() {
         let (capabilities, expected) = ("[]", Vec::<&str>::new());
         let input = format!("convert(Source) -> {capabilities}");
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
@@ -839,9 +905,8 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_typed_implicit_conversion_self_source_trust_1()
-     {
-        let input = "Self(Source) -> unsafe";
+    fn accepts_typed_implicit_friend_unsafe_capability() {
+        let input = "_(Source) -> unsafe";
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
@@ -854,9 +919,8 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_typed_implicit_conversion_self_source_make_trust_2()
-     {
-        let input = "Self(Source,) -> [Make, unsafe]";
+    fn accepts_typed_implicit_friend_with_multiple_capabilities() {
+        let input = "_(Source,) -> [Make, unsafe]";
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
@@ -869,7 +933,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_accepts_absolute_paths_and_trailing_source_comma() {
+    fn accepts_absolute_friend_paths_with_trailing_source_comma() {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(
             "::conversions::own(::sources::Source,) -> Make",
         )
@@ -885,7 +949,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_1() {
+    fn rejects_obsolete_bare_source_syntax() {
         let input = "Source";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -894,8 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_make_2()
-    {
+    fn rejects_obsolete_bare_source_with_capability() {
         let input = "Source -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -904,37 +967,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_conv_convert_cap_make_3()
-     {
-        let input = "Source(conv = convert, cap = Make)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_cap_make_trust_4()
-     {
-        let input = "Source(cap = [Make, unsafe])";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_cap_make_5() {
-        let input = "_(cap = Make)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_level_full_6()
-     {
+    fn rejects_obsolete_level_argument() {
         let input = "Source(level = [Full])";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -943,28 +976,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_conv_convert_cap_make_trusted_true_7()
-     {
-        let input = "Source(conv = convert, cap = Make, trusted = true)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_obsolete_relationship_syntax_source_conv_convert_cap_make_trusted_false_8()
-     {
-        let input = "Source(conv = convert, cap = Make, trusted = false)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_does_not_suggest_obsolete_migrations_source_conv_convert_cap_make_1()
-     {
+    fn does_not_suggest_obsolete_conversion_and_cap_arguments() {
         let input = "Source(conv = convert, cap = Make)";
         let error = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect_err("obsolete friend syntax must fail");
@@ -976,7 +988,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_does_not_suggest_obsolete_migrations_cap_make_2() {
+    fn does_not_suggest_obsolete_implicit_cap_arguments() {
         let input = "_(cap = Make)";
         let error = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect_err("obsolete friend syntax must fail");
@@ -988,8 +1000,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_convert_source_make_1()
-     {
+    fn rejects_friend_without_arrow() {
         let input = "convert(Source) Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -998,7 +1009,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_convert_source_2() {
+    fn rejects_friend_without_capabilities() {
         let input = "convert(Source) ->";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1007,16 +1018,13 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_source_3() {
+    fn accepts_implicit_friend_with_default_capabilities() {
         let input = "_(Source)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
+        syn::parse_str::<crate::friendship::cfg::Friend>(input).expect(input);
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_source_4() {
+    fn rejects_implicit_friend_without_capabilities() {
         let input = "_(Source) ->";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1025,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_case_5() {
+    fn rejects_bare_implicit_friend() {
         let input = "_";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1034,52 +1042,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_make_6() {
-        let input = "_ Make";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_case_7() {
-        let input = "_ ->";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_foo_source_8() {
-        let input = "Foo(Source) ->";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_foo_9() {
-        let input = "Foo";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_arrow_and_capabilities_foo_10() {
-        let input = "Foo ->";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_convert_make_1() {
+    fn rejects_conversion_without_source_argument() {
         let input = "convert() -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1088,8 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_convert_source_other_make_2()
-     {
+    fn rejects_conversion_with_multiple_source_arguments() {
         let input = "convert(Source, Other) -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1098,7 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_convert_make_3() {
+    fn rejects_conversion_with_underscore_source() {
         let input = "convert(_) -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1107,8 +1069,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_convert_source_make_4()
-     {
+    fn rejects_conversion_with_reference_source() {
         let input = "convert(&Source) -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1117,8 +1078,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_convert_source_make_5()
-     {
+    fn rejects_conversion_with_parenthesized_source() {
         let input = "convert((Source)) -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1127,7 +1087,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_make_6() {
+    fn rejects_implicit_conversion_without_source() {
         let input = "_() -> Make";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1136,27 +1096,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_source_other_make_7()
-     {
-        let input = "_(Source, Other) -> Make";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_requires_exactly_one_source_path_make_8() {
-        let input = "_(_) -> Make";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_1()
-     {
+    fn rejects_string_capability() {
         let input = "convert(Source) -> \"Make\"";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1165,8 +1105,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_1_2()
-     {
+    fn rejects_non_identifier_capability() {
         let input = "convert(Source) -> [Make, 1]";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1175,28 +1114,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_3()
-     {
-        let input = "convert(Source) -> {Make}";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_4()
-     {
-        let input = "convert(Source) -> (Make)";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_trust_5()
-     {
+    fn rejects_capability_list_without_comma() {
         let input = "convert(Source) -> [Make unsafe]";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1205,8 +1123,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_trust_6()
-     {
+    fn rejects_capability_list_with_extra_comma() {
         let input = "convert(Source) -> [Make,, unsafe]";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1215,8 +1132,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_nested_7()
-     {
+    fn rejects_nested_capability() {
         let input = "convert(Source) -> Make::Nested";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1225,18 +1141,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_nested_8()
-     {
-        let input = "convert(Source) -> [Make::Nested]";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_extra_9()
-     {
+    fn rejects_capability_with_extra_tokens() {
         let input = "convert(Source) -> Make extra";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1245,18 +1150,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_extra_10()
-     {
-        let input = "convert(Source) -> [Make] extra";
-        assert!(
-            syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
-            "{input}"
-        );
-    }
-
-    #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_convert_source_make_trust_11()
-     {
+    fn rejects_comma_separated_capabilities() {
         let input = "convert(Source) -> Make, unsafe";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),
@@ -1265,8 +1159,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_friend_parser_rejects_malformed_capabilities_and_extra_tokens_foo_source_12()
-     {
+    fn rejects_capability_as_conversion_target() {
         let input = "_ -> Foo(Source)";
         assert!(
             syn::parse_str::<crate::friendship::cfg::Friend>(input).is_err(),

@@ -1,16 +1,16 @@
-#[typekin::integral(konst = none, without = [clone, copy, repr])]
+#[typekin::integral(without = [clone, copy, repr])]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 struct ManualIntegral(u8);
 
-#[typekin::text(konst = none, without = [clone, repr])]
+#[typekin::text(without = [clone, repr])]
 #[repr(transparent)]
 #[derive(Clone)]
 struct ManualText(String);
 
 #[derive(Copy, Clone)]
 #[repr(u8)]
-#[typekin::bitflag(konst = none, without = [clone, copy, repr])]
+#[typekin::bitflag(without = [clone, copy, repr])]
 enum ManualFlag {
     Read = 1,
 }

@@ -94,3 +94,9 @@ path = "examples/my_u32_stable_const.rs"
 [[example]]
 name = "my_u32_stable_const_exp"
 path = "examples/my_u32_stable_const_exp.rs"
+[[example]]
+name = "my_unchecked"
+path = "examples/my_unchecked.rs"
+[[example]]
+name = "my_unchecked_exp"
+path = "examples/my_unchecked_exp.rs"

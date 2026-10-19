@@ -28,6 +28,10 @@ pub(crate) mod cfg {
         BTreeMap,
         BTreeSet,
     };
+    use std::fmt::{
+        Debug,
+        Formatter,
+    };
 
     use proc_macro2::Ident;
     use quote::{
@@ -38,6 +42,7 @@ pub(crate) mod cfg {
         Parse,
         ParseStream,
     };
+    use syn::spanned::Spanned;
     use syn::{
         Path,
         Token,
@@ -107,10 +112,28 @@ pub(crate) mod cfg {
             input: ParseStream,
             capabilities: BTreeSet<Ident>,
         ) -> syn::Result<Self> {
-            let conv = input.parse::<Path>()?;
+            let implicit = input.peek(Token![_]);
+            let conv = if implicit {
+                input.parse::<Token![_]>()?;
+                None
+            }
+            else {
+                let conv = input.parse::<Path>()?;
+                if conv.is_ident("Self") {
+                    return conv.span().fail(
+                        "friend implicit conversion is `_(Type)`, not `Self(Type)`",
+                    );
+                }
+                Some(conv)
+            };
 
             let here = input.span();
-            let mut ty = arg_or_list::<Path>(input)?;
+            let mut ty = if implicit {
+                zz::tuple::<Path>(input)?.vec()
+            }
+            else {
+                arg_or_list::<Path>(input)?
+            };
             let ty =
                 match (ty.pop(), ty) {
                     (Some(it), rest) if rest.is_empty() => it,
@@ -129,22 +152,18 @@ pub(crate) mod cfg {
             let capability_conversions = capabilities
                 .iter()
                 .cloned()
-                .map(|capability| (capability, conv.clone()))
+                .filter_map(|capability| {
+                    conv.clone().map(|conv| (capability, conv))
+                })
                 .collect();
 
             return Ok(Self {
                 identity: ty.to_token_stream().to_string(),
-                conv: if conv.is_ident(&format_ident!("self"))
-                    || conv.is_ident(&format_ident!("Self"))
-                {
-                    None
-                }
-                else {
-                    Some(conv.clone())
-                },
+                conv: conv.clone().filter(|conv| !conv.is_ident("self")),
                 make_conv: capabilities
                     .contains(&format_ident!("Make"))
-                    .then_some(conv),
+                    .then(|| conv.clone())
+                    .flatten(),
                 capability_conversions,
                 capabilities,
                 ty,
@@ -221,6 +240,15 @@ pub(crate) mod cfg {
         pub(super) scope: Option<constructor::Scope>,
         pub(super) friends: BTreeSet<Friend>,
         pub(super) extra_caps: BTreeSet<Ident>,
+    }
+
+    impl Debug for Cfg {
+        fn fmt(
+            &self,
+            f: &mut Formatter<'_>,
+        ) -> std::fmt::Result {
+            write!(f, "Cfg[...]")
+        }
     }
 
     impl Cfg {

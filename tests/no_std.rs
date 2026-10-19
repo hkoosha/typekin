@@ -1,46 +1,51 @@
+use std::path::PathBuf;
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
+use std::{
+    env,
+    fs,
+};
+
+struct FixtureDir {
+    path: PathBuf,
+}
+
+impl FixtureDir {
+    fn new(suffix: &str) -> Self {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before the Unix epoch")
+            .as_nanos();
+        let path = env::temp_dir().join(format!(
+            "typekin-no-std-{suffix}-{}-{unique}",
+            std::process::id()
+        ));
+
+        fs::create_dir_all(path.join("src"))
+            .expect("create no-std fixture directory");
+
+        return Self { path };
+    }
+}
+
+impl Drop for FixtureDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::{
-        Path,
-        PathBuf,
-    };
+    use std::path::Path;
     use std::process::Command;
-    use std::time::{
-        SystemTime,
-        UNIX_EPOCH,
-    };
     use std::{
         env,
         fs,
     };
 
-    struct FixtureDir {
-        path: PathBuf,
-    }
-
-    impl FixtureDir {
-        fn new(suffix: &str) -> Self {
-            let unique = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system clock before the Unix epoch")
-                .as_nanos();
-            let path = env::temp_dir().join(format!(
-                "typekin-no-std-{suffix}-{}-{unique}",
-                std::process::id()
-            ));
-
-            fs::create_dir_all(path.join("src"))
-                .expect("create no-std fixture directory");
-
-            return Self { path };
-        }
-    }
-
-    impl Drop for FixtureDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
+    use super::*;
 
     fn assert_no_std_compiles(
         name: &str,
@@ -162,7 +167,7 @@ fn is_slug(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
 }
 
-#[typekin::text(konst = none, std = false, valid = is_slug)]
+#[typekin::text(std = false, valid = is_slug)]
 pub struct Slug(String);
 
 pub fn build_slug(value: &str) -> Result<Slug, ()> {
@@ -187,10 +192,10 @@ const fn is_even(value: u8) -> bool {
     return value % 2 == 0;
 }
 
-#[typekin::integral(valid = is_even, with = [serde])]
+#[typekin::integral(valid = is_even, with = serde)]
 pub struct Even(u8);
 
-#[typekin::text(std = false, with = [serde])]
+#[typekin::text(std = false, with = serde)]
 pub struct Text(String);
 
 #[typekin::bitflag(

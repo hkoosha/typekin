@@ -66,10 +66,11 @@ mod tests {
 
     #[test]
     fn rejects_flags_enabled_and_disabled_in_the_shared_flag_parser() {
-        let error = syn::parse_str::<FlagLists>(
-            "with = [display], without = [display]",
-        )
-        .expect_err("a generation flag cannot be both enabled and disabled");
+        let input = "
+            with = [display],
+            without = [display]
+        ";
+        let error = syn::parse_str::<FlagLists>(input).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -78,32 +79,38 @@ mod tests {
     }
 
     #[test]
-    fn one_or_list_preserves_single_bracketed_and_empty_forms_one_1() {
-        let (input, expected) = ("One", &["One"][..]);
-        let parsed = syn::parse_str::<OneOrList>(input).unwrap();
+    fn accepts_single_one_or_list() {
+        let input = "One";
+        let expected = &["One"][..];
+        let this = syn::parse_str::<OneOrList>(input);
+        assert!(this.is_ok(), "{input}");
+        let parsed = this.unwrap();
         let actual = parsed.0.iter().map(ToString::to_string).vec();
 
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn one_or_list_preserves_single_bracketed_and_empty_forms_one_2() {
-        let (input, expected) = (
-            "[One, Two]",
-            &[
-                "One", "Two",
-            ][..],
-        );
-        let parsed = syn::parse_str::<OneOrList>(input).unwrap();
+    fn accepts_bracketed_one_or_list() {
+        let input = "[One, Two]";
+        let expected = &[
+            "One", "Two",
+        ][..];
+        let this = syn::parse_str::<OneOrList>(input);
+        assert!(this.is_ok(), "{input}");
+        let parsed = this.unwrap();
         let actual = parsed.0.iter().map(ToString::to_string).vec();
 
         assert_eq!(actual, expected);
     }
 
     #[test]
-    fn one_or_list_preserves_single_bracketed_and_empty_forms_case_3() {
-        let (input, expected): (&str, &[&str]) = ("[]", &[]);
-        let parsed = syn::parse_str::<OneOrList>(input).unwrap();
+    fn accepts_empty_one_or_list() {
+        let input = "[]";
+        let expected: &[&str] = &[];
+        let this = syn::parse_str::<OneOrList>(input);
+        assert!(this.is_ok(), "{input}");
+        let parsed = this.unwrap();
         let actual = parsed.0.iter().map(ToString::to_string).vec();
 
         assert_eq!(actual, expected);
@@ -111,49 +118,49 @@ mod tests {
 
     #[test]
     fn numeric_repr_helper_finds_the_primitive_type() {
-        let item = syn::parse_str::<ItemStruct>(
-            "#[repr(C, transparent, u8)] struct Value(u8);",
-        )
-        .unwrap();
+        let input = "
+            #[repr(C, transparent, u8)]
+            struct Value(u8);
+        ";
+        let this = syn::parse_str::<ItemStruct>(input);
+        assert!(this.is_ok(), "{input}");
+        let item = this.unwrap();
         let attrs = &item.attrs;
         assert_eq!(zz::find_repr_n(attrs, &item).unwrap(), N::U008);
     }
 
     #[test]
     fn numeric_repr_helper_rejects_missing_numeric_repr() {
-        let item = syn::parse_str::<ItemStruct>("#[repr(C)] struct Value(u8);")
-            .unwrap();
+        let input = "
+            #[repr(C)]
+            struct Value(u8);
+        ";
+        let this = syn::parse_str::<ItemStruct>(input);
+        assert!(this.is_ok(), "{input}");
+        let item = this.unwrap();
         let attrs = &item.attrs;
-        assert_eq!(
-            zz::find_repr_n(attrs, &item).unwrap_err().to_string(),
-            "missing numeric repr"
-        );
+        let error = zz::find_repr_n(attrs, &item).unwrap_err();
+        assert_eq!(error.to_string(), "missing numeric repr");
     }
 
     #[test]
-    fn snake_case_handles_single_capitals_and_acronym_boundaries_t_1() {
-        let (input, expected) = ("T", "t");
+    fn snake_cases_acronym_boundary() {
+        let input = "HTTPServer";
+        let expected = "http_server";
         assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 
     #[test]
-    fn snake_case_handles_single_capitals_and_acronym_boundaries_httpserver_2()
-    {
-        let (input, expected) = ("HTTPServer", "http_server");
+    fn snake_cases_embedded_acronym() {
+        let input = "MyURLValue";
+        let expected = "my_url_value";
         assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 
     #[test]
-    fn snake_case_handles_single_capitals_and_acronym_boundaries_myurlvalue_3()
-    {
-        let (input, expected) = ("MyURLValue", "my_url_value");
-        assert_eq!(zz_runner::snake_case_of(input), expected);
-    }
-
-    #[test]
-    fn snake_case_handles_single_capitals_and_acronym_boundaries_x509certificate_4()
-     {
-        let (input, expected) = ("X509Certificate", "x509_certificate");
+    fn snake_cases_alphanumeric_prefix() {
+        let input = "X509Certificate";
+        let expected = "x509_certificate";
         assert_eq!(zz_runner::snake_case_of(input), expected);
     }
 }

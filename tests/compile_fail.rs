@@ -1,64 +1,63 @@
-#[cfg(test)]
-mod tests {
-    use std::error::Error;
-    use std::path::{
-        Path,
-        PathBuf,
-    };
-    use std::process::Command;
-    use std::time::{
-        SystemTime,
-        UNIX_EPOCH,
-    };
-    use std::{
-        env,
-        fs,
-    };
+use std::error::Error;
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::process::Command;
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
+use std::{
+    env,
+    fs,
+};
 
-    const DISABLED: bool = true;
+const DISABLED: bool = true;
 
-    struct FixtureDir {
-        keep: bool,
-        path: PathBuf,
+struct FixtureDir {
+    keep: bool,
+    path: PathBuf,
+}
+
+impl FixtureDir {
+    fn new(suffix: &str) -> Result<Self, Box<dyn Error>> {
+        let path = env::temp_dir().join(format!(
+            "typekin-compile-fail-{}-{}-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+            suffix,
+            std::process::id()
+        ));
+
+        fs::create_dir_all(path.join("src"))?;
+
+        return Ok(Self { keep: false, path });
     }
+}
 
-    impl FixtureDir {
-        fn new(suffix: &str) -> Result<Self, Box<dyn Error>> {
-            let path = env::temp_dir().join(format!(
-                "typekin-compile-fail-{}-{}-{}",
-                SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
-                suffix,
-                std::process::id()
-            ));
-
-            fs::create_dir_all(path.join("src"))?;
-
-            return Ok(Self { keep: false, path });
+impl Drop for FixtureDir {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_dir_all(&self.path);
         }
     }
+}
 
-    impl Drop for FixtureDir {
-        fn drop(&mut self) {
-            if !self.keep {
-                let _ = fs::remove_dir_all(&self.path);
-            }
-        }
+//noinspection RsConstantConditionIf
+fn assert_rejected(
+    name: &str,
+    source: &str,
+    expected_error: &str,
+) {
+    if DISABLED {
+        return;
     }
 
-    fn assert_rejected(
-        name: &str,
-        source: &str,
-        expected_error: &str,
-    ) {
-        if DISABLED {
-            return;
-        }
+    let fixture = FixtureDir::new(name).unwrap();
 
-        let fixture = FixtureDir::new(name).unwrap();
-
-        let path = &fixture.path.join("Cargo.toml");
-        let content = &format!(
-            "\
+    let path = &fixture.path.join("Cargo.toml");
+    let content = &format!(
+        "\
                 [package]\n\
                 name = \"{}\"\n\
                 version = \"0.0.0\"\n\
@@ -67,43 +66,47 @@ mod tests {
                 [dependencies]\n\
                 typekin = {{ path = {} }}\n\
                 ",
-            name,
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .canonicalize()
-                .expect("canonicalize typekin root")
-                .to_str()
-                .expect("typekin root must be valid UTF-8"),
-        );
-        fs::write(path, content).expect("write compile-fail fixture");
+        name,
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .expect("canonicalize typekin root")
+            .to_str()
+            .expect("typekin root must be valid UTF-8"),
+    );
+    fs::write(path, content).expect("write compile-fail fixture");
 
-        let path = &fixture.path.join("src/lib.rs");
-        fs::write(path, source).expect("write compile-fail fixture");
+    let path = &fixture.path.join("src/lib.rs");
+    fs::write(path, source).expect("write compile-fail fixture");
 
-        let output = Command::new("cargo")
-            .args([
-                "+nightly",
-                "check",
-                "--offline",
-                "--quiet",
-                "--manifest-path",
-            ])
-            .arg(&fixture.path.join("Cargo.toml"))
-            .arg("--target-dir")
-            .arg(fixture.path.join("target"))
-            .output()
-            .expect("run nightly compile-fail fixture");
+    let output = Command::new("cargo")
+        .args([
+            "+nightly",
+            "check",
+            "--offline",
+            "--quiet",
+            "--manifest-path",
+        ])
+        .arg(&fixture.path.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(fixture.path.join("target"))
+        .output()
+        .expect("run nightly compile-fail fixture");
 
-        let diagnostics = String::from_utf8_lossy(&output.stderr);
+    let diagnostics = String::from_utf8_lossy(&output.stderr);
 
-        assert!(
-            !output.status.success(),
-            "{name} unexpectedly compiled:\n{diagnostics}"
-        );
-        assert!(
-            diagnostics.contains(expected_error),
-            "{name} rejected for an unexpected reason; expected {expected_error:?}:\n{diagnostics}"
-        );
-    }
+    assert!(
+        !output.status.success(),
+        "{name} unexpectedly compiled:\n{diagnostics}"
+    );
+    assert!(
+        diagnostics.contains(expected_error),
+        "{name} rejected for an unexpected reason; expected {expected_error:?}:\n{diagnostics}"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     #[test]
     fn validated_integral_has_no_make() {
@@ -203,7 +206,7 @@ mod tests {
             r#"
                 #[typekin::integral(
                     konst = none,
-                    without = [fn_conv_raw],
+                    without = fn_conv_raw,
                     get_raw = Self::value,
                 )]
                 #[repr(transparent)]
@@ -229,7 +232,7 @@ mod tests {
             r#"
                 #[typekin::integral(
                     konst = none,
-                    without = [self_math],
+                    without = self_math,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -250,7 +253,7 @@ mod tests {
             r#"
                 #[typekin::integral(
                     konst = none,
-                    without = [self_bit],
+                    without = self_bit,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -288,7 +291,7 @@ mod tests {
             r#"
                 #[typekin::integral(
                     konst = none,
-                    without = [from_str],
+                    without = from_str,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -314,7 +317,7 @@ mod tests {
             r#"
                 #[typekin::integral(
                     konst = none,
-                    without = [core_int],
+                    without = core_int,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]

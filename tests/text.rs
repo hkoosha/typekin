@@ -1,128 +1,172 @@
 extern crate alloc;
 
+use serde_test::{
+    Configure,
+    Token,
+    assert_de_tokens_error,
+    assert_tokens,
+};
+
+fn is_slug(value: &str) -> bool {
+    return !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
+}
+
+fn is_not_reserved(value: &str) -> bool {
+    return value != "reserved";
+}
+
+struct SlugSource(String);
+struct TrustSlugSource(String);
+
+impl SlugSource {
+    fn into_string(self) -> String {
+        return self.0;
+    }
+}
+
+impl TrustSlugSource {
+    fn into_string(self) -> String {
+        return self.0;
+    }
+}
+
+#[typekin::text(
+    std = false,
+    in = ["draft", "published"],
+    friends = [
+        SlugSource::into_string(SlugSource) -> Make,
+        TrustSlugSource::into_string(TrustSlugSource) -> [Make, unsafe],
+    ],
+)]
+struct Slug(String);
+
+#[typekin::text(std = false)]
+struct PlainText(String);
+
+#[typekin::text(std = false)]
+struct FullyGeneratedText(String);
+
+#[typekin::text(std = false, without = [clone, repr])]
+#[repr(transparent)]
+#[derive(Clone)]
+struct ManuallyDerivedText(String);
+
+#[typekin::text(
+    std = false,
+    friends = SlugSource::into_string(SlugSource) -> Make,
+    valid = is_slug,
+)]
+struct CallbackText(String);
+
+#[typekin::text(std = false, valid = [is_slug, is_not_reserved])]
+struct CallbackChainText(String);
+
+#[typekin::text(std = false, in = ["", "é"])]
+struct LiteralText(String);
+
+#[typekin::text(std = false, friends = self(Self) -> [Rel])]
+struct DisplayText(String);
+
+#[typekin::text(std = false, without = display)]
+struct NoDisplayText(String);
+
+impl core::fmt::Display for NoDisplayText {
+    fn fmt(
+        &self,
+        formatter: &mut core::fmt::Formatter<'_>,
+    ) -> core::fmt::Result {
+        return formatter.write_str(self.as_str());
+    }
+}
+
+thread_local! {
+    static MUTATION_CALLS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+fn reset() {
+    MUTATION_CALLS.set(0);
+}
+fn inc() {
+    MUTATION_CALLS.update(|it| it + 1);
+}
+fn require(it: usize) {
+    MUTATION_CALLS.with(|v| assert_eq!(v.get(), it));
+}
+
+fn validate_mutation(value: &str) -> bool {
+    inc();
+    return !value.is_empty() && value != "b" && !value.contains('!');
+}
+
+#[typekin::text(std = false, valid = validate_mutation)]
+struct CheckedMutationText(String);
+
+fn validate_empty_mutation(value: &str) -> bool {
+    inc();
+    return value.is_empty();
+}
+
+#[typekin::text(std = false, valid = validate_empty_mutation)]
+struct CheckedEmptyText(String);
+
+#[typekin::text(std = false, in = ["a", "ab", "abc"])]
+struct MemberMutationText(String);
+
+#[typekin::text(std = false, valid = is_not_reserved)]
+struct MutationAllocationText(String);
+
+fn is_serde_text_valid(value: &str) -> bool {
+    return value == "valid";
+}
+
+#[typekin::text(
+    std = false,
+    valid = is_serde_text_valid,
+    with = serde,
+)]
+struct SerdeText(String);
+
+#[typekin::text(
+    std = false,
+    valid = is_slug,
+    friends = _(Self) -> [Rel, unsafe],
+)]
+struct RelatedText(String);
+
+struct CheckedSource(String);
+struct TrustSource(String);
+
+fn checked_text(source: CheckedSource) -> String {
+    source.0
+}
+
+fn trusted_text(source: TrustSource) -> String {
+    source.0
+}
+
+#[typekin::text(
+    std = false,
+    in = [],
+    friends = [
+        checked_text(CheckedSource) -> Make,
+        trusted_text(TrustSource) -> [Make, unsafe],
+    ],
+)]
+struct EmptyDomain(String);
+
+#[typekin::text(std = false, in = [])]
+struct CallbackEmptyDomain(String);
+
+#[typekin::text(std = false, in = [""])]
+struct EmptyStringOnly(String);
+
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
-    use serde_test::{
-        Configure,
-        Token,
-        assert_de_tokens_error,
-        assert_tokens,
-    };
-
-    fn is_slug(value: &str) -> bool {
-        return !value.is_empty()
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
-    }
-
-    fn is_not_reserved(value: &str) -> bool {
-        return value != "reserved";
-    }
-
-    struct SlugSource(String);
-    struct TrustSlugSource(String);
-
-    impl SlugSource {
-        fn into_string(self) -> String {
-            return self.0;
-        }
-    }
-
-    impl TrustSlugSource {
-        fn into_string(self) -> String {
-            return self.0;
-        }
-    }
-
-    #[typekin::text(
-        konst = none, std = false,
-        in = ["draft", "published"],
-        friends = [
-            SlugSource::into_string(SlugSource) -> Make,
-            TrustSlugSource::into_string(TrustSlugSource) -> [Make, unsafe],
-        ],
-    )]
-    struct Slug(String);
-
-    #[typekin::text(konst = none, std = false)]
-    struct PlainText(String);
-
-    #[typekin::text(konst = none, std = false)]
-    struct FullyGeneratedText(String);
-
-    #[typekin::text(konst = none, std = false, without = [clone, repr])]
-    #[repr(transparent)]
-    #[derive(Clone)]
-    struct ManuallyDerivedText(String);
-
-    #[typekin::text(
-        konst = none, std = false,
-        friends = SlugSource::into_string(SlugSource) -> Make,
-        valid = is_slug,
-    )]
-    struct CallbackText(String);
-
-    #[typekin::text(konst = none, std = false, valid = [is_slug, is_not_reserved])]
-    struct CallbackChainText(String);
-
-    #[typekin::text(konst = none, std = false, in = ["", "é"])]
-    struct LiteralText(String);
-
-    #[typekin::text(konst = none, std = false, friends = self(Self) -> [Rel])]
-    struct DisplayText(String);
-
-    #[typekin::text(konst = none, std = false, without = display)]
-    struct NoDisplayText(String);
-
-    impl core::fmt::Display for NoDisplayText {
-        fn fmt(
-            &self,
-            formatter: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            return formatter.write_str(self.as_str());
-        }
-    }
-
-    thread_local! {
-        static MUTATION_VALIDATIONS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
-    }
-
-    fn validate_mutation(value: &str) -> bool {
-        MUTATION_VALIDATIONS.with(|calls| calls.set(calls.get() + 1));
-        return !value.is_empty() && value != "b" && !value.contains('!');
-    }
-
-    #[typekin::text(konst = none, std = false, valid = validate_mutation)]
-    struct CheckedMutationText(String);
-
-    fn validate_empty_mutation(value: &str) -> bool {
-        MUTATION_VALIDATIONS.with(|calls| calls.set(calls.get() + 1));
-        return value.is_empty();
-    }
-
-    #[typekin::text(konst = none, std = false, valid = validate_empty_mutation)]
-    struct CheckedEmptyText(String);
-
-    #[typekin::text(konst = none, std = false, in = ["a", "ab", "abc"])]
-    struct MemberMutationText(String);
-
-    #[typekin::text(konst = none, std = false, valid = is_not_reserved)]
-    struct MutationAllocationText(String);
-
-    fn is_serde_text_valid(value: &str) -> bool {
-        return value == "valid";
-    }
-
-    #[typekin::text(
-        konst = none,
-        std = false,
-        valid = is_serde_text_valid,
-        with = serde,
-    )]
-    struct SerdeText(String);
-
+    use super::*;
     #[test]
     fn text_serde_uses_owned_strings_and_revalidates() {
         assert_tokens(
@@ -870,9 +914,9 @@ mod tests {
         ];
         for mutate in accepting {
             let text = CheckedMutationText::try_from_str("abc").unwrap();
-            MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+            reset();
             assert!(mutate(text).is_ok());
-            MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+            require(1);
         }
 
         let rejecting: [Mutation; 10] = [
@@ -894,22 +938,22 @@ mod tests {
                 _ => "abc",
             };
             let text = CheckedMutationText::try_from_str(initial).unwrap();
-            MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+            reset();
             assert_eq!(mutate(text), Err(()));
-            MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+            require(1);
         }
 
         let text = CheckedMutationText::try_from_str("abc").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
         assert_eq!((text + "d").as_str(), "abcd");
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
 
         let text = CheckedMutationText::try_from_str("abc").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
 
         assert_panics(|| text + "!");
 
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
     }
 
     #[test]
@@ -984,11 +1028,9 @@ mod tests {
         ];
         for mutate in invalid {
             let text = CheckedMutationText::try_from_str("é").unwrap();
-            MUTATION_VALIDATIONS.with(|calls| calls.set(0));
-
+            reset();
             assert_panics(|| mutate(text));
-
-            MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 0));
+            require(0);
         }
 
         assert_panics(|| {
@@ -999,18 +1041,19 @@ mod tests {
     #[test]
     fn checked_truncate_beyond_length_keeps_text_and_still_validates() {
         let text = CheckedMutationText::try_from_str("é").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
         let text = text.try_truncate(usize::MAX).unwrap();
         assert_eq!(text.as_str(), "é");
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
 
         let text = CheckedMutationText::try_from_str("é").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
         let text = text.try_truncate(2).unwrap();
         assert_eq!(text.as_str(), "é");
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
     }
 
+    //noinspection SpellCheckingInspection
     #[test]
     fn checked_mutations_preserve_the_owned_allocation() {
         fn check(
@@ -1070,213 +1113,166 @@ mod tests {
     #[test]
     fn checked_empty_pop_still_validates_once() {
         let text = CheckedEmptyText::try_from_str("").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
         let (text, removed) = text.try_pop().unwrap();
         assert_eq!(removed, None);
         assert_eq!(text.as_str(), "");
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
     }
 
     #[test]
     fn checked_empty_clear_still_validates_once() {
         let text = CheckedEmptyText::try_from_str("").unwrap();
-        MUTATION_VALIDATIONS.with(|calls| calls.set(0));
+        reset();
         let text = text.try_clear().unwrap();
         assert_eq!(text.as_str(), "");
-        MUTATION_VALIDATIONS.with(|calls| assert_eq!(calls.get(), 1));
+        require(1);
     }
 
-    mod trusted_relation {
-        #[typekin::text(
-            konst = none, std = false,
-            valid = super::is_slug,
-            friends = self(Self) -> [Rel, unsafe],
-        )]
-        struct RelatedText(String);
-
-        #[test]
-        fn trusted_self_relation_needs_no_conversion_and_does_not_skip_validation()
-         {
-            let earlier = RelatedText::try_from_str("draft").unwrap();
-            let later = RelatedText::try_from_str("published").unwrap();
-            assert!(earlier < later);
-            assert_eq!(earlier.cmp(&later), core::cmp::Ordering::Less);
-            assert_eq!(earlier, RelatedText::try_from_str("draft").unwrap());
-            for invalid in [
-                "", "Draft", "é",
-            ] {
-                let checked: Result<RelatedText, ()> =
-                    RelatedText::try_make(String::from(invalid));
-                assert_eq!(checked, Err(()));
-                assert_eq!(RelatedText::try_from_str(invalid), Err(()));
-            }
+    #[test]
+    fn trusted_self_relation_needs_no_conversion_and_does_not_skip_validation()
+    {
+        let earlier = RelatedText::try_from_str("draft").unwrap();
+        let later = RelatedText::try_from_str("published").unwrap();
+        assert!(earlier < later);
+        assert_eq!(earlier.cmp(&later), core::cmp::Ordering::Less);
+        assert_eq!(earlier, RelatedText::try_from_str("draft").unwrap());
+        for invalid in [
+            "", "Draft", "é",
+        ] {
+            let checked: Result<RelatedText, ()> =
+                RelatedText::try_make(String::from(invalid));
+            assert_eq!(checked, Err(()));
+            assert_eq!(RelatedText::try_from_str(invalid), Err(()));
         }
     }
 
-    mod empty_membership {
-        use crate::tests::assert_panics;
+    #[test]
+    fn empty_membership_rejects_every_checked_input_with_and_without_callbacks()
+    {
+        for value in [
+            "", "draft", "reserved", "é🦀", "\0",
+        ] {
+            let owned: Result<EmptyDomain, ()> =
+                EmptyDomain::try_make(String::from(value));
+            let borrowed: Result<EmptyDomain, ()> =
+                EmptyDomain::try_from_str(value);
+            assert_eq!(owned, Err(()));
+            assert_eq!(borrowed, Err(()));
 
-        struct CheckedSource(String);
-        struct TrustSource(String);
-
-        fn checked_text(source: CheckedSource) -> String {
-            source.0
+            let owned: Result<CallbackEmptyDomain, ()> =
+                CallbackEmptyDomain::try_make(String::from(value));
+            let borrowed: Result<CallbackEmptyDomain, ()> =
+                CallbackEmptyDomain::try_from_str(value);
+            assert_eq!(owned, Err(()));
+            assert_eq!(borrowed, Err(()));
         }
+    }
 
-        fn trusted_text(source: TrustSource) -> String {
-            source.0
-        }
+    #[test]
+    fn a_single_empty_literal_accepts_only_the_empty_string_draft_1() {
+        assert_eq!(
+            EmptyStringOnly::try_make(String::new())
+                .map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        assert_eq!(
+            EmptyStringOnly::try_from_str("").map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        let value = "draft";
+        assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
+        assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
+    }
 
-        #[typekin::text(
-            konst = none, std = false,
-            in = [],
-            friends = [
-                checked_text(CheckedSource) -> Make,
-                trusted_text(TrustSource) -> [Make, unsafe],
-            ],
-        )]
-        struct EmptyDomain(String);
+    #[test]
+    fn a_single_empty_literal_accepts_only_the_empty_string_case_2() {
+        assert_eq!(
+            EmptyStringOnly::try_make(String::new())
+                .map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        assert_eq!(
+            EmptyStringOnly::try_from_str("").map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        let value = "é";
+        assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
+        assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
+    }
 
-        #[typekin::text(konst = none, std = false, in = [])]
-        struct CallbackEmptyDomain(String);
+    #[test]
+    fn a_single_empty_literal_accepts_only_the_empty_string_0_3() {
+        assert_eq!(
+            EmptyStringOnly::try_make(String::new())
+                .map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        assert_eq!(
+            EmptyStringOnly::try_from_str("").map(EmptyStringOnly::into_inner),
+            Ok(String::new()),
+        );
+        let value = "\0";
+        assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
+        assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
+    }
 
-        #[typekin::text(konst = none, std = false, in = [""])]
-        struct EmptyStringOnly(String);
+    #[test]
+    fn only_trusted_make_can_construct_an_empty_domain_value_case_1() {
+        let value = "";
+        let checked = CheckedSource(String::from(value));
+        assert_panics(|| EmptyDomain::of(checked));
+        let trusted = TrustSource(String::from(value));
+        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
+    }
 
-        #[test]
-        fn empty_membership_rejects_every_checked_input_with_and_without_callbacks()
-         {
-            for value in [
-                "", "draft", "reserved", "é🦀", "\0",
-            ] {
-                let owned: Result<EmptyDomain, ()> =
-                    EmptyDomain::try_make(String::from(value));
-                let borrowed: Result<EmptyDomain, ()> =
-                    EmptyDomain::try_from_str(value);
-                assert_eq!(owned, Err(()));
-                assert_eq!(borrowed, Err(()));
+    #[test]
+    fn only_trusted_make_can_construct_an_empty_domain_value_draft_2() {
+        let value = "draft";
+        let checked = CheckedSource(String::from(value));
+        assert_panics(|| EmptyDomain::of(checked));
+        let trusted = TrustSource(String::from(value));
+        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
+    }
 
-                let owned: Result<CallbackEmptyDomain, ()> =
-                    CallbackEmptyDomain::try_make(String::from(value));
-                let borrowed: Result<CallbackEmptyDomain, ()> =
-                    CallbackEmptyDomain::try_from_str(value);
-                assert_eq!(owned, Err(()));
-                assert_eq!(borrowed, Err(()));
-            }
-        }
+    #[test]
+    fn only_trusted_make_can_construct_an_empty_domain_value_case_3() {
+        let value = "é🦀";
+        let checked = CheckedSource(String::from(value));
+        assert_panics(|| EmptyDomain::of(checked));
+        let trusted = TrustSource(String::from(value));
+        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
+    }
 
-        #[test]
-        fn a_single_empty_literal_accepts_only_the_empty_string_draft_1() {
-            assert_eq!(
-                EmptyStringOnly::try_make(String::new())
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            assert_eq!(
-                EmptyStringOnly::try_from_str("")
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            let value = "draft";
-            assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
-            assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
-        }
-
-        #[test]
-        fn a_single_empty_literal_accepts_only_the_empty_string_case_2() {
-            assert_eq!(
-                EmptyStringOnly::try_make(String::new())
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            assert_eq!(
-                EmptyStringOnly::try_from_str("")
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            let value = "é";
-            assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
-            assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
-        }
-
-        #[test]
-        fn a_single_empty_literal_accepts_only_the_empty_string_0_3() {
-            assert_eq!(
-                EmptyStringOnly::try_make(String::new())
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            assert_eq!(
-                EmptyStringOnly::try_from_str("")
-                    .map(EmptyStringOnly::into_inner),
-                Ok(String::new()),
-            );
-            let value = "\0";
-            assert_eq!(EmptyStringOnly::try_make(value.into()), Err(()));
-            assert_eq!(EmptyStringOnly::try_from_str(value), Err(()));
-        }
-
-        #[test]
-        fn only_trusted_make_can_construct_an_empty_domain_value_case_1() {
-            let value = "";
-            let checked = CheckedSource(String::from(value));
-            assert_panics(|| EmptyDomain::of(checked));
-            let trusted = TrustSource(String::from(value));
-            assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
-        }
-
-        #[test]
-        fn only_trusted_make_can_construct_an_empty_domain_value_draft_2() {
-            let value = "draft";
-            let checked = CheckedSource(String::from(value));
-            assert_panics(|| EmptyDomain::of(checked));
-            let trusted = TrustSource(String::from(value));
-            assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
-        }
-
-        #[test]
-        fn only_trusted_make_can_construct_an_empty_domain_value_case_3() {
-            let value = "é🦀";
-            let checked = CheckedSource(String::from(value));
-            assert_panics(|| EmptyDomain::of(checked));
-            let trusted = TrustSource(String::from(value));
-            assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
-        }
-
-        #[test]
-        fn trusted_empty_domain_values_revalidate_maps_and_all_checked_mutators()
-         {
-            type Mutation = fn(EmptyDomain) -> bool;
-            let mutations: [(&str, Mutation); 11] = [
-                ("map no-op", |text| text.map(|_| {}).is_err()),
-                ("push", |text| text.try_push('a').is_err()),
-                ("push_str no-op", |text| text.try_push_str("").is_err()),
-                ("insert", |text| text.try_insert(0, 'a').is_err()),
-                ("insert_str no-op", |text| {
-                    text.try_insert_str(0, "").is_err()
-                }),
-                ("replace_range no-op", |text| {
-                    text.try_replace_range(0..0, "").is_err()
-                }),
-                ("truncate no-op", |text| {
-                    text.try_truncate(usize::MAX).is_err()
-                }),
-                ("clear", |text| text.try_clear().is_err()),
-                ("retain no-op", |text| text.try_retain(|_| true).is_err()),
-                ("remove", |text| text.try_remove(0).is_err()),
-                ("pop", |text| text.try_pop().is_err()),
-            ];
-            for (name, mutate) in mutations {
-                let text = EmptyDomain::of(TrustSource(String::from("é🦀")));
-                assert!(
-                    mutate(text),
-                    "{name} must reject an empty-domain value"
-                );
-            }
-
+    #[test]
+    fn trusted_empty_domain_values_revalidate_maps_and_all_checked_mutators() {
+        type Mutation = fn(EmptyDomain) -> bool;
+        let mutations: [(&str, Mutation); 11] = [
+            ("map no-op", |text| text.map(|_| {}).is_err()),
+            ("push", |text| text.try_push('a').is_err()),
+            ("push_str no-op", |text| text.try_push_str("").is_err()),
+            ("insert", |text| text.try_insert(0, 'a').is_err()),
+            ("insert_str no-op", |text| {
+                text.try_insert_str(0, "").is_err()
+            }),
+            ("replace_range no-op", |text| {
+                text.try_replace_range(0..0, "").is_err()
+            }),
+            ("truncate no-op", |text| {
+                text.try_truncate(usize::MAX).is_err()
+            }),
+            ("clear", |text| text.try_clear().is_err()),
+            ("retain no-op", |text| text.try_retain(|_| true).is_err()),
+            ("remove", |text| text.try_remove(0).is_err()),
+            ("pop", |text| text.try_pop().is_err()),
+        ];
+        for (name, mutate) in mutations {
             let text = EmptyDomain::of(TrustSource(String::from("é🦀")));
-            assert_panics(|| text + "");
+            assert!(mutate(text), "{name} must reject an empty-domain value");
         }
+
+        let text = EmptyDomain::of(TrustSource(String::from("é🦀")));
+        assert_panics(|| text + "");
     }
 
     pub fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {

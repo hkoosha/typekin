@@ -72,7 +72,8 @@ to each other and how they interact. For example, if `PageId(u8)`,
 `PageHeader(u32)` before being written to disk:
 
 ```rust
-// The friend syntax is: CONVERSION_FN(FRIEND_TYPE) -> [CAPABILITY, ...]
+// The friend syntax is: CONVERSION_FN(FRIEND_TYPE) -> [CAPABILITY, ...].
+// Use _(FRIEND_TYPE) when no conversion callback is needed.
 // With no explicit capability, the default is assumed.
 #[typekin::integral(friends = [
     id_to_header(PageId) -> [Math, Rel], 
