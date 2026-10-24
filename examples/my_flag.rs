@@ -45,4 +45,7 @@ fn main() {
     for x in MyFlag::items() {
         println!("{}", x.name());
     }
+
+    let v: MyFlags = MyFlag::C & MyFlag::B;
+    println!("auto-conv: {:?}", v);
 }
