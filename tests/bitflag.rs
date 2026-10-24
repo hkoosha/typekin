@@ -226,14 +226,14 @@ const fn is_even(bits: u8) -> bool {
 #[repr(u8)]
 #[typekin::bitflag(
         friends = [
-            trusted_bits(TrustBits) -> [Make, Bit, unsafe],
+            trusted_bits(TrustBits) -> [Bit, unsafe],
             bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
         ],
         integral = [
             friends = [
                 default_bits(DefaultBits) -> Make,
                 checked_bits(CheckedBits) -> [Make],
-                trusted_bits(TrustBits) -> [Make, Bit, unsafe],
+                trusted_bits(TrustBits) -> [Bit, unsafe],
                 bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
                 math_only_bits(MathOnlyBits) -> [Math, unsafe],
             ],
@@ -978,8 +978,7 @@ mod tests {
     }
 
     #[test]
-    fn trusted_operation_only_friends_validate_enum_and_generated_value_results()
-     {
+    fn trusted_bit_and_math_friends_still_validate_results() {
         let root_source = BitOnlyBits(4);
         assert_eq!((Flags::Read | root_source).raw(), 6);
         let value_source = BitOnlyBits(4);

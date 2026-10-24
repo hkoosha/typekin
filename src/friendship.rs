@@ -142,13 +142,17 @@ pub(crate) mod cfg {
                     ),
                 };
 
-            let capabilities = if input.peek(Token![->]) {
+            let mut capabilities = if input.peek(Token![->]) {
                 let _ = input.parse::<Token![->]>()?;
                 parse_capabilities(input)?
             }
             else {
                 capabilities
             };
+            if capabilities.contains(&trust_capability()) {
+                capabilities.insert(format_ident!("Make"));
+            }
+
             let capability_conversions = capabilities
                 .iter()
                 .cloned()

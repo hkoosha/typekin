@@ -229,8 +229,8 @@ struct Number(u8);
 
 #[typekin::integral(
     friends = [
-        self(TrustSelfNumber) -> [Make, unsafe],
-        self(u8) -> [Make, unsafe],
+        self(TrustSelfNumber) -> unsafe,
+        self(u8) -> unsafe,
     ],
     valid = is_even,
     in = 2..=10,

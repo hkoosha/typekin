@@ -1587,12 +1587,13 @@ const _: () = {
             return it as i128;
         }
         #[inline(always)]
-        pub fn try_map<F>(
+        pub const fn try_map<F>(
             self,
             function: F,
         ) -> ::core::result::Result<Self, u32>
         where
-            F: ::core::ops::FnOnce(u32) -> u32,
+            F: [const] ::core::ops::FnOnce(u32) -> u32
+                + [const] ::core::marker::Destruct,
         {
             let value = function(Self::raw(self));
             return if true {
@@ -1604,12 +1605,13 @@ const _: () = {
         }
         #[inline(always)]
         #[track_caller]
-        pub fn map<F>(
+        pub const fn map<F>(
             self,
             function: F,
         ) -> Self
         where
-            F: ::core::ops::FnOnce(u32) -> u32,
+            F: [const] ::core::ops::FnOnce(u32) -> u32
+                + [const] ::core::marker::Destruct,
         {
             return match self.try_map(function) {
                 ::core::result::Result::Ok(value) => value,

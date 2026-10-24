@@ -38,7 +38,7 @@ impl TrustSlugSource {
     in = ["draft", "published"],
     friends = [
         SlugSource::into_string(SlugSource) -> Make,
-        TrustSlugSource::into_string(TrustSlugSource) -> [Make, unsafe],
+        TrustSlugSource::into_string(TrustSlugSource) -> unsafe,
     ],
 )]
 struct Slug(String);
@@ -132,7 +132,7 @@ struct SerdeText(String);
 #[typekin::text(
     std = false,
     valid = is_slug,
-    friends = _(Self) -> [Rel, unsafe],
+    friends = Self::into_inner(Self) -> [Rel, unsafe],
 )]
 struct RelatedText(String);
 
@@ -152,7 +152,7 @@ fn trusted_text(source: TrustSource) -> String {
     in = [],
     friends = [
         checked_text(CheckedSource) -> Make,
-        trusted_text(TrustSource) -> [Make, unsafe],
+        trusted_text(TrustSource) -> [unsafe],
     ],
 )]
 struct EmptyDomain(String);
@@ -863,8 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn trusted_self_relation_needs_no_conversion_and_does_not_skip_validation()
-    {
+    fn trusted_self_relation_preserves_checked_validation() {
         let earlier = RelatedText::try_from_str("draft").unwrap();
         let later = RelatedText::try_from_str("published").unwrap();
         assert!(earlier < later);

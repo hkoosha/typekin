@@ -13,8 +13,8 @@ impl MyFriend {
 }
 
 fn main() {
-    let lhs = 0b1101u32;
-    let rhs = 0b0110u32;
+    let lhs = MyFriend(0b1101u32);
+    let rhs = MyFriend(0b0110u32);
 
     let lhs = MyUnchecked::of(lhs);
     let rhs = MyUnchecked::of(rhs);

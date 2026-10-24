@@ -229,16 +229,16 @@ text equality and ordering remain same-type operations.
 ### Trusted friend construction
 
 Friends without `unsafe` are untrusted. Integral and text `of` validate their
-converted values and panic if invalid. Granting both `Make` and `unsafe` skips
-only that friend-construction validation: the friend author must prove the
-converted value is already valid. `unsafe` alone does not grant `Make`.
+converted values and panic if invalid. `unsafe` implies `Make` and skips only
+that friend-construction validation: the friend author must prove the converted
+value is already valid.
 
-The `unsafe` capability grants no additional operations. Checked constructors
-and math/bitwise operation results still validate, including operations with a
-trusted friend as the right-hand operand.
+`unsafe` does not imply `Math`, `Bit`, or `Rel`. Checked constructors and
+math/bitwise operation results still validate, including operations with a
+trusted friend as the right-hand operand. Text `unsafe` friends require an
+explicit conversion returning `String`, just like explicit `Make` friends.
 
-Standalone `friends` accepts marker capabilities, including `unsafe`,
-independently of `Make`. It generates `Self::of` for the relationship and every
+Standalone `friends` generates `Self::of` for the relationship and every
 declared friend; targets provide `fn of_parts(relation) -> Self`, and `scope`
 controls where the generated protocol is placed. It has no generated validator
 to bypass: the configured `of_parts` function always runs, including its own

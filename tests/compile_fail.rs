@@ -176,30 +176,6 @@ mod tests {
     }
 
     #[test]
-    fn trust_does_not_grant_make() {
-        assert_rejected(
-            "trust-does-not-grant-make",
-            r#"
-                struct TrustSource(u8);
-                fn into_u8(source: TrustSource) -> u8 { source.0 }
-
-                #[typekin::integral(
-                    konst = none,
-                    friends = into_u8(TrustSource) -> unsafe,
-                )]
-                #[repr(transparent)]
-                #[derive(Copy, Clone)]
-                struct Number(u8);
-
-                fn requires_make() {
-                    let _ = Number::of(TrustSource(2));
-                }
-            "#,
-            "Make",
-        );
-    }
-
-    #[test]
     fn without_removes_raw() {
         assert_rejected(
             "without-removes-raw",

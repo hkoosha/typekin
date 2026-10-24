@@ -416,9 +416,15 @@ mod tests {
     }
 
     #[test]
-    fn accepts_source_unsafe_friend() {
+    fn rejects_unsafe_friend_without_conversion() {
         let input = "konst = none, friends = [_(Source) -> unsafe]";
-        syn::parse_str::<Cfg>(input).expect(input);
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "text Make friend requires `conversion(Type) -> Make`",
+            "{input}"
+        );
     }
 
     #[test]
@@ -434,13 +440,19 @@ mod tests {
 
     #[test]
     fn accepts_self_rel_and_unsafe_friend_with_trailing_comma() {
-        let input = "konst = none, friends = [_(Self,) -> [Rel, unsafe]]";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
+        let input = "
+            konst = none,
+            friends = [into_string(Self,) -> [Rel, unsafe]]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.ty.is_ident("Self"));
-        assert!(friend.conv.is_none());
+        assert!(friend.conv.as_ref().unwrap().is_ident("into_string"));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
     }
 
     #[test]

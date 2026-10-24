@@ -818,31 +818,35 @@ mod tests {
     }
 
     #[test]
-    fn accepts_friend_unsafe_capability() {
-        let (capabilities, expected) = ("unsafe", vec!["UnsafeTrust"]);
-        let input = format!("convert(Source) -> {capabilities}");
-        let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
-            .expect(&input);
-        assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+    fn unsafe_friend_implies_only_make() {
+        let input = "convert(Source) -> unsafe";
+        let parsed = syn::parse_str::<crate::friendship::cfg::Friend>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let friend = parsed.unwrap();
+
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
-            expected,
+            [
+                "Make",
+                "UnsafeTrust"
+            ],
             "{input}"
         );
     }
 
     #[test]
-    fn accepts_friend_bracketed_unsafe_capability() {
-        let (capabilities, expected) = ("[unsafe]", vec!["UnsafeTrust"]);
-        let input = format!("convert(Source) -> {capabilities}");
-        let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
-            .expect(&input);
-        assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+    fn bracketed_unsafe_friend_implies_only_make() {
+        let input = "convert(Source) -> [unsafe]";
+        let parsed = syn::parse_str::<crate::friendship::cfg::Friend>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let friend = parsed.unwrap();
+
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
-            expected,
+            [
+                "Make",
+                "UnsafeTrust"
+            ],
             "{input}"
         );
     }
