@@ -7,6 +7,8 @@ use std::fmt::{
 };
 use std::str::FromStr;
 
+use crate::zz::Konsts;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
 pub(crate) enum N {
@@ -454,6 +456,19 @@ impl Operator {
         };
     }
 
+    pub(crate) fn method_name(self) -> &'static str {
+        return match self {
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Rem => "rem",
+            Self::BitAnd => "bitand",
+            Self::BitOr => "bitor",
+            Self::BitXor => "bitxor",
+        };
+    }
+
     pub(crate) fn items() -> &'static [Self] {
         return &Self::ITEMS;
     }
@@ -464,6 +479,43 @@ impl Operator {
 
     pub(crate) fn math_items() -> &'static [Self] {
         return &Self::MATH;
+    }
+
+    pub(crate) fn is_konst_flags(&self) -> [Konsts; 2] {
+        return match self {
+            Self::Add => [
+                Konsts::Add,
+                Konsts::Math,
+            ],
+            Self::Sub => [
+                Konsts::Sub,
+                Konsts::Math,
+            ],
+            Self::Mul => [
+                Konsts::Mul,
+                Konsts::Math,
+            ],
+            Self::Div => [
+                Konsts::Div,
+                Konsts::Math,
+            ],
+            Self::Rem => [
+                Konsts::Rem,
+                Konsts::Math,
+            ],
+            Self::BitAnd => [
+                Konsts::And,
+                Konsts::Bit,
+            ],
+            Self::BitOr => [
+                Konsts::Or,
+                Konsts::Bit,
+            ],
+            Self::BitXor => [
+                Konsts::Xor,
+                Konsts::Bit,
+            ],
+        };
     }
 }
 

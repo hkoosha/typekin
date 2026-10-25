@@ -6,6 +6,7 @@ use std::fmt::{
     Debug,
     Formatter,
 };
+use std::str::FromStr;
 
 use proc_macro2::{
     Ident,
@@ -23,7 +24,6 @@ use syn::parse::{
 };
 use syn::spanned::Spanned as _;
 use syn::{
-    ExprRange,
     Fields,
     ItemStruct,
     Path,
@@ -184,73 +184,11 @@ impl Maker {
     }
 
     fn preprocess_cfg(mut cfg: Box<Cfg>) -> Box<Cfg> {
-        if cfg.flags.auto_of_raw && cfg.has_validation() {
+        if cfg.flags.auto_of_raw && cfg.validation.has_validation() {
             cfg.flags.auto_of_raw = false;
         }
 
         return cfg;
-    }
-
-    fn range_condition(
-        range: &ExprRange,
-        value: &TokenStream,
-    ) -> TokenStream {
-        let lower = range.start.as_ref().map(|start| {
-            return quote! { #value >= (#start) };
-        });
-        let upper = range.end.as_ref().map(|end| {
-            return match &range.limits {
-                syn::RangeLimits::HalfOpen(_) => {
-                    quote! { #value < (#end) }
-                }
-                syn::RangeLimits::Closed(_) => {
-                    quote! { #value <= (#end) }
-                }
-            };
-        });
-
-        return match (lower, upper) {
-            (None, None) => quote! { true },
-            (Some(lower), None) => quote! { #lower },
-            (None, Some(upper)) => quote! { #upper },
-            (Some(lower), Some(upper)) => {
-                quote! { (#lower) && (#upper) }
-            }
-        };
-    }
-
-    pub(crate) fn validation_condition_for(
-        cfg: &Cfg,
-        value: &TokenStream,
-    ) -> TokenStream {
-        let callbacks = cfg
-            .validation
-            .callbacks
-            .iter()
-            .map(|callback| quote! { #callback(#value) })
-            .reduce(|left, right| quote! { (#left) && (#right) });
-        let ranges = cfg
-            .validation
-            .ranges
-            .iter()
-            .map(|range| Self::range_condition(range, value))
-            .reduce(|left, right| quote! { (#left) || (#right) });
-
-        return match (callbacks, ranges) {
-            (Some(callbacks), Some(ranges)) => {
-                quote! { (#callbacks) && (#ranges) }
-            }
-            (Some(callbacks), None) => quote! { #callbacks },
-            (None, Some(ranges)) => quote! { #ranges },
-            (None, None) => quote! { true },
-        };
-    }
-
-    fn validation_condition(
-        &self,
-        value: &TokenStream,
-    ) -> TokenStream {
-        return Self::validation_condition_for(&self.cfg, value);
     }
 
     fn arithmetic_expression(
@@ -273,7 +211,7 @@ impl Maker {
                         ::core::option::Option::Some(value) => value,
                         ::core::option::Option::None => {
                             ::core::panic!(
-                                "integral checked operation overflowed",
+                                "operation overflowed",
                             );
                         }
                     }
@@ -282,10 +220,88 @@ impl Maker {
         };
     }
 
+    fn is_operator_capability(capability: &Ident) -> bool {
+        return matches!(capability.to_string().as_str(), "Math" | "Bit");
+    }
+
+    fn friend_conversion_expression(
+        &self,
+        ty: &Path,
+        conversion: Option<&Path>,
+        value: TokenStream,
+    ) -> TokenStream {
+        if ty.is_ident(&self.ty) {
+            let fp_get_raw = &self.fp_get_raw;
+            return quote! { #fp_get_raw(#value) };
+        }
+
+        let relation = &self.el;
+        if ty
+            .get_ident()
+            .is_some_and(|ident| N::of(ident.to_string()).is_some())
+        {
+            return quote! { #value as #relation };
+        }
+
+        if conversion.is_some_and(|conversion| conversion.is_ident("self")) {
+            return quote! {
+                {
+                    let relation: #relation = #value;
+                    relation
+                }
+            };
+        }
+
+        return match conversion {
+            Some(conversion) => quote! { #conversion(#value) },
+            None => quote! {
+                {
+                    let relation: #relation = #value.into();
+                    relation
+                }
+            },
+        };
+    }
+
+    fn ekran_facet_dispatch_traits(&self) -> TokenStream {
+        if self.cfg.default_facet.is_none() {
+            return TokenStream::new();
+        }
+
+        let operators = self
+            .cfg
+            .facet_slots
+            .keys()
+            .map(|slot| slot.operator)
+            .collect::<BTreeSet<_>>();
+        return operators
+            .into_iter()
+            .map(|operator| {
+                let trait_name = format_ident!("{}Rhs", operator.name());
+                let method = format_ident!("{}", operator.method_name());
+                let target = &self.ty;
+                let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+                let konst = zz_runner::konst(is_konst);
+
+                return quote! {
+                    #konst trait #trait_name {
+                        type Output;
+
+                        fn #method(
+                            lhs: #target,
+                            rhs: Self,
+                        ) -> Self::Output;
+                    }
+                };
+            })
+            .merged();
+    }
+
     fn fix_friendship(&mut self) -> syn::Result<()> {
         let target = &self.ty;
         let relation = &self.el;
-        let validated = self.cfg.has_validation();
+        let self1 = &self.cfg;
+        let validated = self1.validation.has_validation();
         let has_make = self.cfg.flags.self_friend_make;
         let target_friend = Friend::from(target);
 
@@ -362,6 +378,7 @@ impl Maker {
     }
 
     fn ekran_friendship(&self) -> TokenStream {
+        let faceted = self.cfg.default_facet.is_some();
         let target = self.ty.clone();
         let relation_ident = &self.el;
         let relation: Type = parse_quote! { #relation_ident };
@@ -394,6 +411,9 @@ impl Maker {
         ]
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))
+        .filter(|capability| {
+            return !faceted || !Self::is_operator_capability(capability);
+        })
         .vec();
         let friends = match self.cfg.flags.friends {
             false => vec![],
@@ -401,47 +421,37 @@ impl Maker {
                 .cfg
                 .friends
                 .iter()
-                .map(|friend| {
-                    let is_raw = friend.ty.get_ident().is_some_and(|ident| {
-                        N::of(ident.to_string()).is_some()
-                    });
+                .filter_map(|friend| {
+                    let capabilities = friend
+                        .capabilities
+                        .iter()
+                        .filter(|capability| {
+                            return !faceted
+                                || !Self::is_operator_capability(capability);
+                        })
+                        .cloned()
+                        .collect::<BTreeSet<_>>();
+                    if capabilities.is_empty() {
+                        return None;
+                    }
 
                     let conversion = if friend.ty.is_ident(&self.ty) {
                         None
                     }
-                    else if is_raw {
-                        let relation = &self.el;
-                        Some(quote! {
-                            return self as #relation;
-                        })
-                    }
                     else {
-                        match &friend.conv {
-                            Some(conv) if conv.is_ident("self") => {
-                                let relation = &self.el;
-                                Some(quote! {
-                                    let relation: #relation = self;
-                                    return relation;
-                                })
-                            }
-                            Some(conv) => Some(quote! {
-                                return #conv(self);
-                            }),
-                            None => {
-                                let relation = &self.el;
-                                Some(quote! {
-                                    let relation: #relation = self.into();
-                                    return relation;
-                                })
-                            }
-                        }
+                        let value = self.friend_conversion_expression(
+                            &friend.ty,
+                            friend.conv.as_ref(),
+                            quote! { self },
+                        );
+                        Some(quote! { return #value; })
                     };
 
-                    return ProtocolFriend {
+                    return Some(ProtocolFriend {
                         ty: friend.ty.clone(),
-                        capabilities: friend.capabilities.clone(),
+                        capabilities,
                         conversion,
-                    };
+                    });
                 })
                 .vec(),
         };
@@ -453,7 +463,7 @@ impl Maker {
             segment.ident = target.clone();
         }
 
-        return crate::friendship::emit_protocol(Protocol {
+        let protocol = crate::friendship::emit_protocol(Protocol {
             target,
             relation,
             seal,
@@ -469,6 +479,11 @@ impl Maker {
             }),
             konst: self.cfg.konst_friendship(),
         });
+        let dispatch = self.ekran_facet_dispatch_traits();
+        return quote! {
+            #protocol
+            #dispatch
+        };
     }
 
     pub(crate) fn make_range(&self) -> TokenStream {
@@ -586,7 +601,7 @@ impl Maker {
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
             let value = quote! { value };
-            let validation = self.validation_condition(&value);
+            let validation = self.cfg.validation.emit(&value);
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_map<F>(
@@ -618,7 +633,7 @@ impl Maker {
                         ::core::result::Result::Ok(value) => value,
                         ::core::result::Result::Err(_) => {
                             ::core::panic!(
-                                "integral mapping produced an invalid value"
+                                "mapping operation produced an invalid value"
                             )
                         }
                     };
@@ -938,11 +953,15 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fn_make_unchecked_try && self.cfg.has_validation() {
+        let self1 = &self.cfg;
+        let self2 = &self.cfg;
+        if self.cfg.flags.fn_make_unchecked_try
+            && self2.validation.has_validation()
+        {
             let konst =
                 zz_runner::konst(self.cfg.konst_for(&[Konsts::TryMake]));
             let value = quote! { it };
-            let validation = self.validation_condition(&value);
+            let validation = self.cfg.validation.emit(&value);
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_make(it: #el) -> Result<Self, #el> {
@@ -957,7 +976,7 @@ impl Maker {
             stream.extend(it);
         }
         else if self.cfg.flags.fn_make_checked_try
-            && !self.cfg.has_validation()
+            && !self1.validation.has_validation()
         {
             let it = quote! {
                 #[inline(always)]
@@ -968,9 +987,12 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fn_make_unchecked && self.cfg.has_validation() {
+        let self1 = &self.cfg;
+        let self2 = &self.cfg;
+        if self.cfg.flags.fn_make_unchecked && self2.validation.has_validation()
+        {
             let value = quote! { it };
-            let validation = self.validation_condition(&value);
+            let validation = self.cfg.validation.emit(&value);
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
@@ -985,7 +1007,9 @@ impl Maker {
             };
             stream.extend(it);
         }
-        else if self.cfg.flags.fn_make_checked && !self.cfg.has_validation() {
+        else if self.cfg.flags.fn_make_checked
+            && !self1.validation.has_validation()
+        {
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
@@ -1002,7 +1026,7 @@ impl Maker {
                 Konsts::Value,
             ]));
             let value = quote! { value };
-            let validation = self.validation_condition(&value);
+            let validation = self.cfg.validation.emit(&value);
             let it = quote! {
                 #[inline(always)]
                 #[track_caller]
@@ -1011,7 +1035,7 @@ impl Maker {
                         return Self(value);
                     }
                     else {
-                        ::core::panic!("integral operation produced an invalid value");
+                        ::core::panic!("operation produced an invalid value");
                     }
                 }
 
@@ -1037,7 +1061,7 @@ impl Maker {
         let ty = &self.ty;
         let el = &self.el;
         let value = quote! { value };
-        let validation = self.validation_condition(&value);
+        let validation = self.cfg.validation.emit(&value);
 
         let trait_friend_bit = &self.trait_friend_bit;
         let trait_friend_math = &self.trait_friend_math;
@@ -1048,8 +1072,9 @@ impl Maker {
         let fp_friend_conv = quote! { #trait_seal::#fn_conv };
         let fp_get_raw = &self.fp_get_raw;
 
-        let with_self_math = self.cfg.flags.self_math;
-        let with_self_bit = self.cfg.flags.self_bit;
+        let global_operators = self.cfg.default_facet.is_none();
+        let with_self_math = self.cfg.flags.self_math && global_operators;
+        let with_self_bit = self.cfg.flags.self_bit && global_operators;
         let output = OperatorOutput::of(&self.cfg.ty_out);
 
         let bounds_for = |flags: &[Konsts]| {
@@ -2236,7 +2261,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_and {
+        if self.cfg.flags.assign_and && global_operators {
             let flags = [
                 Konsts::AndAssign,
                 Konsts::And,
@@ -2277,7 +2302,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_add {
+        if self.cfg.flags.assign_add && global_operators {
             let flags = [
                 Konsts::AddAssign,
                 Konsts::Add,
@@ -2318,7 +2343,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_sub {
+        if self.cfg.flags.assign_sub && global_operators {
             let flags = [
                 Konsts::SubAssign,
                 Konsts::Sub,
@@ -2359,7 +2384,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_mul {
+        if self.cfg.flags.assign_mul && global_operators {
             let flags = [
                 Konsts::MulAssign,
                 Konsts::Mul,
@@ -2400,7 +2425,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_div {
+        if self.cfg.flags.assign_div && global_operators {
             let flags = [
                 Konsts::DivAssign,
                 Konsts::Div,
@@ -2441,7 +2466,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_rem {
+        if self.cfg.flags.assign_rem && global_operators {
             let flags = [
                 Konsts::RemAssign,
                 Konsts::Rem,
@@ -2482,7 +2507,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_or {
+        if self.cfg.flags.assign_or && global_operators {
             let flags = [
                 Konsts::OrAssign,
                 Konsts::Or,
@@ -2604,7 +2629,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_add {
+        if self.cfg.flags.math_add && global_operators {
             let flags = [
                 Konsts::Add,
                 Konsts::Math,
@@ -2650,7 +2675,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_sub {
+        if self.cfg.flags.math_sub && global_operators {
             let flags = [
                 Konsts::Sub,
                 Konsts::Math,
@@ -2696,7 +2721,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_mul {
+        if self.cfg.flags.math_mul && global_operators {
             let flags = [
                 Konsts::Mul,
                 Konsts::Math,
@@ -2743,7 +2768,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_div {
+        if self.cfg.flags.math_div && global_operators {
             let flags = [
                 Konsts::Div,
                 Konsts::Math,
@@ -2790,7 +2815,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_rem {
+        if self.cfg.flags.math_rem && global_operators {
             let flags = [
                 Konsts::Rem,
                 Konsts::Math,
@@ -2837,7 +2862,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_and {
+        if self.cfg.flags.math_and && global_operators {
             let flags = [
                 Konsts::And,
                 Konsts::Bit,
@@ -2883,7 +2908,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_or {
+        if self.cfg.flags.math_or && global_operators {
             let flags = [
                 Konsts::Or,
                 Konsts::Bit,
@@ -2929,7 +2954,7 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_xor {
+        if self.cfg.flags.math_xor && global_operators {
             let flags = [
                 Konsts::Xor,
                 Konsts::Bit,
@@ -3320,18 +3345,6 @@ impl Maker {
 
 // =============================================================================
 
-struct IntegralFriend(Friend);
-
-impl Parse for IntegralFriend {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        return Friend::parse_with_defaults(
-            input,
-            [format_ident!("Math")].set(),
-        )
-        .map(Self);
-    }
-}
-
 #[derive(Clone, Default)]
 pub(crate) struct IntSettings {
     pub(crate) flags: BTreeMap<String, (bool, Span)>,
@@ -3339,6 +3352,7 @@ pub(crate) struct IntSettings {
     seen: BTreeMap<String, bool>,
 }
 
+#[derive(Default)]
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
     konst_flags: BTreeMap<Konsts, (bool, Span)>,
@@ -3384,7 +3398,7 @@ impl Cfg {
             }
 
             if name.starts_with("konst_") {
-                let Some(flag) = Self::parse_konst_flags(&name)
+                let Some(flag) = Konsts::from_str(&name).ok()
                 else {
                     return span.fail("unknown flag");
                 };
@@ -3808,8 +3822,8 @@ impl Cfg {
         &self,
         flags: &[Konsts],
     ) -> bool {
-        for flag in flags {
-            if let Some((value, _)) = self.konst_flags.get(flag) {
+        for it in flags {
+            if let Some((value, _)) = self.konst_flags.get(it) {
                 return *value;
             }
         }
@@ -3846,36 +3860,44 @@ impl Cfg {
     pub(crate) fn parse_friends_unexpanded(
         input: ParseStream
     ) -> syn::Result<BTreeSet<Friend>> {
-        return zz::one_or_list::<IntegralFriend>(input)?
-            .map(|IntegralFriend(friend)| {
-                for capability in &friend.capabilities {
-                    if !matches!(
-                        capability.to_string().as_str(),
-                        "Make" | "Math" | "Bit" | "Rel" | "UnsafeTrust"
-                    ) {
-                        return capability.fail("unknown integral capability");
-                    }
-                }
-
-                return Ok(friend);
-            })
-            .collect();
+        let defaults = [format_ident!("Math")].into_iter().collect();
+        return Friend::parse_with_valid(
+            input,
+            &vec![
+                format_ident!("Make"),
+                format_ident!("Math"),
+                format_ident!("Bit"),
+                format_ident!("Rel"),
+                format_ident!("UnsafeTrust"),
+            ],
+            &defaults,
+        );
     }
 
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
-        let friends = Self::parse_friends_unexpanded(input)?
-            .into_iter()
-            .map(|mut friend| {
-                if friend.capabilities.contains(&format_ident!("Math")) {
-                    friend.capabilities.extend([
+        let defaults = [format_ident!("Math")].into_iter().collect();
+        return Friend::parse_with_expansion(
+            input,
+            &vec![
+                format_ident!("Make"),
+                format_ident!("Math"),
+                format_ident!("Bit"),
+                format_ident!("Rel"),
+                format_ident!("UnsafeTrust"),
+            ],
+            &defaults,
+            &([
+                (
+                    format_ident!("Math"),
+                    vec![
                         format_ident!("Make"),
                         format_ident!("Bit"),
-                    ]);
-                }
-                return friend;
-            })
-            .collect();
-        return Ok(friends);
+                    ],
+                ),
+            ]
+            .into_iter()
+            .collect()),
+        );
     }
 
     pub(crate) fn add_friend(
@@ -3889,10 +3911,6 @@ impl Cfg {
         req.capabilities.extend(capabilities);
         req.conv = Some(conv);
         assert!(self.friends.insert(req));
-    }
-
-    pub(crate) fn has_validation(&self) -> bool {
-        return self.validation.has_validation();
     }
 
     fn parse_attrs(
@@ -3930,77 +3948,17 @@ impl Cfg {
     }
 
     pub(crate) fn parse_with_konst_unresolved(
-        input: ParseStream,
-        konst: Konst,
+        input: ParseStream
     ) -> syn::Result<Self> {
-        let mut this = Self::with_konst(konst);
+        let mut this = Self::without_konst();
         this.parse_attrs(input, false)?;
         return Ok(this);
     }
 
-    pub(crate) fn with_konst(konst: Konst) -> Self {
-        return Self {
-            konst,
-            konst_flags: Default::default(),
-            root_konst_flags: Default::default(),
-            root_flags: Default::default(),
-            root_seen_flags: Default::default(),
-            get_raw: None,
-            validation: Default::default(),
-            friends: Default::default(),
-            flags: Box::default(),
-            ty_out: Default::default(),
-            profile: Default::default(),
-            facets: Default::default(),
-            default_facet: None,
-            facet_slots: Default::default(),
-            facets_present: false,
-        };
-    }
-
-    pub(crate) fn parse_konst_flags(name: &str) -> Option<Konsts> {
-        return Some(match name {
-            "konst_add" => Konsts::Add,
-            "konst_add_assign" => Konsts::AddAssign,
-            "konst_and" => Konsts::And,
-            "konst_and_assign" => Konsts::AndAssign,
-            "konst_assign" => Konsts::Assign,
-            "konst_bit" => Konsts::Bit,
-            "konst_comparison" => Konsts::Comparison,
-            "konst_conversion" => Konsts::Conversion,
-            "konst_core_int" => Konsts::CoreInt,
-            "konst_div" => Konsts::Div,
-            "konst_div_assign" => Konsts::DivAssign,
-            "konst_eq" => Konsts::Eq,
-            "konst_friendship" => Konsts::Friendship,
-            "konst_into" => Konsts::Into,
-            "konst_iterator" => Konsts::Iterator,
-            "konst_map" => Konsts::Map,
-            "konst_math" => Konsts::Math,
-            "konst_mul" => Konsts::Mul,
-            "konst_mul_assign" => Konsts::MulAssign,
-            "konst_not" => Konsts::Not,
-            "konst_of" => Konsts::Of,
-            "konst_or" => Konsts::Or,
-            "konst_or_assign" => Konsts::OrAssign,
-            "konst_ord" => Konsts::Ord,
-            "konst_partial_eq" => Konsts::PartialEq,
-            "konst_partial_ord" => Konsts::PartialOrd,
-            "konst_rem" => Konsts::Rem,
-            "konst_rem_assign" => Konsts::RemAssign,
-            "konst_shl" => Konsts::Shl,
-            "konst_shl_assign" => Konsts::ShlAssign,
-            "konst_shr" => Konsts::Shr,
-            "konst_shr_assign" => Konsts::ShrAssign,
-            "konst_sub" => Konsts::Sub,
-            "konst_sub_assign" => Konsts::SubAssign,
-            "konst_try_into" => Konsts::TryInto,
-            "konst_try_make" => Konsts::TryMake,
-            "konst_value" => Konsts::Value,
-            "konst_xor" => Konsts::Xor,
-            "konst_xor_assign" => Konsts::XorAssign,
-            _ => return None,
-        });
+    pub(crate) fn without_konst() -> Self {
+        let mut this = Self::default();
+        this.konst = Konst::None;
+        return this;
     }
 }
 
@@ -4025,7 +3983,7 @@ impl Debug for Cfg {
 
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::with_konst(Konst::default());
+        let mut this = Self::default();
         this.parse_attrs(input, true)?;
         this.resolve()?;
         return Ok(this);

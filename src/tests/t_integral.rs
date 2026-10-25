@@ -5,7 +5,10 @@ mod tests {
         format_ident,
     };
 
-    use crate::integral::Cfg;
+    use crate::integral::{
+        Cfg,
+        Maker,
+    };
     use crate::zz::{
         Konst,
         Konsts,
@@ -17,6 +20,20 @@ mod tests {
     };
     use crate::zz_runner::ToCollection;
     use crate::zz_value_type::Operator;
+
+    fn expansion_of(input: &str) -> String {
+        let config = syn::parse_str::<Cfg>(input);
+        assert!(config.is_ok(), "{input}");
+        let maker = Maker::new(
+            format_ident!("Point"),
+            format_ident!("u32"),
+            Box::new(config.unwrap()),
+        );
+        assert!(maker.is_ok(), "{input}");
+        let expansion = maker.unwrap().ekran();
+        assert!(expansion.is_ok(), "{input}");
+        return expansion.unwrap().to_string();
+    }
 
     #[test]
     fn accepts_friend_with_single_capability() {
@@ -426,7 +443,7 @@ mod tests {
 
         assert_eq!(config.validation.callbacks.len(), 1);
         assert_eq!(config.validation.ranges.len(), 1);
-        assert!(config.has_validation());
+        assert!(config.validation.has_validation());
     }
 
     #[test]
@@ -670,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn omitted_facets_preserve_the_legacy_configuration_path() {
+    fn omitted_facets_do_not_materialize_facet_configuration() {
         let input = "konst = none";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -917,6 +934,70 @@ mod tests {
     }
 
     #[test]
+    fn omitted_facets_emit_global_friendship_and_operators() {
+        let expansion = expansion_of(
+            "
+                konst = none,
+                friends = convert(Offset) -> [Math, Rel]
+            ",
+        );
+
+        assert!(expansion.contains("trait Math : Seal"));
+        assert!(expansion.contains("trait Bit : Seal"));
+        assert!(expansion.contains("impl Math for Offset"));
+        assert!(
+            expansion
+                .contains("impl < T > :: core :: ops :: Add < T > for Point")
+        );
+    }
+
+    #[test]
+    fn facets_replace_operator_friendship_with_dispatch_traits() {
+        let expansion = expansion_of(
+            "
+                konst = none,
+                profile = circular {},
+                friends = convert(Offset) -> [Math, Rel],
+                facets = [
+                    circular {
+                        friends = other(Other) -> Math,
+                    },
+                ]
+            ",
+        );
+
+        assert!(expansion.contains("trait AddRhs"));
+        assert!(expansion.contains("trait SubRhs"));
+        assert!(!expansion.contains("trait Math : Seal"));
+        assert!(!expansion.contains("trait Bit : Seal"));
+        assert!(!expansion.contains("impl Math for Offset"));
+        assert!(!expansion.contains("impl Bit for Offset"));
+        assert!(
+            !expansion
+                .contains("impl < T > :: core :: ops :: Add < T > for Point")
+        );
+        assert!(!expansion.contains(":: core :: ops :: Add for Point"));
+        assert!(!expansion.contains(":: core :: ops :: AddAssign"));
+        assert!(!expansion.contains("Other"));
+    }
+
+    #[test]
+    fn faceted_friendship_retains_make_and_rel_capabilities() {
+        let expansion = expansion_of(
+            "
+                konst = none,
+                friends = convert(Offset) -> [Math, Rel],
+                facets = []
+            ",
+        );
+
+        assert!(expansion.contains("trait Make : Seal"));
+        assert!(expansion.contains("trait Rel : Seal"));
+        assert!(expansion.contains("impl Make for Offset"));
+        assert!(expansion.contains("impl Rel for Offset"));
+    }
+
+    #[test]
     fn parses_output_type_conversion_with_generic_target() {
         let input = "
             konst = none,
@@ -972,8 +1053,7 @@ mod tests {
 
         impl syn::parse::Parse for Nested {
             fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-                let mut it =
-                    Cfg::parse_with_konst_unresolved(input, Konst::None)?;
+                let mut it = Cfg::parse_with_konst_unresolved(input)?;
                 it.resolve()?;
                 return Ok(Self(it));
             }

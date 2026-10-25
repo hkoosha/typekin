@@ -2,6 +2,7 @@ use std::collections::{
     BTreeMap,
     BTreeSet,
 };
+use std::str::FromStr;
 
 use proc_macro2::{
     Ident,
@@ -298,7 +299,8 @@ impl Maker {
             .map(|it| quote! { #it })
             .unwrap_or_else(|| quote! { #vl::raw });
 
-        let from_bits = if self.cfg.int.has_validation() {
+        let self1 = &self.cfg.int;
+        let from_bits = if self1.validation.has_validation() {
             quote! {
                 match Self::try_make(bits) {
                     ::core::result::Result::Ok(value) => value,
@@ -669,8 +671,7 @@ impl Maker {
         let el = &self.el;
         let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
         let value = quote! { bits };
-        let validation =
-            integral::Maker::validation_condition_for(&self.cfg.int, &value);
+        let validation = &self.cfg.int.validation.emit(&value);
 
         let display = display.then(|| {
             quote! {
@@ -806,8 +807,7 @@ impl Maker {
         let el = &self.el;
         let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
         let bits = quote! { bits };
-        let validation =
-            integral::Maker::validation_condition_for(&self.cfg.int, &bits);
+        let validation = &self.cfg.int.validation.emit(&bits);
         let serialize_as_name = if self.cfg.bit.serde_with_name {
             quote! { true }
         }
@@ -1659,7 +1659,7 @@ impl Parse for Cfg {
         let mut this = Self {
             friends: Default::default(),
             bit: Box::default(),
-            int: Box::new(integral::Cfg::with_konst(Konst::None)),
+            int: Box::new(integral::Cfg::without_konst()),
             repr: None,
             konst: Konst::default(),
             konst_flags: Default::default(),
@@ -1717,7 +1717,7 @@ impl Cfg {
             }
 
             if name.starts_with("konst_") {
-                let Some(flag) = integral::Cfg::parse_konst_flags(&name)
+                let Some(flag) = Konsts::from_str(&name).ok()
                 else {
                     return span.fail("unknown flag");
                 };
@@ -1768,7 +1768,7 @@ impl Cfg {
             {
                 return Err(syn::Error::new(
                     span,
-                    "this value is not compatible with bitflags' own konst config",
+                    "this value is not compatible with own konst config of bitflag",
                 ));
             }
 
@@ -1815,10 +1815,8 @@ impl Cfg {
                 let content;
                 let _ = bracketed!(content in rest);
 
-                let mut int = integral::Cfg::parse_with_konst_unresolved(
-                    &content,
-                    Konst::None,
-                )?;
+                let mut int =
+                    integral::Cfg::parse_with_konst_unresolved(&content)?;
                 if !int.ty_out.is_self() {
                     return int.ty_out.conversion.fail(
                         "bitflag integral configuration does not support out_type",

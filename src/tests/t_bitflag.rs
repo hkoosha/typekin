@@ -469,7 +469,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "this value is not compatible with bitflags' own konst config",
+            "this value is not compatible with own konst config of bitflag",
         );
     }
 

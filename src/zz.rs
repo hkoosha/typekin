@@ -3,8 +3,13 @@ use std::fmt::{
     Debug,
     Formatter,
 };
+use std::str::FromStr;
 
-use proc_macro2::Ident;
+use proc_macro2::{
+    Ident,
+    TokenStream,
+};
+use quote::quote;
 pub(crate) use ranges::parse_ranges;
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
@@ -127,6 +132,59 @@ impl Konsts {
             Self::CoreInt | Self::TryMake | Self::Value | Self::TextAccess
         );
     }
+
+    pub(crate) fn parse_konst_flags(name: &str) -> Option<Konsts> {
+        return Some(match name {
+            "konst_add" => Konsts::Add,
+            "konst_add_assign" => Konsts::AddAssign,
+            "konst_and" => Konsts::And,
+            "konst_and_assign" => Konsts::AndAssign,
+            "konst_assign" => Konsts::Assign,
+            "konst_bit" => Konsts::Bit,
+            "konst_comparison" => Konsts::Comparison,
+            "konst_conversion" => Konsts::Conversion,
+            "konst_core_int" => Konsts::CoreInt,
+            "konst_div" => Konsts::Div,
+            "konst_div_assign" => Konsts::DivAssign,
+            "konst_eq" => Konsts::Eq,
+            "konst_friendship" => Konsts::Friendship,
+            "konst_into" => Konsts::Into,
+            "konst_iterator" => Konsts::Iterator,
+            "konst_map" => Konsts::Map,
+            "konst_math" => Konsts::Math,
+            "konst_mul" => Konsts::Mul,
+            "konst_mul_assign" => Konsts::MulAssign,
+            "konst_not" => Konsts::Not,
+            "konst_of" => Konsts::Of,
+            "konst_or" => Konsts::Or,
+            "konst_or_assign" => Konsts::OrAssign,
+            "konst_ord" => Konsts::Ord,
+            "konst_partial_eq" => Konsts::PartialEq,
+            "konst_partial_ord" => Konsts::PartialOrd,
+            "konst_rem" => Konsts::Rem,
+            "konst_rem_assign" => Konsts::RemAssign,
+            "konst_shl" => Konsts::Shl,
+            "konst_shl_assign" => Konsts::ShlAssign,
+            "konst_shr" => Konsts::Shr,
+            "konst_shr_assign" => Konsts::ShrAssign,
+            "konst_sub" => Konsts::Sub,
+            "konst_sub_assign" => Konsts::SubAssign,
+            "konst_try_into" => Konsts::TryInto,
+            "konst_try_make" => Konsts::TryMake,
+            "konst_value" => Konsts::Value,
+            "konst_xor" => Konsts::Xor,
+            "konst_xor_assign" => Konsts::XorAssign,
+            _ => return None,
+        });
+    }
+}
+
+impl FromStr for Konsts {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return Self::parse_konst_flags(s).ok_or(());
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -186,6 +244,62 @@ impl Parse for Konst {
 pub(crate) struct ValidationCfg {
     pub(crate) callbacks: Vec<Path>,
     pub(crate) ranges: Vec<ExprRange>,
+}
+
+impl ValidationCfg {
+    pub(crate) fn emit(
+        &self,
+        value: &TokenStream,
+    ) -> TokenStream {
+        let callbacks = self
+            .callbacks
+            .iter()
+            .map(|callback| quote! { #callback(#value) })
+            .reduce(|left, right| quote! { (#left) && (#right) });
+
+        let ranges = self
+            .ranges
+            .iter()
+            .map(|range| Self::range_condition(range, value))
+            .reduce(|left, right| quote! { (#left) || (#right) });
+
+        return match (callbacks, ranges) {
+            (Some(callbacks), Some(ranges)) => {
+                quote! { (#callbacks) && (#ranges) }
+            }
+            (Some(callbacks), None) => quote! { #callbacks },
+            (None, Some(ranges)) => quote! { #ranges },
+            (None, None) => quote! { true },
+        };
+    }
+
+    fn range_condition(
+        range: &ExprRange,
+        value: &TokenStream,
+    ) -> TokenStream {
+        let lower = range.start.as_ref().map(|start| {
+            return quote! { #value >= (#start) };
+        });
+        let upper = range.end.as_ref().map(|end| {
+            return match &range.limits {
+                syn::RangeLimits::HalfOpen(_) => {
+                    quote! { #value < (#end) }
+                }
+                syn::RangeLimits::Closed(_) => {
+                    quote! { #value <= (#end) }
+                }
+            };
+        });
+
+        return match (lower, upper) {
+            (None, None) => quote! { true },
+            (Some(lower), None) => quote! { #lower },
+            (None, Some(upper)) => quote! { #upper },
+            (Some(lower), Some(upper)) => {
+                quote! { (#lower) && (#upper) }
+            }
+        };
+    }
 }
 
 impl Debug for ValidationCfg {

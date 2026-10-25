@@ -27,6 +27,7 @@ pub(crate) mod cfg {
     use std::collections::{
         BTreeMap,
         BTreeSet,
+        HashMap,
     };
     use std::fmt::{
         Debug,
@@ -47,6 +48,7 @@ pub(crate) mod cfg {
         Path,
         Token,
         Type,
+        bracketed,
     };
 
     use crate::zz::{
@@ -74,7 +76,7 @@ pub(crate) mod cfg {
 
     impl Parse for Friend {
         fn parse(input: ParseStream) -> syn::Result<Self> {
-            return Self::parse_with_defaults(input, BTreeSet::new());
+            return Self::parse_with_defaults(input, &BTreeSet::new());
         }
     }
 
@@ -110,7 +112,7 @@ pub(crate) mod cfg {
     impl Friend {
         pub(crate) fn parse_with_defaults(
             input: ParseStream,
-            capabilities: BTreeSet<Ident>,
+            capabilities: &BTreeSet<Ident>,
         ) -> syn::Result<Self> {
             let implicit = input.peek(Token![_]);
             let conv = if implicit {
@@ -147,7 +149,7 @@ pub(crate) mod cfg {
                 parse_capabilities(input)?
             }
             else {
-                capabilities
+                capabilities.clone()
             };
             if capabilities.contains(&trust_capability()) {
                 capabilities.insert(format_ident!("Make"));
@@ -172,6 +174,60 @@ pub(crate) mod cfg {
                 capabilities,
                 ty,
             });
+        }
+
+        pub(crate) fn parse_with_valid(
+            input: ParseStream,
+            valid: &Vec<Ident>,
+            defaults: &BTreeSet<Ident>,
+        ) -> syn::Result<BTreeSet<Friend>> {
+            let mut friends = BTreeSet::new();
+            if input.peek(syn::token::Bracket) {
+                let content;
+                let _ = bracketed!(content in input);
+                while !content.is_empty() {
+                    let friend = Self::parse_with_defaults(&content, defaults)?;
+                    friends.insert(friend);
+
+                    if !content.is_empty() {
+                        let _ = content.parse::<Token![,]>()?;
+                    }
+                }
+            }
+            else {
+                friends.insert(Self::parse_with_defaults(input, defaults)?);
+            }
+
+            for friend in &friends {
+                for capability in &friend.capabilities {
+                    if !valid.contains(capability) {
+                        return capability.fail("unknown capability");
+                    }
+                }
+            }
+
+            return Ok(friends);
+        }
+
+        pub(crate) fn parse_with_expansion(
+            input: ParseStream,
+            valid: &Vec<Ident>,
+            defaults: &BTreeSet<Ident>,
+            expansions: &HashMap<Ident, Vec<Ident>>,
+        ) -> syn::Result<BTreeSet<Friend>> {
+            let this = Self::parse_with_valid(input, valid, defaults)?
+                .into_iter()
+                .map(|mut friend| {
+                    for (cap, exp) in expansions {
+                        if friend.capabilities.contains(cap) {
+                            friend.capabilities.extend(exp.clone());
+                        }
+                    }
+                    return friend;
+                })
+                .collect();
+
+            return Ok(this);
         }
     }
 
