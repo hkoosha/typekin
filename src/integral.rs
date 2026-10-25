@@ -266,8 +266,11 @@ fn ekran(
 
     let raw = N::of(el.to_string())
         .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
-    let storage =
-        StoragePlan::new(raw, attr.requires_non_zero_storage(), false);
+    let storage = StoragePlan::new(
+        raw,
+        attr.requires_non_zero_storage(),
+        attr.requires_wrapping_storage(),
+    );
     if storage.rewrites_field() {
         let private = match &field.vis {
             Visibility::Inherited => true,
@@ -385,6 +388,63 @@ impl Maker {
         return path;
     }
 
+    fn arithmetic_method_name(
+        &self,
+        operation: ArithmeticOp,
+        is_konst: bool,
+    ) -> Ident {
+        let name = operation.name();
+        return if !is_konst
+            && self.cfg.profile.arithmetic() == Arithmetic::WrapperWrapping
+        {
+            format_ident!("_{}_wrapping", name)
+        }
+        else {
+            format_ident!("_{}", name)
+        };
+    }
+
+    fn ekran_arithmetic_helper(
+        &self,
+        operation: ArithmeticOp,
+        rhs_type: TokenStream,
+    ) -> TokenStream {
+        let fp_get_raw = &self.fp_get_raw;
+        let fp_unchecked = &self.fp_unchecked;
+        let arithmetic = self.cfg.profile.arithmetic();
+        let method = self.arithmetic_method_name(operation, true);
+        let expression = arithmetic.make_const_expr(operation);
+        let wrapping = (arithmetic == Arithmetic::WrapperWrapping).then(|| {
+            let method = self.arithmetic_method_name(operation, false);
+            let expression = arithmetic.make_expr(operation);
+            quote! {
+                #[inline(always)]
+                pub(self) fn #method(
+                    &self,
+                    rhs: #rhs_type,
+                ) -> Self {
+                    let lhs = #fp_get_raw(*self);
+                    let it = #expression;
+                    return #fp_unchecked(it);
+                }
+            }
+        });
+
+        return quote! {
+            #[inline(always)]
+            pub(self) const fn #method(
+                &self,
+                rhs: #rhs_type,
+            ) -> Self {
+                let lhs = #fp_get_raw(*self);
+                let it = #expression;
+                return #fp_unchecked(it);
+            }
+
+            #wrapping
+        };
+    }
+
     fn is_operator_capability(capability: &Ident) -> bool {
         return matches!(capability.to_string().as_str(), "Math" | "Bit");
     }
@@ -482,7 +542,6 @@ impl Maker {
             };
             let lhs = self.target_qualified_path(&self.fp_get_raw);
             let unchecked = self.target_qualified_path(&self.fp_unchecked);
-            let operation = slot.arithmetic.make_operator_expr(operator);
             let output = OperatorOutput::of(&slot.ty_out);
             let output_ty = if slot.ty_out.is_self() {
                 quote! { #target }
@@ -492,6 +551,8 @@ impl Maker {
             };
             let result = output.convert(quote! { value });
             let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let operation =
+                slot.arithmetic.make_operator_expr(operator, is_konst);
             let konst = zz_runner::konst(is_konst);
 
             return quote! {
@@ -955,88 +1016,33 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_add {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Add);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _add(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Add, quote! { #el }),
+            );
         }
 
         if self.cfg.flags.fn_math_sub {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Sub);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _sub(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Sub, quote! { #el }),
+            );
         }
 
         if self.cfg.flags.fn_math_mul {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Mul);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _mul(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Mul, quote! { #el }),
+            );
         }
 
         if self.cfg.flags.fn_math_div {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Div);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _div(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Div, quote! { #el }),
+            );
         }
 
         if self.cfg.flags.fn_math_rem {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Rem);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _rem(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Rem, quote! { #el }),
+            );
         }
 
         if self.cfg.flags.fn_math_xor {
@@ -1085,37 +1091,21 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_shr {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Shr);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _shr(
-                    &self,
-                    rhs: usize,
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(
+                    ArithmeticOp::Shr,
+                    quote! { usize },
+                ),
+            );
         }
 
         if self.cfg.flags.fn_math_shl {
-            let operation =
-                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Shl);
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _shl(
-                    &self,
-                    rhs: usize,
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #operation;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
+            stream.extend(
+                self.ekran_arithmetic_helper(
+                    ArithmeticOp::Shl,
+                    quote! { usize },
+                ),
+            );
         }
 
         if self.cfg.flags.fn_math_not {
@@ -2415,12 +2405,15 @@ impl Maker {
         }
 
         if self.cfg.flags.math_shr {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let is_konst = self.cfg.konst_for(&[
                 Konsts::Shr,
                 Konsts::Math,
-            ]));
+            ]);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._shr(rhs) });
+            let result = output.convert(quote! { self.#method(rhs) });
             let it = quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
                     type Output = #output_ty;
@@ -2438,12 +2431,15 @@ impl Maker {
         }
 
         if self.cfg.flags.math_shl {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let is_konst = self.cfg.konst_for(&[
                 Konsts::Shl,
                 Konsts::Math,
-            ]));
+            ]);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._shl(rhs) });
+            let result = output.convert(quote! { self.#method(rhs) });
             let it = quote::quote! {
                 #konst impl ::core::ops::Shl<usize> for #ty {
                     type Output = #output_ty;
@@ -2462,12 +2458,15 @@ impl Maker {
         }
 
         if self.cfg.flags.assign_shr {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let is_konst = self.cfg.konst_for(&[
                 Konsts::ShrAssign,
                 Konsts::Shr,
                 Konsts::Assign,
                 Konsts::Math,
-            ]));
+            ]);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
             let it = quote! {
                 #konst impl ::core::ops::ShrAssign<usize> for #ty {
                     #[inline(always)]
@@ -2475,7 +2474,7 @@ impl Maker {
                         &mut self,
                         other: usize,
                     ) {
-                        *self = self._shr(other);
+                        *self = self.#method(other);
                     }
                 }
             };
@@ -2484,12 +2483,15 @@ impl Maker {
         }
 
         if self.cfg.flags.assign_shl {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let is_konst = self.cfg.konst_for(&[
                 Konsts::ShlAssign,
                 Konsts::Shl,
                 Konsts::Assign,
                 Konsts::Math,
-            ]));
+            ]);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
             let it = quote! {
                 #konst impl ::core::ops::ShlAssign<usize> for #ty {
                     #[inline(always)]
@@ -2497,7 +2499,7 @@ impl Maker {
                         &mut self,
                         other: usize,
                     ) {
-                        *self = self._shl(other);
+                        *self = self.#method(other);
                     }
                 }
             };
@@ -2553,7 +2555,10 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2563,7 +2568,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._add(#rhs_raw);
+                            *self = self.#method(#rhs_raw);
                         }
                     }
                 });
@@ -2579,7 +2584,7 @@ impl Maker {
                         rhs: T,
                     ) {
                         let it = #fp_friend_conv(rhs);
-                        *self = self._add(it);
+                        *self = self.#method(it);
                     }
                 }
             };
@@ -2594,7 +2599,10 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2604,7 +2612,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._sub(#rhs_raw);
+                            *self = self.#method(#rhs_raw);
                         }
                     }
                 });
@@ -2620,7 +2628,7 @@ impl Maker {
                         rhs: T,
                     ) {
                         let it = #fp_friend_conv(rhs);
-                        *self = self._sub(it);
+                        *self = self.#method(it);
                     }
                 }
             };
@@ -2635,7 +2643,10 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2645,7 +2656,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._mul(#rhs_raw);
+                            *self = self.#method(#rhs_raw);
                         }
                     }
                 });
@@ -2661,7 +2672,7 @@ impl Maker {
                         rhs: T,
                     ) {
                         let it = #fp_friend_conv(rhs);
-                        *self = self._mul(it);
+                        *self = self.#method(it);
                     }
                 }
             };
@@ -2676,7 +2687,10 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2686,7 +2700,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._div(#rhs_raw);
+                            *self = self.#method(#rhs_raw);
                         }
                     }
                 });
@@ -2702,7 +2716,7 @@ impl Maker {
                         rhs: T,
                     ) {
                         let it = #fp_friend_conv(rhs);
-                        *self = self._div(it);
+                        *self = self.#method(it);
                     }
                 }
             };
@@ -2717,7 +2731,10 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
@@ -2727,7 +2744,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._rem(#rhs_raw);
+                            *self = self.#method(#rhs_raw);
                         }
                     }
                 });
@@ -2743,7 +2760,7 @@ impl Maker {
                         rhs: T,
                     ) {
                         let it = #fp_friend_conv(rhs);
-                        *self = self._rem(it);
+                        *self = self.#method(it);
                     }
                 }
             };
@@ -2871,11 +2888,14 @@ impl Maker {
                 Konsts::Add,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._add(#rhs_raw) });
+                let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Add for #ty {
                         type Output = #output_ty;
@@ -2892,7 +2912,7 @@ impl Maker {
             }
 
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._add(it) });
+            let result = output.convert(quote! { self.#method(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Add<T> for #ty
                 where T: #trait_friend_math + #bounds
@@ -2917,11 +2937,14 @@ impl Maker {
                 Konsts::Sub,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._sub(#rhs_raw) });
+                let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Sub for #ty {
                         type Output = #output_ty;
@@ -2938,7 +2961,7 @@ impl Maker {
             }
 
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._sub(it) });
+            let result = output.convert(quote! { self.#method(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Sub<T> for #ty
                 where T: #trait_friend_math + #bounds
@@ -2963,11 +2986,14 @@ impl Maker {
                 Konsts::Mul,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._mul(#rhs_raw) });
+                let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Mul for #ty {
                         type Output = #output_ty;
@@ -2984,7 +3010,7 @@ impl Maker {
             }
 
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._mul(it) });
+            let result = output.convert(quote! { self.#method(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Mul<T> for #ty
                 where T: #trait_friend_math + #bounds
@@ -3010,11 +3036,14 @@ impl Maker {
                 Konsts::Div,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._div(#rhs_raw) });
+                let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Div for #ty {
                         type Output = #output_ty;
@@ -3031,7 +3060,7 @@ impl Maker {
             }
 
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._div(it) });
+            let result = output.convert(quote! { self.#method(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Div<T> for #ty
                 where T: #trait_friend_math + #bounds
@@ -3057,11 +3086,14 @@ impl Maker {
                 Konsts::Rem,
                 Konsts::Math,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let is_konst = self.cfg.konst_for(&flags);
+            let konst = zz_runner::konst(is_konst);
+            let method =
+                self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._rem(#rhs_raw) });
+                let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Rem for #ty {
                         type Output = #output_ty;
@@ -3078,7 +3110,7 @@ impl Maker {
             }
 
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._rem(it) });
+            let result = output.convert(quote! { self.#method(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Rem<T> for #ty
                 where T: #trait_friend_math + #bounds
@@ -3609,6 +3641,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) non_zero: NonZeroPolicy,
+    wrapping_storage: bool,
     pub(crate) ty_out: SelfConverter,
     pub(crate) profile: Profiles,
     pub(crate) facets: Vec<FacetCfg>,
@@ -3625,6 +3658,10 @@ impl Cfg {
             NonZeroPolicy::Require => true,
             NonZeroPolicy::Suppress => false,
         };
+    }
+
+    pub(crate) fn requires_wrapping_storage(&self) -> bool {
+        return self.wrapping_storage;
     }
 
     pub(crate) fn facets_present(&self) -> bool {
@@ -4087,6 +4124,8 @@ impl Cfg {
             ty_out: self.ty_out.clone(),
         });
         self.resolve_facets()?;
+        self.wrapping_storage = self.profile.requires_wrapping_storage()
+            || self.facets.iter().any(FacetCfg::requires_wrapping_storage);
 
         return Ok(());
     }

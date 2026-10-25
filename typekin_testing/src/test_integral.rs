@@ -440,6 +440,28 @@ struct CircularExtended(u8);
 
 #[typekin::integral(
     konst = none,
+    profile = wrapping {},
+)]
+struct WrappingSequence(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = wrapping {},
+    with = non_zero,
+)]
+struct WrappingNonZero(u8);
+
+#[typekin::integral(
+    konst = nightly,
+    profile = wrapping {},
+)]
+struct ConstWrappingSequence(u8);
+
+const CONST_WRAPPING_RESULT: ConstWrappingSequence =
+    ConstWrappingSequence::make(u8::MAX) + ConstWrappingSequence::make(1);
+
+#[typekin::integral(
+    konst = none,
     profile = sequential {},
 )]
 struct SequentialCounter(u8);
@@ -478,6 +500,9 @@ pub struct FacetChecked(u8);
 #[derive(Copy, Clone)]
 pub struct FacetBits(u8);
 
+#[derive(Copy, Clone)]
+pub struct FacetWrapping(u8);
+
 fn facet_offset_raw(value: FacetOffset) -> u8 {
     return value.0;
 }
@@ -487,6 +512,10 @@ fn facet_checked_raw(value: FacetChecked) -> u8 {
 }
 
 fn facet_bits_raw(value: FacetBits) -> u8 {
+    return value.0;
+}
+
+fn facet_wrapping_raw(value: FacetWrapping) -> u8 {
     return value.0;
 }
 
@@ -509,6 +538,10 @@ fn facet_bits_raw(value: FacetBits) -> u8 {
             with = math_xor,
             out_type = Self,
         },
+        wrapping {
+            friends = facet_wrapping_raw(FacetWrapping) -> Math,
+            out_type = Self,
+        },
     ],
 )]
 pub struct FacetPoint(u8);
@@ -529,7 +562,7 @@ const fn facet_const_offset_raw(value: FacetConstOffset) -> u8 {
 #[typekin::integral(
     konst = nightly,
     facets = [
-        int {
+        wrapping {
             friends = facet_const_offset_raw(FacetConstOffset) -> Math,
             without = math_sub,
         },
@@ -553,8 +586,13 @@ const fn facet_valid(value: u8) -> bool {
 #[typekin::integral(
     konst = none,
     valid = facet_valid,
+    with = non_zero,
     out_type = FacetValidated::into_result(_) -> FacetValidatedResult,
-    facets = [],
+    facets = [
+        wrapping {
+            with = self_math,
+        },
+    ],
 )]
 struct FacetValidated(u8);
 
@@ -581,7 +619,13 @@ mod tests {
 
     #[test]
     fn facets_dispatch_by_rhs_with_independent_policies_and_outputs() {
+        let storage: core::num::Wrapping<u8> = FacetPoint::make(1).0;
+        assert_eq!(storage.0, 1);
+
         let wrapped = FacetPoint::make(u8::MAX) + FacetOffset(1);
+        assert_eq!(wrapped.raw(), 0);
+
+        let wrapped = FacetPoint::make(u8::MAX) + FacetWrapping(1);
         assert_eq!(wrapped.raw(), 0);
 
         let same_type = FacetPoint::make(2) + FacetPoint::make(3);
@@ -598,8 +642,12 @@ mod tests {
     #[test]
     fn facets_preserve_constness_and_validate_before_output_conversion() {
         assert_eq!(FACET_CONST_RESULT.raw(), 5);
+        let storage: core::num::Wrapping<u8> = FACET_CONST_RESULT.0;
+        assert_eq!(storage.0, 5);
 
         let lhs = FacetValidated::try_make(2).unwrap();
+        let storage: core::num::Wrapping<core::num::NonZeroU8> = lhs.0;
+        assert_eq!(storage.0.get(), 2);
         let rhs = FacetValidated::try_make(3).unwrap();
         FACET_OUTPUTS.store(0, std::sync::atomic::Ordering::Relaxed);
 
@@ -775,6 +823,53 @@ mod tests {
         );
         assert_eq!((CircularExtended::make(128) << 1).raw(), 0);
         assert_eq!((CircularExtended::make(16) >> 2).raw(), 4);
+    }
+
+    #[test]
+    fn wrapping_profile_uses_physical_wrapping_storage_and_linear_ordering() {
+        let maximum = WrappingSequence::make(u8::MAX);
+        let storage: core::num::Wrapping<u8> = maximum.0;
+        assert_eq!(storage.0, u8::MAX);
+
+        let wrapped = maximum + WrappingSequence::make(1);
+        assert_eq!(wrapped.raw(), 0);
+        assert!(WrappingSequence::make(1) < WrappingSequence::make(2));
+
+        let mut assigned = WrappingSequence::make(u8::MAX);
+        assigned += WrappingSequence::make(1);
+        assert_eq!(assigned.raw(), 0);
+
+        assert_eq!(
+            (WrappingSequence::make(200) * WrappingSequence::make(2)).raw(),
+            144,
+        );
+        assert_eq!((WrappingSequence::make(128) << 1).raw(), 0);
+    }
+
+    #[test]
+    fn wrapping_profile_supports_combined_non_zero_storage() {
+        let value = WrappingNonZero::try_make(2).unwrap();
+        let storage: core::num::Wrapping<core::num::NonZeroU8> = value.0;
+        assert_eq!(storage.0.get(), 2);
+        assert_eq!(
+            core::mem::size_of::<Option<WrappingNonZero>>(),
+            core::mem::size_of::<u8>(),
+        );
+
+        let lhs = WrappingNonZero::try_make(2).unwrap();
+        let rhs = WrappingNonZero::try_make(3).unwrap();
+        assert_eq!((lhs + rhs).raw(), 5);
+
+        let lhs = WrappingNonZero::try_make(2).unwrap();
+        let rhs = WrappingNonZero::try_make(2).unwrap();
+        assert_panics(|| {
+            let _ = lhs - rhs;
+        });
+    }
+
+    #[test]
+    fn wrapping_profile_retains_const_arithmetic() {
+        assert_eq!(CONST_WRAPPING_RESULT.raw(), 0);
     }
 
     #[test]

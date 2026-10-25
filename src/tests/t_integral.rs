@@ -631,7 +631,7 @@ mod tests {
 
         assert!(config.profile.is_circular());
         assert!(!config.profile.emits_precedes());
-        assert_eq!(config.profile.arithmetic(), Arithmetic::Wrapping);
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
         assert!(config.flags.assign_add);
@@ -661,6 +661,118 @@ mod tests {
         assert!(!config.flags.self_bit);
         assert!(config.flags.ord);
         assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn wrapping_profile_retains_integral_defaults_and_requests_storage() {
+        let input = "konst = none, profile = wrapping {}";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(!config.profile.is_circular());
+        assert!(config.profile.requires_wrapping_storage());
+        assert_eq!(config.profile.arithmetic(), Arithmetic::WrapperWrapping);
+        assert!(config.flags.math_add);
+        assert!(config.flags.math_mul);
+        assert!(config.flags.math_xor);
+        assert!(config.flags.self_bit);
+        assert!(config.flags.core_int);
+        assert!(config.flags.ord);
+        assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn wrapping_arithmetic_uses_wrapper_ops_with_a_const_fallback() {
+        let runtime = Arithmetic::WrapperWrapping
+            .make_expr(crate::zz_value_type::ArithmeticOp::Add)
+            .to_string();
+        let konst = Arithmetic::WrapperWrapping
+            .make_const_expr(crate::zz_value_type::ArithmeticOp::Add)
+            .to_string();
+
+        assert!(
+            runtime.contains("Wrapping (lhs) + :: core :: num :: Wrapping")
+        );
+        assert!(konst.contains("lhs . wrapping_add (rhs)"));
+    }
+
+    #[test]
+    fn effective_profile_selects_wrapping_storage() {
+        let wrapping = "
+            konst = none,
+            profile = [circular {}, wrapping {}]
+        ";
+        let circular = "
+            konst = none,
+            profile = [wrapping {}, circular {}]
+        ";
+        let wrapping = syn::parse_str::<Cfg>(wrapping).unwrap();
+        let circular = syn::parse_str::<Cfg>(circular).unwrap();
+
+        assert!(wrapping.profile.requires_wrapping_storage());
+        assert!(!circular.profile.requires_wrapping_storage());
+        assert_eq!(
+            circular.profile.arithmetic(),
+            Arithmetic::PrimitiveWrapping
+        );
+    }
+
+    #[test]
+    fn wrapping_facet_selects_wrapper_wide_storage_after_resolution() {
+        let input = "
+            konst = none,
+            facets = [
+                wrapping {
+                    friends = offset(Offset) -> Math,
+                },
+                sequential {
+                    friends = checked(Checked) -> Math,
+                },
+            ]
+        ";
+        let config = syn::parse_str::<Cfg>(input).unwrap();
+
+        assert!(!config.profile.requires_wrapping_storage());
+        assert!(config.facets[0].requires_wrapping_storage());
+        assert!(!config.facets[1].requires_wrapping_storage());
+        assert!(config.requires_wrapping_storage());
+
+        let wrapping = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+        let checked = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Checked".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(wrapping.arithmetic, Arithmetic::WrapperWrapping);
+        assert_eq!(checked.arithmetic, Arithmetic::Checked);
+    }
+
+    #[test]
+    fn root_wrapping_requirement_survives_non_wrapping_facets() {
+        let input = "
+            konst = none,
+            profile = wrapping {},
+            facets = [
+                int {
+                    friends = offset(Offset) -> Math,
+                },
+            ]
+        ";
+        let config = syn::parse_str::<Cfg>(input).unwrap();
+
+        assert!(config.profile.requires_wrapping_storage());
+        assert!(!config.facets[0].requires_wrapping_storage());
+        assert!(config.requires_wrapping_storage());
     }
 
     #[test]
@@ -711,7 +823,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.arithmetic(), Arithmetic::Wrapping);
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
         assert!(config.profile.is_circular());
         assert!(!config.profile.emits_precedes());
         assert!(!config.flags.math_add);
@@ -768,7 +880,10 @@ mod tests {
         let config = this.unwrap();
 
         assert_eq!(config.facets.len(), 2);
-        assert_eq!(config.facets[0].profile.arithmetic(), Arithmetic::Wrapping,);
+        assert_eq!(
+            config.facets[0].profile.arithmetic(),
+            Arithmetic::PrimitiveWrapping,
+        );
         assert_eq!(
             config.facets[1].profile.arithmetic(),
             Arithmetic::Primitive,
@@ -898,7 +1013,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(sub_offset.owner, FacetOwner::Default);
-        assert_eq!(sub_offset.arithmetic, Arithmetic::Wrapping);
+        assert_eq!(sub_offset.arithmetic, Arithmetic::PrimitiveWrapping);
         assert!(!sub_offset.ty_out.is_self());
 
         let add_self = config
@@ -1232,6 +1347,19 @@ mod tests {
     fn sequential_profile_treats_precedes_as_unknown() {
         let input = "
             profile = sequential {
+                precedes = true,
+            }
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown attribute", "{input}");
+    }
+
+    #[test]
+    fn wrapping_profile_treats_precedes_as_unknown() {
+        let input = "
+            profile = wrapping {
                 precedes = true,
             }
         ";

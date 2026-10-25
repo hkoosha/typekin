@@ -45,7 +45,8 @@ use crate::zz_value_type::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Arithmetic {
     Primitive,
-    Wrapping,
+    PrimitiveWrapping,
+    WrapperWrapping,
     Checked,
 }
 
@@ -66,10 +67,80 @@ impl Arithmetic {
 
         return match self {
             Arithmetic::Primitive => primitive,
-            Arithmetic::Wrapping => {
+            Arithmetic::PrimitiveWrapping => {
                 let method = format_ident!("wrapping_{}", it.name());
                 let rhs = Self::rhs_for(it);
                 quote! { lhs.#method(#rhs) }
+            }
+            Arithmetic::WrapperWrapping => {
+                let rhs = match it {
+                    ArithmeticOp::Shl | ArithmeticOp::Shr => quote! { rhs },
+                    ArithmeticOp::Add
+                    | ArithmeticOp::Sub
+                    | ArithmeticOp::Mul
+                    | ArithmeticOp::Div
+                    | ArithmeticOp::Rem => {
+                        quote! { ::core::num::Wrapping(rhs) }
+                    }
+                };
+                match it {
+                    ArithmeticOp::Add => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    + #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Sub => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    - #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Mul => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    * #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Div => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    / #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Rem => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    % #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Shl => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    << #rhs
+                            ).0
+                        }
+                    }
+                    ArithmeticOp::Shr => {
+                        quote! {
+                            (
+                                ::core::num::Wrapping(lhs)
+                                    >> #rhs
+                            ).0
+                        }
+                    }
+                }
             }
             Arithmetic::Checked => {
                 let method = format_ident!("checked_{}", it.name());
@@ -88,19 +159,38 @@ impl Arithmetic {
         };
     }
 
+    pub(crate) fn make_const_expr(
+        self,
+        it: ArithmeticOp,
+    ) -> TokenStream {
+        return match self {
+            Self::WrapperWrapping => Self::PrimitiveWrapping.make_expr(it),
+            _ => self.make_expr(it),
+        };
+    }
+
     pub(crate) fn make_operator_expr(
         self,
         operator: Operator,
+        is_konst: bool,
     ) -> TokenStream {
+        let make_expr = |operation| {
+            return if is_konst {
+                self.make_const_expr(operation)
+            }
+            else {
+                self.make_expr(operation)
+            };
+        };
         return match operator {
             Operator::BitAnd => quote! { lhs & rhs },
             Operator::BitOr => quote! { lhs | rhs },
             Operator::BitXor => quote! { lhs ^ rhs },
-            Operator::Add => self.make_expr(ArithmeticOp::Add),
-            Operator::Sub => self.make_expr(ArithmeticOp::Sub),
-            Operator::Mul => self.make_expr(ArithmeticOp::Mul),
-            Operator::Div => self.make_expr(ArithmeticOp::Div),
-            Operator::Rem => self.make_expr(ArithmeticOp::Rem),
+            Operator::Add => make_expr(ArithmeticOp::Add),
+            Operator::Sub => make_expr(ArithmeticOp::Sub),
+            Operator::Mul => make_expr(ArithmeticOp::Mul),
+            Operator::Div => make_expr(ArithmeticOp::Div),
+            Operator::Rem => make_expr(ArithmeticOp::Rem),
         };
     }
 
@@ -141,11 +231,17 @@ pub(crate) struct Sequential {
     settings: IntSettings,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct Wrapping {
+    settings: IntSettings,
+}
+
 #[derive(Clone)]
 pub(crate) enum Profile {
     Int(Int),
     Circular(Circular),
     Sequential(Sequential),
+    Wrapping(Wrapping),
 }
 
 impl Profile {
@@ -154,6 +250,7 @@ impl Profile {
             "int" => Self::Int(Int::default()),
             "circular" => Self::Circular(Circular::default()),
             "sequential" => Self::Sequential(Sequential::default()),
+            "wrapping" => Self::Wrapping(Wrapping::default()),
             _ => return it.fail("unknown profile"),
         };
 
@@ -186,8 +283,9 @@ impl Profile {
     pub(crate) fn arithmetic(&self) -> Arithmetic {
         return match self {
             Self::Int { .. } => Arithmetic::Primitive,
-            Self::Circular { .. } => Arithmetic::Wrapping,
+            Self::Circular { .. } => Arithmetic::PrimitiveWrapping,
             Self::Sequential { .. } => Arithmetic::Checked,
+            Self::Wrapping { .. } => Arithmetic::WrapperWrapping,
         };
     }
 
@@ -203,7 +301,8 @@ impl Profile {
         return match self {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
-            | Self::Sequential(Sequential { settings, .. }) => settings,
+            | Self::Sequential(Sequential { settings, .. })
+            | Self::Wrapping(Wrapping { settings, .. }) => settings,
         };
     }
 
@@ -211,7 +310,8 @@ impl Profile {
         return match self {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
-            | Self::Sequential(Sequential { settings, .. }) => settings,
+            | Self::Sequential(Sequential { settings, .. })
+            | Self::Wrapping(Wrapping { settings, .. }) => settings,
         };
     }
 
@@ -223,6 +323,7 @@ impl Profile {
             Self::Int { .. } => {}
             Self::Circular { .. } => profile_apply_circular(it),
             Self::Sequential { .. } => profile_apply_sequential(it),
+            Self::Wrapping { .. } => {}
         };
     }
 
@@ -274,6 +375,12 @@ impl Profiles {
         return self
             .effective()
             .map_or(Arithmetic::Primitive, Profile::arithmetic);
+    }
+
+    pub(crate) fn requires_wrapping_storage(&self) -> bool {
+        return self
+            .effective()
+            .is_some_and(|profile| matches!(profile, Profile::Wrapping(_)));
     }
 
     pub(crate) fn is_circular(&self) -> bool {
@@ -388,6 +495,10 @@ impl Parse for FacetCfg {
 }
 
 impl FacetCfg {
+    pub(crate) fn requires_wrapping_storage(&self) -> bool {
+        return self.profile.requires_wrapping_storage();
+    }
+
     pub(crate) fn explicit_flag(
         &self,
         name: &str,
