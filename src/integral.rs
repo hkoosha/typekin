@@ -20,12 +20,15 @@ use syn::parse::{
     Parse,
     ParseStream,
 };
+use syn::spanned::Spanned;
 use syn::{
     ExprRange,
     Fields,
     ItemStruct,
     Path,
+    Token,
     Type,
+    parenthesized,
     parse_quote,
 };
 
@@ -35,8 +38,13 @@ use crate::friendship::{
     Protocol,
     ProtocolFriend,
 };
+use crate::integral_profiles::{
+    Profile,
+    ProfileKind,
+};
 use crate::zz::{
     Konst,
+    Konsts,
     ValidationCfg,
 };
 use crate::zz_runner::{
@@ -458,8 +466,8 @@ impl Maker {
 
         if self.cfg.flags.fn_conv_of {
             let is_konst = self.cfg.konst_for(&[
-                "of",
-                "conversion",
+                Konsts::Of,
+                Konsts::Conversion,
             ]);
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
@@ -485,8 +493,8 @@ impl Maker {
 
         if self.cfg.flags.auto_of_raw {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "of",
-                "conversion",
+                Konsts::Of,
+                Konsts::Conversion,
             ]));
             let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
             let it = quote! {
@@ -533,7 +541,7 @@ impl Maker {
         }
 
         if self.cfg.flags.map {
-            let is_konst = self.cfg.konst_for(&["map"])
+            let is_konst = self.cfg.konst_for(&[Konsts::Map])
                 || self.cfg.flags.with_const_map_fn;
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
@@ -822,7 +830,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_make_unchecked_try && self.cfg.has_validation() {
-            let konst = zz_runner::konst(self.cfg.konst_for(&["try_make"]));
+            let konst =
+                zz_runner::konst(self.cfg.konst_for(&[Konsts::TryMake]));
             let value = quote! { it };
             let validation = self.validation_condition(&value);
             let it = quote! {
@@ -880,7 +889,8 @@ impl Maker {
 
         if self.cfg.flags.core_int {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "core_int", "value",
+                Konsts::CoreInt,
+                Konsts::Value,
             ]));
             let value = quote! { value };
             let validation = self.validation_condition(&value);
@@ -932,7 +942,7 @@ impl Maker {
         let with_self_math = self.cfg.flags.self_math;
         let with_self_bit = self.cfg.flags.self_bit;
 
-        let bounds_for = |flags: &[&str]| {
+        let bounds_for = |flags: &[Konsts]| {
             let is_konst = self.cfg.konst_for(flags);
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
@@ -1133,7 +1143,8 @@ impl Maker {
             stream.extend(it);
 
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "core_int", "value",
+                Konsts::CoreInt,
+                Konsts::Value,
             ]));
             let it = quote! {
                 impl #ty {
@@ -1975,8 +1986,8 @@ impl Maker {
 
         if self.cfg.flags.into {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "into",
-                "conversion",
+                Konsts::Into,
+                Konsts::Conversion,
             ]));
             let it = N::items()
                 .iter()
@@ -1999,8 +2010,8 @@ impl Maker {
 
         if self.cfg.flags.try_into {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "try_into",
-                "conversion",
+                Konsts::TryInto,
+                Konsts::Conversion,
             ]));
             let it = N::items()
                 .iter()
@@ -2026,7 +2037,8 @@ impl Maker {
 
         if self.cfg.flags.math_shr {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "shr", "math",
+                Konsts::Shr,
+                Konsts::Math,
             ]));
             let it = quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
@@ -2046,7 +2058,8 @@ impl Maker {
 
         if self.cfg.flags.math_shl {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "shl", "math",
+                Konsts::Shl,
+                Konsts::Math,
             ]));
             let it = quote::quote! {
                 #konst impl ::core::ops::Shl<usize> for #ty {
@@ -2067,10 +2080,10 @@ impl Maker {
 
         if self.cfg.flags.assign_shr {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "shr_assign",
-                "shr",
-                "assign",
-                "math",
+                Konsts::ShrAssign,
+                Konsts::Shr,
+                Konsts::Assign,
+                Konsts::Math,
             ]));
             let it = quote! {
                 #konst impl ::core::ops::ShrAssign<usize> for #ty {
@@ -2089,10 +2102,10 @@ impl Maker {
 
         if self.cfg.flags.assign_shl {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "shl_assign",
-                "shl",
-                "assign",
-                "math",
+                Konsts::ShlAssign,
+                Konsts::Shl,
+                Konsts::Assign,
+                Konsts::Math,
             ]));
             let it = quote! {
                 #konst impl ::core::ops::ShlAssign<usize> for #ty {
@@ -2111,10 +2124,10 @@ impl Maker {
 
         if self.cfg.flags.assign_and {
             let flags = [
-                "and_assign",
-                "and",
-                "assign",
-                "bit",
+                Konsts::AndAssign,
+                Konsts::And,
+                Konsts::Assign,
+                Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2152,10 +2165,10 @@ impl Maker {
 
         if self.cfg.flags.assign_add {
             let flags = [
-                "add_assign",
-                "add",
-                "assign",
-                "math",
+                Konsts::AddAssign,
+                Konsts::Add,
+                Konsts::Assign,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2193,10 +2206,10 @@ impl Maker {
 
         if self.cfg.flags.assign_sub {
             let flags = [
-                "sub_assign",
-                "sub",
-                "assign",
-                "math",
+                Konsts::SubAssign,
+                Konsts::Sub,
+                Konsts::Assign,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2234,10 +2247,10 @@ impl Maker {
 
         if self.cfg.flags.assign_mul {
             let flags = [
-                "mul_assign",
-                "mul",
-                "assign",
-                "math",
+                Konsts::MulAssign,
+                Konsts::Mul,
+                Konsts::Assign,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2275,10 +2288,10 @@ impl Maker {
 
         if self.cfg.flags.assign_div {
             let flags = [
-                "div_assign",
-                "div",
-                "assign",
-                "math",
+                Konsts::DivAssign,
+                Konsts::Div,
+                Konsts::Assign,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2316,10 +2329,10 @@ impl Maker {
 
         if self.cfg.flags.assign_rem {
             let flags = [
-                "rem_assign",
-                "rem",
-                "assign",
-                "math",
+                Konsts::RemAssign,
+                Konsts::Rem,
+                Konsts::Assign,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2357,10 +2370,10 @@ impl Maker {
 
         if self.cfg.flags.assign_or {
             let flags = [
-                "or_assign",
-                "or",
-                "assign",
-                "bit",
+                Konsts::OrAssign,
+                Konsts::Or,
+                Konsts::Assign,
+                Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2435,8 +2448,8 @@ impl Maker {
 
         if self.cfg.flags.eq {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "eq",
-                "comparison",
+                Konsts::Eq,
+                Konsts::Comparison,
             ]));
             // TODO why can't we do derive?
             let it = quote! {
@@ -2447,8 +2460,8 @@ impl Maker {
 
         if self.cfg.flags.ord {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "ord",
-                "comparison",
+                Konsts::Ord,
+                Konsts::Comparison,
             ]));
             let it = quote! {
                 #konst impl ::core::cmp::Ord for #ty {
@@ -2476,7 +2489,8 @@ impl Maker {
 
         if self.cfg.flags.math_add {
             let flags = [
-                "add", "math",
+                Konsts::Add,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2517,7 +2531,8 @@ impl Maker {
 
         if self.cfg.flags.math_sub {
             let flags = [
-                "sub", "math",
+                Konsts::Sub,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2558,7 +2573,8 @@ impl Maker {
 
         if self.cfg.flags.math_mul {
             let flags = [
-                "mul", "math",
+                Konsts::Mul,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2600,7 +2616,8 @@ impl Maker {
 
         if self.cfg.flags.math_div {
             let flags = [
-                "div", "math",
+                Konsts::Div,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2642,7 +2659,8 @@ impl Maker {
 
         if self.cfg.flags.math_rem {
             let flags = [
-                "rem", "math",
+                Konsts::Rem,
+                Konsts::Math,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2684,7 +2702,8 @@ impl Maker {
 
         if self.cfg.flags.math_and {
             let flags = [
-                "and", "bit",
+                Konsts::And,
+                Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2725,7 +2744,8 @@ impl Maker {
 
         if self.cfg.flags.math_or {
             let flags = [
-                "or", "bit",
+                Konsts::Or,
+                Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2766,15 +2786,16 @@ impl Maker {
 
         if self.cfg.flags.math_xor {
             let flags = [
-                "xor", "bit",
+                Konsts::Xor,
+                Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             let assign_flags = [
-                "xor_assign",
-                "xor",
-                "assign",
-                "bit",
+                Konsts::XorAssign,
+                Konsts::Xor,
+                Konsts::Assign,
+                Konsts::Bit,
             ];
             let konst_assign =
                 zz_runner::konst(self.cfg.konst_for(&assign_flags));
@@ -2844,7 +2865,8 @@ impl Maker {
 
         if self.cfg.flags.math_not {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "not", "bit",
+                Konsts::Not,
+                Konsts::Bit,
             ]));
             let it = quote! {
                 #konst impl ::core::ops::Not for #ty {
@@ -2936,8 +2958,8 @@ impl Maker {
 
         if self.cfg.flags.partial_eq {
             let flags = [
-                "partial_eq",
-                "comparison",
+                Konsts::PartialEq,
+                Konsts::Comparison,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -2962,8 +2984,8 @@ impl Maker {
 
         if self.cfg.flags.partial_ord {
             let flags = [
-                "partial_ord",
-                "comparison",
+                Konsts::PartialOrd,
+                Konsts::Comparison,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
@@ -3151,63 +3173,67 @@ impl Parse for IntegralFriend {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct OutType {
+    pub(crate) conversion: Path,
+    pub(crate) target: Type,
+}
+
+impl Parse for OutType {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let conversion = input.parse::<Path>()?;
+        let content;
+        let _ = parenthesized!(content in input);
+        let source = content.parse::<Type>()?;
+
+        if !content.is_empty() {
+            return content.span().fail(
+                "out_type conversion requires exactly one `Self` argument",
+            );
+        }
+        else if !matches!(
+            &source,
+            Type::Path(path)
+                if path.qself.is_none() && path.path.is_ident("Self")
+        ) {
+            return source
+                .span()
+                .fail("out_type conversion requires a `Self` argument");
+        }
+
+        input.parse::<Token![->]>()?;
+        let target = input.parse::<Type>()?;
+
+        return Ok(Self { conversion, target });
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Settings {
+    flags: BTreeMap<String, (bool, Span)>,
+    konst_flags: BTreeMap<Konsts, (bool, Span)>,
+    seen: BTreeMap<String, bool>,
+}
+
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
-    konst_flags: BTreeMap<String, (bool, Span)>,
-    seen_flags: BTreeMap<String, bool>,
+    konst_flags: BTreeMap<Konsts, (bool, Span)>,
+    root_konst_flags: BTreeMap<Konsts, (bool, Span)>,
+    root_flags: BTreeMap<String, (bool, Span)>,
+    root_seen_flags: BTreeMap<String, bool>,
     pub(crate) get_raw: Option<Path>,
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) out_type: Option<OutType>,
+    pub(crate) profile: Profile,
 }
 
 impl Cfg {
-    pub(crate) const KONST_FLAGS: &[&str] = &[
-        "konst_add",
-        "konst_add_assign",
-        "konst_and",
-        "konst_and_assign",
-        "konst_assign",
-        "konst_bit",
-        "konst_comparison",
-        "konst_conversion",
-        "konst_core_int",
-        "konst_div",
-        "konst_div_assign",
-        "konst_eq",
-        "konst_friendship",
-        "konst_into",
-        "konst_iterator",
-        "konst_map",
-        "konst_math",
-        "konst_mul",
-        "konst_mul_assign",
-        "konst_not",
-        "konst_of",
-        "konst_or",
-        "konst_or_assign",
-        "konst_ord",
-        "konst_partial_eq",
-        "konst_partial_ord",
-        "konst_rem",
-        "konst_rem_assign",
-        "konst_shl",
-        "konst_shl_assign",
-        "konst_shr",
-        "konst_shr_assign",
-        "konst_sub",
-        "konst_sub_assign",
-        "konst_try_into",
-        "konst_try_make",
-        "konst_value",
-        "konst_xor",
-        "konst_xor_assign",
-    ];
-
-    fn parse_flags(
-        &mut self,
+    pub(crate) fn parse_flags_into(
         input: ParseStream,
         value_if_seen: bool,
+        settings: &mut Settings,
     ) -> syn::Result<()> {
         let attrs = zz::one_or_list::<Ident>(input)?;
         let mut duplicated = BTreeMap::new();
@@ -3220,8 +3246,8 @@ impl Cfg {
                 return span.fail("duplicated flags");
             }
 
-            if self
-                .seen_flags
+            if settings
+                .seen
                 .get(&name)
                 .is_some_and(|value| *value != value_if_seen)
             {
@@ -3230,17 +3256,117 @@ impl Cfg {
             }
 
             if name.starts_with("konst_") {
-                if !Self::KONST_FLAGS.contains(&name.as_str()) {
+                let Some(flag) = Self::parse_konst_flags(&name)
+                else {
                     return span.fail("unknown flag");
-                }
+                };
 
-                self.konst_flags.insert(name.clone(), (value_if_seen, span));
+                settings.konst_flags.insert(flag, (value_if_seen, span));
             }
-            else if self.flags.set_bool(&name, value_if_seen).is_err() {
+            else if IntegralFlags::default()
+                .set_bool(&name, value_if_seen)
+                .is_err()
+            {
                 return span.fail("unknown flag");
             }
+            else {
+                settings.flags.insert(name.clone(), (value_if_seen, span));
+            }
 
-            self.seen_flags.insert(name, value_if_seen);
+            settings.seen.insert(name.clone(), value_if_seen);
+        }
+
+        return Ok(());
+    }
+
+    fn parse_flags(
+        &mut self,
+        input: ParseStream,
+        value_if_seen: bool,
+    ) -> syn::Result<()> {
+        let mut settings = Settings {
+            flags: std::mem::take(&mut self.root_flags),
+            konst_flags: std::mem::take(&mut self.root_konst_flags),
+            seen: std::mem::take(&mut self.root_seen_flags),
+        };
+        let result =
+            Self::parse_flags_into(input, value_if_seen, &mut settings);
+
+        self.root_flags = settings.flags;
+        self.root_konst_flags = settings.konst_flags;
+        self.root_seen_flags = settings.seen;
+
+        return result;
+    }
+
+    fn apply_flag_settings(
+        flags: &mut IntegralFlags,
+        settings: &BTreeMap<String, (bool, Span)>,
+    ) {
+        for (name, (value, _)) in settings {
+            flags
+                .set_bool(name, *value)
+                .expect("integral configuration contains an unknown flag");
+        }
+    }
+
+    fn explicit_flag(
+        &self,
+        name: &str,
+    ) -> Option<(bool, Span)> {
+        return self
+            .root_flags
+            .get(name)
+            .copied()
+            .or_else(|| self.profile.settings.flags.get(name).copied());
+    }
+
+    fn resolve(&mut self) -> syn::Result<()> {
+        self.flags = Box::default();
+        self.konst_flags = self.profile.settings.konst_flags.clone();
+        self.profile.apply_defaults(&mut self.flags);
+        Self::apply_flag_settings(
+            &mut self.flags,
+            &self.profile.settings.flags,
+        );
+        Self::apply_flag_settings(&mut self.flags, &self.root_flags);
+        self.konst_flags.extend(self.root_konst_flags.clone());
+
+        if matches!(self.profile.kind, ProfileKind::Circular) {
+            for name in [
+                "ord",
+                "partial_ord",
+            ] {
+                if let Some((true, span)) = self.explicit_flag(name) {
+                    return span.fail(
+                        "circular profiles do not support linear ordering",
+                    );
+                }
+            }
+            self.flags.ord = false;
+            self.flags.partial_ord = false;
+        }
+
+        if self.out_type.is_some() {
+            for name in [
+                "assign_add",
+                "assign_and",
+                "assign_div",
+                "assign_mul",
+                "assign_or",
+                "assign_rem",
+                "assign_shl",
+                "assign_shr",
+                "assign_sub",
+            ] {
+                if let Some((true, span)) = self.explicit_flag(name) {
+                    return span
+                        .fail("out_type cannot generate assignment operators");
+                }
+                self.flags
+                    .set_bool(name, false)
+                    .expect("integral configuration contains an unknown flag");
+            }
         }
 
         return Ok(());
@@ -3248,11 +3374,10 @@ impl Cfg {
 
     pub(crate) fn konst_for(
         &self,
-        flags: &[&str],
+        flags: &[Konsts],
     ) -> bool {
         for flag in flags {
-            let name = format!("konst_{flag}");
-            if let Some((value, _)) = self.konst_flags.get(&name) {
+            if let Some((value, _)) = self.konst_flags.get(flag) {
                 return *value;
             }
         }
@@ -3262,36 +3387,28 @@ impl Cfg {
 
     pub(crate) fn explicit_konst_flag(
         &self,
-        name: &str,
+        flag: Konsts,
     ) -> Option<(bool, Span)> {
-        return self.konst_flags.get(name).copied();
+        return self.konst_flags.get(&flag).copied();
     }
 
     pub(crate) fn set_konst_flag(
         &mut self,
-        name: &str,
+        flag: Konsts,
         value: bool,
     ) {
-        self.konst_flags
-            .insert(name.to_owned(), (value, Span::call_site()));
+        self.konst_flags.insert(flag, (value, Span::call_site()));
     }
 
     pub(crate) fn konst_friendship(&self) -> bool {
-        if self.konst_for(&["friendship"]) {
+        if self.konst_for(&[Konsts::Friendship]) {
             return true;
         }
 
-        return Self::KONST_FLAGS
+        return Konsts::INTEGRAL
             .iter()
-            .filter(|flag| {
-                let flag = flag.strip_prefix("konst_").unwrap();
-                return flag != "friendship"
-                    && !Konst::STABLE_FLAGS.contains(&flag);
-            })
-            .any(|flag| {
-                let flag = flag.strip_prefix("konst_").unwrap();
-                return self.konst_for(&[flag]);
-            });
+            .filter(|flag| **flag != Konsts::Friendship && !flag.is_stable())
+            .any(|flag| self.konst_for(&[*flag]));
     }
 
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
@@ -3335,37 +3452,43 @@ impl Cfg {
         return self.validation.has_validation();
     }
 
-    pub(crate) fn parse_with_konst(
+    fn parse_attrs(
+        &mut self,
         input: ParseStream,
-        konst: Konst,
-    ) -> syn::Result<Self> {
-        let mut this = Self::with_konst(konst);
-
-        zz::parse_inner(input, |attr, rest| {
-            if this.validation.parse_attr(attr, rest)? {
+        allow_konst: bool,
+    ) -> syn::Result<()> {
+        return zz::parse_inner(input, |attr, rest| {
+            if self.validation.parse_attr(attr, rest)? {
                 return Ok(true);
             }
 
             match attr {
+                "konst" if allow_konst => self.konst = rest.parse()?,
                 "konst" => {
                     return attr
                         .fail("constness is specified in multiple places");
                 }
                 "error" => zz::parse_unit_error(rest)?,
-                "with" => this.parse_flags(rest, true)?,
-                "without" => this.parse_flags(rest, false)?,
-                "friends" => {
-                    this.friends = Self::parse_friends(rest)?;
-                }
-                "get_raw" => this.get_raw = Some(rest.parse()?),
-                _ => {
-                    return Ok(false);
-                }
+                "with" => self.parse_flags(rest, true)?,
+                "without" => self.parse_flags(rest, false)?,
+                "friends" => self.friends = Self::parse_friends(rest)?,
+                "get_raw" => self.get_raw = Some(rest.parse()?),
+                "out_type" => self.out_type = Some(rest.parse()?),
+                "profile" => self.profile = Profile::parse(rest)?,
+                _ => return Ok(false),
             };
 
             return Ok(true);
-        })?;
+        });
+    }
 
+    pub(crate) fn parse_with_konst(
+        input: ParseStream,
+        konst: Konst,
+    ) -> syn::Result<Self> {
+        let mut this = Self::with_konst(konst);
+        this.parse_attrs(input, false)?;
+        this.resolve()?;
         return Ok(this);
     }
 
@@ -3373,12 +3496,61 @@ impl Cfg {
         return Self {
             konst,
             konst_flags: Default::default(),
-            seen_flags: Default::default(),
+            root_konst_flags: Default::default(),
+            root_flags: Default::default(),
+            root_seen_flags: Default::default(),
             get_raw: None,
             validation: Default::default(),
             friends: Default::default(),
             flags: Box::default(),
+            out_type: None,
+            profile: Default::default(),
         };
+    }
+
+    pub(crate) fn parse_konst_flags(name: &str) -> Option<Konsts> {
+        return Some(match name {
+            "konst_add" => Konsts::Add,
+            "konst_add_assign" => Konsts::AddAssign,
+            "konst_and" => Konsts::And,
+            "konst_and_assign" => Konsts::AndAssign,
+            "konst_assign" => Konsts::Assign,
+            "konst_bit" => Konsts::Bit,
+            "konst_comparison" => Konsts::Comparison,
+            "konst_conversion" => Konsts::Conversion,
+            "konst_core_int" => Konsts::CoreInt,
+            "konst_div" => Konsts::Div,
+            "konst_div_assign" => Konsts::DivAssign,
+            "konst_eq" => Konsts::Eq,
+            "konst_friendship" => Konsts::Friendship,
+            "konst_into" => Konsts::Into,
+            "konst_iterator" => Konsts::Iterator,
+            "konst_map" => Konsts::Map,
+            "konst_math" => Konsts::Math,
+            "konst_mul" => Konsts::Mul,
+            "konst_mul_assign" => Konsts::MulAssign,
+            "konst_not" => Konsts::Not,
+            "konst_of" => Konsts::Of,
+            "konst_or" => Konsts::Or,
+            "konst_or_assign" => Konsts::OrAssign,
+            "konst_ord" => Konsts::Ord,
+            "konst_partial_eq" => Konsts::PartialEq,
+            "konst_partial_ord" => Konsts::PartialOrd,
+            "konst_rem" => Konsts::Rem,
+            "konst_rem_assign" => Konsts::RemAssign,
+            "konst_shl" => Konsts::Shl,
+            "konst_shl_assign" => Konsts::ShlAssign,
+            "konst_shr" => Konsts::Shr,
+            "konst_shr_assign" => Konsts::ShrAssign,
+            "konst_sub" => Konsts::Sub,
+            "konst_sub_assign" => Konsts::SubAssign,
+            "konst_try_into" => Konsts::TryInto,
+            "konst_try_make" => Konsts::TryMake,
+            "konst_value" => Konsts::Value,
+            "konst_xor" => Konsts::Xor,
+            "konst_xor_assign" => Konsts::XorAssign,
+            _ => return None,
+        });
     }
 }
 
@@ -3389,11 +3561,13 @@ impl Debug for Cfg {
     ) -> std::fmt::Result {
         write!(
             f,
-            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, flags={:?}",
+            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, out_type={}, profile={:?}, flags={:?}",
             self.konst,
             to_debug(&self.get_raw),
             self.validation,
             self.friends,
+            self.out_type.is_some(),
+            self.profile.kind,
             self.flags,
         )
     }
@@ -3402,31 +3576,8 @@ impl Debug for Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::with_konst(Konst::default());
-
-        zz::parse_inner(input, |attr, rest| {
-            if this.validation.parse_attr(attr, rest)? {
-                return Ok(true);
-            }
-
-            match attr {
-                "konst" => {
-                    this.konst = rest.parse()?;
-                }
-                "error" => zz::parse_unit_error(rest)?,
-                "with" => this.parse_flags(rest, true)?,
-                "without" => this.parse_flags(rest, false)?,
-                "friends" => {
-                    this.friends = Self::parse_friends(rest)?;
-                }
-                "get_raw" => this.get_raw = Some(rest.parse()?),
-                _ => {
-                    return Ok(false);
-                }
-            };
-
-            return Ok(true);
-        })?;
-
+        this.parse_attrs(input, true)?;
+        this.resolve()?;
         return Ok(this);
     }
 }

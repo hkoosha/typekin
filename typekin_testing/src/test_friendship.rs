@@ -1,3 +1,5 @@
+use crate::*;
+
 #[typekin::friends(
     relation = DocumentParts,
     friends = [
@@ -12,7 +14,7 @@ pub struct Document {
 }
 
 impl Document {
-    fn of_parts(parts: DocumentParts) -> Self {
+    pub fn of_parts(parts: DocumentParts) -> Self {
         return Self {
             id: parts.id,
             access: parts.access,
@@ -22,33 +24,33 @@ impl Document {
 
 #[typekin::friends(
     relation = (u32, u8),
-    mod = pub(crate) declared_document_protocol,
+    mod = pub declared_document_protocol,
     extra_caps = [DocumentDeclared],
 )]
-struct DocumentProtocol;
+pub struct DocumentProtocol;
 
 #[allow(dead_code)]
 impl DocumentProtocol {
-    fn of_parts(_: (u32, u8)) -> Self {
+    pub fn of_parts(_: (u32, u8)) -> Self {
         return Self;
     }
 }
 
 #[typekin::friends(
     relation = DirectParts,
-    scope = pub(crate) direct_friendship,
+    scope = pub direct_friendship,
     friends = [],
 )]
 pub struct Direct;
 
 impl Direct {
-    fn of_parts(_: DirectParts) -> Self {
+    pub fn of_parts(_: DirectParts) -> Self {
         return Self;
     }
 }
 
 #[derive(Copy, Clone)]
-struct DirectParts;
+pub struct DirectParts;
 
 #[derive(Copy, Clone)]
 pub struct DocumentParts {
@@ -56,7 +58,7 @@ pub struct DocumentParts {
     access: u8,
 }
 
-fn document_parts(document: Document) -> DocumentParts {
+pub fn document_parts(document: Document) -> DocumentParts {
     return DocumentParts {
         id: document.id,
         access: document.access,
@@ -71,14 +73,14 @@ pub struct Writer {
     id: u32,
 }
 
-fn reader_parts(reader: Reader) -> DocumentParts {
+pub fn reader_parts(reader: Reader) -> DocumentParts {
     return DocumentParts {
         id: reader.id,
         access: 0b001,
     };
 }
 
-fn writer_parts(writer: Writer) -> DocumentParts {
+pub fn writer_parts(writer: Writer) -> DocumentParts {
     return DocumentParts {
         id: writer.id,
         access: 0b010,
@@ -106,18 +108,18 @@ impl declared_document_protocol::DocumentDeclared for Reader {
 )]
 pub struct CapabilitySpecificTarget(u128);
 
-struct CapabilitySpecificSource(u128);
+pub struct CapabilitySpecificSource(u128);
 
-fn make_parts(source: CapabilitySpecificSource) -> u128 {
+pub fn make_parts(source: CapabilitySpecificSource) -> u128 {
     return source.0 / 4;
 }
 
-fn bit_parts(source: CapabilitySpecificSource) -> u128 {
+pub fn bit_parts(source: CapabilitySpecificSource) -> u128 {
     return source.0 / 2;
 }
 
 impl CapabilitySpecificTarget {
-    fn of_parts(value: u128) -> Self {
+    pub fn of_parts(value: u128) -> Self {
         return Self(value);
     }
 }
@@ -126,7 +128,7 @@ impl CapabilitySpecificTarget {
 
 #[typekin::friends(
     relation = ScopedDocumentParts,
-    scope = pub(crate) scoped_document_protocol,
+    scope = pub scoped_document_protocol,
     friends = scoped_document_parts(Self) -> [],
 )]
 pub struct ScopedDocument;
@@ -134,24 +136,24 @@ pub struct ScopedDocument;
 pub struct ScopedDocumentParts;
 
 impl ScopedDocument {
-    fn of_parts(_: ScopedDocumentParts) -> Self {
+    pub fn of_parts(_: ScopedDocumentParts) -> Self {
         return Self;
     }
 }
 
-fn scoped_document_parts(_: ScopedDocument) -> ScopedDocumentParts {
+pub fn scoped_document_parts(_: ScopedDocument) -> ScopedDocumentParts {
     return ScopedDocumentParts;
 }
 
 // ==============================================================================
 
 #[typekin::friends(relation = ConstDocumentParts)]
-struct ConstDocument;
+pub struct ConstDocument;
 
-struct ConstDocumentParts;
+pub struct ConstDocumentParts;
 
 impl ConstDocument {
-    fn of_parts(_: ConstDocumentParts) -> Self {
+    pub fn of_parts(_: ConstDocumentParts) -> Self {
         return Self;
     }
 }
@@ -160,14 +162,14 @@ impl ConstDocument {
 
 #[typekin::friends(
     relation = String,
-    mod = pub(crate) trusted_title_protocol,
+    mod = pub trusted_title_protocol,
     friends = title_conversions::owned_title(OwnedTitle,) -> unsafe,
 )]
-pub(crate) struct TrustDocument {
+pub struct TrustDocument {
     title: String,
 }
 
-struct OwnedTitle(String);
+pub struct OwnedTitle(String);
 
 mod title_conversions {
     pub(super) fn owned_title(source: super::OwnedTitle) -> String {
@@ -176,7 +178,7 @@ mod title_conversions {
 }
 
 impl TrustDocument {
-    fn of_parts(title: String) -> Self {
+    pub fn of_parts(title: String) -> Self {
         assert!(!title.is_empty(), "a document must have a title");
         Self {
             title: title.to_uppercase(),
@@ -193,8 +195,8 @@ where
 
 // ==============================================================================
 
-pub(crate) mod inspector_conversions {
-    pub(crate) fn inspector_text(source: super::InspectorSource) -> String {
+pub mod inspector_conversions {
+    pub fn inspector_text(source: super::InspectorSource) -> String {
         let super::InspectorSource {
             text,
             lifetime: _lifetime,
@@ -205,13 +207,13 @@ pub(crate) mod inspector_conversions {
 
 #[typekin::friends(
     relation = String,
-    mod = pub(crate) inspector_protocol,
+    mod = pub inspector_protocol,
     extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
     friends = [
         inspector_conversions::inspector_text(InspectorSource) -> [Inspect, unsafe],
     ],
 )]
-struct Inspectable;
+pub struct Inspectable;
 
 #[allow(dead_code)]
 impl Inspectable {
@@ -226,12 +228,12 @@ const _: () = {
     let _ = Inspectable;
 };
 
-struct InspectorSource {
+pub struct InspectorSource {
     text: String,
     lifetime: SourceLifetime,
 }
 
-struct SourceLifetime(std::rc::Rc<std::cell::Cell<usize>>);
+pub struct SourceLifetime(std::rc::Rc<std::cell::Cell<usize>>);
 
 impl Drop for SourceLifetime {
     fn drop(&mut self) {
@@ -268,14 +270,34 @@ where
     inspector_protocol::Inspect::to_string(source)
 }
 
+fn construct_declared<T>(source: T) -> Document
+where
+    T: declared_document_protocol::DocumentDeclared,
+{
+    let (id, access) =
+        declared_document_protocol::DocumentDeclared::convert(source);
+    Document::of(DocumentParts { id, access })
+}
+
 // ==============================================================================
 
-fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
-    std::panic::set_hook(Box::new(move |_| {}));
-    let result = std::panic::catch_unwind(f);
-    let _ = std::panic::take_hook();
-    assert!(result.is_err());
+#[typekin::friends(
+        relation = SelfScopedParts,
+        seal = SelfScopedSeal,
+        scope = self,
+        friends = [],
+)]
+pub struct SelfScoped;
+
+pub struct SelfScopedParts;
+
+impl SelfScoped {
+    pub fn of_parts(_: SelfScopedParts) -> Self {
+        return Self;
+    }
 }
+
+// ==============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -283,15 +305,6 @@ mod tests {
 
     #[test]
     fn standalone_marker_gates_owned_document_construction() {
-        fn construct_declared<T>(source: T) -> Document
-        where
-            T: declared_document_protocol::DocumentDeclared,
-        {
-            let (id, access) =
-                declared_document_protocol::DocumentDeclared::convert(source);
-            Document::of(DocumentParts { id, access })
-        }
-
         let _ = DocumentProtocol;
         let document = construct_declared(Reader { id: 5 });
         assert_eq!((document.id, document.access), (5, 0b001));
@@ -394,25 +407,6 @@ mod tests {
         assert_eq!(title.as_ptr(), pointer);
         assert_eq!(title.capacity(), capacity);
         assert_eq!(drops.get(), 1);
-    }
-}
-
-#[cfg(test)]
-mod self_scoped {
-    #[typekin::friends(
-        relation = SelfScopedParts,
-        seal = SelfScopedSeal,
-        scope = self,
-        friends = [],
-    )]
-    struct SelfScoped;
-
-    struct SelfScopedParts;
-
-    impl SelfScoped {
-        pub(crate) fn of_parts(_: SelfScopedParts) -> Self {
-            return Self;
-        }
     }
 
     #[test]

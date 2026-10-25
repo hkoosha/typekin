@@ -1,106 +1,28 @@
+use crate::*;
+use std::env;
 use std::error::Error;
-use std::path::{
-    Path,
-    PathBuf,
-};
-use std::process::Command;
-use std::time::{
-    SystemTime,
-    UNIX_EPOCH,
-};
-use std::{
-    env,
-    fs,
-};
-
-const DISABLED: bool = true;
-
-struct FixtureDir {
-    keep: bool,
-    path: PathBuf,
-}
-
-impl FixtureDir {
-    fn new(suffix: &str) -> Result<Self, Box<dyn Error>> {
-        let path = env::temp_dir().join(format!(
-            "typekin-compile-fail-{}-{}-{}",
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
-            suffix,
-            std::process::id()
-        ));
-
-        fs::create_dir_all(path.join("src"))?;
-
-        return Ok(Self { keep: false, path });
-    }
-}
-
-impl Drop for FixtureDir {
-    fn drop(&mut self) {
-        if !self.keep {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-}
 
 //noinspection RsConstantConditionIf
 fn assert_rejected(
     name: &str,
-    source: &str,
     expected_error: &str,
+    source: &str,
 ) {
-    if DISABLED {
+    if !env::var("TYPEKIN_SLOW_TESTS").is_ok() {
         return;
     }
 
-    let fixture = FixtureDir::new(name).unwrap();
-
-    let path = &fixture.path.join("Cargo.toml");
-    let content = &format!(
-        "\
-                [package]\n\
-                name = \"{}\"\n\
-                version = \"0.0.0\"\n\
-                edition = \"2024\"\n\
-                \n\
-                [dependencies]\n\
-                typekin = {{ path = {} }}\n\
-                ",
-        name,
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .canonicalize()
-            .expect("canonicalize typekin root")
-            .to_str()
-            .expect("typekin root must be valid UTF-8"),
-    );
-    fs::write(path, content).expect("write compile-fail fixture");
-
-    let path = &fixture.path.join("src/lib.rs");
-    fs::write(path, source).expect("write compile-fail fixture");
-
-    let output = Command::new("cargo")
-        .args([
-            "+nightly",
-            "check",
-            "--offline",
-            "--quiet",
-            "--manifest-path",
-        ])
-        .arg(&fixture.path.join("Cargo.toml"))
-        .arg("--target-dir")
-        .arg(fixture.path.join("target"))
-        .output()
-        .expect("run nightly compile-fail fixture");
-
-    let diagnostics = String::from_utf8_lossy(&output.stderr);
+    let output = compile(name, "", source, true);
 
     assert!(
         !output.status.success(),
-        "{name} unexpectedly compiled:\n{diagnostics}"
+        "unexpectedly compiled: name={} output={:?}"
+        name, output,
     );
     assert!(
-        diagnostics.contains(expected_error),
-        "{name} rejected for an unexpected reason; expected {expected_error:?}:\n{diagnostics}"
+        output.stderr.contains(expected_error),
+        "rejected for an unexpected reason; name={}, expected={}, output={:?}"
+        name, expected_error, output
     );
 }
 
@@ -110,9 +32,7 @@ mod tests {
 
     #[test]
     fn validated_integral_has_no_make() {
-        assert_rejected(
-            "validated-integral-make",
-            r#"
+        const SRC: &str = r#"
                 const fn is_even(value: u8) -> bool { value % 2 == 0 }
 
                 #[typekin::integral(konst = none, valid = is_even)]
@@ -122,16 +42,17 @@ mod tests {
                 fn requires_make() {
                     let _ = Checked::make(2);
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "validated-integral-make",
             "no associated function or constant named `make`",
+            SRC,
         );
     }
 
     #[test]
     fn make_does_not_grant_math() {
-        assert_rejected(
-            "make-does-not-grant-math",
-            r#"
+        const SRC: &str = r#"
                 struct MakeSource(u8);
                 fn into_u8(source: MakeSource) -> u8 { source.0 }
 
@@ -146,16 +67,14 @@ mod tests {
                 fn requires_math() {
                     let _ = Number::make(1) + MakeSource(2);
                 }
-            "#,
-            "Math",
-        );
+            "#;
+
+        assert_rejected("make-does-not-grant-math", "Math", SRC);
     }
 
     #[test]
     fn bit_does_not_grant_math() {
-        assert_rejected(
-            "bit-does-not-grant-math",
-            r#"
+        const SRC: &str = r#"
                 struct BitSource(u8);
                 fn into_u8(source: BitSource) -> u8 { source.0 }
 
@@ -170,16 +89,13 @@ mod tests {
                 fn requires_math() {
                     let _ = Number::make(1) + BitSource(2);
                 }
-            "#,
-            "Math",
-        );
+            "#;
+        assert_rejected("bit-does-not-grant-math", "Math", SRC);
     }
 
     #[test]
     fn without_removes_raw() {
-        assert_rejected(
-            "without-removes-raw",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     without = fn_conv_raw,
@@ -196,16 +112,14 @@ mod tests {
                 fn requires_raw() {
                     let _ = Number::make(2).raw();
                 }
-            "#,
-            "no method named `raw`",
-        );
+            "#;
+
+        assert_rejected("without-removes-raw", "no method named `raw`", SRC);
     }
 
     #[test]
     fn without_removes_self_math() {
-        assert_rejected(
-            "without-removes-self-math",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     without = self_math,
@@ -217,16 +131,18 @@ mod tests {
                 fn requires_self_math() {
                     let _ = Number::make(2) + Number::make(3);
                 }
-            "#,
+            "#;
+
+        assert_rejected(
+            "without-removes-self-math",
             "the trait `Math` is not implemented for `Number`",
+            SRC,
         );
     }
 
     #[test]
     fn without_removes_self_bit() {
-        assert_rejected(
-            "without-removes-self-bit",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     without = self_bit,
@@ -238,16 +154,17 @@ mod tests {
                 fn requires_self_bit() {
                     let _ = Number::make(2) | Number::make(3);
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "without-removes-self-bit",
             "the trait `Bit` is not implemented for `Number`",
+            SRC,
         );
     }
 
     #[test]
     fn self_operators_do_not_use_friendship() {
-        assert_rejected(
-            "self-operators-do-not-use-friendship",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     friends = Number(Number) -> Math,
@@ -255,16 +172,17 @@ mod tests {
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
                 struct Number(u8);
-            "#,
+            "#;
+        assert_rejected(
+            "self-operators-do-not-use-friendship",
             "self math operations use `with_self_math`, not `friends`",
+            SRC,
         );
     }
 
     #[test]
     fn without_removes_from_str() {
-        assert_rejected(
-            "without-removes-from-str",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     without = from_str,
@@ -281,16 +199,17 @@ mod tests {
                 fn requires_number_from_str() {
                     requires_from_str::<Number>();
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "without-removes-from-str",
             "the trait bound `Number: FromStr` is not satisfied",
+            SRC,
         );
     }
 
     #[test]
     fn without_removes_common_integral_methods() {
-        assert_rejected(
-            "without-removes-common-integral-methods",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(
                     konst = none,
                     without = core_int,
@@ -302,16 +221,17 @@ mod tests {
                 fn requires_count_ones() {
                     let _ = Number::make(2).count_ones();
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "without-removes-common-integral-methods",
             "no method named `count_ones`",
+            SRC,
         );
     }
 
     #[test]
     fn core_integral_methods_exclude_unsafe_operations() {
-        assert_rejected(
-            "core-integral-methods-exclude-unsafe-operations",
-            r#"
+        const SRC: &str = r#"
                 #[typekin::integral(konst = none)]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -320,16 +240,17 @@ mod tests {
                 fn requires_unchecked_add() {
                     let _ = Number::make(2).unchecked_add(Number::make(3));
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "core-integral-methods-exclude-unsafe-operations",
             "no method named `unchecked_add`",
+            SRC,
         );
     }
 
     #[test]
     fn validated_text_has_no_infallible_from() {
-        assert_rejected(
-            "validated-text-has-no-infallible-from",
-            r#"
+        const SRC: &str = r#"
                 extern crate alloc;
                 use alloc::string::String;
 
@@ -342,16 +263,17 @@ mod tests {
                 fn requires_infallible_from() {
                     let _: Checked = String::from("text").into();
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "validated-text-has-no-infallible-from",
             "the trait bound `Checked: From<String>` is not satisfied",
+            SRC,
         );
     }
 
     #[test]
     fn validated_text_has_no_deref_mut() {
-        assert_rejected(
-            "validated-text-has-no-deref-mut",
-            r#"
+        const SRC: &str = r#"
                 extern crate alloc;
                 use alloc::string::String;
 
@@ -364,16 +286,13 @@ mod tests {
                 fn requires_deref_mut(value: &mut Checked) {
                     let _: &mut str = value;
                 }
-            "#,
-            "DerefMut",
-        );
+            "#;
+        assert_rejected("validated-text-has-no-deref-mut", "DerefMut", SRC);
     }
 
     #[test]
     fn validated_text_has_no_infallible_str_from() {
-        assert_rejected(
-            "validated-text-has-no-infallible-str-from",
-            r#"
+        const SRC: &str = r#"
                 extern crate alloc;
                 use alloc::string::String;
 
@@ -386,16 +305,17 @@ mod tests {
                 fn requires_infallible_from() {
                     let _: Checked = "text".into();
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "validated-text-has-no-infallible-str-from",
             "the trait bound `Checked: From<&str>` is not satisfied",
+            SRC,
         );
     }
 
     #[test]
     fn validated_text_has_no_as_mut() {
-        assert_rejected(
-            "validated-text-has-no-as-mut",
-            r#"
+        const SRC: &str = r#"
                 extern crate alloc;
                 use alloc::string::String;
 
@@ -408,16 +328,13 @@ mod tests {
                 fn requires_as_mut(value: &mut Checked) {
                     let _: &mut str = AsMut::<str>::as_mut(value);
                 }
-            "#,
-            "AsMut<str>",
-        );
+            "#;
+        assert_rejected("validated-text-has-no-as-mut", "AsMut<str>", SRC);
     }
 
     #[test]
     fn validated_text_has_no_mutable_string() {
-        assert_rejected(
-            "validated-text-has-no-mutable-string",
-            r#"
+        const SRC: &str = r#"
                 extern crate alloc;
                 use alloc::string::String;
 
@@ -432,8 +349,11 @@ mod tests {
                 fn mutable_string_escape(value: &mut Checked) {
                     requires_mutable_string(value);
                 }
-            "#,
+            "#;
+        assert_rejected(
+            "validated-text-has-no-mutable-string",
             "expected `&mut String`, found `&mut Checked`",
+            SRC,
         );
     }
 }

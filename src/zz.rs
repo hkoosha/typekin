@@ -5,6 +5,7 @@ use std::fmt::{
 };
 
 use proc_macro2::Ident;
+pub(crate) use ranges::parse_ranges;
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
     Parse,
@@ -23,8 +24,111 @@ use syn::{
     parenthesized,
 };
 
-use crate::zz_runner::MkErr;
+use crate::zz_runner::{
+    MkErr,
+    ToCollection,
+    to_debug,
+};
 use crate::zz_value_type::N;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Konsts {
+    Add,
+    AddAssign,
+    And,
+    AndAssign,
+    Assign,
+    Bit,
+    Comparison,
+    Conversion,
+    CoreInt,
+    Div,
+    DivAssign,
+    Eq,
+    Friendship,
+    From,
+    Into,
+    Iterator,
+    Map,
+    Math,
+    Mul,
+    MulAssign,
+    Not,
+    Of,
+    Or,
+    OrAssign,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Rem,
+    RemAssign,
+    Shl,
+    ShlAssign,
+    Shr,
+    ShrAssign,
+    Sub,
+    SubAssign,
+    Text,
+    TextAccess,
+    TextFriendship,
+    TextFrom,
+    TryInto,
+    TryMake,
+    Value,
+    Xor,
+    XorAssign,
+}
+
+impl Konsts {
+    pub(crate) const INTEGRAL: &[Self] = &[
+        Self::Add,
+        Self::AddAssign,
+        Self::And,
+        Self::AndAssign,
+        Self::Assign,
+        Self::Bit,
+        Self::Comparison,
+        Self::Conversion,
+        Self::CoreInt,
+        Self::Div,
+        Self::DivAssign,
+        Self::Eq,
+        Self::Friendship,
+        Self::Into,
+        Self::Iterator,
+        Self::Map,
+        Self::Math,
+        Self::Mul,
+        Self::MulAssign,
+        Self::Not,
+        Self::Of,
+        Self::Or,
+        Self::OrAssign,
+        Self::Ord,
+        Self::PartialEq,
+        Self::PartialOrd,
+        Self::Rem,
+        Self::RemAssign,
+        Self::Shl,
+        Self::ShlAssign,
+        Self::Shr,
+        Self::ShrAssign,
+        Self::Sub,
+        Self::SubAssign,
+        Self::TryInto,
+        Self::TryMake,
+        Self::Value,
+        Self::Xor,
+        Self::XorAssign,
+    ];
+
+    pub(crate) fn is_stable(self) -> bool {
+        return matches!(
+            self,
+            Self::CoreInt | Self::TryMake | Self::Value | Self::TextAccess
+        );
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Konst {
@@ -44,19 +148,13 @@ impl Default for Konst {
 }
 
 impl Konst {
-    pub(crate) const STABLE_FLAGS: &[&str] = &[
-        "core_int", "try_make", "value",
-    ];
-
     pub(crate) fn enables(
         self,
-        flags: &[&str],
+        flags: &[Konsts],
     ) -> bool {
         return match self {
             Self::None => false,
-            Self::Stable => {
-                flags.iter().any(|flag| Self::STABLE_FLAGS.contains(flag))
-            }
+            Self::Stable => flags.iter().any(|flag| flag.is_stable()),
             Self::Nightly => true,
         };
     }
@@ -125,6 +223,26 @@ impl ValidationCfg {
     }
 }
 
+pub(crate) trait UcFirst {
+    fn ucfirst(self) -> String;
+}
+
+impl UcFirst for String {
+    fn ucfirst(mut self) -> String {
+        if let Some(r) = self.get_mut(0..1) {
+            r.make_ascii_uppercase();
+        }
+
+        return self;
+    }
+}
+
+impl UcFirst for &str {
+    fn ucfirst(self) -> String {
+        return self.to_string().ucfirst();
+    }
+}
+
 pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
     let error: Type = input.parse()?;
 
@@ -134,13 +252,6 @@ pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
 
     return error.fail("only `()` is currently supported for `error`");
 }
-
-pub(crate) use ranges::parse_ranges;
-
-use crate::zz_runner::{
-    ToCollection,
-    to_debug,
-};
 
 mod ranges {
     use std::cmp::Ordering;

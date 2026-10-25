@@ -18,6 +18,8 @@ unused_dependencies = "allow"
 
 [dependencies]
 typekin = { path = ".." }
+serde = { version = "1", default-features = false, features = ["alloc"] }
+serde_test = "1"
 
 [[bin]]
 name = "my_u32"

@@ -24,10 +24,6 @@ quote = "1"
 syn = { version = "3", features = ["full", "visit-mut"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 
-[dev-dependencies]
-serde = { version = "1", default-features = false, features = ["alloc"] }
-serde_test = "1"
-
 [[example]]
 name = "my_plain"
 path = "examples/my_plain.rs"

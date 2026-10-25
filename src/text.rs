@@ -31,7 +31,10 @@ use syn::{
 
 use crate::friendship::cfg::Friend;
 use crate::zz;
-use crate::zz::Konst;
+use crate::zz::{
+    Konst,
+    Konsts,
+};
 use crate::zz_runner::{
     self,
     MkErr,
@@ -73,7 +76,7 @@ mk_flags! {
 #[derive(Clone)]
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
-    konst_flags: BTreeMap<String, bool>,
+    konst_flags: BTreeMap<Konsts, bool>,
     seen_flags: BTreeMap<String, bool>,
     pub(crate) std: bool,
     pub(crate) callbacks: Vec<Path>,
@@ -83,15 +86,6 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
-    const KONST_FLAGS: &[&str] = &[
-        "konst_friendship",
-        "konst_from",
-        "konst_text",
-        "konst_text_access",
-        "konst_text_friendship",
-        "konst_text_from",
-    ];
-
     fn parse_flags(
         &mut self,
         input: ParseStream,
@@ -120,11 +114,12 @@ impl Cfg {
             }
 
             if name.starts_with("konst_") {
-                if !Self::KONST_FLAGS.contains(&name.as_str()) {
+                let Some(flag) = Self::parse_konst_flags(&name)
+                else {
                     return Err(syn::Error::new(span, "unknown flag"));
-                }
+                };
 
-                self.konst_flags.insert(name.clone(), value_if_seen);
+                self.konst_flags.insert(flag, value_if_seen);
             }
             else if self.flags.set_bool(&name, value_if_seen).is_err() {
                 return Err(syn::Error::new(span, "unknown flag"));
@@ -138,20 +133,15 @@ impl Cfg {
 
     pub(crate) fn konst_for(
         &self,
-        flags: &[&str],
+        flags: &[Konsts],
     ) -> bool {
         for flag in flags {
-            let name = format!("konst_{flag}");
-            if let Some(value) = self.konst_flags.get(&name) {
+            if let Some(value) = self.konst_flags.get(flag) {
                 return *value;
             }
         }
 
-        return match self.konst {
-            Konst::None => false,
-            Konst::Stable => flags.contains(&"text_access"),
-            Konst::Nightly => true,
-        };
+        return self.konst.enables(flags);
     }
 
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
@@ -223,6 +213,18 @@ impl Cfg {
             friends: BTreeSet::new(),
             flags: Default::default(),
         };
+    }
+
+    fn parse_konst_flags(name: &str) -> Option<Konsts> {
+        return Some(match name {
+            "konst_friendship" => Konsts::Friendship,
+            "konst_from" => Konsts::From,
+            "konst_text" => Konsts::Text,
+            "konst_text_access" => Konsts::TextAccess,
+            "konst_text_friendship" => Konsts::TextFriendship,
+            "konst_text_from" => Konsts::TextFrom,
+            _ => return None,
+        });
     }
 }
 
@@ -354,9 +356,9 @@ impl TextMaker {
     fn make_friendship(&self) -> TokenStream {
         let ty = &self.ty;
         let is_konst = self.cfg.konst_for(&[
-            "text_friendship",
-            "friendship",
-            "text",
+            Konsts::TextFriendship,
+            Konsts::Friendship,
+            Konsts::Text,
         ]);
         let konst = zz_runner::konst(is_konst);
         let bonst = zz_runner::bonst(is_konst);
@@ -444,13 +446,13 @@ impl TextMaker {
             true => quote! { ::std::vec::Vec },
             false => quote! { ::alloc::vec::Vec },
         };
-        let is_konst = self.cfg.konst_for(&["text"]);
+        let is_konst = self.cfg.konst_for(&[Konsts::Text]);
         let konst = zz_runner::konst(is_konst);
         let bonst = TokenStream::new();
         let destruct = TokenStream::new();
         let access_konst = zz_runner::konst(self.cfg.konst_for(&[
-            "text_access",
-            "text",
+            Konsts::TextAccess,
+            Konsts::Text,
         ]));
         let validation = self.validation_condition();
         let display = self.cfg.flags.display.then(|| {
@@ -505,9 +507,9 @@ impl TextMaker {
         });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
             let konst = zz_runner::konst(self.cfg.konst_for(&[
-                "text_from",
-                "from",
-                "text",
+                Konsts::TextFrom,
+                Konsts::From,
+                Konsts::Text,
             ]));
             quote! {
                 #konst impl ::core::convert::From<#ty_string> for #ty {

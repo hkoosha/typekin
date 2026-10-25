@@ -1,18 +1,9 @@
-#![feature(const_clone)]
-#![feature(const_cmp)]
-#![feature(const_convert)]
-#![feature(const_destruct)]
-#![feature(const_iter)]
-#![feature(const_ops)]
-#![feature(const_trait_impl)]
-#![feature(derive_const)]
-
 #[typekin::bitflag(
-        with = display,
-        friends = self(u8) -> Bit,
-        integral = [
-            friends = self(u8) -> [Math, Rel],
-        ],
+    with = display,
+    friends = self(u8) -> Bit,
+    integral = [
+        friends = self(u8) -> [Math, Rel],
+    ],
 )]
 #[repr(u8)]
 pub enum Thingy {
@@ -24,8 +15,8 @@ pub enum Thingy {
 
 #[repr(u8)]
 #[typekin::bitflag(
-        suffix = "Holder",
-        integral = [in = 0..=7],
+    suffix = "Holder",
+    integral = [in = 0..=7],
 )]
 pub enum Thingy1 {
     FirstThing = 0,
@@ -65,8 +56,8 @@ enum ValueSerdeFlag {
 }
 
 #[typekin::bitflag(
-        with = serde,
-        integral = [in = 0..=7],
+    with = serde,
+    integral = [in = 0..=7],
 )]
 #[repr(u8)]
 enum ValidatedSerdeFlag {
@@ -146,8 +137,8 @@ enum DisplaySigned {
 
 #[repr(u8)]
 #[typekin::bitflag(
-            with = display,
-            integral = [without = display],
+    with = display,
+    integral = [without = display],
 )]
 enum RootBeforeNested {
     Read = 1,
@@ -156,8 +147,8 @@ enum RootBeforeNested {
 
 #[repr(u8)]
 #[typekin::bitflag(
-            integral = [without = display],
-            with = display,
+    integral = [without = display],
+    with = display,
 )]
 enum NestedBeforeRoot {
     Read = 1,
@@ -173,8 +164,8 @@ enum NestedOnly {
 
 #[repr(u8)]
 #[typekin::bitflag(
-            without = display,
-            integral = [with = display],
+    without = display,
+    integral = [with = display],
 )]
 enum DisabledRootBeforeNested {
     Read = 1,
@@ -183,8 +174,8 @@ enum DisabledRootBeforeNested {
 
 #[repr(u8)]
 #[typekin::bitflag(
-            integral = [with = display],
-            without = display,
+    integral = [with = display],
+    without = display,
 )]
 enum NestedBeforeDisabledRoot {
     Read = 1,
@@ -225,26 +216,33 @@ const fn is_even(bits: u8) -> bool {
 
 #[repr(u8)]
 #[typekin::bitflag(
+    friends = [
+        trusted_bits(TrustBits) -> [Bit, unsafe],
+        bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
+    ],
+    integral = [
         friends = [
+            default_bits(DefaultBits) -> Make,
+            checked_bits(CheckedBits) -> [Make],
             trusted_bits(TrustBits) -> [Bit, unsafe],
             bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
+            math_only_bits(MathOnlyBits) -> [Math, unsafe],
         ],
-        integral = [
-            friends = [
-                default_bits(DefaultBits) -> Make,
-                checked_bits(CheckedBits) -> [Make],
-                trusted_bits(TrustBits) -> [Bit, unsafe],
-                bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
-                math_only_bits(MathOnlyBits) -> [Math, unsafe],
-            ],
-            valid = is_even,
-            in = 0..=6,
-        ],
+        valid = is_even,
+        in = 0..=6,
+    ],
 )]
 enum Flags {
     Empty = 0,
     Read = 2,
     Write = 4,
+}
+
+#[derive(Copy, Clone)]
+#[repr(u8)]
+#[typekin::bitflag(without = [clone, copy, repr])]
+enum ManualFlag {
+    Read = 1,
 }
 
 // =============================================================================
@@ -259,6 +257,8 @@ fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
 fn unsafe_assert_panics<T>(f: impl FnOnce() -> T) {
     assert_panics(std::panic::AssertUnwindSafe(f))
 }
+
+fn accepts_copy_clone<T: Copy + Clone>() {}
 
 // =============================================================================
 
@@ -416,9 +416,7 @@ mod tests {
             Thingy::iter_values()
                 .map(ThingyValue::raw)
                 .collect::<Vec<_>>(),
-            [
-                0, 1, 2, 4
-            ]
+            [0, 1, 2, 4]
         );
     }
 
@@ -427,11 +425,7 @@ mod tests {
         let mixed = ThingyValue::from_bits_retain(0b1011);
         assert_eq!(
             mixed.iter_known_flags().collect::<Vec<_>>(),
-            [
-                Thingy::FirstThing,
-                Thingy::ReadThing,
-                Thingy::WritersBlock,
-            ]
+            [Thingy::FirstThing, Thingy::ReadThing, Thingy::WritersBlock,]
         );
     }
 
@@ -440,9 +434,7 @@ mod tests {
         let mixed = ThingyValue::from_bits_retain(0b1011);
         assert_eq!(
             mixed.iter().map(ThingyValue::raw).collect::<Vec<_>>(),
-            [
-                0, 1, 2, 8
-            ]
+            [0, 1, 2, 8]
         );
     }
 
@@ -454,11 +446,7 @@ mod tests {
                 .iter_names()
                 .map(|(name, value)| (name, value.raw()))
                 .collect::<Vec<_>>(),
-            [
-                ("FirstThing", 0),
-                ("ReadThing", 1),
-                ("WritersBlock", 2)
-            ]
+            [("FirstThing", 0), ("ReadThing", 1), ("WritersBlock", 2)]
         );
     }
 
@@ -871,13 +859,7 @@ mod tests {
 
     #[test]
     fn signed_text_round_trips() {
-        for raw in [
-            0,
-            i16::MIN,
-            -123,
-            i16::MAX,
-            -1,
-        ] {
+        for raw in [0, i16::MIN, -123, i16::MAX, -1] {
             let value = DisplaySigned::from_bits_retain(raw);
             assert_eq!(
                 DisplaySignedValue::from_str(&value.to_string())
@@ -986,9 +968,7 @@ mod tests {
         let math_source = MathOnlyBits(4);
         assert_eq!((Flags::Read.into_value() + math_source).raw(), 6);
 
-        for rhs in [
-            1, 8,
-        ] {
+        for rhs in [1, 8] {
             assert_panics(|| Flags::Read | BitOnlyBits(rhs));
             assert_panics(|| Flags::Read.into_value() | BitOnlyBits(rhs));
             assert_panics(|| Flags::Read.into_value() + MathOnlyBits(rhs));
@@ -1009,9 +989,16 @@ mod tests {
         assert_eq!(size_of::<FlagsValue>(), size_of::<u8>());
         assert_eq!(align_of::<FlagsValue>(), align_of::<u8>());
     }
+
+    #[test]
+    fn traits_and_layout_can_be_supplied_by_the_caller() {
+        accepts_copy_clone::<ManualFlag>();
+
+        assert_eq!(ManualFlag::Read.raw(), 1);
+    }
 }
 
-#[cfg(any())]
+#[cfg(test)]
 mod display_native_values {
     #[typekin::bitflag(with = display)]
     #[repr(u32)]

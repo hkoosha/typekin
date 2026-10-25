@@ -1,22 +1,16 @@
-use std::process::Command;
-
 use crate::*;
-
-const MANIFEST: &str = env!("CARGO_MANIFEST_DIR");
+use std::process::Command;
 
 #[test]
 fn unoptimized_integral() {
-    const CTX: &str = "unoptimized_asm";
-    const FIX: &str = "my_u32";
-    const OPS: &[Operation] = U32_OPERATIONS;
-    const OPZ: &str = "0";
+    let dir = make_dir("unoptimized_asm");
+    let bin = dir.join("release").join("my_u32");
 
-    let dir = make_dir(CTX);
-    let bin = dir.join("release").join(FIX);
-    build(OPZ, FIX, &dir, MANIFEST);
+    build(0, "my_u32", &dir);
+
     exe("bin", Command::new(&bin));
 
-    let (expected, unexpected) = assert_diff(&bin, OPS);
+    let (expected, unexpected) = assert_diff(&bin, U32_OPERATIONS);
     if !expected.is_empty() {
         let it = format!("expected found:\n\n{}", expected.join("\n"));
         eprintln!("{}", it);
@@ -29,17 +23,13 @@ fn unoptimized_integral() {
 
 #[test]
 fn optimized_integral() {
-    const CTX: &str = "optimized_asm";
-    const FIX: &str = "my_u32";
-    const OPS: &[Operation] = U32_OPERATIONS;
-    const OPZ: &str = "3";
+    let dir = make_dir("optimized_asm");
+    let bin = dir.join("release").join("my_u32");
 
-    let dir = make_dir(CTX);
-    let bin = dir.join("release").join(FIX);
-    build(OPZ, FIX, &dir, MANIFEST);
+    build(3, "my_u32", &dir);
     exe("bin", Command::new(&bin));
 
-    let (expected, unexpected) = assert_match(&bin, OPS);
+    let (expected, unexpected) = assert_match(&bin, U32_OPERATIONS);
     if !expected.is_empty() {
         let it = format!("expected found:\n\n{}", expected.join("\n"));
         eprintln!("{}", it);
@@ -52,17 +42,12 @@ fn optimized_integral() {
 
 #[test]
 fn optimized_integral_mapping() {
-    const CTX: &str = "optimized_map_asm";
-    const FIX: &str = "my_u32";
-    const OPS: &[Operation] = U32_MAP_OPERATIONS;
-    const OPZ: &str = "3";
-
-    let dir = make_dir(CTX);
-    let bin = dir.join("release").join(FIX);
-    build(OPZ, FIX, &dir, MANIFEST);
+    let dir = make_dir("optimized_map_asm");
+    let bin = dir.join("release").join("my_u32");
+    build(3, "my_u32", &dir);
     exe("bin", Command::new(&bin));
 
-    let (expected, unexpected) = assert_match(&bin, OPS);
+    let (expected, unexpected) = assert_match(&bin, U32_MAP_OPERATIONS);
     if !expected.is_empty() {
         let it = format!("expected found:\n\n{}", expected.join("\n"));
         eprintln!("{}", it);
@@ -75,17 +60,13 @@ fn optimized_integral_mapping() {
 
 #[test]
 fn optimized_integral_const() {
-    const CTX: &str = "optimized_asm_const";
-    const FIX: &str = "my_u32_const";
-    const OPS: &[Operation] = U32_OPERATIONS;
-    const OPZ: &str = "3";
+    let dir = make_dir("optimized_asm_const");
+    let bin = dir.join("release").join("my_u32_const");
 
-    let dir = make_dir(CTX);
-    let bin = dir.join("release").join(FIX);
-    build(OPZ, FIX, &dir, MANIFEST);
+    build(3, "my_u32_const", &dir);
     exe("bin", Command::new(&bin));
 
-    let (expected, unexpected) = assert_match(&bin, OPS);
+    let (expected, unexpected) = assert_match(&bin, U32_OPERATIONS);
     if !expected.is_empty() {
         let it = format!("expected found:\n\n{}", expected.join("\n"));
         eprintln!("{}", it);

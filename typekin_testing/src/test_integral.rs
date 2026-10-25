@@ -1,12 +1,4 @@
-#![allow(dead_code)]
-#![feature(const_closures)]
-#![feature(const_cmp)]
-#![feature(const_clone)]
-#![feature(const_convert)]
-#![feature(const_destruct)]
-#![feature(const_ops)]
-#![feature(const_trait_impl)]
-#![feature(derive_const)]
+use crate::*;
 
 #[typekin::integral(konst = nightly)]
 struct My32(u32);
@@ -257,25 +249,23 @@ impl EncodedWithDisplay {
 
 // ==============================================================================
 
-fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
-    std::panic::set_hook(Box::new(move |_| {}));
-    let result = std::panic::catch_unwind(f);
-    let _ = std::panic::take_hook();
-    assert!(result.is_err());
-}
+#[typekin::integral(without = [clone, copy, repr])]
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+struct ManualIntegral(u8);
+
+// ==============================================================================
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use core::cmp::Ordering;
-
     use serde_test::{
         Configure,
         Token,
         assert_de_tokens_error,
         assert_tokens,
     };
-
-    use super::*;
 
     #[test]
     fn trusted_const_construction_bypasses_callback_and_range_validation() {
@@ -304,9 +294,7 @@ mod tests {
 
     #[test]
     fn integral_layout_and_copy_traits_can_be_supplied_manually() {
-        fn accepts_traits<T: Copy + Clone>() {}
-
-        accepts_traits::<ManuallyDerivedIntegral>();
+        accepts_copy::<ManuallyDerivedIntegral>();
         assert_eq!(ManuallyDerivedIntegral::make(7).raw(), 7);
     }
 
@@ -347,9 +335,8 @@ mod tests {
 
     #[test]
     fn full_integral_generates_layout_and_common_traits() {
-        fn accepts_traits<T: Copy + Clone + core::hash::Hash>() {}
-
-        accepts_traits::<FullyGenerated>();
+        accepts_hash::<FullyGenerated>();
+        accepts_copy::<FullyGenerated>();
         assert_eq!(size_of::<FullyGenerated>(), 1);
         assert_eq!(align_of::<FullyGenerated>(), 1);
         assert_eq!(FULLY_GENERATED_CLONE.raw(), 23);
@@ -1480,8 +1467,7 @@ mod tests {
 
     #[test]
     fn implements_eq() {
-        fn requires_eq<T: Eq>() {}
-        requires_eq::<My32>();
+        accepts_eq::<My32>();
     }
 
     #[test]
@@ -1549,9 +1535,7 @@ mod tests {
     #[test]
     fn same_type_construction_requires_explicit_target_trust_to_bypass_validation()
      {
-        for raw in [
-            3, 12,
-        ] {
+        for raw in [3, 12] {
             let untrusted_target = Number::of(TrustSource(Box::new(raw)));
             assert_panics(|| Number::of(untrusted_target));
 
@@ -1646,9 +1630,7 @@ mod tests {
         let bit_source = BitOnlySource(Box::new(2));
         assert_eq!((Number::try_make(4).unwrap() | bit_source).raw(), 6);
 
-        for rhs in [
-            1, 8,
-        ] {
+        for rhs in [1, 8] {
             assert_panics(|| {
                 let _ = Number::try_make(4).unwrap()
                     + MathOnlySource(Box::new(rhs));
@@ -1714,5 +1696,11 @@ mod tests {
         assert_eq!(value.0, 123);
         assert_eq!(format!("{}", value), "23");
         assert_eq!(format!("{:+06}", value), "+00023");
+    }
+
+    #[test]
+    fn traits_and_layout_can_be_supplied_by_the_caller() {
+        accepts_copy::<ManualIntegral>();
+        assert_eq!(ManualIntegral::make(1).raw(), 1);
     }
 }

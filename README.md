@@ -347,6 +347,11 @@ option.
 Generation of individual features can be disabled (check integral's
 [cfg](src/integral.rs) and bitflag's [cfg](src/bitflag.rs))
 
+Integral profile options are scoped to the selected
+[profile](src/integral_profiles.rs): `profile = circular { precedes = false }`
+is accepted; `precedes` is an unknown attribute in `default` and `sequential`
+profiles.
+
 ```rust
 struct Foo(u32);
 impl Foo { fn to_u32(self) -> u32 { self.0 } }

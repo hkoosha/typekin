@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::text::Cfg;
+    use crate::zz::Konsts;
 
     #[test]
     fn accepts_friend_with_make_capability() {
@@ -285,20 +286,20 @@ mod tests {
             .expect("konst should default to the crate feature");
 
         assert_eq!(cfg.konst, crate::zz::Konst::default());
-        assert!(cfg.konst_for(&["text_access"]));
-        assert_eq!(cfg.konst_for(&["text"]), cfg!(feature = "nightly"));
+        assert!(cfg.konst_for(&[Konsts::TextAccess]));
+        assert_eq!(cfg.konst_for(&[Konsts::Text]), cfg!(feature = "nightly"));
     }
 
     #[test]
     fn accepts_integral_style_konst_modes() {
         let stable = syn::parse_str::<Cfg>("konst = stable")
             .expect("stable konst should parse");
-        assert!(stable.konst_for(&["text_access"]));
-        assert!(!stable.konst_for(&["text"]));
+        assert!(stable.konst_for(&[Konsts::TextAccess]));
+        assert!(!stable.konst_for(&[Konsts::Text]));
 
         let nightly = syn::parse_str::<Cfg>("konst = nightly")
             .expect("nightly konst should parse");
-        assert!(nightly.konst_for(&["text"]));
+        assert!(nightly.konst_for(&[Konsts::Text]));
     }
 
     #[test]
@@ -309,6 +310,14 @@ mod tests {
             error.to_string(),
             "expected `none`, `stable`, or `nightly`",
         );
+    }
+
+    #[test]
+    fn rejects_integral_only_const_flag() {
+        let result = syn::parse_str::<Cfg>("with = konst_add");
+        let error = result.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag");
     }
 
     #[test]

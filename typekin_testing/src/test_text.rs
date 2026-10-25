@@ -1,11 +1,81 @@
-extern crate alloc;
-
+use crate::*;
 use serde_test::{
     Configure,
     Token,
     assert_de_tokens_error,
     assert_tokens,
 };
+use std::alloc::GlobalAlloc;
+use std::cell::Cell;
+use std::rc::Rc;
+
+//noinspection SpellCheckingInspection
+const MY_WORD: &str = "safeé";
+
+fn valid_owned_text(value: &str) -> bool {
+    if value == "panic" {
+        panic!("validator panic");
+    }
+    return value == "safe" || value == MY_WORD;
+}
+
+#[typekin::text(valid = valid_owned_text)]
+struct OwnedText(String);
+
+fn tracked_text(value: &str) -> (OwnedText, AllocationWatch) {
+    let mut backing = String::with_capacity(64);
+    backing.push_str(value);
+    let text = OwnedText::try_make(backing).unwrap();
+    assert!(text.capacity() >= 64);
+    let watch = AllocationWatch::watch(text.as_str().as_ptr());
+    return (text, watch);
+}
+
+struct EmptySetSource(String);
+struct TrustEmptySetSource(String);
+
+fn empty_set_text(source: EmptySetSource) -> String {
+    source.0
+}
+
+fn trusted_empty_set_text(source: TrustEmptySetSource) -> String {
+    source.0
+}
+
+#[typekin::text(
+    in = [],
+    friends = [
+        empty_set_text(EmptySetSource) -> Make,
+        trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
+    ],
+)]
+struct EmptySetText(String);
+
+#[typekin::text(in = [])]
+struct CallbackEmptySetText(String);
+
+struct DropProbe(Rc<Cell<usize>>);
+
+impl DropProbe {
+    fn assert_live(&self) {
+        assert_eq!(self.0.get(), 0);
+    }
+}
+
+impl Drop for DropProbe {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() + 1);
+    }
+}
+
+// =============================================================================
+
+#[typekin::text(without = [clone, repr])]
+#[repr(transparent)]
+#[derive(Clone)]
+struct ManualText(String);
+
+// =============================================================================
 
 fn is_slug(value: &str) -> bool {
     return !value.is_empty()
@@ -34,7 +104,6 @@ impl TrustSlugSource {
 }
 
 #[typekin::text(
-    std = false,
     in = ["draft", "published"],
     friends = [
         SlugSource::into_string(SlugSource) -> Make,
@@ -43,34 +112,33 @@ impl TrustSlugSource {
 )]
 struct Slug(String);
 
-#[typekin::text(std = false)]
+#[typekin::text]
 struct PlainText(String);
 
-#[typekin::text(std = false)]
+#[typekin::text]
 struct FullyGeneratedText(String);
 
-#[typekin::text(std = false, without = [clone, repr])]
+#[typekin::text(without = [clone, repr])]
 #[repr(transparent)]
 #[derive(Clone)]
 struct ManuallyDerivedText(String);
 
 #[typekin::text(
-    std = false,
     friends = SlugSource::into_string(SlugSource) -> Make,
     valid = is_slug,
 )]
 struct CallbackText(String);
 
-#[typekin::text(std = false, valid = [is_slug, is_not_reserved])]
+#[typekin::text(valid = [is_slug, is_not_reserved])]
 struct CallbackChainText(String);
 
-#[typekin::text(std = false, in = ["", "é"])]
+#[typekin::text(in = ["", "é"])]
 struct LiteralText(String);
 
-#[typekin::text(std = false, friends = self(Self) -> [Rel])]
+#[typekin::text(friends = self(Self) -> [Rel])]
 struct DisplayText(String);
 
-#[typekin::text(std = false, without = display)]
+#[typekin::text(without = display)]
 struct NoDisplayText(String);
 
 impl core::fmt::Display for NoDisplayText {
@@ -83,7 +151,7 @@ impl core::fmt::Display for NoDisplayText {
 }
 
 thread_local! {
-    static MUTATION_CALLS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    static MUTATION_CALLS: Cell<usize> = const { Cell::new(0) };
 }
 
 fn reset() {
@@ -101,7 +169,7 @@ fn validate_mutation(value: &str) -> bool {
     return !value.is_empty() && value != "b" && !value.contains('!');
 }
 
-#[typekin::text(std = false, valid = validate_mutation)]
+#[typekin::text(valid = validate_mutation)]
 struct CheckedMutationText(String);
 
 fn validate_empty_mutation(value: &str) -> bool {
@@ -109,13 +177,13 @@ fn validate_empty_mutation(value: &str) -> bool {
     return value.is_empty();
 }
 
-#[typekin::text(std = false, valid = validate_empty_mutation)]
+#[typekin::text(valid = validate_empty_mutation)]
 struct CheckedEmptyText(String);
 
-#[typekin::text(std = false, in = ["a", "ab", "abc"])]
+#[typekin::text(in = ["a", "ab", "abc"])]
 struct MemberMutationText(String);
 
-#[typekin::text(std = false, valid = is_not_reserved)]
+#[typekin::text(valid = is_not_reserved)]
 struct MutationAllocationText(String);
 
 fn is_serde_text_valid(value: &str) -> bool {
@@ -123,14 +191,12 @@ fn is_serde_text_valid(value: &str) -> bool {
 }
 
 #[typekin::text(
-    std = false,
     valid = is_serde_text_valid,
     with = serde,
 )]
 struct SerdeText(String);
 
 #[typekin::text(
-    std = false,
     valid = is_slug,
     friends = Self::into_inner(Self) -> [Rel, unsafe],
 )]
@@ -148,7 +214,6 @@ fn trusted_text(source: TrustSource) -> String {
 }
 
 #[typekin::text(
-    std = false,
     in = [],
     friends = [
         checked_text(CheckedSource) -> Make,
@@ -157,16 +222,17 @@ fn trusted_text(source: TrustSource) -> String {
 )]
 struct EmptyDomain(String);
 
-#[typekin::text(std = false, in = [])]
+#[typekin::text(in = [])]
 struct CallbackEmptyDomain(String);
 
-#[typekin::text(std = false, in = [""])]
+#[typekin::text(in = [""])]
 struct EmptyStringOnly(String);
 
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn text_serde_uses_owned_strings_and_revalidates() {
         assert_tokens(
@@ -185,12 +251,12 @@ mod tests {
 
     #[test]
     fn full_text_generates_layout_and_clone() {
-        fn accepts_traits<
-            T: Clone + core::fmt::Debug + Eq + Ord + core::hash::Hash,
-        >() {
-        }
+        accepts_clone::<FullyGeneratedText>();
+        accepts_debug::<FullyGeneratedText>();
+        accepts_eq::<FullyGeneratedText>();
+        accepts_hash::<FullyGeneratedText>();
+        accepts_ord::<FullyGeneratedText>();
 
-        accepts_traits::<FullyGeneratedText>();
         let text = FullyGeneratedText::try_from_str("full").unwrap().clone();
         assert_eq!(text.as_str(), "full");
         assert_eq!(size_of::<FullyGeneratedText>(), size_of::<String>());
@@ -205,9 +271,7 @@ mod tests {
 
     #[test]
     fn text_layout_and_clone_can_be_supplied_manually() {
-        fn accepts_traits<T: Clone>() {}
-
-        accepts_traits::<ManuallyDerivedText>();
+        accepts_clone::<ManuallyDerivedText>();
         let text = ManuallyDerivedText::try_from_str("manual").unwrap().clone();
         assert_eq!(text.as_str(), "manual");
     }
@@ -349,10 +413,7 @@ mod tests {
 
         assert_eq!(
             ordered.keys().map(Slug::as_str).collect::<Vec<_>>(),
-            [
-                "draft",
-                "published"
-            ]
+            ["draft", "published"]
         );
     }
 
@@ -368,10 +429,7 @@ mod tests {
 
         assert_eq!(
             ordered.keys().map(Slug::as_str).collect::<Vec<_>>(),
-            [
-                "draft",
-                "published"
-            ]
+            ["draft", "published"]
         );
     }
 
@@ -387,11 +445,7 @@ mod tests {
         assert_eq!(bytes.as_ptr(), value.as_bytes().as_ptr());
         assert_eq!(
             value.char_indices().collect::<Vec<_>>(),
-            [
-                (0, 'é'),
-                (2, '🦀'),
-                (6, 'Z')
-            ]
+            [(0, 'é'), (2, '🦀'), (6, 'Z')]
         );
         assert_eq!(value.get(2..6), Some("🦀"));
         assert_eq!(value.get(1..2), None);
@@ -622,12 +676,7 @@ mod tests {
             .try_retain(move |character| state.keep(character, visited_ref))
             .unwrap();
         assert_eq!(text.as_str(), "a🍆");
-        assert_eq!(
-            visited,
-            [
-                'a', 'é', '🍆', '界'
-            ]
-        );
+        assert_eq!(visited, ['a', 'é', '🍆', '界']);
     }
 
     #[test]
@@ -869,9 +918,7 @@ mod tests {
         assert!(earlier < later);
         assert_eq!(earlier.cmp(&later), core::cmp::Ordering::Less);
         assert_eq!(earlier, RelatedText::try_from_str("draft").unwrap());
-        for invalid in [
-            "", "Draft", "é",
-        ] {
+        for invalid in ["", "Draft", "é"] {
             let checked: Result<RelatedText, ()> =
                 RelatedText::try_make(String::from(invalid));
             assert_eq!(checked, Err(()));
@@ -882,9 +929,7 @@ mod tests {
     #[test]
     fn empty_membership_rejects_every_checked_input_with_and_without_callbacks()
     {
-        for value in [
-            "", "draft", "reserved", "é🦀", "\0",
-        ] {
+        for value in ["", "draft", "reserved", "é🦀", "\0"] {
             let owned: Result<EmptyDomain, ()> =
                 EmptyDomain::try_make(String::from(value));
             let borrowed: Result<EmptyDomain, ()> =
@@ -957,10 +1002,286 @@ mod tests {
         assert_panics(|| text + "");
     }
 
-    pub fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
-        std::panic::set_hook(Box::new(move |_| {}));
-        let result = std::panic::catch_unwind(f);
-        let _ = std::panic::take_hook();
+    #[test]
+    fn traits_and_layout_can_be_supplied_by_the_caller() {
+        accepts_clone::<ManualText>();
+        assert_eq!(ManualText::try_from_str("text").unwrap().as_str(), "text");
+    }
+}
+
+#[cfg(test)]
+mod test_mutation_drop {
+    use super::*;
+    use std::cell::Cell;
+    use std::panic::AssertUnwindSafe;
+    use std::rc::Rc;
+
+    #[test]
+    fn empty_membership_releases_rejected_empty_inputs() {
+        type Construction = fn(String) -> bool;
+        let constructors: [(&str, Construction); 3] = [
+            ("checked", |raw| EmptySetText::try_make(raw).is_err()),
+            ("membership", |raw| {
+                CallbackEmptySetText::try_make(raw).is_err()
+            }),
+            ("untrusted friend", |raw| {
+                assert_panics(|| EmptySetText::of(EmptySetSource(raw)));
+                true
+            }),
+        ];
+        for (name, construct) in constructors {
+            let value = "";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::watch(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn empty_membership_releases_rejected_ascii_inputs() {
+        type Construction = fn(String) -> bool;
+        let constructors: [(&str, Construction); 3] = [
+            ("checked", |raw| EmptySetText::try_make(raw).is_err()),
+            ("membership", |raw| {
+                CallbackEmptySetText::try_make(raw).is_err()
+            }),
+            ("untrusted friend", |raw| {
+                assert_panics(|| EmptySetText::of(EmptySetSource(raw)));
+                true
+            }),
+        ];
+        for (name, construct) in constructors {
+            let value = "safe";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::watch(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn empty_membership_releases_rejected_unicode_inputs() {
+        type Construction = fn(String) -> bool;
+        let constructors: [(&str, Construction); 3] = [
+            ("checked", |raw| EmptySetText::try_make(raw).is_err()),
+            ("membership", |raw| {
+                CallbackEmptySetText::try_make(raw).is_err()
+            }),
+            ("untrusted friend", |raw| {
+                assert_panics(|| EmptySetText::of(EmptySetSource(raw)));
+                true
+            }),
+        ];
+        for (name, construct) in constructors {
+            let value = "é🦀";
+            let mut raw = String::with_capacity(64);
+            raw.push_str(value);
+            let watch = AllocationWatch::watch(raw.as_ptr());
+            assert!(construct(raw), "{name} must reject {value:?}");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn empty_membership_releases_trusted_buffers_after_rejected_noop_changes() {
+        type Mutation = fn(EmptySetText) -> bool;
+        let mutations: [Mutation; 2] = [
+            |text| text.map(|_| {}).is_err(),
+            |text| text.try_push_str("").is_err(),
+        ];
+        for mutate in mutations {
+            let mut raw = String::with_capacity(64);
+            raw.push_str("é🦀");
+            let watch = AllocationWatch::watch(raw.as_ptr());
+            let text = EmptySetText::of(TrustEmptySetSource(raw));
+            assert_eq!(watch.deallocations(), 0);
+            assert!(mutate(text));
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn successful_mutation_keeps_the_allocation_until_the_owner_is_dropped() {
+        let (text, watch) = tracked_text("safe");
+        let original_address = text.as_str().as_ptr() as usize;
+        let text = text.try_push('é').unwrap();
+        assert_eq!(text.as_str(), MY_WORD);
+        assert_eq!(text.as_str().as_ptr() as usize, original_address);
+        assert_eq!(watch.deallocations(), 0);
+        drop(text);
+        watch.assert_released();
+    }
+
+    #[test]
+    fn every_rejected_mutation_releases_the_owned_backing_allocation() {
+        type Mutation = fn(OwnedText) -> bool;
+        let mutations: [(&str, Mutation); 11] = [
+            ("push", |text| text.try_push('!').is_err()),
+            ("push_str", |text| text.try_push_str("!").is_err()),
+            ("insert", |text| text.try_insert(1, '!').is_err()),
+            ("insert_str", |text| text.try_insert_str(1, "!").is_err()),
+            ("replace_range", |text| {
+                text.try_replace_range(0..1, "x").is_err()
+            }),
+            ("truncate", |text| text.try_truncate(3).is_err()),
+            ("clear", |text| text.try_clear().is_err()),
+            ("retain", |text| {
+                text.try_retain(|character| character != 's').is_err()
+            }),
+            ("remove", |text| text.try_remove(0).is_err()),
+            ("pop", |text| text.try_pop().is_err()),
+            ("map", |text| text.map(|value| value.clear()).is_err()),
+        ];
+
+        for (name, mutate) in mutations {
+            let (text, watch) = tracked_text("safe");
+            assert!(mutate(text), "{name} must reject invalid output");
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn invalid_add_panics_and_releases_the_consumed_buffer() {
+        let (text, watch) = tracked_text("safe");
+        assert_panics(move || text + "!");
+        watch.assert_released();
+    }
+
+    #[test]
+    fn native_string_index_panics_release_the_consumed_buffer() {
+        type Mutation = fn(OwnedText);
+        let mutations: [(&str, Mutation); 9] = [
+            ("insert inside UTF-8", |text| {
+                let _ = text.try_insert(5, 'x');
+            }),
+            ("insert_str inside UTF-8", |text| {
+                let _ = text.try_insert_str(5, "x");
+            }),
+            ("remove inside UTF-8", |text| {
+                let _ = text.try_remove(5);
+            }),
+            ("replace_range inside UTF-8", |text| {
+                let _ = text.try_replace_range(5..6, "x");
+            }),
+            ("truncate inside UTF-8", |text| {
+                let _ = text.try_truncate(5);
+            }),
+            ("insert past end", |text| {
+                let _ = text.try_insert(99, 'x');
+            }),
+            ("insert_str past end", |text| {
+                let _ = text.try_insert_str(99, "x");
+            }),
+            ("remove past end", |text| {
+                let _ = text.try_remove(99);
+            }),
+            ("replace_range past end", |text| {
+                let _ = text.try_replace_range(99..100, "x");
+            }),
+        ];
+
+        for (_, mutate) in mutations {
+            let (text, watch) = tracked_text(MY_WORD);
+            assert_panics(move || mutate(text));
+            watch.assert_released();
+        }
+    }
+
+    #[test]
+    fn retain_predicate_panic_drops_partially_mutated_buffer_and_owned_capture()
+    {
+        let drops = Rc::new(Cell::new(0));
+        let probe = DropProbe(Rc::clone(&drops));
+        let (text, watch) = tracked_text("safe");
+        assert_panics(AssertUnwindSafe(move || {
+            let mut visited = 0;
+            let _ = text.try_retain(move |_| {
+                probe.assert_live();
+                visited += 1;
+                if visited == 3 {
+                    panic!("retain predicate panic");
+                }
+                return visited != 1;
+            });
+        }));
+        assert_eq!(
+            drops.get(),
+            1,
+            "predicate-owned state must be dropped once"
+        );
+        watch.assert_released();
+    }
+
+    #[test]
+    fn map_panic_drops_mutated_buffer_and_owned_capture() {
+        let drops = Rc::new(Cell::new(0));
+        let probe = DropProbe(Rc::clone(&drops));
+        let (text, watch) = tracked_text("safe");
+        assert_panics(AssertUnwindSafe(move || {
+            let _ = text.map(move |value| {
+                probe.assert_live();
+                value.clear();
+                value.push_str("invalid");
+                panic!("map callback panic");
+            });
+        }));
+        assert_eq!(drops.get(), 1, "map-owned state must be dropped once");
+        watch.assert_released();
+    }
+
+    #[test]
+    fn validator_panic_drops_the_mutated_buffer() {
+        let (text, watch) = tracked_text("safe");
+        assert_panics(AssertUnwindSafe(move || {
+            let _ = text.try_replace_range(.., "panic");
+        }));
+        watch.assert_released();
+    }
+
+    #[test]
+    fn validator_panic_after_map_drops_buffer_and_owned_capture() {
+        let drops = Rc::new(Cell::new(0));
+        let probe = DropProbe(Rc::clone(&drops));
+        let (text, watch) = tracked_text("safe");
+        assert_panics(AssertUnwindSafe(move || {
+            let _ = text.map(move |value| {
+                probe.assert_live();
+                value.clear();
+                value.push_str("panic");
+            });
+        }));
+        assert_eq!(drops.get(), 1);
+        watch.assert_released();
+    }
+
+    #[test]
+    fn rejected_map_drops_its_owned_capture_and_buffer() {
+        let drops = Rc::new(Cell::new(0));
+        let probe = DropProbe(Rc::clone(&drops));
+        let (text, watch) = tracked_text("safe");
+        let result = text.map(move |value| {
+            probe.assert_live();
+            value.clear();
+        });
         assert!(result.is_err());
+        assert_eq!(drops.get(), 1);
+        watch.assert_released();
+    }
+
+    #[test]
+    fn rejected_retain_drops_its_owned_capture_and_buffer() {
+        let drops = Rc::new(Cell::new(0));
+        let probe = DropProbe(Rc::clone(&drops));
+        let (text, watch) = tracked_text("safe");
+        let result = text.try_retain(move |_| {
+            probe.assert_live();
+            return false;
+        });
+        assert!(result.is_err());
+        assert_eq!(drops.get(), 1);
+        watch.assert_released();
     }
 }

@@ -4,6 +4,7 @@ mod tests {
         Cfg,
         resolve_repr,
     };
+    use crate::zz::Konsts;
     use crate::zz_value_type::N;
 
     #[test]
@@ -216,8 +217,8 @@ mod tests {
         let config = syn::parse_str::<Cfg>(it)
             .expect("top-level stable konst should parse");
         assert_eq!(config.int.konst, crate::zz::Konst::Stable);
-        assert!(config.int.konst_for(&["value"]));
-        assert!(!config.int.konst_for(&["math"]));
+        assert!(config.int.konst_for(&[Konsts::Value]));
+        assert!(!config.int.konst_for(&[Konsts::Math]));
     }
 
     #[test]
@@ -419,7 +420,7 @@ mod tests {
         let config = syn::parse_str::<Cfg>(it)
             .expect("matching forwarded konst flag should parse");
 
-        assert!(config.int.konst_for(&["value"]));
+        assert!(config.int.konst_for(&[Konsts::Value]));
     }
 
     #[test]
@@ -438,6 +439,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_text_only_konst_flag() {
+        let result = syn::parse_str::<Cfg>("with = [konst_text_access]");
+        let error = result.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag");
+    }
+
+    #[test]
     fn defaults_missing_konst_to_crate_default() {
         let it = "
             friends = [Foo(u8) -> Bit]
@@ -447,8 +456,11 @@ mod tests {
             .expect("konst should default to the crate feature");
 
         assert_eq!(config.int.konst, crate::zz::Konst::default());
-        assert!(config.int.konst_for(&["value"]));
-        assert_eq!(config.int.konst_for(&["math"]), cfg!(feature = "nightly"),);
+        assert!(config.int.konst_for(&[Konsts::Value]));
+        assert_eq!(
+            config.int.konst_for(&[Konsts::Math]),
+            cfg!(feature = "nightly"),
+        );
     }
 
     #[test]

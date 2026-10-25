@@ -3,7 +3,14 @@ mod tests {
     use quote::ToTokens;
 
     use crate::integral::Cfg;
-    use crate::zz::Konst;
+    use crate::integral_profiles::{
+        Arithmetic,
+        ProfileKind,
+    };
+    use crate::zz::{
+        Konst,
+        Konsts,
+    };
     use crate::zz_runner::ToCollection;
 
     #[test]
@@ -247,26 +254,38 @@ mod tests {
     }
 
     #[test]
+    fn rejects_text_only_konst_flag() {
+        let result = syn::parse_str::<Cfg>("with = [konst_text_access]");
+        let error = result.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag");
+    }
+
+    #[test]
     fn konst_flags_inherit_and_override_the_master_default() {
         let disabled = syn::parse_str::<Cfg>("konst = none")
             .expect("disabled konst should parse");
         assert!(!disabled.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
 
         let enabled = syn::parse_str::<Cfg>("konst = none, with = [konst_add]")
             .expect("an operation can opt into constness");
         assert!(enabled.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
         assert!(!enabled.konst_for(&[
-            "sub", "math"
+            Konsts::Sub,
+            Konsts::Math
         ]));
 
         let family = syn::parse_str::<Cfg>("konst = none, with = [konst_math]")
             .expect("a family can opt into constness");
         assert!(family.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
 
         let operation_override = syn::parse_str::<Cfg>(
@@ -274,36 +293,41 @@ mod tests {
         )
         .expect("an operation can override its family");
         assert!(!operation_override.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
         assert!(operation_override.konst_for(&[
-            "sub", "math"
+            Konsts::Sub,
+            Konsts::Math
         ]));
 
         let enabled = syn::parse_str::<Cfg>("konst = nightly")
             .expect("enabled konst should parse");
         assert!(enabled.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
 
         let disabled =
             syn::parse_str::<Cfg>("konst = nightly, without = [konst_add]")
                 .expect("an operation can opt out of constness");
         assert!(!disabled.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
         assert!(disabled.konst_for(&[
-            "sub", "math"
+            Konsts::Sub,
+            Konsts::Math
         ]));
 
         let map = syn::parse_str::<Cfg>("konst = none, with = [konst_map]")
             .expect("mapping can opt into constness");
-        assert!(map.konst_for(&["map"]));
+        assert!(map.konst_for(&[Konsts::Map]));
 
         let map =
             syn::parse_str::<Cfg>("konst = nightly, without = [konst_map]")
                 .expect("mapping can opt out of constness");
-        assert!(!map.konst_for(&["map"]));
+        assert!(!map.konst_for(&[Konsts::Map]));
     }
 
     #[test]
@@ -312,27 +336,33 @@ mod tests {
             .expect("default konst configuration should parse");
         assert_eq!(cfg.konst, Konst::default());
 
-        assert!(cfg.konst_for(&["try_make"]));
+        assert!(cfg.konst_for(&[Konsts::TryMake]));
         assert!(cfg.konst_for(&[
-            "core_int", "value"
+            Konsts::CoreInt,
+            Konsts::Value
         ]));
         assert_eq!(
             cfg.konst_for(&[
-                "add", "math"
+                Konsts::Add,
+                Konsts::Math
             ]),
             cfg!(feature = "nightly")
         );
-        assert_eq!(cfg.konst_for(&["friendship"]), cfg!(feature = "nightly"));
+        assert_eq!(
+            cfg.konst_for(&[Konsts::Friendship]),
+            cfg!(feature = "nightly")
+        );
         assert_eq!(cfg.konst_friendship(), cfg!(feature = "nightly"));
 
         let cfg = syn::parse_str::<Cfg>("without = [konst_try_make]")
             .expect("explicit flags override the stable master default");
-        assert!(!cfg.konst_for(&["try_make"]));
+        assert!(!cfg.konst_for(&[Konsts::TryMake]));
 
         let cfg = syn::parse_str::<Cfg>("with = [konst_add]")
             .expect("explicit flags override the stable master default");
         assert!(cfg.konst_for(&[
-            "add", "math"
+            Konsts::Add,
+            Konsts::Math
         ]));
         assert!(cfg.konst_friendship());
     }
@@ -392,6 +422,222 @@ mod tests {
         assert_eq!(config.validation.callbacks.len(), 1);
         assert_eq!(config.validation.ranges.len(), 1);
         assert!(config.has_validation());
+    }
+
+    #[test]
+    fn default_profile_preserves_integral_defaults() {
+        let input = "konst = none, profile = default {}";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.kind, ProfileKind::Default);
+        assert_eq!(config.profile.arithmetic, Arithmetic::Primitive);
+        assert!(config.flags.math_add);
+        assert!(config.flags.math_sub);
+        assert!(config.flags.self_math);
+        assert!(config.flags.self_bit);
+        assert!(config.flags.ord);
+        assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn circular_profile_resolves_restricted_defaults() {
+        let input = "
+            konst = none,
+            profile = circular {
+                precedes = false,
+            }
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.kind, ProfileKind::Circular);
+        assert_eq!(config.profile.arithmetic, Arithmetic::Wrapping);
+        assert!(!config.profile.circular_precedes);
+        assert!(config.flags.math_add);
+        assert!(config.flags.math_sub);
+        assert!(config.flags.assign_add);
+        assert!(config.flags.assign_sub);
+        assert!(!config.flags.math_mul);
+        assert!(!config.flags.math_and);
+        assert!(!config.flags.self_bit);
+        assert!(!config.flags.bit_access);
+        assert!(!config.flags.core_int);
+        assert!(!config.flags.ord);
+        assert!(!config.flags.partial_ord);
+    }
+
+    #[test]
+    fn sequential_profile_resolves_checked_policy() {
+        let input = "konst = none, profile = sequential {}";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.kind, ProfileKind::Sequential);
+        assert_eq!(config.profile.arithmetic, Arithmetic::Checked);
+        assert!(config.flags.math_add);
+        assert!(config.flags.math_sub);
+        assert!(!config.flags.math_mul);
+        assert!(!config.flags.math_xor);
+        assert!(!config.flags.self_bit);
+        assert!(config.flags.ord);
+        assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn root_flags_override_profile_body_regardless_of_attribute_order() {
+        let root_before_profile = "
+            konst = none,
+            with = [math_add],
+            profile = circular {
+                without = [math_add],
+            }
+        ";
+        let profile_before_root = "
+            konst = none,
+            profile = circular {
+                without = [math_add],
+            },
+            with = [math_add]
+        ";
+        let first = syn::parse_str::<Cfg>(root_before_profile);
+        let second = syn::parse_str::<Cfg>(profile_before_root);
+        assert!(first.is_ok(), "{root_before_profile}");
+        assert!(second.is_ok(), "{profile_before_root}");
+        let first = first.unwrap();
+        let second = second.unwrap();
+
+        assert!(first.flags.math_add);
+        assert!(second.flags.math_add);
+        assert_eq!(first.flags.math_add, second.flags.math_add);
+    }
+
+    #[test]
+    fn parses_output_type_conversion_with_generic_target() {
+        let input = "
+            konst = none,
+            out_type = crate::Point::into_offset(Self) -> Offset<u32>
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+        let out_type = config.out_type.expect("out_type should be recorded");
+
+        assert_eq!(
+            out_type.conversion.to_token_stream().to_string(),
+            "crate :: Point :: into_offset",
+        );
+        assert_eq!(
+            out_type.target.to_token_stream().to_string(),
+            "Offset < u32 >",
+        );
+        assert!(!config.flags.assign_add);
+        assert!(!config.flags.assign_sub);
+        assert!(!config.flags.assign_and);
+        assert!(!config.flags.assign_or);
+    }
+
+    #[test]
+    fn nested_integral_configuration_uses_profile_parser() {
+        struct Nested(Cfg);
+
+        impl syn::parse::Parse for Nested {
+            fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+                return Cfg::parse_with_konst(input, Konst::None).map(Self);
+            }
+        }
+
+        let input = "
+            profile = circular {
+                precedes = true,
+            }
+        ";
+        let this = syn::parse_str::<Nested>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap().0;
+
+        assert_eq!(config.profile.kind, ProfileKind::Circular);
+        assert!(config.profile.circular_precedes);
+    }
+
+    #[test]
+    fn rejects_unknown_profile() {
+        let input = "profile = affine {}";
+        let error = syn::parse_str::<Cfg>(input)
+            .expect_err("unknown profiles should be rejected");
+
+        assert_eq!(error.to_string(), "unknown profile");
+    }
+
+    #[test]
+    fn default_profile_treats_precedes_as_unknown() {
+        let input = "
+            profile = default {
+                precedes = true,
+            }
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown attribute", "{input}");
+    }
+
+    #[test]
+    fn sequential_profile_treats_precedes_as_unknown() {
+        let input = "
+            profile = sequential {
+                precedes = true,
+            }
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown attribute", "{input}");
+    }
+
+    #[test]
+    fn rejects_non_self_output_conversion_source() {
+        let input = "out_type = Point::into_offset(Point) -> Offset";
+        let error = syn::parse_str::<Cfg>(input)
+            .expect_err("out_type callbacks must take Self");
+
+        assert_eq!(
+            error.to_string(),
+            "out_type conversion requires a `Self` argument",
+        );
+    }
+
+    #[test]
+    fn rejects_linear_ordering_in_circular_profile() {
+        let input = "
+            profile = circular {},
+            with = [ord]
+        ";
+        let error = syn::parse_str::<Cfg>(input)
+            .expect_err("circular ordering must not be enabled");
+
+        assert_eq!(
+            error.to_string(),
+            "circular profiles do not support linear ordering",
+        );
+    }
+
+    #[test]
+    fn rejects_assignment_override_for_output_type() {
+        let input = "
+            out_type = Point::into_offset(Self) -> Offset,
+            with = [assign_add]
+        ";
+        let error = syn::parse_str::<Cfg>(input)
+            .expect_err("out_type cannot retain assignment operators");
+
+        assert_eq!(
+            error.to_string(),
+            "out_type cannot generate assignment operators",
+        );
     }
 
     #[test]
@@ -547,8 +793,11 @@ mod tests {
             .expect("konst should default to the crate feature");
 
         assert_eq!(config.konst, Konst::default());
-        assert!(config.konst_for(&["try_make"]));
-        assert_eq!(config.konst_for(&["math"]), cfg!(feature = "nightly"));
+        assert!(config.konst_for(&[Konsts::TryMake]));
+        assert_eq!(
+            config.konst_for(&[Konsts::Math]),
+            cfg!(feature = "nightly")
+        );
     }
 
     #[test]
