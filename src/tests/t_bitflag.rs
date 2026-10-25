@@ -200,6 +200,38 @@ mod tests {
     }
 
     #[test]
+    fn rejects_output_type_in_integral() {
+        let it = "
+            integral = [
+                out_type = FlagValue::into_output(_) -> Output
+            ]
+        ";
+        let error = syn::parse_str::<Cfg>(it)
+            .expect_err("bitflag values cannot have a custom output type");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral configuration does not support out_type",
+        );
+    }
+
+    #[test]
+    fn rejects_non_default_profile_in_integral() {
+        let it = "
+            integral = [
+                profile = circular {}
+            ]
+        ";
+        let error = syn::parse_str::<Cfg>(it)
+            .expect_err("bitflag values cannot use restricted profiles");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral configuration only supports the default profile",
+        );
+    }
+
+    #[test]
     fn accepts_konst_nightly() {
         let it = "
             konst = nightly

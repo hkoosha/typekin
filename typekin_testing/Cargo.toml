@@ -36,3 +36,9 @@ name = "my_u32_const"
 path = "src/my_u32_const.rs"
 test = false
 bench = false
+
+[[bin]]
+name = "my_sequence"
+path = "src/my_sequence.rs"
+test = false
+bench = false

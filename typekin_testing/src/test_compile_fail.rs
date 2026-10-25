@@ -212,6 +212,71 @@ mod tests {
     }
 
     #[test]
+    fn circular_profile_has_no_linear_ordering() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    konst = none,
+                    profile = circular {},
+                )]
+                struct Sequence(u8);
+
+                fn requires_ord<T: Ord>() {}
+
+                fn requires_linear_ordering() {
+                    requires_ord::<Sequence>();
+                }
+            "#;
+
+        assert_rejected(
+            "circular-profile-has-no-linear-ordering",
+            "Sequence: Ord",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn circular_profile_has_no_primitive_arithmetic() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    konst = none,
+                    profile = circular {},
+                )]
+                struct Sequence(u8);
+
+                fn requires_primitive_addition() {
+                    let _ = Sequence::make(1) + 1u8;
+                }
+            "#;
+
+        assert_rejected(
+            "circular-profile-has-no-primitive-arithmetic",
+            "the trait bound `u8: Math` is not satisfied",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn circular_profile_has_no_core_integer_helpers() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    konst = none,
+                    profile = circular {},
+                )]
+                struct Sequence(u8);
+
+                fn requires_count_ones() {
+                    let _ = Sequence::make(1).count_ones();
+                }
+            "#;
+
+        assert_rejected(
+            "circular-profile-has-no-core-integer-helpers",
+            "no method named `count_ones`",
+            SRC,
+        );
+    }
+
+    #[test]
     fn self_operators_do_not_use_friendship() {
         const SRC: &str = r#"
                 #[typekin::integral(

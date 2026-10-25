@@ -1,4 +1,7 @@
-use proc_macro2::Ident;
+use proc_macro2::{
+    Ident,
+    Span,
+};
 use syn::parse::{
     Parse,
     ParseStream,
@@ -26,73 +29,115 @@ pub(crate) enum Arithmetic {
     Checked,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) enum Profile {
-    Default {
+    #[default]
+    Default,
+    Integral {
         settings: IntSettings,
+        span: Option<Span>,
     },
     Circular {
         settings: IntSettings,
         precedes: bool,
+        span: Option<Span>,
     },
     Sequential {
         settings: IntSettings,
+        span: Option<Span>,
     },
 }
 
-impl Default for Profile {
-    fn default() -> Self {
-        return Self::Default {
-            settings: Default::default(),
-        };
-    }
-}
-
 impl Profile {
+    fn unresolved() -> ! {
+        unreachable!("default profiles must be resolved");
+    }
+
+    fn ensure_resolved(&self) {
+        if matches!(self, Self::Default) {
+            Self::unresolved();
+        }
+    }
+
     pub(crate) fn arithmetic(&self) -> Arithmetic {
         return match self {
-            Self::Default { .. } => Arithmetic::Primitive,
+            Self::Default => Self::unresolved(),
+            Self::Integral { .. } => Arithmetic::Primitive,
             Self::Circular { .. } => Arithmetic::Wrapping,
             Self::Sequential { .. } => Arithmetic::Checked,
         };
     }
 
     pub(crate) fn is_circular(&self) -> bool {
+        self.ensure_resolved();
+
         return matches!(self, Self::Circular { .. });
     }
 
-    pub(crate) fn emits_precedes(&self) -> bool {
+    pub(crate) fn is_default(&self) -> bool {
+        return matches!(self, Self::Default);
+    }
+
+    pub(crate) fn span(&self) -> Span {
         return match self {
-            Self::Circular { precedes, .. } => *precedes,
-            Self::Default { .. } | Self::Sequential { .. } => false,
+            Self::Default => Span::call_site(),
+
+            Self::Integral { span, .. }
+            | Self::Circular { span, .. }
+            | Self::Sequential { span, .. } => {
+                span.unwrap_or_else(Span::call_site)
+            }
         };
+    }
+
+    pub(crate) fn emits_precedes(&self) -> bool {
+        self.ensure_resolved();
+
+        return matches!(self, Self::Circular { precedes: true, .. });
     }
 
     pub(crate) fn int_settings(&self) -> &IntSettings {
         return match self {
-            Self::Default { settings }
+            Self::Default => Self::unresolved(),
+
+            Self::Integral { settings, .. }
             | Self::Circular { settings, .. }
-            | Self::Sequential { settings } => settings,
+            | Self::Sequential { settings, .. } => settings,
         };
     }
 
     fn settings_mut(&mut self) -> &mut IntSettings {
         return match self {
-            Self::Default { settings }
+            Self::Default => Self::unresolved(),
+
+            Self::Integral { settings, .. }
             | Self::Circular { settings, .. }
-            | Self::Sequential { settings } => settings,
+            | Self::Sequential { settings, .. } => settings,
         };
     }
 
-    pub(crate) fn apply_defaults(
+    pub(crate) fn apply(
         &self,
         flags: &mut IntegralFlags,
     ) {
         return match self {
-            Self::Default { .. } => profile_apply_default(flags),
+            Self::Default => Self::unresolved(),
+
+            Self::Integral { .. } => {}
             Self::Circular { .. } => profile_apply_circular(flags),
             Self::Sequential { .. } => profile_apply_sequential(flags),
         };
+    }
+
+    pub(crate) fn resolve(&mut self) -> &mut Self {
+        if matches!(self, Self::Default) {
+            *self = Self::Integral {
+                settings: IntSettings::default(),
+                span: None,
+            };
+        }
+
+        return self;
     }
 }
 
@@ -100,15 +145,18 @@ impl Parse for Profile {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let name = input.parse::<Ident>()?;
         let mut profile = match snake_case_of(&name.to_string()).as_str() {
-            "default" => Self::Default {
-                settings: Default::default(),
+            "default" => Self::Integral {
+                settings: IntSettings::default(),
+                span: Some(name.span()),
             },
             "circular" => Self::Circular {
-                settings: Default::default(),
+                settings: IntSettings::default(),
                 precedes: true,
+                span: Some(name.span()),
             },
             "sequential" => Self::Sequential {
-                settings: Default::default(),
+                settings: IntSettings::default(),
+                span: Some(name.span()),
             },
             _ => return Err(name.errorful::<Self>("unknown profile")),
         };
@@ -139,8 +187,6 @@ impl Parse for Profile {
         return Ok(profile);
     }
 }
-
-fn profile_apply_default(_: &mut IntegralFlags) {}
 
 fn profile_apply_circular(it: &mut IntegralFlags) {
     profile_apply_restricted_math(it);

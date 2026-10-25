@@ -431,7 +431,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert!(matches!(&config.profile, Profile::Default { .. }));
+        assert!(matches!(&config.profile, Profile::Integral { .. }));
         assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -439,6 +439,20 @@ mod tests {
         assert!(config.flags.self_bit);
         assert!(config.flags.ord);
         assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn implicit_profile_uses_integral_behavior() {
+        let mut profile = Profile::default();
+
+        assert!(matches!(&profile, Profile::Default));
+        assert!(profile.is_default());
+        profile.resolve();
+        assert!(matches!(&profile, Profile::Integral { .. }));
+        assert_eq!(profile.arithmetic(), Arithmetic::Primitive);
+        assert!(!profile.is_circular());
+        assert!(!profile.is_default());
+        assert!(!profile.emits_precedes());
     }
 
     #[test]
@@ -576,7 +590,10 @@ mod tests {
 
         impl syn::parse::Parse for Nested {
             fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-                return Cfg::parse_with_konst(input, Konst::None).map(Self);
+                let mut it =
+                    Cfg::parse_with_konst_unresolved(input, Konst::None)?;
+                it.resolve()?;
+                return Ok(Self(it));
             }
         }
 

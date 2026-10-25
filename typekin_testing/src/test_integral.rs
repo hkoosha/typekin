@@ -309,6 +309,28 @@ impl CheckedOutputSource {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct BoundedOutput(u8);
+
+impl BoundedOutput {
+    fn make(value: u8) -> Self {
+        assert!(value <= 5);
+        return Self(value);
+    }
+}
+
+#[typekin::integral(
+    konst = none,
+    out_type = TargetCheckedSource::into_output(_) -> BoundedOutput,
+)]
+struct TargetCheckedSource(u8);
+
+impl TargetCheckedSource {
+    fn into_output(self) -> BoundedOutput {
+        return BoundedOutput::make(self.raw());
+    }
+}
+
 #[typekin::integral(
     konst = none,
     out_type = Self(_) -> Self,
@@ -429,6 +451,13 @@ mod tests {
             CHECKED_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
             0,
         );
+    }
+
+    #[test]
+    fn output_type_preserves_target_validation_failure() {
+        assert_panics(|| {
+            let _ = TargetCheckedSource::make(4) + TargetCheckedSource::make(3);
+        });
     }
 
     #[test]

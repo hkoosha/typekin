@@ -57,6 +57,7 @@ use crate::zz_runner::{
 };
 use crate::zz_value_type::N;
 use crate::{
+
     zz,
     zz_runner,
 };
@@ -3437,10 +3438,11 @@ impl Cfg {
             .or_else(|| self.profile.int_settings().flags.get(name).copied());
     }
 
-    fn resolve(&mut self) -> syn::Result<()> {
+    pub(crate) fn resolve(&mut self) -> syn::Result<()> {
+        self.profile.resolve();
         self.flags = Box::default();
         self.konst_flags = self.profile.int_settings().konst_flags.clone();
-        self.profile.apply_defaults(&mut self.flags);
+        self.profile.apply(&mut self.flags);
         Self::apply_flag_settings(
             &mut self.flags,
             &self.profile.int_settings().flags,
@@ -3598,13 +3600,12 @@ impl Cfg {
         });
     }
 
-    pub(crate) fn parse_with_konst(
+    pub(crate) fn parse_with_konst_unresolved(
         input: ParseStream,
         konst: Konst,
     ) -> syn::Result<Self> {
         let mut this = Self::with_konst(konst);
         this.parse_attrs(input, false)?;
-        this.resolve()?;
         return Ok(this);
     }
 

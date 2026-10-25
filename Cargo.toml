@@ -49,6 +49,12 @@ path = "examples/my_u32_non_const.rs"
 name = "my_u32_non_const_exp"
 path = "examples/my_u32_non_const_exp.rs"
 [[example]]
+name = "my_sequence"
+path = "examples/my_sequence.rs"
+[[example]]
+name = "my_sequence_exp"
+path = "examples/my_sequence_exp.rs"
+[[example]]
 name = "my_flag"
 path = "examples/my_flag.rs"
 [[example]]

@@ -1776,6 +1776,7 @@ impl Cfg {
         }
 
         self.int.konst = self.konst;
+        self.int.profile.resolve();
         return Ok(());
     }
 
@@ -1815,8 +1816,22 @@ impl Cfg {
                 let content;
                 let _ = bracketed!(content in rest);
 
-                *self.int =
-                    integral::Cfg::parse_with_konst(&content, Konst::None)?;
+                let mut int = integral::Cfg::parse_with_konst_unresolved(
+                    &content,
+                    Konst::None,
+                )?;
+                if !int.ty_out.is_self() {
+                    return int.ty_out.conversion.span().fail(
+                        "bitflag integral configuration does not support out_type",
+                    );
+                }
+                if !int.profile.is_default() {
+                    return int.profile.span().fail(
+                        "bitflag integral configuration only supports the default profile",
+                    );
+                }
+                int.resolve()?;
+                *self.int = int;
 
                 return Ok(true);
             }

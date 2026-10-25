@@ -37,3 +37,16 @@ pub const U32_MAP_OPERATIONS: &[Operation] = &[
         "wrapped_try_map_add_u32",
     ),
 ];
+
+pub const SEQUENCE_OPERATIONS: &[Operation] = &[
+    Operation::new(
+        "circular subtraction with output conversion",
+        "raw_sub_sequence",
+        "wrapped_sub_sequence",
+    ),
+    Operation::new(
+        "circular precedes",
+        "raw_precedes_sequence",
+        "wrapped_precedes_sequence",
+    ),
+];

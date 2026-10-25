@@ -76,4 +76,15 @@ mod tests {
             U32_MAP_OPERATIONS,
         );
     }
+
+    #[test]
+    fn optimized_circular_output_asm_level3() {
+        assert_ok(
+            "optimized_circular_output_asm_level3",
+            "my_sequence",
+            3,
+            true,
+            SEQUENCE_OPERATIONS,
+        );
+    }
 }
