@@ -11,6 +11,7 @@ use proc_macro2::{
     TokenStream,
 };
 use quote::quote;
+use syn::Error;
 use syn::spanned::Spanned;
 
 macro_rules! mk_flags {
@@ -503,7 +504,7 @@ pub(crate) trait MkErr {
     fn fail<T>(
         &self,
         msg: impl Display,
-    ) -> Result<T, syn::Error> {
+    ) -> Result<T, Error> {
         return Err(self.errorful(msg));
     }
 
@@ -512,21 +513,21 @@ pub(crate) trait MkErr {
         msg: impl Display,
         spanned: impl MySpanned,
         msg1: impl Display,
-    ) -> Result<T, syn::Error> {
+    ) -> Result<T, Error> {
         return Err(self.combine(msg, spanned, msg1));
     }
 
     fn errorful(
         &self,
         msg: impl Display,
-    ) -> syn::Error;
+    ) -> Error;
 
     fn combine(
         &self,
         msg0: impl Display,
         spanned: impl MySpanned,
         msg1: impl Display,
-    ) -> syn::Error {
+    ) -> Error {
         let mut lhs = self.errorful(msg0);
         let rhs = spanned.errorful(msg1);
         lhs.combine(rhs);
@@ -538,8 +539,8 @@ impl<U: MySpanned> MkErr for U {
     fn errorful(
         &self,
         msg: impl Display,
-    ) -> syn::Error {
-        return syn::Error::new(self.my_span(), msg);
+    ) -> Error {
+        return Error::new(self.my_span(), msg);
     }
 }
 

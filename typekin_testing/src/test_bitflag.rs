@@ -16,7 +16,7 @@ pub enum Thingy {
 #[repr(u8)]
 #[typekin::bitflag(
     suffix = "Holder",
-    integral = [in = 0..=7],
+    integral = [domain = 0..=7],
 )]
 pub enum Thingy1 {
     FirstThing = 0,
@@ -57,7 +57,7 @@ enum ValueSerdeFlag {
 
 #[typekin::bitflag(
     with = serde,
-    integral = [in = 0..=7],
+    integral = [domain = 0..=7],
 )]
 #[repr(u8)]
 enum ValidatedSerdeFlag {
@@ -229,7 +229,7 @@ const fn is_even(bits: u8) -> bool {
             math_only_bits(MathOnlyBits) -> [Math, unsafe],
         ],
         valid = is_even,
-        in = 0..=6,
+        domain = 0..=6,
     ],
 )]
 enum Flags {

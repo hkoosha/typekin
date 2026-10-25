@@ -178,10 +178,18 @@ mod tests {
     #[test]
     fn accepts_literal_membership_validation() {
         let cfg = syn::parse_str::<Cfg>(
-            r#"konst = none, in = ["draft", "published"]"#,
+            r#"konst = none, domain = ["draft", "published"]"#,
         )
         .expect("literal membership configuration should parse");
         assert_eq!(cfg.values.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn rejects_renamed_in_property() {
+        let error = syn::parse_str::<Cfg>(r#"in = ["draft"]"#)
+            .expect_err("the removed `in` spelling must be rejected");
+
+        assert_eq!(error.to_string(), "`in` was renamed to `domain`",);
     }
 
     #[test]
@@ -270,13 +278,13 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_literal_membership() {
-        let input = r#"in = ["draft", "draft"]"#;
+        let input = r#"domain = ["draft", "draft"]"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_equivalent_duplicate_literal_membership() {
-        let input = r#"in = ["é", "\u{e9}"]"#;
+        let input = r#"domain = ["é", "\u{e9}"]"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -322,43 +330,43 @@ mod tests {
 
     #[test]
     fn rejects_callbacks_and_literal_membership() {
-        let input = r#"konst = none, valid = is_slug, in = ["draft"]"#;
+        let input = r#"konst = none, valid = is_slug, domain = ["draft"]"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
                 .to_string()
-                .contains("`valid` and `in` cannot be used together"),
+                .contains("`valid` and `domain` cannot be used together"),
             "{input}",
         );
     }
 
     #[test]
     fn rejects_literal_membership_and_callbacks() {
-        let input = r#"konst = none, in = ["draft"], valid = is_slug"#;
+        let input = r#"konst = none, domain = ["draft"], valid = is_slug"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
                 .to_string()
-                .contains("`valid` and `in` cannot be used together"),
+                .contains("`valid` and `domain` cannot be used together"),
             "{input}",
         );
     }
 
     #[test]
     fn rejects_unbracketed_literal_membership() {
-        let input = r#"in = "draft""#;
+        let input = r#"domain = "draft""#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_expression_literal_membership() {
-        let input = r#"in = [concat!("dra", "ft")]"#;
+        let input = r#"domain = [concat!("dra", "ft")]"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_non_string_literal_membership() {
-        let input = r#"in = ["draft", 1]"#;
+        let input = r#"domain = ["draft", 1]"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 

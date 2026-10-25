@@ -10,7 +10,7 @@ use proc_macro2::{
     TokenStream,
 };
 use quote::quote;
-pub(crate) use ranges::parse_ranges;
+pub(crate) use ranges::parse_domain;
 use syn::meta::ParseNestedMeta;
 use syn::parse::{
     Parse,
@@ -33,7 +33,11 @@ use crate::zz_runner::{
     MkErr,
     ToCollection,
 };
-use crate::zz_value_type::N;
+use crate::zz_value_type::{
+    Int,
+    N,
+    RangeEnding,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Konsts {
@@ -240,37 +244,51 @@ impl Parse for Konst {
     }
 }
 
-#[derive(Default, Clone)]
-pub(crate) struct ValidationCfg {
-    pub(crate) callbacks: Vec<Path>,
-    pub(crate) ranges: Vec<ExprRange>,
+#[derive(Clone)]
+pub(crate) struct DomainRange {
+    range: ExprRange,
+    lower: Option<Int>,
+    upper: RangeEnding,
 }
 
-impl ValidationCfg {
-    pub(crate) fn emit(
+#[derive(Clone, Default)]
+pub(crate) struct IntegralDomain {
+    ranges: Vec<DomainRange>,
+}
+
+impl IntegralDomain {
+    #[cfg(test)]
+    pub(crate) fn ranges(&self) -> impl ExactSizeIterator<Item = &ExprRange> {
+        return self.ranges.iter().map(|range| &range.range);
+    }
+
+    pub(crate) fn contains_zero(&self) -> bool {
+        let zero = Int::NonNegative(0);
+        return self.ranges.iter().any(|range| {
+            let above_lower = range.lower.is_none_or(|lower| lower <= zero);
+            let below_upper = match range.upper {
+                RangeEnding::Empty => false,
+                RangeEnding::Value(upper) => zero <= upper,
+                RangeEnding::Unbounded => true,
+            };
+            return above_lower && below_upper;
+        });
+    }
+
+    pub(crate) fn excludes_zero(&self) -> bool {
+        return !self.contains_zero();
+    }
+
+    fn validation_expression(
         &self,
         value: &TokenStream,
     ) -> TokenStream {
-        let callbacks = self
-            .callbacks
-            .iter()
-            .map(|callback| quote! { #callback(#value) })
-            .reduce(|left, right| quote! { (#left) && (#right) });
-
-        let ranges = self
+        return self
             .ranges
             .iter()
-            .map(|range| Self::range_condition(range, value))
-            .reduce(|left, right| quote! { (#left) || (#right) });
-
-        return match (callbacks, ranges) {
-            (Some(callbacks), Some(ranges)) => {
-                quote! { (#callbacks) && (#ranges) }
-            }
-            (Some(callbacks), None) => quote! { #callbacks },
-            (None, Some(ranges)) => quote! { #ranges },
-            (None, None) => quote! { true },
-        };
+            .map(|range| Self::range_condition(&range.range, value))
+            .reduce(|left, right| quote! { (#left) || (#right) })
+            .unwrap_or_else(|| quote! { false });
     }
 
     fn range_condition(
@@ -302,6 +320,39 @@ impl ValidationCfg {
     }
 }
 
+#[derive(Default, Clone)]
+pub(crate) struct ValidationCfg {
+    pub(crate) callbacks: Vec<Path>,
+    pub(crate) domain: Option<IntegralDomain>,
+    non_zero: bool,
+}
+
+impl ValidationCfg {
+    pub(crate) fn emit(
+        &self,
+        value: &TokenStream,
+    ) -> TokenStream {
+        let callbacks = self
+            .callbacks
+            .iter()
+            .map(|callback| quote! { #callback(#value) })
+            .reduce(|left, right| quote! { (#left) && (#right) });
+
+        let domain = self
+            .domain
+            .as_ref()
+            .map(|domain| domain.validation_expression(value));
+        let non_zero = self.non_zero.then(|| quote! { #value != 0 });
+
+        return callbacks
+            .into_iter()
+            .chain(domain)
+            .chain(non_zero)
+            .reduce(|left, right| quote! { (#left) && (#right) })
+            .unwrap_or_else(|| quote! { true });
+    }
+}
+
 impl Debug for ValidationCfg {
     fn fmt(
         &self,
@@ -310,14 +361,34 @@ impl Debug for ValidationCfg {
         return f
             .debug_struct("ValidationCfg")
             .field("callbacks_count", &self.callbacks.len())
-            .field("ranges_count", &self.ranges.len())
+            .field(
+                "ranges_count",
+                &self.domain.as_ref().map_or(0, |it| it.ranges.len()),
+            )
+            .field("non_zero", &self.non_zero)
             .finish();
     }
 }
 
 impl ValidationCfg {
     pub(crate) fn has_validation(&self) -> bool {
-        return !self.callbacks.is_empty() || !self.ranges.is_empty();
+        return !self.callbacks.is_empty()
+            || self.domain.is_some()
+            || self.non_zero;
+    }
+
+    pub(crate) fn domain_excludes_zero(&self) -> bool {
+        return self
+            .domain
+            .as_ref()
+            .is_some_and(IntegralDomain::excludes_zero);
+    }
+
+    pub(crate) fn require_non_zero(
+        &mut self,
+        required: bool,
+    ) {
+        self.non_zero = required;
     }
 
     pub(crate) fn parse_attr(
@@ -327,7 +398,10 @@ impl ValidationCfg {
     ) -> syn::Result<bool> {
         match attr {
             "valid" => self.callbacks = parse_callbacks(input)?,
-            "in" => self.ranges = parse_ranges(input)?,
+            "domain" => self.domain = Some(parse_domain(input)?),
+            "in" => {
+                return input.span().fail("`in` was renamed to `domain`");
+            }
             _ => return Ok(false),
         };
 
@@ -357,7 +431,11 @@ mod ranges {
         UnOp,
     };
 
-    use crate::zz::one_or_list;
+    use crate::zz::{
+        DomainRange,
+        IntegralDomain,
+        one_or_list,
+    };
     use crate::zz_runner::{
         MkErr,
         ToCollection,
@@ -368,9 +446,9 @@ mod ranges {
         RangeEnding,
     };
 
-    pub(crate) fn parse_ranges(
+    pub(crate) fn parse_domain(
         input: ParseStream
-    ) -> syn::Result<Vec<ExprRange>> {
+    ) -> syn::Result<IntegralDomain> {
         let mut ranges = one_or_list(input)?
             .map(|it| {
                 let Expr::Range(range) = it
@@ -430,9 +508,16 @@ mod ranges {
             }
         }
 
-        let fin = merged.into_iter().map(|it| it.range).vec();
-
-        return Ok(fin);
+        return Ok(IntegralDomain {
+            ranges: merged
+                .into_iter()
+                .map(|it| DomainRange {
+                    range: it.range,
+                    lower: it.lower,
+                    upper: it.upper,
+                })
+                .vec(),
+        });
     }
 
     fn integer_constant(expr: &Expr) -> syn::Result<Int> {

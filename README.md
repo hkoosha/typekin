@@ -268,17 +268,22 @@ Integral types also implement `FromStr`. Parsing first uses the wrapped
 primitive's parser and then applies the same validation; either failure returns
 `Err(())`. Use `without = [from_str]` to omit this implementation.
 
-An unvalidated integral has raw `make`. Configuring `in` or `valid` suppresses
-that constructor and exposes `try_make(raw) -> Result<Self, Raw>` instead.
+An unvalidated integral has raw `make`. Configuring `domain` or `valid`
+suppresses that constructor and exposes `try_make(raw) -> Result<Self, Raw>`
+instead.
 
-`in` accepts one range or a bracketed, comma-separated list:
-`in = [2..=4, 8..10]`. Bounds must be integer constants (including primitive
-`MIN`/`MAX` constants), not arbitrary expressions. `in` and `valid` conditions
-are ANDed; generated construction and enabled mathematical or bitwise operations
-reject values that fail them.
+`domain` accepts one range or a bracketed, comma-separated list:
+`domain = [2..=4, 8..10]`. Bounds must be integer constants (including primitive
+`MIN`/`MAX` constants), not arbitrary expressions. `domain` and `valid`
+conditions are ANDed; generated construction and enabled mathematical or bitwise
+operations reject values that fail them.
+
+`with = [non_zero]` adds a wrapper-wide nonzero constraint, including when no
+`domain` is declared. `without = [non_zero]` leaves the declared domain
+unchanged while suppressing nonzero storage inference.
 
 ```rust
-#[typekin::integral(in = [1..=1023, 49_152..=65_535])]
+#[typekin::integral(domain = [1..=1023, 49_152..=65_535])]
 struct Port(u16);
 
 fn main() {
@@ -307,7 +312,7 @@ use alloc::string::String;
 
 #[typekin::text(
     std = false,
-    in = ["draft", "news", "medical-news"],
+    domain = ["draft", "news", "medical-news"],
     // `valid = some_fn` is the alternative to literal membership.
 )]
 struct Tag(String);

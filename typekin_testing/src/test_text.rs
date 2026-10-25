@@ -43,7 +43,7 @@ fn trusted_empty_set_text(source: TrustEmptySetSource) -> String {
 }
 
 #[typekin::text(
-    in = [],
+    domain = [],
     friends = [
         empty_set_text(EmptySetSource) -> Make,
         trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
@@ -94,7 +94,7 @@ impl TrustSlugSource {
 }
 
 #[typekin::text(
-    in = ["draft", "published"],
+    domain = ["draft", "published"],
     friends = [
         SlugSource::into_string(SlugSource) -> Make,
         TrustSlugSource::into_string(TrustSlugSource) -> unsafe,
@@ -119,7 +119,7 @@ struct CallbackText(String);
 #[typekin::text(valid = [is_slug, is_not_reserved])]
 struct CallbackChainText(String);
 
-#[typekin::text(in = ["", "é"])]
+#[typekin::text(domain = ["", "é"])]
 struct LiteralText(String);
 
 #[typekin::text(friends = self(Self) -> [Rel])]
@@ -167,7 +167,7 @@ fn validate_empty_mutation(value: &str) -> bool {
 #[typekin::text(valid = validate_empty_mutation)]
 struct CheckedEmptyText(String);
 
-#[typekin::text(in = ["a", "ab", "abc"])]
+#[typekin::text(domain = ["a", "ab", "abc"])]
 struct MemberMutationText(String);
 
 #[typekin::text(valid = is_not_reserved)]
@@ -201,7 +201,7 @@ fn trusted_text(source: TrustSource) -> String {
 }
 
 #[typekin::text(
-    in = [],
+    domain = [],
     friends = [
         checked_text(CheckedSource) -> Make,
         trusted_text(TrustSource) -> [unsafe],
@@ -209,10 +209,10 @@ fn trusted_text(source: TrustSource) -> String {
 )]
 struct EmptyDomain(String);
 
-#[typekin::text(in = [])]
+#[typekin::text(domain = [])]
 struct CallbackEmptyDomain(String);
 
-#[typekin::text(in = [""])]
+#[typekin::text(domain = [""])]
 struct EmptyStringOnly(String);
 
 #[cfg(test)]

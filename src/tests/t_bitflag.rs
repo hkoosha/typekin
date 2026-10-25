@@ -251,6 +251,36 @@ mod tests {
     }
 
     #[test]
+    fn rejects_renamed_in_property_in_integral() {
+        let error = syn::parse_str::<Cfg>("integral = [in = 0..=7]")
+            .expect_err("nested integral configuration uses `domain`");
+
+        assert_eq!(error.to_string(), "`in` was renamed to `domain`",);
+    }
+
+    #[test]
+    fn rejects_non_zero_in_integral() {
+        let error = syn::parse_str::<Cfg>("integral = [with = non_zero]")
+            .expect_err("bitflag values require a zero identity");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral configuration does not support `non_zero`",
+        );
+    }
+
+    #[test]
+    fn rejects_integral_domain_that_excludes_zero() {
+        let error = syn::parse_str::<Cfg>("integral = [domain = 1..]")
+            .expect_err("bitflag domains must contain zero");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral domain must include zero",
+        );
+    }
+
+    #[test]
     fn accepts_konst_nightly() {
         let it = "
             konst = nightly

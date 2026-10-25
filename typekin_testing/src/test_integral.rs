@@ -95,28 +95,84 @@ const fn accepts_ranged(_: u8) -> bool {
     konst = nightly,
     friends = self(u8) -> [Math, Rel],
     valid = [is_even, is_not_fifty],
-    in = 2..=100,
+    domain = 2..=100,
 )]
 struct Even(u8);
 
 #[typekin::integral(
     konst = nightly,
     friends = [self(u8) -> [Math, Rel]],
-    in = [2..=4, 8..10],
+    domain = [2..=4, 8..10],
     valid = accepts_ranged,
 )]
 struct Ranged(u8);
 
-#[typekin::integral(konst = nightly, in = ..)]
+#[typekin::integral(konst = none, with = non_zero)]
+struct RequiredNonZero(u8);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroUsize(usize);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroIsize(isize);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroU8(u8);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroU16(u16);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroU32(u32);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroU64(u64);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroU128(u128);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroI8(i8);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroI16(i16);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroI32(i32);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroI64(i64);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct NonZeroI128(i128);
+
+#[typekin::integral(
+    konst = none,
+    domain = 0..=10,
+    with = non_zero,
+)]
+struct DomainRequiredNonZero(u8);
+
+#[typekin::integral(konst = none, domain = 1..)]
+struct ExplicitlyPrivateNonZero(pub(self) u8);
+
+#[typekin::integral(
+    konst = none,
+    domain = 1..=10,
+    without = non_zero,
+)]
+struct PrimitivePositive(u8);
+
+#[typekin::integral(konst = nightly, domain = ..)]
 struct AnyU8(u8);
 
-#[typekin::integral(konst = nightly, in = ..5)]
+#[typekin::integral(konst = nightly, domain = ..5)]
 struct BelowFive(u8);
 
-#[typekin::integral(konst = nightly, in = ..=5)]
+#[typekin::integral(konst = nightly, domain = ..=5)]
 struct AtMostFive(u8);
 
-#[typekin::integral(konst = nightly, in = -2..)]
+#[typekin::integral(konst = nightly, domain = -2..)]
 struct FromNegativeTwo(i8);
 
 const fn is_even_i8(value: i8) -> bool {
@@ -126,7 +182,7 @@ const fn is_even_i8(value: i8) -> bool {
 #[typekin::integral(
     konst = nightly,
     valid = is_even_i8,
-    in = [..=-6, 4..],
+    domain = [..=-6, 4..],
 )]
 struct SplitEven(i8);
 
@@ -171,7 +227,7 @@ struct Wide(u128);
     konst = nightly,
     friends = self(u8) -> [Math, unsafe],
     valid = is_even,
-    in = 2..=10,
+    domain = 2..=10,
 )]
 struct TrustEven(u8);
 
@@ -215,7 +271,7 @@ fn bit_only_raw(source: BitOnlySource) -> u8 {
         self(u8) -> Rel,
     ],
     valid = is_even,
-    in = 2..=10,
+    domain = 2..=10,
 )]
 struct Number(u8);
 
@@ -225,7 +281,7 @@ struct Number(u8);
         self(u8) -> unsafe,
     ],
     valid = is_even,
-    in = 2..=10,
+    domain = 2..=10,
 )]
 struct TrustSelfNumber(u8);
 
@@ -722,6 +778,11 @@ mod tests {
         assert_eq!(TrustEven::of(12u8).raw(), 12);
         assert_eq!(TrustEven::try_make(3), Err(3));
         assert_eq!(TrustEven::try_make(12), Err(12));
+    }
+
+    #[test]
+    fn trusted_construction_cannot_bypass_non_zero_storage() {
+        assert_panics(|| TrustEven::of(0u8));
     }
 
     #[test]
@@ -1396,6 +1457,125 @@ mod tests {
         assert_eq!(Ranged::try_make(1), Err(1));
         assert_eq!(Ranged::try_make(5), Err(5));
         assert_eq!(Ranged::try_make(10), Err(10));
+    }
+
+    #[test]
+    fn non_zero_policy_adds_and_preserves_semantic_validation() {
+        assert_eq!(RequiredNonZero::try_make(0), Err(0));
+        assert_eq!(
+            RequiredNonZero::try_make(1).map(RequiredNonZero::raw),
+            Ok(1),
+        );
+
+        assert_eq!(DomainRequiredNonZero::try_make(0), Err(0));
+        assert_eq!(
+            DomainRequiredNonZero::try_make(10).map(DomainRequiredNonZero::raw),
+            Ok(10),
+        );
+        assert_eq!(DomainRequiredNonZero::try_make(11), Err(11));
+
+        assert_eq!(PrimitivePositive::try_make(0), Err(0));
+        assert_eq!(
+            PrimitivePositive::try_make(1).map(PrimitivePositive::raw),
+            Ok(1),
+        );
+    }
+
+    #[test]
+    fn non_zero_storage_preserves_every_primitive_layout_and_niche() {
+        assert_eq!(
+            core::mem::size_of::<NonZeroUsize>(),
+            core::mem::size_of::<usize>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroUsize>>(),
+            core::mem::size_of::<usize>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroIsize>>(),
+            core::mem::size_of::<isize>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroU8>>(),
+            core::mem::size_of::<u8>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroU16>>(),
+            core::mem::size_of::<u16>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroU32>>(),
+            core::mem::size_of::<u32>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroU64>>(),
+            core::mem::size_of::<u64>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroU128>>(),
+            core::mem::size_of::<u128>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroI8>>(),
+            core::mem::size_of::<i8>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroI16>>(),
+            core::mem::size_of::<i16>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroI32>>(),
+            core::mem::size_of::<i32>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroI64>>(),
+            core::mem::size_of::<i64>(),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<NonZeroI128>>(),
+            core::mem::size_of::<i128>(),
+        );
+    }
+
+    #[test]
+    fn non_zero_storage_keeps_primitive_raw_apis() {
+        let unsigned = NonZeroU32::try_make(7).unwrap();
+        let signed = NonZeroI32::try_make(9).unwrap();
+
+        assert_eq!(unsigned.raw(), 7u32);
+        assert_eq!(signed.raw(), 9i32);
+        assert_eq!(NonZeroU32::try_make(0), Err(0));
+        assert_eq!(NonZeroI32::try_make(0), Err(0));
+    }
+
+    #[test]
+    fn explicit_non_zero_storage_has_a_niche_without_a_domain() {
+        assert_eq!(
+            core::mem::size_of::<Option<RequiredNonZero>>(),
+            core::mem::size_of::<u8>(),
+        );
+    }
+
+    #[test]
+    fn explicit_private_visibility_allows_storage_rewriting() {
+        assert_eq!(
+            ExplicitlyPrivateNonZero::try_make(7)
+                .map(ExplicitlyPrivateNonZero::raw),
+            Ok(7),
+        );
+        assert_eq!(
+            core::mem::size_of::<Option<ExplicitlyPrivateNonZero>>(),
+            core::mem::size_of::<u8>(),
+        );
+    }
+
+    #[test]
+    fn suppressing_non_zero_keeps_primitive_storage() {
+        assert_eq!(
+            core::mem::size_of::<Option<PrimitivePositive>>(),
+            core::mem::size_of::<Option<u8>>(),
+        );
+        assert_eq!(PrimitivePositive::try_make(0), Err(0));
     }
 
     #[test]

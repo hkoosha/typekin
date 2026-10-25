@@ -218,7 +218,16 @@ impl Maker {
         let impl_int = match self.cfg.bit.impl_value {
             false => TokenStream::new(),
             true => {
-                integral::Maker::new(self.vl, self.el, self.cfg.int)?.ekran()?
+                let raw = N::of(self.el.to_string()).ok_or_else(|| {
+                    syn::Error::new(self.el.span(), "unknown integral type")
+                })?;
+                integral::Maker::new(
+                    self.vl,
+                    self.el,
+                    self.cfg.int,
+                    integral::StoragePlan::primitive(raw),
+                )?
+                .ekran()?
             }
         };
 
@@ -1833,6 +1842,16 @@ impl Cfg {
                     );
                 }
                 int.resolve()?;
+                if int.non_zero == integral::NonZeroPolicy::Require {
+                    return content.span().fail(
+                        "bitflag integral configuration does not support `non_zero`",
+                    );
+                }
+                if int.validation.domain_excludes_zero() {
+                    return content
+                        .span()
+                        .fail("bitflag integral domain must include zero");
+                }
                 *self.int = int;
 
                 return Ok(true);

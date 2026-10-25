@@ -8,6 +8,8 @@ mod tests {
     use crate::integral::{
         Cfg,
         Maker,
+        NonZeroPolicy,
+        StoragePlan,
     };
     use crate::zz::{
         Konst,
@@ -19,7 +21,10 @@ mod tests {
         FacetSlotKey,
     };
     use crate::zz_runner::ToCollection;
-    use crate::zz_value_type::Operator;
+    use crate::zz_value_type::{
+        N,
+        Operator,
+    };
 
     fn expansion_of(input: &str) -> String {
         let config = syn::parse_str::<Cfg>(input);
@@ -28,6 +33,7 @@ mod tests {
             format_ident!("Point"),
             format_ident!("u32"),
             Box::new(config.unwrap()),
+            StoragePlan::primitive(crate::zz_value_type::N::U032),
         );
         assert!(maker.is_ok(), "{input}");
         let expansion = maker.unwrap().ekran();
@@ -43,6 +49,125 @@ mod tests {
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
+    }
+
+    #[test]
+    fn storage_plan_maps_every_non_zero_alias() {
+        assert_eq!(
+            StoragePlan::new(N::USIZ, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroUsize",
+        );
+        assert_eq!(
+            StoragePlan::new(N::ISIZ, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroIsize",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U008, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU8",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U016, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU16",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U032, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU32",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U064, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU64",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U128, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU128",
+        );
+        assert_eq!(
+            StoragePlan::new(N::I008, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroI8",
+        );
+        assert_eq!(
+            StoragePlan::new(N::I016, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroI16",
+        );
+        assert_eq!(
+            StoragePlan::new(N::I032, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroI32",
+        );
+        assert_eq!(
+            StoragePlan::new(N::I064, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroI64",
+        );
+        assert_eq!(
+            StoragePlan::new(N::I128, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroI128",
+        );
+    }
+
+    #[test]
+    fn storage_plan_supports_all_combined_layouts() {
+        assert_eq!(
+            StoragePlan::new(N::U032, false, false)
+                .field_type()
+                .to_string(),
+            "u32",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U032, true, false)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: NonZeroU32",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U032, false, true)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: Wrapping < u32 >",
+        );
+        assert_eq!(
+            StoragePlan::new(N::U032, true, true)
+                .field_type()
+                .to_string(),
+            ":: core :: num :: Wrapping < :: core :: num :: NonZeroU32 >",
+        );
+    }
+
+    #[test]
+    fn storage_plan_extracts_and_constructs_logical_raw_values() {
+        let storage = StoragePlan::new(N::U032, true, true);
+        assert_eq!(
+            storage.extract(quote::quote! { self.0 }).to_string(),
+            "((self . 0) . 0) . get ()",
+        );
+        let construction = storage
+            .construct(quote::quote! { Self }, quote::quote! { value })
+            .to_string();
+        assert!(construction.contains("Wrapping"));
+        assert!(construction.contains("NonZeroU32 :: new"));
+        assert!(construction.contains("Self"));
     }
 
     #[test]
@@ -72,7 +197,7 @@ mod tests {
         let input = "
             konst = none,
             friends = Foo(crate::source::Source) -> [Math, Bit],
-            in = 1..=4
+            domain = 1..=4
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -437,12 +562,16 @@ mod tests {
 
     #[test]
     fn accepts_root_validation_attributes() {
-        let config =
-            syn::parse_str::<Cfg>("konst = none, valid = is_even, in = 1..=4")
-                .expect("root validation attributes should parse");
+        let config = syn::parse_str::<Cfg>(
+            "konst = none, valid = is_even, domain = 1..=4",
+        )
+        .expect("root validation attributes should parse");
 
         assert_eq!(config.validation.callbacks.len(), 1);
-        assert_eq!(config.validation.ranges.len(), 1);
+        assert_eq!(
+            config.validation.domain.as_ref().unwrap().ranges().len(),
+            1,
+        );
         assert!(config.validation.has_validation());
     }
 
@@ -1200,23 +1329,27 @@ mod tests {
     #[test]
     fn accepts_root_validation_lists() {
         let config = syn::parse_str::<Cfg>(
-            "konst = none, valid = [is_even, is_not_fifty], in = [1..=4, 8..10, ..=0]",
+            "konst = none, valid = [is_even, is_not_fifty], domain = [1..=4, 8..10, ..=0]",
         )
             .expect("root validation lists should parse");
 
         assert_eq!(config.validation.callbacks.len(), 2);
-        assert_eq!(config.validation.ranges.len(), 2);
+        assert_eq!(
+            config.validation.domain.as_ref().unwrap().ranges().len(),
+            2,
+        );
     }
 
     #[test]
     fn merges_overlapping_and_adjacent_ranges() {
         let config = syn::parse_str::<Cfg>(
-            "konst = none, in = [10..=12, 1..3, 3..=5, 6..10]",
+            "konst = none, domain = [10..=12, 1..3, 3..=5, 6..10]",
         )
         .expect("constant ranges should parse");
 
-        assert_eq!(config.validation.ranges.len(), 1);
-        let range = &config.validation.ranges[0];
+        let domain = config.validation.domain.as_ref().unwrap();
+        assert_eq!(domain.ranges().len(), 1);
+        let range = domain.ranges().next().unwrap();
         assert_eq!(
             range.start.as_ref().unwrap().to_token_stream().to_string(),
             "1",
@@ -1231,17 +1364,20 @@ mod tests {
     #[test]
     fn accepts_primitive_integer_constants_in_ranges() {
         let config = syn::parse_str::<Cfg>(
-            "konst = none, in = [1..=u32::MAX, u32::MAX..]",
+            "konst = none, domain = [1..=u32::MAX, u32::MAX..]",
         )
         .expect("primitive integer constants should parse");
-        assert_eq!(config.validation.ranges.len(), 1);
+        assert_eq!(
+            config.validation.domain.as_ref().unwrap().ranges().len(),
+            1,
+        );
     }
 
     #[test]
     fn rejects_path_range_bound() {
         let input = "
             konst = none,
-            in = [MAX..4]
+            domain = [MAX..4]
         ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("range bounds must be integer constants");
@@ -1252,7 +1388,7 @@ mod tests {
     fn rejects_expression_range_bound() {
         let input = "
             konst = none,
-            in = [1 + 1..4]
+            domain = [1 + 1..4]
         ";
         let error = syn::parse_str::<Cfg>(input)
             .expect_err("range bounds must be integer constants");
@@ -1260,28 +1396,31 @@ mod tests {
     }
 
     #[test]
-    fn accepts_unbracketed_root_in_union_with_valid_callback() {
+    fn accepts_unbracketed_root_domain_with_valid_callback() {
         let config =
-            syn::parse_str::<Cfg>("konst = none, in = 1..2, valid = foo")
+            syn::parse_str::<Cfg>("konst = none, domain = 1..2, valid = foo")
                 .expect(
                     "an unbracketed range with a valid callback should parse",
                 );
 
         assert_eq!(config.validation.callbacks.len(), 1);
-        assert_eq!(config.validation.ranges.len(), 1);
+        assert_eq!(
+            config.validation.domain.as_ref().unwrap().ranges().len(),
+            1,
+        );
     }
 
     #[test]
-    fn rejects_non_in_validation() {
-        let error = syn::parse_str::<Cfg>("konst = none, in = [1]")
-            .expect_err("in validation needs range expressions");
+    fn rejects_non_range_domain_member() {
+        let error = syn::parse_str::<Cfg>("konst = none, domain = [1]")
+            .expect_err("domain validation needs range expressions");
 
         assert_eq!(error.to_string(), "invalid range definition");
     }
 
     #[test]
     fn rejects_plus_separated_ranges() {
-        syn::parse_str::<Cfg>("konst = none, in = [1..2 + 3..4]")
+        syn::parse_str::<Cfg>("konst = none, domain = [1..2 + 3..4]")
             .expect_err("multiple ranges use comma separators");
     }
 
@@ -1296,10 +1435,150 @@ mod tests {
             .expect_err("in is the range constraint key");
         assert_eq!(range.to_string(), "unknown attribute");
 
+        let renamed = syn::parse_str::<Cfg>("konst = none, in = 1..2")
+            .expect_err("the removed `in` spelling must be rejected");
+        assert_eq!(renamed.to_string(), "`in` was renamed to `domain`",);
+
         let validator =
             syn::parse_str::<Cfg>("konst = none, validator = is_valid")
                 .expect_err("valid is the validation callback key");
         assert_eq!(validator.to_string(), "unknown attribute");
+    }
+
+    fn assert_domain_zero_membership(
+        source: &str,
+        expected: bool,
+    ) {
+        let input = format!("konst = none, domain = {source}");
+        let config = syn::parse_str::<Cfg>(&input).unwrap();
+        let domain = config.validation.domain.as_ref().unwrap();
+        assert_eq!(domain.contains_zero(), expected, "{input}");
+        assert_eq!(domain.excludes_zero(), !expected, "{input}");
+    }
+
+    #[test]
+    fn empty_domain_excludes_zero() {
+        assert_domain_zero_membership("[]", false);
+    }
+
+    #[test]
+    fn unbounded_domain_contains_zero() {
+        assert_domain_zero_membership("..", true);
+    }
+
+    #[test]
+    fn open_zero_upper_bound_excludes_zero() {
+        assert_domain_zero_membership("..0", false);
+    }
+
+    #[test]
+    fn closed_zero_upper_bound_contains_zero() {
+        assert_domain_zero_membership("..=0", true);
+    }
+
+    #[test]
+    fn positive_domain_excludes_zero() {
+        assert_domain_zero_membership("1..", false);
+    }
+
+    #[test]
+    fn negative_domain_excludes_zero() {
+        assert_domain_zero_membership("-5..0", false);
+    }
+
+    #[test]
+    fn split_domain_excludes_zero() {
+        assert_domain_zero_membership("[-5..0, 1..]", false);
+    }
+
+    #[test]
+    fn adjacent_negative_domains_exclude_zero_after_merging() {
+        assert_domain_zero_membership("[-10..=-5, -4..0]", false);
+    }
+
+    #[test]
+    fn domain_union_contains_zero_when_any_member_does() {
+        assert_domain_zero_membership("[..=-1, 0..]", true);
+    }
+
+    #[test]
+    fn unsigned_min_constant_is_zero() {
+        assert_domain_zero_membership("u32::MIN..=u32::MIN", true);
+    }
+
+    #[test]
+    fn signed_min_constant_is_negative() {
+        assert_domain_zero_membership("i32::MIN..0", false);
+    }
+
+    #[test]
+    fn resolves_non_zero_as_a_tri_state_policy() {
+        let unspecified =
+            syn::parse_str::<Cfg>("konst = none, valid = opaque").unwrap();
+        assert_eq!(unspecified.non_zero, NonZeroPolicy::Infer);
+        assert!(!unspecified.requires_non_zero_storage());
+
+        let inferred =
+            syn::parse_str::<Cfg>("konst = none, domain = [2..10, 100..123]")
+                .unwrap();
+        assert_eq!(inferred.non_zero, NonZeroPolicy::Infer);
+        assert!(inferred.requires_non_zero_storage());
+
+        let required =
+            syn::parse_str::<Cfg>("konst = none, with = non_zero").unwrap();
+        assert_eq!(required.non_zero, NonZeroPolicy::Require);
+        assert!(required.requires_non_zero_storage());
+        assert!(
+            required
+                .validation
+                .emit(&quote::quote! { value })
+                .to_string()
+                .contains("value != 0")
+        );
+
+        let suppressed = syn::parse_str::<Cfg>(
+            "konst = none, domain = 1.., without = non_zero",
+        )
+        .unwrap();
+        assert_eq!(suppressed.non_zero, NonZeroPolicy::Suppress);
+        assert!(!suppressed.requires_non_zero_storage());
+        assert!(suppressed.validation.has_validation());
+    }
+
+    #[test]
+    fn root_non_zero_overrides_profile_setting() {
+        let config = syn::parse_str::<Cfg>(
+            "
+                konst = none,
+                without = non_zero,
+                profile = int {
+                    with = non_zero,
+                }
+            ",
+        )
+        .unwrap();
+
+        assert_eq!(config.non_zero, NonZeroPolicy::Suppress);
+    }
+
+    #[test]
+    fn rejects_facet_local_non_zero() {
+        let error = syn::parse_str::<Cfg>(
+            "
+                konst = none,
+                facets = [
+                    int {
+                        with = non_zero,
+                    },
+                ]
+            ",
+        )
+        .expect_err("facets cannot choose physical storage");
+
+        assert_eq!(
+            error.to_string(),
+            "`non_zero` is wrapper-wide and cannot be configured inside a facet",
+        );
     }
 
     #[test]

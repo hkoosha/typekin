@@ -43,7 +43,6 @@ pub(crate) mod cfg {
         Parse,
         ParseStream,
     };
-    use syn::spanned::Spanned;
     use syn::{
         Path,
         Token,
@@ -122,7 +121,7 @@ pub(crate) mod cfg {
             else {
                 let conv = input.parse::<Path>()?;
                 if conv.is_ident("Self") {
-                    return conv.span().fail(
+                    return conv.fail(
                         "friend implicit conversion is `_(Type)`, not `Self(Type)`",
                     );
                 }
@@ -444,6 +443,7 @@ pub(crate) struct ProtocolFriend {
 pub(crate) struct Construction {
     pub(crate) make: Ident,
     pub(crate) trusted: Ident,
+    pub(crate) trusted_constructor: TokenStream,
     pub(crate) checked: TokenStream,
 }
 
@@ -540,15 +540,18 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                         .capabilities
                         .contains(&construction.trusted)
                     {
-                        true => quote! { #target },
-                        false => construction.checked.clone(),
+                        true => construction.trusted_constructor.clone(),
+                        false => {
+                            let checked = &construction.checked;
+                            quote! { #checked(raw) }
+                        }
                     };
 
                     Some(quote! {
                         #[inline(always)]
                         fn make(self) -> #target {
                             let raw = <Self as #seal>::#conversion(self);
-                            return #constructor(raw);
+                            return #constructor;
                         }
                     })
                 });

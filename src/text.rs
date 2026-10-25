@@ -91,7 +91,7 @@ impl Cfg {
         input: ParseStream,
         value_if_seen: bool,
     ) -> syn::Result<()> {
-        let attrs = zz::one_or_list::<syn::Ident>(input)?;
+        let attrs = zz::one_or_list::<Ident>(input)?;
         let mut duplicated = BTreeMap::new();
 
         for attr in attrs {
@@ -150,7 +150,7 @@ impl Cfg {
         let mut seen = BTreeSet::new();
         for value in &values {
             if !seen.insert(value.value()) {
-                return value.span().fail("duplicated text literal");
+                return value.fail("duplicated text literal");
             }
         }
 
@@ -258,19 +258,22 @@ impl Parse for Cfg {
                 "error" => zz::parse_unit_error(rest)?,
                 "valid" => {
                     if this.values.is_some() {
-                        return rest
-                            .span()
-                            .fail("`valid` and `in` cannot be used together");
+                        rest.span().fail(
+                            "`valid` and `domain` cannot be used together",
+                        )?;
                     }
                     this.callbacks = zz::parse_callbacks(rest)?;
                 }
-                "in" => {
+                "domain" => {
                     if !this.callbacks.is_empty() {
-                        return rest
-                            .span()
-                            .fail("`valid` and `in` cannot be used together");
+                        rest.span().fail(
+                            "`valid` and `domain` cannot be used together",
+                        )?;
                     }
                     this.values = Some(Self::parse_values(rest)?);
+                }
+                "in" => {
+                    rest.span().fail("`in` was renamed to `domain`")?;
                 }
                 "friends" => this.parse_friends(rest)?,
                 "with" => this.parse_flags(rest, true)?,

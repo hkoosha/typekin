@@ -30,6 +30,68 @@ mod tests {
     use super::*;
 
     #[test]
+    fn integral_in_property_was_renamed() {
+        const SRC: &str = r#"
+                #[typekin::integral(in = 1..)]
+                struct Code(u8);
+            "#;
+
+        assert_rejected(
+            "integral-in-property-was-renamed",
+            "`in` was renamed to `domain`",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn text_in_property_was_renamed() {
+        const SRC: &str = r#"
+                #[typekin::text(in = ["draft"])]
+                struct State(String);
+            "#;
+
+        assert_rejected(
+            "text-in-property-was-renamed",
+            "`in` was renamed to `domain`",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn facet_cannot_select_non_zero_storage() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    facets = [
+                        int {
+                            with = non_zero,
+                        },
+                    ],
+                )]
+                struct Code(u8);
+            "#;
+
+        assert_rejected(
+            "facet-cannot-select-non-zero-storage",
+            "`non_zero` is wrapper-wide and cannot be configured inside a facet",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn rewritten_integral_storage_requires_a_private_field() {
+        const SRC: &str = r#"
+                #[typekin::integral(domain = 1..)]
+                struct Code(pub u8);
+            "#;
+
+        assert_rejected(
+            "rewritten-integral-storage-requires-private-field",
+            "integral storage can only rewrite a private tuple field",
+            SRC,
+        );
+    }
+
+    #[test]
     fn validated_integral_has_no_make() {
         const SRC: &str = r#"
                 const fn is_even(value: u8) -> bool { value % 2 == 0 }

@@ -132,6 +132,23 @@ impl N {
         };
     }
 
+    pub(crate) fn non_zero_rust_name(&self) -> &'static str {
+        return match self {
+            N::USIZ => "NonZeroUsize",
+            N::ISIZ => "NonZeroIsize",
+            N::U008 => "NonZeroU8",
+            N::U016 => "NonZeroU16",
+            N::U032 => "NonZeroU32",
+            N::U064 => "NonZeroU64",
+            N::U128 => "NonZeroU128",
+            N::I008 => "NonZeroI8",
+            N::I016 => "NonZeroI16",
+            N::I032 => "NonZeroI32",
+            N::I064 => "NonZeroI64",
+            N::I128 => "NonZeroI128",
+        };
+    }
+
     pub fn bits(&self) -> usize {
         return match self {
             N::USIZ => usize::BITS,
@@ -238,7 +255,7 @@ impl N {
                 Int::NonNegative(usize::MAX as u128),
             ),
             Self::ISIZ => (
-                Int::NonNegative(isize::MIN as u128),
+                Int::Negative((isize::MIN as i128).unsigned_abs()),
                 Int::NonNegative(isize::MAX as u128),
             ),
             Self::U008 => (
@@ -261,23 +278,23 @@ impl N {
                 (Int::NonNegative(u128::MIN), Int::NonNegative(u128::MAX))
             }
             Self::I008 => (
-                Int::Negative((i8::MIN as u128) + 1),
+                Int::Negative((i8::MIN as i128).unsigned_abs()),
                 Int::NonNegative(i8::MAX as u128),
             ),
             Self::I016 => (
-                Int::Negative((i16::MIN as u128) + 1),
+                Int::Negative((i16::MIN as i128).unsigned_abs()),
                 Int::NonNegative(i16::MAX as u128),
             ),
             Self::I032 => (
-                Int::Negative((i32::MIN as u128) + 1),
+                Int::Negative((i32::MIN as i128).unsigned_abs()),
                 Int::NonNegative(i32::MAX as u128),
             ),
             Self::I064 => (
-                Int::Negative((i64::MIN as u128) + 1),
+                Int::Negative((i64::MIN as i128).unsigned_abs()),
                 Int::NonNegative(i64::MAX as u128),
             ),
             Self::I128 => (
-                Int::Negative((i128::MIN as u128) + 1),
+                Int::Negative(i128::MIN.unsigned_abs()),
                 Int::NonNegative(i128::MAX as u128),
             ),
         };
@@ -299,7 +316,7 @@ impl Ord for Int {
             (Self::Negative(_), Self::NonNegative(_)) => Ordering::Less,
             (Self::NonNegative(_), Self::Negative(_)) => Ordering::Greater,
             (Self::NonNegative(l), Self::NonNegative(r)) => l.cmp(r),
-            (Self::Negative(l), Self::Negative(r)) => l.cmp(r),
+            (Self::Negative(l), Self::Negative(r)) => r.cmp(l),
         };
     }
 }

@@ -28,6 +28,7 @@ use syn::{
     ItemStruct,
     Path,
     Type,
+    Visibility,
     parse_quote,
 };
 
@@ -71,16 +72,169 @@ use crate::{
     zz_runner,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct StoragePlan {
+    pub(crate) raw: N,
+    pub(crate) non_zero: bool,
+    pub(crate) wrapping: bool,
+}
+
+impl StoragePlan {
+    pub(crate) fn primitive(raw: N) -> Self {
+        return Self {
+            raw,
+            non_zero: false,
+            wrapping: false,
+        };
+    }
+
+    pub(crate) fn new(
+        raw: N,
+        non_zero: bool,
+        wrapping: bool,
+    ) -> Self {
+        return Self {
+            raw,
+            non_zero,
+            wrapping,
+        };
+    }
+
+    pub(crate) fn rewrites_field(&self) -> bool {
+        return self.non_zero || self.wrapping;
+    }
+
+    pub(crate) fn field_type(&self) -> TokenStream {
+        let raw = format_ident!("{}", self.raw.rust_name());
+        let storage = if self.non_zero {
+            let non_zero = format_ident!("{}", self.raw.non_zero_rust_name());
+            quote! { ::core::num::#non_zero }
+        }
+        else {
+            quote! { #raw }
+        };
+
+        return if self.wrapping {
+            quote! { ::core::num::Wrapping<#storage> }
+        }
+        else {
+            storage
+        };
+    }
+
+    fn storage_expression(
+        &self,
+        raw: TokenStream,
+    ) -> TokenStream {
+        let storage = if self.non_zero {
+            let non_zero = format_ident!("{}", self.raw.non_zero_rust_name());
+            quote! {
+                match ::core::num::#non_zero::new(#raw) {
+                    ::core::option::Option::Some(value) => value,
+                    ::core::option::Option::None => {
+                        ::core::panic!(
+                            "zero cannot be stored by this integral type"
+                        )
+                    }
+                }
+            }
+        }
+        else {
+            raw
+        };
+
+        return if self.wrapping {
+            quote! { ::core::num::Wrapping(#storage) }
+        }
+        else {
+            storage
+        };
+    }
+
+    pub(crate) fn construct(
+        &self,
+        target: TokenStream,
+        raw: TokenStream,
+    ) -> TokenStream {
+        let storage = self.storage_expression(raw);
+        return quote! { #target(#storage) };
+    }
+
+    pub(crate) fn extract(
+        &self,
+        storage: TokenStream,
+    ) -> TokenStream {
+        let storage = if self.wrapping {
+            quote! { (#storage).0 }
+        }
+        else {
+            storage
+        };
+
+        return if self.non_zero {
+            quote! { (#storage).get() }
+        }
+        else {
+            storage
+        };
+    }
+
+    pub(crate) fn extract_ref(
+        &self,
+        storage: TokenStream,
+    ) -> TokenStream {
+        if !self.rewrites_field() {
+            return quote! { &#storage };
+        }
+
+        let raw = format_ident!("{}", self.raw.rust_name());
+        return quote! {
+            unsafe {
+                // SAFETY: NonZero integers and Wrapping are transparent
+                // over their inner values. Storage construction also ensures
+                // that every NonZero value contains a valid primitive value.
+                &*(
+                    ::core::ptr::addr_of!(#storage)
+                        .cast::<#raw>()
+                )
+            }
+        };
+    }
+
+    pub(crate) fn layout_assertions(
+        &self,
+        target: &Ident,
+    ) -> TokenStream {
+        let raw = format_ident!("{}", self.raw.rust_name());
+        return quote! {
+            if !(::core::mem::size_of::<#target>()
+                == ::core::mem::size_of::<#raw>())
+            {
+                ::core::panic!(
+                    "invalid integral storage size"
+                );
+            };
+            if !(::core::mem::align_of::<#target>()
+                == ::core::mem::align_of::<#raw>())
+            {
+                ::core::panic!(
+                    "invalid integral storage alignment"
+                );
+            };
+        };
+    }
+}
+
 pub(crate) fn integral(
     attr: Box<Cfg>,
     item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || ekran(attr, &item));
+    return zz_runner::catching(move || ekran(attr, item));
 }
 
 fn ekran(
     attr: Box<Cfg>,
-    item: &ItemStruct,
+    mut item: ItemStruct,
 ) -> syn::Result<TokenStream> {
     let ty = item.ident.clone();
 
@@ -94,22 +248,44 @@ fn ekran(
             Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
         });
 
-    let el = if let Fields::Unnamed(fields) = &item.fields
+    let (el, field) = if let Fields::Unnamed(fields) = &mut item.fields
         && fields.unnamed.len() == 1
-        && let Type::Path(field) = &fields.unnamed[0].ty
-        && let Some(id) = field.path.get_ident()
+        && let Some(field) = fields.unnamed.first_mut()
+        && let Type::Path(path) = &field.ty
+        && let Some(id) = path.path.get_ident()
         && N::rust_names().contains(&id.to_string().as_str())
     {
-        id.clone()
+        (id.clone(), field)
     }
     else {
-        return item.fail(
+        return item.ident.fail(
             "expected a tuple struct with exactly one field \
             of primitive integral type",
         );
     };
 
-    let it = Maker::new(ty, el, attr)?.ekran()?;
+    let raw = N::of(el.to_string())
+        .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
+    let storage =
+        StoragePlan::new(raw, attr.requires_non_zero_storage(), false);
+    if storage.rewrites_field() {
+        let private = match &field.vis {
+            Visibility::Inherited => true,
+            Visibility::Restricted(visibility) => {
+                visibility.path.is_ident("self")
+            }
+            Visibility::Public(_) => false,
+        };
+        if !private {
+            return field.vis.fail(
+                "integral storage can only rewrite a private tuple field",
+            );
+        }
+        field.ty = syn::parse2(storage.field_type())
+            .expect("storage plans emit valid field types");
+    }
+
+    let it = Maker::new(ty, el, attr, storage)?.ekran()?;
 
     let stream = quote::quote! {
         #repr
@@ -130,6 +306,7 @@ fn ekran(
 
 pub(crate) struct Maker {
     repr: N,
+    storage: StoragePlan,
     el: Ident,
     ty: Ident,
 
@@ -151,6 +328,7 @@ impl Maker {
         ty: Ident,
         el: Ident,
         cfg: Box<Cfg>,
+        storage: StoragePlan,
     ) -> syn::Result<Self> {
         let cfg = Self::preprocess_cfg(cfg);
 
@@ -174,6 +352,7 @@ impl Maker {
             repr: N::of(el.to_string()).ok_or_else(|| {
                 syn::Error::new(el.span(), "unknown integral type")
             })?,
+            storage,
             el,
             ty,
             cfg,
@@ -534,6 +713,8 @@ impl Maker {
         {
             segment.ident = target.clone();
         }
+        let trusted =
+            self.storage.construct(quote! { #target }, quote! { raw });
 
         let protocol = crate::friendship::emit_protocol(Protocol {
             target,
@@ -547,6 +728,7 @@ impl Maker {
             construction: Some(Construction {
                 make: self.trait_friend_make.clone(),
                 trusted: crate::friendship::cfg::trust_capability(),
+                trusted_constructor: trusted,
                 checked: quote! { #checked },
             }),
             konst: self.cfg.konst_friendship(),
@@ -587,6 +769,7 @@ impl Maker {
         let el = &self.el;
         let fp_unchecked = &self.fp_unchecked;
         let fp_get_raw = &self.fp_get_raw;
+        let raw = self.storage.extract(quote! { self.0 });
 
         let mut stream = TokenStream::new();
 
@@ -639,7 +822,7 @@ impl Maker {
                 #[must_use]
                 #[inline(always)]
                 pub const fn #get_raw(self) -> #el {
-                    return self.0;
+                    return #raw;
                 }
             };
             stream.extend(it);
@@ -674,6 +857,8 @@ impl Maker {
             let destruct = zz_runner::destruct(is_konst);
             let value = quote! { value };
             let validation = self.cfg.validation.emit(&value);
+            let constructed =
+                self.storage.construct(quote! { Self }, value.clone());
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_map<F>(
@@ -685,7 +870,7 @@ impl Maker {
                 {
                     let value = function(#fp_get_raw(self));
                     return if #validation {
-                        ::core::result::Result::Ok(Self(value))
+                        ::core::result::Result::Ok(#constructed)
                     }
                     else {
                         ::core::result::Result::Err(value)
@@ -1006,11 +1191,13 @@ impl Maker {
                 zz_runner::konst(self.cfg.konst_for(&[Konsts::TryMake]));
             let value = quote! { it };
             let validation = self.cfg.validation.emit(&value);
+            let constructed =
+                self.storage.construct(quote! { Self }, value.clone());
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_make(it: #el) -> Result<Self, #el> {
                     return if #validation {
-                        return ::core::result::Result::Ok(Self(it));
+                        return ::core::result::Result::Ok(#constructed);
                     }
                     else {
                         ::core::result::Result::Err(it)
@@ -1037,12 +1224,14 @@ impl Maker {
         {
             let value = quote! { it };
             let validation = self.cfg.validation.emit(&value);
+            let constructed =
+                self.storage.construct(quote! { Self }, value.clone());
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
                 pub(self) const fn _unchecked(it: #el) -> Self {
                     if #validation {
-                        return Self(it);
+                        return #constructed;
                     }
                     else {
                         ::core::panic!("invalid value");
@@ -1054,11 +1243,13 @@ impl Maker {
         else if self.cfg.flags.fn_make_checked
             && !self1.validation.has_validation()
         {
+            let constructed =
+                self.storage.construct(quote! { Self }, quote! { it });
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
                 pub(self) const fn _unchecked(it: #el) -> Self {
-                    return Self(it);
+                    return #constructed;
                 }
             };
             stream.extend(it);
@@ -1071,12 +1262,14 @@ impl Maker {
             ]));
             let value = quote! { value };
             let validation = self.cfg.validation.emit(&value);
+            let constructed =
+                self.storage.construct(quote! { Self }, value.clone());
             let it = quote! {
                 #[inline(always)]
                 #[track_caller]
                 pub(self) #konst fn _core_int(value: #el) -> Self {
                     if #validation {
-                        return Self(value);
+                        return #constructed;
                     }
                     else {
                         ::core::panic!("operation produced an invalid value");
@@ -1088,7 +1281,7 @@ impl Maker {
                     value: #el,
                 ) -> ::core::option::Option<Self> {
                     return if #validation {
-                        ::core::option::Option::Some(Self(value))
+                        ::core::option::Option::Some(#constructed)
                     }
                     else {
                         ::core::option::Option::None
@@ -1115,6 +1308,9 @@ impl Maker {
         let fn_conv = &self.fn_conv;
         let fp_friend_conv = quote! { #trait_seal::#fn_conv };
         let fp_get_raw = &self.fp_get_raw;
+        let rhs_raw = self.storage.extract(quote! { rhs.0 });
+        let self_raw = self.storage.extract(quote! { self.0 });
+        let self_raw_ref = self.storage.extract_ref(quote! { self.0 });
 
         let global_operators = !self.cfg.facets_present();
         let with_self_math = self.cfg.flags.self_math && global_operators;
@@ -1136,7 +1332,7 @@ impl Maker {
                 impl ::core::convert::AsRef<#el> for #ty {
                     #[inline(always)]
                     fn as_ref(&self) -> &#el {
-                        return &self.0;
+                        return #self_raw_ref;
                     }
                 }
             };
@@ -1144,6 +1340,8 @@ impl Maker {
         }
 
         if self.cfg.flags.from_str {
+            let constructed =
+                self.storage.construct(quote! { Self }, quote! { value });
             stream.extend(quote! {
                 impl ::core::str::FromStr for #ty {
                     type Err = ();
@@ -1161,7 +1359,7 @@ impl Maker {
                             };
 
                         return if #validation {
-                            ::core::result::Result::Ok(Self(value))
+                            ::core::result::Result::Ok(#constructed)
                         }
                         else {
                             ::core::result::Result::Err(())
@@ -1172,6 +1370,8 @@ impl Maker {
         }
 
         if self.cfg.flags.serde {
+            let constructed =
+                self.storage.construct(quote! { Self }, quote! { value });
             stream.extend(quote! {
                 impl ::serde::Serialize for #ty {
                     #[inline(always)]
@@ -1204,7 +1404,7 @@ impl Maker {
                             )?;
 
                         return if #validation {
-                            ::core::result::Result::Ok(Self(value))
+                            ::core::result::Result::Ok(#constructed)
                         }
                         else {
                             ::core::result::Result::Err(
@@ -2322,7 +2522,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._bitand(rhs.0);
+                            *self = self._bitand(#rhs_raw);
                         }
                     }
                 });
@@ -2363,7 +2563,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._add(rhs.0);
+                            *self = self._add(#rhs_raw);
                         }
                     }
                 });
@@ -2404,7 +2604,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._sub(rhs.0);
+                            *self = self._sub(#rhs_raw);
                         }
                     }
                 });
@@ -2445,7 +2645,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._mul(rhs.0);
+                            *self = self._mul(#rhs_raw);
                         }
                     }
                 });
@@ -2486,7 +2686,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._div(rhs.0);
+                            *self = self._div(#rhs_raw);
                         }
                     }
                 });
@@ -2527,7 +2727,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._rem(rhs.0);
+                            *self = self._rem(#rhs_raw);
                         }
                     }
                 });
@@ -2568,7 +2768,7 @@ impl Maker {
                             &mut self,
                             rhs: Self,
                         ) {
-                            *self = self._bitor(rhs.0);
+                            *self = self._bitor(#rhs_raw);
                         }
                     }
                 });
@@ -2606,7 +2806,7 @@ impl Maker {
                     ) -> ::core::fmt::Result {
                         return f
                             .debug_tuple(#name)
-                            .field(&self.0)
+                            .field(&#self_raw)
                             .finish();
                     }
                 }
@@ -2625,7 +2825,7 @@ impl Maker {
                     where
                         H: ::core::hash::Hasher,
                     {
-                        return ::core::hash::Hash::hash(&self.0, state);
+                        return ::core::hash::Hash::hash(&#self_raw, state);
                     }
                 }
             };
@@ -2662,14 +2862,7 @@ impl Maker {
         }
 
         if self.cfg.flags.assertions {
-            let it = quote! {
-                if !(::core::mem::size_of::<#ty>() == ::core::mem::size_of::<#el>()) {
-                    panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
-                };
-                if !(::core::mem::align_of::<#ty>() == ::core::mem::align_of::<#el>()) {
-                    panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
-                };
-            };
+            let it = self.storage.layout_assertions(ty);
             stream.extend(it);
         }
 
@@ -2682,7 +2875,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._add(rhs.0) });
+                let result = output.convert(quote! { self._add(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Add for #ty {
                         type Output = #output_ty;
@@ -2728,7 +2921,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._sub(rhs.0) });
+                let result = output.convert(quote! { self._sub(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Sub for #ty {
                         type Output = #output_ty;
@@ -2774,7 +2967,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._mul(rhs.0) });
+                let result = output.convert(quote! { self._mul(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Mul for #ty {
                         type Output = #output_ty;
@@ -2821,7 +3014,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._div(rhs.0) });
+                let result = output.convert(quote! { self._div(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Div for #ty {
                         type Output = #output_ty;
@@ -2868,7 +3061,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._rem(rhs.0) });
+                let result = output.convert(quote! { self._rem(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Rem for #ty {
                         type Output = #output_ty;
@@ -2915,7 +3108,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitand(rhs.0) });
+                let result = output.convert(quote! { self._bitand(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitAnd for #ty {
                         type Output = #output_ty;
@@ -2961,7 +3154,7 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitor(rhs.0) });
+                let result = output.convert(quote! { self._bitor(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitOr for #ty {
                         type Output = #output_ty;
@@ -3016,7 +3209,7 @@ impl Maker {
             let assign_bounds = bounds_for(&assign_flags);
             if with_self_bit {
                 let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitxor(rhs.0) });
+                let result = output.convert(quote! { self._bitxor(#rhs_raw) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitXor for #ty {
                         type Output = #output_ty;
@@ -3039,7 +3232,7 @@ impl Maker {
                                 &mut self,
                                 rhs: Self,
                             ) {
-                                *self = self._bitxor(rhs.0);
+                                *self = self._bitxor(#rhs_raw);
                             }
                         }
                     });
@@ -3396,6 +3589,14 @@ pub(crate) struct IntSettings {
     seen: BTreeMap<String, bool>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum NonZeroPolicy {
+    #[default]
+    Infer,
+    Require,
+    Suppress,
+}
+
 #[derive(Default)]
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
@@ -3407,6 +3608,7 @@ pub(crate) struct Cfg {
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) non_zero: NonZeroPolicy,
     pub(crate) ty_out: SelfConverter,
     pub(crate) profile: Profiles,
     pub(crate) facets: Vec<FacetCfg>,
@@ -3416,6 +3618,15 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
+    #[allow(dead_code)]
+    pub(crate) fn requires_non_zero_storage(&self) -> bool {
+        return match self.non_zero {
+            NonZeroPolicy::Infer => self.validation.domain_excludes_zero(),
+            NonZeroPolicy::Require => true,
+            NonZeroPolicy::Suppress => false,
+        };
+    }
+
     pub(crate) fn facets_present(&self) -> bool {
         return self.facets_present;
     }
@@ -3517,6 +3728,12 @@ impl Cfg {
             }
 
             for (name, (enabled, span)) in &settings.flags {
+                if name == "non_zero" {
+                    return span.fail(
+                        "`non_zero` is wrapper-wide and cannot be configured inside a facet",
+                    );
+                }
+
                 if name.starts_with("assign_") {
                     if *enabled {
                         return span.fail(
@@ -3804,6 +4021,14 @@ impl Cfg {
     }
 
     pub(crate) fn resolve(&mut self) -> syn::Result<()> {
+        self.non_zero = match self.explicit_flag("non_zero") {
+            Some((true, _)) => NonZeroPolicy::Require,
+            Some((false, _)) => NonZeroPolicy::Suppress,
+            None => NonZeroPolicy::Infer,
+        };
+        self.validation
+            .require_non_zero(self.non_zero == NonZeroPolicy::Require);
+
         *self.flags = IntegralFlags::default();
         self.konst_flags.clear();
         for profile in self.profile.iter() {
@@ -4021,6 +4246,7 @@ impl Debug for Cfg {
             .field("get_raw", &self.get_raw.to_token_stream().to_string())
             .field("validation", &self.validation)
             .field("friends", &self.friends)
+            .field("non_zero", &self.non_zero)
             .field("ty_out", &!self.ty_out.is_self())
             .field("profile", &self.profile.arithmetic())
             .field("facet_slots", &self.facet_slots)
@@ -4119,6 +4345,7 @@ mk_flags! {
         pub serde: bool = false,
         pub try_into: bool,
         pub with_const_map_fn: bool = false,
+        pub non_zero: bool = false,
 
         pub assign_add: bool,
         pub assign_and: bool,
