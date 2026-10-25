@@ -9,7 +9,7 @@ mod tests {
     };
     use crate::zz_profile::{
         Arithmetic,
-        IntProfile,
+        Profile,
     };
     use crate::zz_runner::ToCollection;
 
@@ -431,8 +431,8 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.profile, IntProfile::Default);
-        assert_eq!(config.profile.arithmetic, Arithmetic::Primitive);
+        assert!(matches!(&config.profile, Profile::Default { .. }));
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
         assert!(config.flags.self_math);
@@ -453,9 +453,14 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.profile, IntProfile::Circular);
-        assert_eq!(config.profile.arithmetic, Arithmetic::Wrapping);
-        assert!(!config.profile.circular_precedes);
+        assert!(matches!(
+            &config.profile,
+            Profile::Circular {
+                precedes: false,
+                ..
+            }
+        ));
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Wrapping);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
         assert!(config.flags.assign_add);
@@ -476,8 +481,8 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.profile, IntProfile::Sequential);
-        assert_eq!(config.profile.arithmetic, Arithmetic::Checked);
+        assert!(matches!(&config.profile, Profile::Sequential { .. }));
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Checked);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
         assert!(!config.flags.math_mul);
@@ -584,8 +589,10 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap().0;
 
-        assert_eq!(config.profile.profile, IntProfile::Circular);
-        assert!(config.profile.circular_precedes);
+        assert!(matches!(
+            &config.profile,
+            Profile::Circular { precedes: true, .. }
+        ));
     }
 
     #[test]

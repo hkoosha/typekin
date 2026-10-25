@@ -45,10 +45,7 @@ use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
 };
-use crate::zz_profile::{
-    IntProfile,
-    ProfileConfig,
-};
+use crate::zz_profile::Profile;
 use crate::zz_runner::{
     Merged,
     MkErr,
@@ -3239,7 +3236,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) ty_out: SelfConverter,
-    pub(crate) profile: ProfileConfig,
+    pub(crate) profile: Profile,
 }
 
 impl Cfg {
@@ -3331,21 +3328,21 @@ impl Cfg {
             .root_flags
             .get(name)
             .copied()
-            .or_else(|| self.profile.settings.flags.get(name).copied());
+            .or_else(|| self.profile.int_settings().flags.get(name).copied());
     }
 
     fn resolve(&mut self) -> syn::Result<()> {
         self.flags = Box::default();
-        self.konst_flags = self.profile.settings.konst_flags.clone();
+        self.konst_flags = self.profile.int_settings().konst_flags.clone();
         self.profile.apply_defaults(&mut self.flags);
         Self::apply_flag_settings(
             &mut self.flags,
-            &self.profile.settings.flags,
+            &self.profile.int_settings().flags,
         );
         Self::apply_flag_settings(&mut self.flags, &self.root_flags);
         self.konst_flags.extend(self.root_konst_flags.clone());
 
-        if matches!(self.profile.profile, IntProfile::Circular) {
+        if self.profile.is_circular() {
             for name in [
                 "ord",
                 "partial_ord",
@@ -3487,7 +3484,7 @@ impl Cfg {
                 "friends" => self.friends = Self::parse_friends(rest)?,
                 "get_raw" => self.get_raw = Some(rest.parse()?),
                 "out_type" => self.ty_out = rest.parse()?,
-                "profile" => self.profile = ProfileConfig::parse(rest)?,
+                "profile" => self.profile = rest.parse()?,
                 _ => return Ok(false),
             };
 
@@ -3579,7 +3576,7 @@ impl Debug for Cfg {
             .field("validation", &self.validation)
             .field("friends", &self.friends)
             .field("ty_out", &!self.ty_out.is_self())
-            .field("profile", &self.profile.profile)
+            .field("profile", &self.profile.arithmetic())
             .field("flags", &self.flags)
             .finish_non_exhaustive();
     }

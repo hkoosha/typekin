@@ -221,26 +221,6 @@ impl ValidationCfg {
     }
 }
 
-pub(crate) trait UcFirst {
-    fn ucfirst(self) -> String;
-}
-
-impl UcFirst for String {
-    fn ucfirst(mut self) -> String {
-        if let Some(r) = self.get_mut(0..1) {
-            r.make_ascii_uppercase();
-        }
-
-        return self;
-    }
-}
-
-impl UcFirst for &str {
-    fn ucfirst(self) -> String {
-        return self.to_string().ucfirst();
-    }
-}
-
 pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
     let error: Type = input.parse()?;
 
