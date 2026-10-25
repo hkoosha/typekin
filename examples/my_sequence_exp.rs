@@ -20,6 +20,11 @@ const _: () = {
     trait Math: Seal {}
     trait Bit: Seal {}
     trait Rel: Seal {}
+    #[doc = "# Safety"]
+    #[doc = ""]
+    #[doc = "Implementing this trait asserts that values \
+                        produced by the sealed conversion satisfy every \
+                        invariant required by the target type."]
     unsafe trait UnsafeTrust: Seal {}
     impl Seal for SeqPoint {
         #[inline(always)]
@@ -653,6 +658,11 @@ const _: () = {
     trait Math: Seal {}
     trait Bit: Seal {}
     trait Rel: Seal {}
+    #[doc = "# Safety"]
+    #[doc = ""]
+    #[doc = "Implementing this trait asserts that values \
+                        produced by the sealed conversion satisfy every \
+                        invariant required by the target type."]
     unsafe trait UnsafeTrust: Seal {}
     impl Seal for SeqOffset {
         #[inline(always)]

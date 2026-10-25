@@ -47,7 +47,7 @@ use crate::zz_conv::{
 };
 use crate::zz_profile::{
     Arithmetic,
-    Profile,
+    Profiles,
 };
 use crate::zz_runner::{
     Merged,
@@ -3342,7 +3342,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) ty_out: SelfConverter,
-    pub(crate) profile: Profile,
+    pub(crate) profile: Profiles,
 }
 
 impl Cfg {
@@ -3430,22 +3430,35 @@ impl Cfg {
         &self,
         name: &str,
     ) -> Option<(bool, Span)> {
-        return self
-            .root_flags
-            .get(name)
-            .copied()
-            .or_else(|| self.profile.int_settings().flags.get(name).copied());
+        if let Some(setting) = self.root_flags.get(name) {
+            return Some(*setting);
+        }
+
+        let mut setting = None;
+        for profile in self.profile.iter() {
+            if profile.resets_flag(name) {
+                setting = None;
+            }
+            if let Some(value) = profile.int_settings().flags.get(name) {
+                setting = Some(*value);
+            }
+        }
+
+        return setting;
     }
 
     pub(crate) fn resolve(&mut self) -> syn::Result<()> {
-        self.profile.resolve();
-        self.flags = Box::default();
-        self.konst_flags = self.profile.int_settings().konst_flags.clone();
-        self.profile.apply(&mut self.flags);
-        Self::apply_flag_settings(
-            &mut self.flags,
-            &self.profile.int_settings().flags,
-        );
+        *self.flags = IntegralFlags::default();
+        self.konst_flags.clear();
+        for profile in self.profile.iter() {
+            profile.apply(&mut self.flags);
+            Self::apply_flag_settings(
+                &mut self.flags,
+                &profile.int_settings().flags,
+            );
+            self.konst_flags
+                .extend(profile.int_settings().konst_flags.clone());
+        }
         Self::apply_flag_settings(&mut self.flags, &self.root_flags);
         self.konst_flags.extend(self.root_konst_flags.clone());
 

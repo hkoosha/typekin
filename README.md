@@ -386,13 +386,22 @@ bit access are disabled by default. A profile body can use `with` and `without`
 to change its operation set; re-enabled arithmetic uses that profile's wrapping
 or checked policy. Bitwise operations retain ordinary bitwise semantics.
 
+`profile` accepts one profile or an ordered list. Resolution starts from the
+default integral profile, then applies each profile's defaults and body in list
+order. Untouched settings carry forward, later settings win, and root-level
+`with` and `without` are applied last.
+
 ```rust
 #[typekin::integral(
     konst = none,
-    profile = circular {
-        precedes = true,
-        without = math_add,
-    },
+    profile = [
+        default {
+            without = math_add,
+        },
+        circular {
+            precedes = true,
+        },
+    ],
     out_type = SeqPoint::into_offset(_) -> SeqOffset,
 )]
 struct SeqPoint(u32);

@@ -1776,7 +1776,6 @@ impl Cfg {
         }
 
         self.int.konst = self.konst;
-        self.int.profile.resolve();
         return Ok(());
     }
 

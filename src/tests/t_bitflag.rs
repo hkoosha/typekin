@@ -219,7 +219,10 @@ mod tests {
     fn rejects_non_default_profile_in_integral() {
         let it = "
             integral = [
-                profile = circular {}
+                profile = [
+                    default {},
+                    circular {},
+                ]
             ]
         ";
         let error = syn::parse_str::<Cfg>(it)

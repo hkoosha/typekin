@@ -11,16 +11,50 @@ fn convert_for_bit(it: Thing0) -> u128 {
     return it.0.bitxor(0b01);
 }
 
-#[typekin::friends(
-    relation = u128,
-    friends = [
-        convert_for_make(Thing0) -> [Make],
-        convert_for_bit(Thing0) -> [Bit],
-    ],
-    scope = things,
-)]
 #[derive(Debug, Clone, Copy)]
 pub struct Thingy(u128);
+
+mod things {
+    pub(super) trait Seal {}
+    #[allow(unused, dead_code)]
+    pub(super) trait Bit: Seal {
+        fn to_u128(self) -> u128;
+    }
+    #[allow(unused, dead_code)]
+    pub(super) trait Make: Seal {
+        fn to_u128(self) -> u128;
+    }
+    impl Seal for super::Thing0 {}
+    impl Bit for super::Thing0 {
+        #[inline(always)]
+        fn to_u128(self) -> u128 {
+            return super::convert_for_bit(self);
+        }
+    }
+    impl Make for super::Thing0 {
+        #[inline(always)]
+        fn to_u128(self) -> u128 {
+            return super::convert_for_make(self);
+        }
+    }
+    impl super::Thingy {
+        #[allow(private_bounds)]
+        #[inline(always)]
+        pub fn of<T>(it: T) -> Self
+        where
+            T: Make + Seal,
+        {
+            return Self::of_parts(<T as Make>::to_u128(it));
+        }
+    }
+    impl Seal for u128 {}
+    impl Make for u128 {
+        #[inline(always)]
+        fn to_u128(self) -> u128 {
+            return self;
+        }
+    }
+}
 
 impl Thingy {
     fn of_parts(it: u128) -> Self {

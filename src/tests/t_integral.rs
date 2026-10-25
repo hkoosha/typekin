@@ -7,10 +7,7 @@ mod tests {
         Konst,
         Konsts,
     };
-    use crate::zz_profile::{
-        Arithmetic,
-        Profile,
-    };
+    use crate::zz_profile::Arithmetic;
     use crate::zz_runner::ToCollection;
 
     #[test]
@@ -431,7 +428,6 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert!(matches!(&config.profile, Profile::Integral { .. }));
         assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -443,16 +439,28 @@ mod tests {
 
     #[test]
     fn implicit_profile_uses_integral_behavior() {
-        let mut profile = Profile::default();
+        let input = "konst = none";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
 
-        assert!(matches!(&profile, Profile::Default));
-        assert!(profile.is_default());
-        profile.resolve();
-        assert!(matches!(&profile, Profile::Integral { .. }));
-        assert_eq!(profile.arithmetic(), Arithmetic::Primitive);
-        assert!(!profile.is_circular());
-        assert!(!profile.is_default());
-        assert!(!profile.emits_precedes());
+        assert!(config.profile.is_default());
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
+        assert!(!config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+    }
+
+    #[test]
+    fn empty_profile_list_uses_integral_behavior() {
+        let input = "konst = none, profile = []";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.profile.is_default());
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
+        assert!(config.flags.math_add);
+        assert!(config.flags.ord);
     }
 
     #[test]
@@ -467,13 +475,8 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert!(matches!(
-            &config.profile,
-            Profile::Circular {
-                precedes: false,
-                ..
-            }
-        ));
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
         assert_eq!(config.profile.arithmetic(), Arithmetic::Wrapping);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -495,7 +498,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert!(matches!(&config.profile, Profile::Sequential { .. }));
+        assert!(!config.profile.is_circular());
         assert_eq!(config.profile.arithmetic(), Arithmetic::Checked);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -532,6 +535,56 @@ mod tests {
         assert!(first.flags.math_add);
         assert!(second.flags.math_add);
         assert_eq!(first.flags.math_add, second.flags.math_add);
+    }
+
+    #[test]
+    fn profile_list_applies_profiles_in_order() {
+        let input = "
+            konst = none,
+            profile = [
+                sequential {
+                    without = math_add,
+                    with = [math_mul, bit_access],
+                },
+                circular {
+                    with = core_int,
+                    without = math_sub,
+                    precedes = false,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Wrapping);
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+        assert!(!config.flags.math_add);
+        assert!(!config.flags.math_mul);
+        assert!(!config.flags.bit_access);
+        assert!(config.flags.core_int);
+        assert!(!config.flags.math_sub);
+    }
+
+    #[test]
+    fn later_profile_body_overrides_earlier_profile_body() {
+        let input = "
+            konst = none,
+            profile = [
+                default {
+                    without = math_add,
+                },
+                default {
+                    with = math_add,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.flags.math_add);
     }
 
     #[test]
@@ -606,10 +659,8 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap().0;
 
-        assert!(matches!(
-            &config.profile,
-            Profile::Circular { precedes: true, .. }
-        ));
+        assert!(config.profile.is_circular());
+        assert!(config.profile.emits_precedes());
     }
 
     #[test]

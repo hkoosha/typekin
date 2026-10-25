@@ -220,7 +220,7 @@ pub(crate) mod cfg {
     impl ::std::fmt::Debug for Friend {
         fn fmt(
             &self,
-            f: &mut ::std::fmt::Formatter<'_>,
+            f: &mut Formatter<'_>,
         ) -> std::fmt::Result {
             return f
                 .debug_struct("Friend")
@@ -422,8 +422,17 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
     let capability_declarations =
         protocol.capabilities.iter().map(|capability| {
-            let unsafe_ =
-                cfg::is_trust_capability(capability).then(|| quote! { unsafe });
+            let is_unsafe = cfg::is_trust_capability(capability);
+            let unsafe_ = is_unsafe.then(|| quote! { unsafe });
+            let safety = is_unsafe.then(|| {
+                quote! {
+                    #[doc = "# Safety"]
+                    #[doc = ""]
+                    #[doc = "Implementing this trait asserts that values \
+                        produced by the sealed conversion satisfy every \
+                        invariant required by the target type."]
+                }
+            });
             let method =
                 protocol.construction.as_ref().and_then(|construction| {
                     (capability == &construction.make).then(|| {
@@ -432,6 +441,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                 });
 
             quote! {
+                #safety
                 #konst #unsafe_ trait #capability: #bonst #seal {
                     #method
                 }

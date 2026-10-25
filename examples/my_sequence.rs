@@ -5,9 +5,12 @@ use core::ops::{
 
 #[typekin::integral(
     konst = none,
-    profile = circular {
-        without = math_add,
-    },
+    profile = [
+        default {
+            without = math_add,
+        },
+        circular {},
+    ],
     out_type = SeqPoint::into_offset(_) -> SeqOffset,
 )]
 struct SeqPoint(u32);

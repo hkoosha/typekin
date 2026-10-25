@@ -34,7 +34,7 @@ build: fmt
   cargo build
 
 clippy: fmt
-  cargo clippy
+  cargo clippy --offline --locked --frozen
 
 init:
   cargo install expandem
@@ -52,7 +52,7 @@ z-expand what: (
 zz-expand from to:
   rm -rf '{{ to }}'
   touch '{{ to }}'
-  expandem '{{ from }}' 'typekin::**' > '{{ to }}'
+  expandem --fix '{{ from }}' 'typekin::**' > '{{ to }}'
 
 @new it:
   target="$(printf '%s' '{{ it }}' | tr '_' '-')"; \

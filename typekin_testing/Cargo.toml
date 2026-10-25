@@ -17,6 +17,7 @@ fast_tests = []
 
 [lints.clippy]
 needless_return = "allow"
+missing_safety_doc = "allow"
 
 [lints.cargo]
 unused_dependencies = "allow"

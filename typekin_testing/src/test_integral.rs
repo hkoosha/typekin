@@ -371,6 +371,20 @@ struct SequentialCounter(u8);
 )]
 struct SequentialExtended(u8);
 
+#[typekin::integral(
+    konst = none,
+    profile = [
+        sequential {
+            with = math_mul,
+        },
+        circular {
+            with = math_mul,
+            precedes = false,
+        },
+    ],
+)]
+struct LayeredProfiles(u8);
+
 // ==============================================================================
 
 #[cfg(test)]
@@ -555,6 +569,15 @@ mod tests {
         assert_panics(|| {
             let _ = SequentialExtended::make(128) << 8;
         });
+    }
+
+    #[test]
+    fn profile_list_uses_the_last_arithmetic_policy() {
+        let lhs = LayeredProfiles::make(200);
+        let rhs = LayeredProfiles::make(2);
+        let product = lhs * rhs;
+
+        assert_eq!(product.raw(), 144);
     }
 
     #[test]
