@@ -1825,7 +1825,7 @@ impl Cfg {
                     );
                 }
                 if !int.profile.is_default() {
-                    return int.profile.span().fail(
+                    return content.span().fail(
                         "bitflag integral configuration only supports the default profile",
                     );
                 }
