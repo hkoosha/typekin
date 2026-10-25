@@ -25,9 +25,9 @@ use syn::parse::{
 use syn::spanned::Spanned as _;
 use syn::visit_mut::VisitMut as _;
 use syn::{
+    Fields,
     GenericParam,
     Generics,
-    Fields,
     ItemStruct,
     Path,
     Type,
@@ -85,7 +85,10 @@ pub(crate) struct IntegralTarget {
 }
 
 impl IntegralTarget {
-    fn new(ident: Ident, generics: Generics) -> Self {
+    fn new(
+        ident: Ident,
+        generics: Generics,
+    ) -> Self {
         let occupied_names = generics
             .params
             .iter()
@@ -194,7 +197,10 @@ impl IntegralTarget {
         return generics;
     }
 
-    fn qualify_path(&self, path: &Path) -> TokenStream {
+    fn qualify_path(
+        &self,
+        path: &Path,
+    ) -> TokenStream {
         if !self.has_generics() {
             let mut path = path.clone();
             if path.leading_colon.is_none()
@@ -210,7 +216,10 @@ impl IntegralTarget {
         return quote! { #path };
     }
 
-    fn external_type(&self, ty: &Type) -> TokenStream {
+    fn external_type(
+        &self,
+        ty: &Type,
+    ) -> TokenStream {
         let mut ty = ty.clone();
         TargetSelf(self.ty()).visit_type_mut(&mut ty);
         return quote! { #ty };
@@ -222,7 +231,12 @@ impl IntegralTarget {
         external: bool,
     ) -> OperatorOutput<'a> {
         let ty = if configuration.is_self() {
-            if external { self.ty() } else { quote! { Self } }
+            if external {
+                self.ty()
+            }
+            else {
+                quote! { Self }
+            }
         }
         else if external {
             self.external_type(&configuration.target)
@@ -240,12 +254,18 @@ impl IntegralTarget {
         return OperatorOutput::of(configuration, ty, conversion);
     }
 
-    fn is_target(&self, path: &Path) -> bool {
+    fn is_target(
+        &self,
+        path: &Path,
+    ) -> bool {
         return path.is_ident("Self")
             || path.to_token_stream().to_string() == self.ty().to_string();
     }
 
-    fn fresh_ident(&self, preferred: &str) -> Ident {
+    fn fresh_ident(
+        &self,
+        preferred: &str,
+    ) -> Ident {
         let mut name = preferred.to_owned();
         if self.occupied_names.contains(&name) {
             name = format!("__Typekin{preferred}");
@@ -256,7 +276,10 @@ impl IntegralTarget {
         return Ident::new(&name, Span::mixed_site());
     }
 
-    fn fresh_lifetime(&self, preferred: &str) -> syn::Lifetime {
+    fn fresh_lifetime(
+        &self,
+        preferred: &str,
+    ) -> syn::Lifetime {
         let mut name = preferred.to_owned();
         if self.occupied_names.contains(&name) {
             name = format!("__typekin_{preferred}");
@@ -313,11 +336,18 @@ impl IntegralTarget {
 struct TargetSelf(TokenStream);
 
 impl syn::visit_mut::VisitMut for TargetSelf {
-    fn visit_type_path_mut(&mut self, path: &mut syn::TypePath) {
+    fn visit_type_path_mut(
+        &mut self,
+        path: &mut syn::TypePath,
+    ) {
         syn::visit_mut::visit_type_path_mut(self, path);
         if path.qself.is_none()
             && path.path.leading_colon.is_none()
-            && path.path.segments.first().is_some_and(|it| it.ident == "Self")
+            && path
+                .path
+                .segments
+                .first()
+                .is_some_and(|it| it.ident == "Self")
         {
             let target = &self.0;
             path.path.segments =
@@ -332,11 +362,18 @@ impl syn::visit_mut::VisitMut for TargetSelf {
         }
     }
 
-    fn visit_expr_path_mut(&mut self, path: &mut syn::ExprPath) {
+    fn visit_expr_path_mut(
+        &mut self,
+        path: &mut syn::ExprPath,
+    ) {
         syn::visit_mut::visit_expr_path_mut(self, path);
         if path.qself.is_none()
             && path.path.leading_colon.is_none()
-            && path.path.segments.first().is_some_and(|it| it.ident == "Self")
+            && path
+                .path
+                .segments
+                .first()
+                .is_some_and(|it| it.ident == "Self")
         {
             if path.path.is_ident("Self") {
                 return;
@@ -430,7 +467,6 @@ impl StoragePlan {
         };
     }
 
-
     pub(crate) fn extract(
         &self,
         storage: TokenStream,
@@ -507,21 +543,18 @@ pub(crate) fn ekran(
     attr: Box<Cfg>,
     mut item: ItemStruct,
 ) -> syn::Result<TokenStream> {
-    let target = IntegralTarget::new(
-        item.ident.clone(),
-        item.generics.clone(),
-    );
+    let target = IntegralTarget::new(item.ident.clone(), item.generics.clone());
     let repr: Option<TokenStream> =
         attr.flags.repr.then(|| quote! { #[repr(transparent)] });
     let derive_copy: Option<TokenStream> = (attr.flags.copy
         && !target.has_generics())
-        .then(|| quote! { #[derive(Copy)] });
+    .then(|| quote! { #[derive(Copy)] });
     let derive_clone: Option<TokenStream> = (attr.flags.clone
         && !target.has_generics())
-        .then(|| match attr.konst {
-            Konst::Nightly => quote! { #[derive_const(Clone)] },
-            Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
-        });
+    .then(|| match attr.konst {
+        Konst::Nightly => quote! { #[derive_const(Clone)] },
+        Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
+    });
 
     let Fields::Unnamed(fields) = &item.fields
     else {
@@ -543,11 +576,10 @@ pub(crate) fn ekran(
     }
     let field = fields.unnamed.first().unwrap();
     let el = match &field.ty {
-        Type::Path(path) if path.qself.is_none() => {
-            path.path.get_ident().filter(|id| {
-                N::rust_names().contains(&id.to_string().as_str())
-            })
-        }
+        Type::Path(path) if path.qself.is_none() => path
+            .path
+            .get_ident()
+            .filter(|id| N::rust_names().contains(&id.to_string().as_str())),
         _ => None,
     }
     .ok_or_else(|| {
@@ -568,20 +600,16 @@ pub(crate) fn ekran(
     );
     let private = match &field_visibility {
         Visibility::Inherited => true,
-        Visibility::Restricted(visibility) => {
-            visibility.path.is_ident("self")
-        }
+        Visibility::Restricted(visibility) => visibility.path.is_ident("self"),
         Visibility::Public(_) => false,
     };
     if target.has_generics() && !private {
-        return field_visibility.fail(
-            "generic integral types require a private value field",
-        );
+        return field_visibility
+            .fail("generic integral types require a private value field");
     }
     if storage.rewrites_field() && !private {
-        return field_visibility.fail(
-            "integral storage can only rewrite a private tuple field",
-        );
+        return field_visibility
+            .fail("integral storage can only rewrite a private tuple field");
     }
 
     let Fields::Unnamed(fields) = &mut item.fields
@@ -878,9 +906,8 @@ impl Maker {
             .map(|slot| slot.operator)
             .collect::<BTreeSet<_>>();
         let traits = operators.iter().copied().map(|operator| {
-            let trait_name = self
-                .target
-                .fresh_ident(&format!("{}Rhs", operator.name()));
+            let trait_name =
+                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
             let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
             let konst = zz_runner::konst(is_konst);
@@ -900,9 +927,8 @@ impl Maker {
         });
         let implementations = self.cfg.facet_slots.iter().map(|(key, slot)| {
             let operator = key.operator;
-            let trait_name = self
-                .target
-                .fresh_ident(&format!("{}Rhs", operator.name()));
+            let trait_name =
+                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
             let rhs_ty = slot.rhs.as_ref().map_or_else(
                 || target.clone(),
@@ -1049,7 +1075,9 @@ impl Maker {
                 it.capabilities.insert(format_ident!("Math"));
             }
 
-            if self.target.is_target(&f_def.ty) || self.cfg.flags.self_friend_rel {
+            if self.target.is_target(&f_def.ty)
+                || self.cfg.flags.self_friend_rel
+            {
                 it.capabilities.insert(format_ident!("Rel"));
             }
 
@@ -1092,7 +1120,10 @@ impl Maker {
         return Ok(());
     }
 
-    fn protocol_capability(&self, capability: &Ident) -> Ident {
+    fn protocol_capability(
+        &self,
+        capability: &Ident,
+    ) -> Ident {
         return match capability.to_string().as_str() {
             "Make" => self.trait_friend_make.clone(),
             "Math" => self.trait_friend_math.clone(),
@@ -1116,10 +1147,7 @@ impl Maker {
             }
         });
         let capabilities = [
-            (
-                self.cfg.flags.friendzone_friend_make,
-                format_ident!("Make"),
-            ),
+            (self.cfg.flags.friendzone_friend_make, format_ident!("Make")),
             (
                 self.cfg.flags.friendzone_friend_math_ops,
                 format_ident!("Math"),
@@ -1128,10 +1156,7 @@ impl Maker {
                 self.cfg.flags.friendzone_friend_math_bit,
                 format_ident!("Bit"),
             ),
-            (
-                self.cfg.flags.friendzone_friend_rel,
-                format_ident!("Rel"),
-            ),
+            (self.cfg.flags.friendzone_friend_rel, format_ident!("Rel")),
             (true, crate::friendship::cfg::trust_capability()),
         ]
         .into_iter()
@@ -1175,10 +1200,13 @@ impl Maker {
 
                     let friend_ty = &friend.ty;
                     return Some(ProtocolFriend {
-                        ty: syn::parse2(self.target.external_type(
-                            &parse_quote! { #friend_ty },
-                        ))
-                        .expect("friend types remain valid after target lowering"),
+                        ty: syn::parse2(
+                            self.target
+                                .external_type(&parse_quote! { #friend_ty }),
+                        )
+                        .expect(
+                            "friend types remain valid after target lowering",
+                        ),
                         capabilities,
                         conversion,
                     });
@@ -1230,8 +1258,7 @@ impl Maker {
         let bit_access = self.ekran_bit_access_items();
 
         let ty = self.target.ty();
-        let (impl_generics, where_clause) =
-            self.target.impl_header(&[], &[]);
+        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
         return Ok(quote::quote! {
             #impls
 
@@ -1731,17 +1758,19 @@ impl Maker {
 
     pub(crate) fn ekran_impls(&self) -> syn::Result<TokenStream> {
         let ty = self.target.ty();
-        let (impl_generics, where_clause) =
-            self.target.impl_header(&[], &[]);
+        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
         let arguments = self.target.arguments();
         let rhs_ty = self.target.fresh_ident("T");
         let (rhs_impl_generics, _) =
             self.target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
         let rhs_where_clause = |bounds: TokenStream| {
-            return self.target.impl_header(
-                &[parse_quote! { #rhs_ty }],
-                &[parse_quote! { #rhs_ty: #bounds }],
-            ).1;
+            return self
+                .target
+                .impl_header(
+                    &[parse_quote! { #rhs_ty }],
+                    &[parse_quote! { #rhs_ty: #bounds }],
+                )
+                .1;
         };
         let el = &self.el;
         let value = quote! { value };
@@ -3024,7 +3053,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitAndAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3070,7 +3100,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::AddAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3116,7 +3147,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::SubAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3162,7 +3194,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::MulAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3208,7 +3241,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::DivAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3254,7 +3288,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::RemAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3297,7 +3332,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitOrAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3387,8 +3423,7 @@ impl Maker {
         }
 
         if self.cfg.flags.assertions {
-            let assertions =
-                self.storage.layout_assertions(quote! { #ty });
+            let assertions = self.storage.layout_assertions(quote! { #ty });
             if self.target.has_generics() {
                 let name = self.target.layout_assertion();
                 stream.extend(quote! {
@@ -3434,7 +3469,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Add<#rhs_ty> for #ty
                 #rhs_where
@@ -3484,7 +3520,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Sub<#rhs_ty> for #ty
                 #rhs_where
@@ -3534,7 +3571,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Mul<#rhs_ty> for #ty
                 #rhs_where
@@ -3585,7 +3623,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Div<#rhs_ty> for #ty
                 #rhs_where
@@ -3636,7 +3675,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Rem<#rhs_ty> for #ty
                 #rhs_where
@@ -3684,7 +3724,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitand(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitAnd<#rhs_ty> for #ty
                 #rhs_where
@@ -3731,7 +3772,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitor(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitOr<#rhs_ty> for #ty
                 #rhs_where
@@ -3802,7 +3844,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitxor(it) });
-            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where =
+                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitXor<#rhs_ty> for #ty
                 #rhs_where
@@ -3823,7 +3866,9 @@ impl Maker {
             stream.extend(it);
 
             if self.cfg.ty_out.is_self() {
-                let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #assign_bounds });
+                let rhs_where = rhs_where_clause(
+                    quote! { #trait_friend_bit + #assign_bounds },
+                );
                 let it = quote! {
                     #konst_assign impl #rhs_impl_generics ::core::ops::BitXorAssign<#rhs_ty> for #ty
                     #rhs_where

@@ -62,8 +62,6 @@ impl<D: Direction> SeqPoint<D> {
     }
 }
 
-
-
 fn directional_sequence<D: Direction>() {
     let maximum = SeqPoint::<D>::make(u32::MAX);
     let zero = SeqPoint::<D>::make(0);

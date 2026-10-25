@@ -155,7 +155,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn non_zero_storage_rejects_a_custom_unchecked_constructor() {
         let input = "

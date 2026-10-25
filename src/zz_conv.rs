@@ -90,7 +90,11 @@ impl<'a> OperatorOutput<'a> {
         ty: TokenStream,
         conversion: TokenStream,
     ) -> Self {
-        return Self { configuration, ty, conversion };
+        return Self {
+            configuration,
+            ty,
+            conversion,
+        };
     }
 
     pub(crate) fn ty(&self) -> TokenStream {

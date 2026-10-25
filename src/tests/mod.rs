@@ -5,6 +5,8 @@ mod t_friendship;
 #[cfg(test)]
 mod t_integral;
 #[cfg(test)]
+mod t_integral_generic;
+#[cfg(test)]
 mod t_runner;
 #[cfg(test)]
 mod t_text;

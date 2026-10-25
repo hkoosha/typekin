@@ -37,6 +37,9 @@ build: fmt
 clippy: fmt
   cargo clippy --offline --locked --frozen
 
+fix: fmt
+  cargo clippy --offline --locked --frozen --fix
+
 init:
   cargo install expandem
 
