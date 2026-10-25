@@ -332,7 +332,7 @@ mod ranges {
                     literal.base10_digits(),
                     literal.suffix(),
                 )
-                .map_err(|_| expr.errorful::<()>("invalid number"))
+                .map_err(|_| expr.errorful("invalid number"))
             }
 
             Expr::Unary(expr)
@@ -365,9 +365,7 @@ mod ranges {
                 let (min, max) = N::of(ty.ident.to_string())
                     .map(|it| it.bounds())
                     .ok_or_else(|| {
-                        expr.errorful::<Int>(
-                            "range bounds must be integer constants",
-                        )
+                        expr.errorful("range bounds must be integer constants")
                     })?;
 
                 match bound.ident.to_string().as_str() {

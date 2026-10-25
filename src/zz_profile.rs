@@ -4,13 +4,18 @@ use std::fmt::{
     Formatter,
 };
 
-use proc_macro2::Ident;
+use proc_macro2::{
+    Ident,
+    Span,
+};
+use quote::ToTokens;
 use syn::parse::{
     Parse,
     ParseStream,
 };
 use syn::{
     LitBool,
+    Path,
     braced,
 };
 
@@ -24,9 +29,10 @@ use crate::zz;
 use crate::zz_conv::SelfConverter;
 use crate::zz_runner::{
     MkErr,
+    MySpanned,
     snake_case_of,
 };
-use crate::zz_value_type::RESTRICTED_MATH_FLAGS;
+use crate::zz_value_type::Operator;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Arithmetic {
@@ -152,9 +158,11 @@ impl Profile {
         return match self {
             Self::Circular { .. } => {
                 matches!(name, "ord" | "partial_ord")
-                    || RESTRICTED_MATH_FLAGS.contains(&name)
+                    || IntegralFlags::restricted_math_flags().contains(&name)
             }
-            Self::Sequential { .. } => RESTRICTED_MATH_FLAGS.contains(&name),
+            Self::Sequential { .. } => {
+                IntegralFlags::restricted_math_flags().contains(&name)
+            }
             _ => false,
         };
     }
@@ -227,7 +235,7 @@ fn profile_apply_sequential(it: &mut IntegralFlags) {
 }
 
 fn profile_apply_restricted_math(it: &mut IntegralFlags) {
-    for name in RESTRICTED_MATH_FLAGS {
+    for name in IntegralFlags::restricted_math_flags() {
         it.set_bool(name, false)
             .expect("integral profile contains an unknown flag");
     }
@@ -235,10 +243,14 @@ fn profile_apply_restricted_math(it: &mut IntegralFlags) {
 
 // =============================================================================
 
+mod stuff {}
+
+#[derive(Clone)]
 pub(crate) struct FacetCfg {
     pub(crate) profile: Profiles,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) ty_out: Option<SelfConverter>,
+    pub(crate) precedes_span: Option<Span>,
 }
 
 impl Debug for FacetCfg {
@@ -254,6 +266,7 @@ impl Debug for FacetCfg {
                 "ty_out",
                 &self.ty_out.as_ref().is_some_and(|it| !it.is_self()),
             )
+            .field("precedes", &self.precedes_span.is_some())
             .finish();
     }
 }
@@ -264,10 +277,14 @@ impl Parse for FacetCfg {
         let mut profile = Profile::from_name(name)?;
         let mut friends = BTreeSet::new();
         let mut ty_out = None;
+        let mut precedes_span = None;
 
         let content;
         let _ = braced!(content in input);
         zz::parse_inner(&content, |attr, rest| {
+            if attr == "precedes" {
+                precedes_span = Some(rest.span());
+            }
             if profile.parse_attr(attr, rest)? {
                 return Ok(true);
             }
@@ -290,6 +307,91 @@ impl Parse for FacetCfg {
             profile: Profiles::one(profile),
             friends,
             ty_out,
+            precedes_span,
         });
+    }
+}
+
+impl FacetCfg {
+    pub(crate) fn explicit_flag(
+        &self,
+        name: &str,
+    ) -> Option<(bool, Span)> {
+        return self
+            .profile
+            .iter()
+            // TODO untangle from integral
+            .filter_map(|profile| profile.int_settings().flags.get(name))
+            .copied()
+            .last();
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct FacetSlotKey {
+    pub(crate) operator: Operator,
+    pub(crate) rhs: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FacetOwner {
+    Default,
+    Explicit(usize),
+}
+
+#[derive(Clone)]
+pub(crate) struct FacetSlot {
+    pub(crate) rhs: Option<Path>,
+    pub(crate) conversion: Option<Path>,
+    pub(crate) arithmetic: Arithmetic,
+    pub(crate) ty_out: SelfConverter,
+    pub(crate) owner: FacetOwner,
+    pub(crate) span: Span,
+}
+
+impl MySpanned for FacetSlot {
+    fn my_span(&self) -> Span {
+        return self.span;
+    }
+}
+
+impl Debug for FacetSlot {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return f
+            .debug_struct("FacetSlot")
+            .field("rhs", &self.rhs.as_ref().map(ToTokens::to_token_stream))
+            .field(
+                "conversion",
+                &self.conversion.as_ref().map(ToTokens::to_token_stream),
+            )
+            .field("arithmetic", &self.arithmetic)
+            .field("ty_out", &!self.ty_out.is_self())
+            .field("owner", &self.owner)
+            .finish_non_exhaustive();
+    }
+}
+
+pub(crate) struct DefaultFacetCfg {
+    pub(crate) profile: Profiles,
+    pub(crate) friends: BTreeSet<Friend>,
+    pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) ty_out: SelfConverter,
+}
+
+impl Debug for DefaultFacetCfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return f
+            .debug_struct("DefaultFacetCfg")
+            .field("profile", &self.profile.arithmetic())
+            .field("friends", &self.friends)
+            .field("flags", &self.flags)
+            .field("ty_out", &!self.ty_out.is_self())
+            .finish();
     }
 }

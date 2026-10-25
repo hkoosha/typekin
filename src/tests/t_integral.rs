@@ -10,8 +10,13 @@ mod tests {
         Konst,
         Konsts,
     };
-    use crate::zz_profile::Arithmetic;
+    use crate::zz_profile::{
+        Arithmetic,
+        FacetOwner,
+        FacetSlotKey,
+    };
     use crate::zz_runner::ToCollection;
+    use crate::zz_value_type::Operator;
 
     #[test]
     fn accepts_friend_with_single_capability() {
@@ -426,7 +431,7 @@ mod tests {
 
     #[test]
     fn default_profile_preserves_integral_defaults() {
-        let input = "konst = none, profile = default {}";
+        let input = "konst = none, profile = int {}";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
@@ -575,10 +580,10 @@ mod tests {
         let input = "
             konst = none,
             profile = [
-                default {
+                int {
                     without = math_add,
                 },
-                default {
+                int {
                     with = math_add,
                 },
             ]
@@ -606,7 +611,7 @@ mod tests {
                     with = [math_add, math_sub],
                     out_type = Self,
                 },
-                default {
+                int {
                     friends = bits_conv(Bits) -> Bit,
                     without = math_sub,
                 },
@@ -677,11 +682,11 @@ mod tests {
 
     #[test]
     fn facets_require_a_bracketed_list() {
-        let input = "facets = [default {}]";
+        let input = "facets = [int {}]";
         let valid = syn::parse_str::<Cfg>(input);
         assert!(valid.is_ok(), "{input}");
 
-        let input = "facets = default {}";
+        let input = "facets = int {}";
         let invalid = syn::parse_str::<Cfg>(input);
         assert!(invalid.is_err(), "{input}");
     }
@@ -690,7 +695,7 @@ mod tests {
     fn rejects_duplicate_facet_fields() {
         let input = "
             facets = [
-                default {
+                int {
                     out_type = Self,
                     out_type = Self,
                 },
@@ -700,6 +705,215 @@ mod tests {
         let error = parsed.unwrap_err();
 
         assert_eq!(error.to_string(), "duplicated arg", "{input}");
+    }
+
+    #[test]
+    fn resolves_explicit_slots_and_retains_unclaimed_defaults() {
+        let input = "
+            konst = none,
+            profile = circular {},
+            friends = offset_conv(Offset) -> Math,
+            out_type = Point::into_offset(_) -> RootOutput,
+            facets = [
+                sequential {
+                    friends = offset_conv(Offset) -> Math,
+                    without = math_sub,
+                    out_type = Self,
+                },
+                circular {
+                    with = [self_math, math_sub],
+                    without = math_add,
+                    out_type = Point::into_self_offset(_) -> SelfOutput,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        let add_offset = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+        assert_eq!(add_offset.owner, FacetOwner::Explicit(0));
+        assert_eq!(add_offset.arithmetic, Arithmetic::Checked);
+        assert!(add_offset.ty_out.is_self());
+
+        let sub_offset = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Sub,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+        assert_eq!(sub_offset.owner, FacetOwner::Default);
+        assert_eq!(sub_offset.arithmetic, Arithmetic::Wrapping);
+        assert!(!sub_offset.ty_out.is_self());
+
+        let add_self = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Self".to_string(),
+            })
+            .unwrap();
+        assert_eq!(add_self.owner, FacetOwner::Default);
+
+        let sub_self = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Sub,
+                rhs: "Self".to_string(),
+            })
+            .unwrap();
+        assert_eq!(sub_self.owner, FacetOwner::Explicit(1));
+        assert_eq!(
+            sub_self.ty_out.target.to_token_stream().to_string(),
+            "SelfOutput",
+        );
+        assert_eq!(config.facet_slots.len(), 4);
+    }
+
+    #[test]
+    fn rejects_duplicate_explicit_facet_slots() {
+        let input = "
+            konst = none,
+            facets = [
+                circular {
+                    friends = first(Offset) -> Math,
+                },
+                sequential {
+                    friends = second(Offset) -> Math,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicate explicit facet slot",);
+        assert_eq!(error.into_iter().count(), 2);
+    }
+
+    #[test]
+    fn permits_distinct_operations_for_the_same_rhs() {
+        let input = "
+            konst = none,
+            facets = [
+                circular {
+                    friends = first(Offset) -> Math,
+                    without = math_sub,
+                },
+                circular {
+                    friends = second(Offset) -> Math,
+                    without = math_add,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+    }
+
+    #[test]
+    fn rejects_unsupported_facet_friend_capabilities() {
+        let input = "
+            konst = none,
+            facets = [
+                int {
+                    friends = make(Source) -> Make,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "facet friends only support `Math` and `Bit` capabilities",
+        );
+    }
+
+    #[test]
+    fn rejects_wrapper_wide_precedes_in_a_facet() {
+        let input = "
+            konst = none,
+            facets = [
+                circular {
+                    precedes = false,
+                    friends = convert(Source) -> Math,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`precedes` is wrapper-wide and cannot be configured inside a facet",
+        );
+    }
+
+    #[test]
+    fn rejects_wrapper_wide_flags_in_a_facet() {
+        let input = "
+            konst = none,
+            facets = [
+                int {
+                    friends = convert(Source) -> Math,
+                    with = display,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "attribute is wrapper-wide or has no operand slot and cannot be configured inside a facet",
+        );
+    }
+
+    #[test]
+    fn rejects_facet_assignment_requests() {
+        let input = "
+            konst = none,
+            facets = [
+                int {
+                    friends = convert(Source) -> Math,
+                    with = assign_add,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "facets do not support assignment operators",
+        );
+    }
+
+    #[test]
+    fn rejects_contradictory_facet_flags() {
+        let input = "
+            konst = none,
+            facets = [
+                int {
+                    friends = convert(Source) -> Math,
+                    with = math_add,
+                    without = math_add,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "flag specified in both `with` and `without`",
+        );
     }
 
     #[test]
@@ -790,7 +1004,7 @@ mod tests {
     #[test]
     fn default_profile_treats_precedes_as_unknown() {
         let input = "
-            profile = default {
+            profile = int {
                 precedes = true,
             }
         ";

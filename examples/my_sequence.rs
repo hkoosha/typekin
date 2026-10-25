@@ -6,7 +6,7 @@ use core::ops::{
 #[typekin::integral(
     konst = none,
     profile = [
-        default {
+        int {
             without = math_add,
         },
         circular {},

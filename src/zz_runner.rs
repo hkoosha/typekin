@@ -6,7 +6,10 @@ use std::sync::{
     Mutex,
 };
 
-use proc_macro2::TokenStream;
+use proc_macro2::{
+    Span,
+    TokenStream,
+};
 use quote::quote;
 use syn::spanned::Spanned;
 
@@ -486,29 +489,57 @@ where
 
 // -------------------------------------
 
+pub(crate) trait MySpanned {
+    fn my_span(&self) -> Span;
+}
+
+impl<S: Spanned> MySpanned for S {
+    fn my_span(&self) -> Span {
+        return self.span();
+    }
+}
+
 pub(crate) trait MkErr {
     fn fail<T>(
         &self,
         msg: impl Display,
     ) -> Result<T, syn::Error> {
-        return Err(self.errorful::<T>(msg));
+        return Err(self.errorful(msg));
     }
 
-    fn errorful<T>(
+    fn fail_combi<T>(
+        &self,
+        msg: impl Display,
+        spanned: impl MySpanned,
+        msg1: impl Display,
+    ) -> Result<T, syn::Error> {
+        return Err(self.combine(msg, spanned, msg1));
+    }
+
+    fn errorful(
         &self,
         msg: impl Display,
     ) -> syn::Error;
+
+    fn combine(
+        &self,
+        msg0: impl Display,
+        spanned: impl MySpanned,
+        msg1: impl Display,
+    ) -> syn::Error {
+        let mut lhs = self.errorful(msg0);
+        let rhs = spanned.errorful(msg1);
+        lhs.combine(rhs);
+        return lhs;
+    }
 }
 
-impl<U> MkErr for U
-where
-    U: Spanned,
-{
-    fn errorful<T>(
+impl<U: MySpanned> MkErr for U {
+    fn errorful(
         &self,
         msg: impl Display,
     ) -> syn::Error {
-        return syn::Error::new(self.span(), msg);
+        return syn::Error::new(self.my_span(), msg);
     }
 }
 

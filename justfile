@@ -13,7 +13,7 @@ clean:
 
 fmt:
   rumdl fmt --deny-config-warnings --no-cache *.md
-  rumdl fmt --deny-config-warnings --no-cache arena/*.md || true
+  rumdl fmt --deny-config-warnings --no-cache arena/*.md &>/dev/null || true
   cargo fmt
 
 test-here: fmt

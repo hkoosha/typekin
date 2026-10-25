@@ -220,7 +220,7 @@ mod tests {
         let it = "
             integral = [
                 profile = [
-                    default {},
+                    int {},
                     circular {},
                 ]
             ]

@@ -1,6 +1,11 @@
 #![allow(unused, dead_code)]
 
 use std::cmp::Ordering;
+use std::fmt::{
+    Display,
+    Formatter,
+};
+use std::str::FromStr;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]
@@ -19,50 +24,27 @@ pub(crate) enum N {
     I128,
 }
 
-const N_ITEMS: [N; 12] = [
-    N::USIZ,
-    N::ISIZ,
-    N::U008,
-    N::U016,
-    N::U032,
-    N::U064,
-    N::U128,
-    N::I008,
-    N::I016,
-    N::I032,
-    N::I064,
-    N::I128,
-];
+impl N {
+    const N_RUST_NAMES: [&str; 12] = [
+        "usize", "isize", "u8", "u16", "u32", "u64", "u128", "i8", "i16",
+        "i32", "i64", "i128",
+    ];
 
-const N_RUST_NAMES: [&str; 12] = [
-    "usize", "isize", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32",
-    "i64", "i128",
-];
-
-pub(crate) const RESTRICTED_MATH_FLAGS: &[&str] = &[
-    "self_friend_math_ops",
-    "self_friend_math_bit",
-    "self_friend_rel",
-    "self_bit",
-    "bit_access",
-    "core_int",
-    "math_and",
-    "math_div",
-    "math_mul",
-    "math_not",
-    "math_or",
-    "math_rem",
-    "math_shl",
-    "math_shr",
-    "math_xor",
-    "assign_and",
-    "assign_div",
-    "assign_mul",
-    "assign_or",
-    "assign_rem",
-    "assign_shl",
-    "assign_shr",
-];
+    const ITEMS: [Self; 12] = [
+        Self::USIZ,
+        Self::ISIZ,
+        Self::U008,
+        Self::U016,
+        Self::U032,
+        Self::U064,
+        Self::U128,
+        Self::I008,
+        Self::I016,
+        Self::I032,
+        Self::I064,
+        Self::I128,
+    ];
+}
 
 impl N {
     pub fn of(name: impl AsRef<str>) -> Option<Self> {
@@ -84,11 +66,11 @@ impl N {
     }
 
     pub const fn items() -> &'static [Self] {
-        return &N_ITEMS;
+        return &Self::ITEMS;
     }
 
     pub const fn rust_names() -> &'static [&'static str] {
-        return &N_RUST_NAMES;
+        return &Self::N_RUST_NAMES;
     }
 
     pub const fn len() -> usize {
@@ -416,6 +398,93 @@ impl PartialOrd for RangeEnding {
         other: &Self,
     ) -> Option<Ordering> {
         return Some(self.cmp(other));
+    }
+}
+
+// =============================================================================
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Operator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    BitAnd,
+    BitOr,
+    BitXor,
+}
+
+impl Operator {
+    const ITEMS: [Self; 8] = [
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Div,
+        Self::Rem,
+        Self::BitAnd,
+        Self::BitOr,
+        Self::BitXor,
+    ];
+
+    const MATH: [Self; 5] = [
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Div,
+        Self::Rem,
+    ];
+
+    const BIT: [Self; 3] = [
+        Self::BitAnd,
+        Self::BitOr,
+        Self::BitXor,
+    ];
+
+    pub(crate) fn name(self) -> &'static str {
+        return match self {
+            Self::Add => "Add",
+            Self::Sub => "Sub",
+            Self::Mul => "Mul",
+            Self::Div => "Div",
+            Self::Rem => "Rem",
+            Self::BitAnd => "BitAnd",
+            Self::BitOr => "BitOr",
+            Self::BitXor => "BitXor",
+        };
+    }
+
+    pub(crate) fn items() -> &'static [Self] {
+        return &Self::ITEMS;
+    }
+
+    pub(crate) fn bit_items() -> &'static [Self] {
+        return &Self::BIT;
+    }
+
+    pub(crate) fn math_items() -> &'static [Self] {
+        return &Self::MATH;
+    }
+}
+
+impl Display for Operator {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for Operator {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return Self::items()
+            .into_iter()
+            .find(|it| it.name() == s)
+            .cloned()
+            .ok_or("unknown operator");
     }
 }
 

@@ -1820,7 +1820,7 @@ impl Cfg {
                     Konst::None,
                 )?;
                 if !int.ty_out.is_self() {
-                    return int.ty_out.conversion.span().fail(
+                    return int.ty_out.conversion.fail(
                         "bitflag integral configuration does not support out_type",
                     );
                 }

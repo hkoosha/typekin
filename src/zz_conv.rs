@@ -1,4 +1,7 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{
+    Span,
+    TokenStream,
+};
 use quote::quote;
 use syn::parse::{
     Parse,
@@ -13,12 +16,21 @@ use syn::{
     parse_quote,
 };
 
-use crate::zz_runner::MkErr;
+use crate::zz_runner::{
+    MkErr,
+    MySpanned,
+};
 
 #[derive(Clone)]
 pub(crate) struct SelfConverter {
     pub(crate) conversion: Path,
     pub(crate) target: Type,
+}
+
+impl MySpanned for SelfConverter {
+    fn my_span(&self) -> Span {
+        return self.conversion.span();
+    }
 }
 
 impl Default for SelfConverter {
@@ -92,5 +104,11 @@ impl<'a> OperatorOutput<'a> {
 
         let conversion = &self.0.conversion;
         return quote! { #conversion(#value) };
+    }
+}
+
+impl MySpanned for OperatorOutput<'_> {
+    fn my_span(&self) -> Span {
+        return self.0.my_span();
     }
 }

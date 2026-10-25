@@ -21,13 +21,13 @@ use syn::parse::{
     Parse,
     ParseStream,
 };
+use syn::spanned::Spanned as _;
 use syn::{
     ExprRange,
     Fields,
     ItemStruct,
     Path,
     Type,
-    braced,
     parse_quote,
 };
 
@@ -46,14 +46,25 @@ use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
 };
-use crate::zz_profile::{Arithmetic, FacetCfg, Profile, Profiles};
+use crate::zz_profile::{
+    Arithmetic,
+    DefaultFacetCfg,
+    FacetCfg,
+    FacetOwner,
+    FacetSlot,
+    FacetSlotKey,
+    Profiles,
+};
 use crate::zz_runner::{
     Merged,
     MkErr,
     ToCollection,
     mk_flags,
 };
-use crate::zz_value_type::N;
+use crate::zz_value_type::{
+    N,
+    Operator,
+};
 use crate::{
     zz,
     zz_runner,
@@ -3323,31 +3334,9 @@ impl Parse for IntegralFriend {
 
 #[derive(Clone, Default)]
 pub(crate) struct IntSettings {
-    flags: BTreeMap<String, (bool, Span)>,
+    pub(crate) flags: BTreeMap<String, (bool, Span)>,
     konst_flags: BTreeMap<Konsts, (bool, Span)>,
     seen: BTreeMap<String, bool>,
-}
-
-pub(crate) struct DefaultFacetCfg {
-    pub(crate) profile: Profiles,
-    pub(crate) friends: BTreeSet<Friend>,
-    pub(crate) flags: Box<IntegralFlags>,
-    pub(crate) ty_out: SelfConverter,
-}
-
-impl Debug for DefaultFacetCfg {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        return f
-            .debug_struct("DefaultFacetCfg")
-            .field("profile", &self.profile.arithmetic())
-            .field("friends", &self.friends)
-            .field("flags", &self.flags)
-            .field("ty_out", &!self.ty_out.is_self())
-            .finish();
-    }
 }
 
 pub(crate) struct Cfg {
@@ -3364,6 +3353,7 @@ pub(crate) struct Cfg {
     pub(crate) profile: Profiles,
     pub(crate) facets: Vec<FacetCfg>,
     pub(crate) default_facet: Option<DefaultFacetCfg>,
+    pub(crate) facet_slots: BTreeMap<FacetSlotKey, FacetSlot>,
     facets_present: bool,
 }
 
@@ -3448,6 +3438,288 @@ impl Cfg {
         }
     }
 
+    fn validate_facet(it: &FacetCfg) -> syn::Result<()> {
+        if let Some(span) = it.precedes_span {
+            return span.fail(
+                "`precedes` is wrapper-wide and cannot be configured inside a facet",
+            );
+        }
+
+        for profile in it.profile.iter() {
+            let settings = profile.int_settings();
+
+            if let Some((_, span)) = settings.konst_flags.values().next() {
+                return span.fail(
+                    "constness is wrapper-wide and cannot be configured inside a facet",
+                );
+            }
+
+            for (name, (enabled, span)) in &settings.flags {
+                if name.starts_with("assign_") {
+                    if *enabled {
+                        return span.fail(
+                            "facets do not support assignment operators",
+                        );
+                    }
+                    continue;
+                }
+
+                if !matches!(
+                    name.as_str(),
+                    "math_add"
+                        | "math_sub"
+                        | "math_mul"
+                        | "math_div"
+                        | "math_rem"
+                        | "math_and"
+                        | "math_or"
+                        | "math_xor"
+                        | "self_math"
+                        | "self_bit"
+                ) {
+                    return span.fail(
+                        "attribute is wrapper-wide or has no operand \
+                        slot and cannot be configured inside a facet",
+                    );
+                }
+            }
+        }
+
+        for friend in &it.friends {
+            for capability in &friend.capabilities {
+                if !matches!(capability.to_string().as_str(), "Math" | "Bit") {
+                    return capability.fail(
+                        "facet friends only support `Math` and `Bit` capabilities",
+                    );
+                }
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn resolved_facet_flags(
+        baseline: &IntegralFlags,
+        facet: &FacetCfg,
+    ) -> IntegralFlags {
+        let mut flags = baseline.clone();
+        for profile in facet.profile.iter() {
+            profile.apply(&mut flags);
+            Self::apply_flag_settings(
+                &mut flags,
+                &profile.int_settings().flags,
+            );
+        }
+        return flags;
+    }
+
+    fn insert_explicit_slot(
+        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
+        key: FacetSlotKey,
+        slot: FacetSlot,
+    ) -> syn::Result<()> {
+        if let Some(previous) = slots.get(&key) {
+            return slot.fail_combi(
+                "duplicate explicit facet slot",
+                previous.span,
+                "the slot was first claimed here",
+            );
+        }
+
+        slots.insert(key, slot);
+        return Ok(());
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_slots(
+        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
+        operations: &[Operator],
+        flags: &IntegralFlags,
+        rhs: Option<&Path>,
+        conversion: Option<&Path>,
+        arithmetic: Arithmetic,
+        ty_out: &SelfConverter,
+        owner: FacetOwner,
+        span: Span,
+    ) -> syn::Result<()> {
+        let identity = rhs.map_or_else(
+            || "Self".to_string(),
+            |rhs| rhs.to_token_stream().to_string(),
+        );
+
+        for operator in operations
+            .iter()
+            .copied()
+            .filter(|operator| flags.enabled(*operator))
+        {
+            let key = FacetSlotKey {
+                operator,
+                rhs: identity.clone(),
+            };
+            let slot = FacetSlot {
+                rhs: rhs.cloned(),
+                conversion: conversion.cloned(),
+                arithmetic,
+                ty_out: ty_out.clone(),
+                owner,
+                span,
+            };
+
+            if matches!(owner, FacetOwner::Explicit(_)) {
+                Self::insert_explicit_slot(slots, key, slot)?;
+            }
+            else {
+                slots.entry(key).or_insert(slot);
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn resolve_facets(&mut self) -> syn::Result<()> {
+        self.facet_slots.clear();
+        if !self.facets_present {
+            return Ok(());
+        }
+
+        let default = self
+            .default_facet
+            .as_ref()
+            .expect("facets require a resolved default facet");
+        let mut slots = BTreeMap::new();
+
+        for (index, facet) in self.facets.iter().enumerate() {
+            Self::validate_facet(facet)?;
+
+            let flags = Self::resolved_facet_flags(&default.flags, facet);
+            let arithmetic = facet.profile.arithmetic();
+            let ty_out = facet.ty_out.as_ref().unwrap_or(&default.ty_out);
+            let owner = FacetOwner::Explicit(index);
+
+            for friend in &facet.friends {
+                let span = friend.ty.span();
+                if friend.capabilities.contains(&format_ident!("Math")) {
+                    Self::insert_slots(
+                        &mut slots,
+                        &Operator::math_items(),
+                        &flags,
+                        Some(&friend.ty),
+                        friend.conv.as_ref(),
+                        arithmetic,
+                        ty_out,
+                        owner,
+                        span,
+                    )?;
+                }
+                if friend.capabilities.contains(&format_ident!("Bit")) {
+                    Self::insert_slots(
+                        &mut slots,
+                        &Operator::bit_items(),
+                        &flags,
+                        Some(&friend.ty),
+                        friend.conv.as_ref(),
+                        arithmetic,
+                        ty_out,
+                        owner,
+                        span,
+                    )?;
+                }
+            }
+
+            if let Some((true, span)) = facet.explicit_flag("self_math") {
+                let conversion: Path = parse_quote! { Self::raw };
+                Self::insert_slots(
+                    &mut slots,
+                    &Operator::math_items(),
+                    &flags,
+                    None,
+                    Some(&conversion),
+                    arithmetic,
+                    ty_out,
+                    owner,
+                    span,
+                )?;
+            }
+
+            if let Some((true, span)) = facet.explicit_flag("self_bit") {
+                let conversion: Path = parse_quote! { Self::raw };
+                Self::insert_slots(
+                    &mut slots,
+                    &Operator::bit_items(),
+                    &flags,
+                    None,
+                    Some(&conversion),
+                    arithmetic,
+                    ty_out,
+                    owner,
+                    span,
+                )?;
+            }
+        }
+
+        let arithmetic = default.profile.arithmetic();
+        for friend in &default.friends {
+            let span = friend.ty.span();
+            if friend.capabilities.contains(&format_ident!("Math")) {
+                Self::insert_slots(
+                    &mut slots,
+                    &Operator::math_items(),
+                    &default.flags,
+                    Some(&friend.ty),
+                    friend.conv.as_ref(),
+                    arithmetic,
+                    &default.ty_out,
+                    FacetOwner::Default,
+                    span,
+                )?;
+            }
+            if friend.capabilities.contains(&format_ident!("Bit")) {
+                Self::insert_slots(
+                    &mut slots,
+                    &Operator::bit_items(),
+                    &default.flags,
+                    Some(&friend.ty),
+                    friend.conv.as_ref(),
+                    arithmetic,
+                    &default.ty_out,
+                    FacetOwner::Default,
+                    span,
+                )?;
+            }
+        }
+
+        let conversion: Path = parse_quote! { Self::raw };
+        if default.flags.self_math {
+            Self::insert_slots(
+                &mut slots,
+                &Operator::math_items(),
+                &default.flags,
+                None,
+                Some(&conversion),
+                arithmetic,
+                &default.ty_out,
+                FacetOwner::Default,
+                Span::call_site(),
+            )?;
+        }
+        if default.flags.self_bit {
+            Self::insert_slots(
+                &mut slots,
+                &Operator::bit_items(),
+                &default.flags,
+                None,
+                Some(&conversion),
+                arithmetic,
+                &default.ty_out,
+                FacetOwner::Default,
+                Span::call_site(),
+            )?;
+        }
+
+        self.facet_slots = slots;
+        return Ok(());
+    }
+
     fn explicit_flag(
         &self,
         name: &str,
@@ -3527,6 +3799,7 @@ impl Cfg {
             flags: self.flags.clone(),
             ty_out: self.ty_out.clone(),
         });
+        self.resolve_facets()?;
 
         return Ok(());
     }
@@ -3680,6 +3953,7 @@ impl Cfg {
             profile: Default::default(),
             facets: Default::default(),
             default_facet: None,
+            facet_slots: Default::default(),
             facets_present: false,
         };
     }
@@ -3743,6 +4017,7 @@ impl Debug for Cfg {
             .field("friends", &self.friends)
             .field("ty_out", &!self.ty_out.is_self())
             .field("profile", &self.profile.arithmetic())
+            .field("facet_slots", &self.facet_slots)
             .field("flags", &self.flags)
             .finish_non_exhaustive();
     }
@@ -3758,6 +4033,53 @@ impl Parse for Cfg {
 }
 
 // =============================================================================
+
+impl IntegralFlags {
+    const RESTRICTED_MATH_FLAGS: [&str; 22] = [
+        "self_friend_math_ops",
+        "self_friend_math_bit",
+        "self_friend_rel",
+        "self_bit",
+        "bit_access",
+        "core_int",
+        "math_and",
+        "math_div",
+        "math_mul",
+        "math_not",
+        "math_or",
+        "math_rem",
+        "math_shl",
+        "math_shr",
+        "math_xor",
+        "assign_and",
+        "assign_div",
+        "assign_mul",
+        "assign_or",
+        "assign_rem",
+        "assign_shl",
+        "assign_shr",
+    ];
+
+    pub(crate) fn restricted_math_flags() -> &'static [&'static str] {
+        return &Self::RESTRICTED_MATH_FLAGS;
+    }
+
+    pub(crate) fn enabled(
+        &self,
+        it: Operator,
+    ) -> bool {
+        return match it {
+            Operator::Add => self.math_add,
+            Operator::Sub => self.math_sub,
+            Operator::Mul => self.math_mul,
+            Operator::Div => self.math_div,
+            Operator::Rem => self.math_rem,
+            Operator::BitAnd => self.math_and,
+            Operator::BitOr => self.math_or,
+            Operator::BitXor => self.math_xor,
+        };
+    }
+}
 
 mk_flags! {
     #[flag_default(bool=true, str="")]
