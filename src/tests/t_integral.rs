@@ -524,20 +524,45 @@ mod tests {
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
-        let out_type = config.ty_out.expect("out_type should be recorded");
-
         assert_eq!(
-            out_type.conversion.to_token_stream().to_string(),
+            config.ty_out.conversion.to_token_stream().to_string(),
             "crate :: Point :: into_offset",
         );
         assert_eq!(
-            out_type.target.to_token_stream().to_string(),
+            config.ty_out.target.to_token_stream().to_string(),
             "Offset < u32 >",
         );
+        assert!(!config.ty_out.is_self());
         assert!(!config.flags.assign_add);
         assert!(!config.flags.assign_sub);
         assert!(!config.flags.assign_and);
         assert!(!config.flags.assign_or);
+    }
+
+    #[test]
+    fn defaults_output_type_to_self_converter() {
+        let config = syn::parse_str::<Cfg>("konst = none")
+            .expect("default configuration should parse");
+
+        assert!(config.ty_out.is_self());
+        assert_eq!(config.ty_out.target.to_token_stream().to_string(), "Self");
+        assert!(config.flags.assign_add);
+        assert!(config.flags.assign_sub);
+        assert!(config.flags.assign_and);
+        assert!(config.flags.assign_or);
+    }
+
+    #[test]
+    fn self_output_type_preserves_assignment_operators() {
+        let input = "
+            out_type = Self(_) -> Self,
+            with = [assign_add]
+        ";
+        let config = syn::parse_str::<Cfg>(input)
+            .expect("Self output type should parse");
+
+        assert!(config.ty_out.is_self());
+        assert!(config.flags.assign_add);
     }
 
     #[test]

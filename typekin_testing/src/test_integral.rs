@@ -309,6 +309,12 @@ impl CheckedOutputSource {
     }
 }
 
+#[typekin::integral(
+    konst = none,
+    out_type = Self(_) -> Self,
+)]
+struct ExplicitSelfOutput(u8);
+
 // ==============================================================================
 
 #[cfg(test)]
@@ -389,6 +395,17 @@ mod tests {
             CHECKED_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
             0,
         );
+    }
+
+    #[test]
+    fn self_output_type_keeps_identity_operations_and_assignments() {
+        let sum: ExplicitSelfOutput =
+            ExplicitSelfOutput::make(2) + ExplicitSelfOutput::make(3);
+        assert_eq!(sum.raw(), 5);
+
+        let mut assigned = ExplicitSelfOutput::make(2);
+        assigned += ExplicitSelfOutput::make(3);
+        assert_eq!(assigned.raw(), 5);
     }
 
     #[test]

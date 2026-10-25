@@ -220,9 +220,13 @@ pub(crate) mod cfg {
     impl ::std::fmt::Debug for Friend {
         fn fmt(
             &self,
-            f: &mut std::fmt::Formatter<'_>,
+            f: &mut ::std::fmt::Formatter<'_>,
         ) -> std::fmt::Result {
-            write!(f, "Friend[{}::{:?}]", self.identity, self.capabilities)
+            return f
+                .debug_struct("Friend")
+                .field("identity", &self.identity)
+                .field("capabilities", &self.capabilities)
+                .finish();
         }
     }
 
@@ -251,7 +255,7 @@ pub(crate) mod cfg {
             &self,
             f: &mut Formatter<'_>,
         ) -> std::fmt::Result {
-            write!(f, "Cfg[...]")
+            return f.debug_struct("Cfg").finish_non_exhaustive();
         }
     }
 

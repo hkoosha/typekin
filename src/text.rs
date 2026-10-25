@@ -469,7 +469,7 @@ impl TextMaker {
             }
         });
         let debug = self.cfg.flags.debug.then(|| {
-            let fmt_str = format!("{}({{:?}})", ty);
+            let name = ty.to_string();
             quote! {
                 impl ::core::fmt::Debug for #ty {
                     #[inline(always)]
@@ -477,11 +477,10 @@ impl TextMaker {
                         &self,
                         formatter: &mut ::core::fmt::Formatter<'_>,
                     ) -> ::core::fmt::Result {
-                        return ::core::write!(
-                            formatter,
-                            #fmt_str,
-                            self.as_str(),
-                        );
+                        return formatter
+                            .debug_tuple(#name)
+                            .field(&self.as_str())
+                            .finish();
                     }
                 }
             }

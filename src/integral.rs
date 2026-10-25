@@ -13,6 +13,7 @@ use proc_macro2::{
     TokenStream,
 };
 use quote::{
+    ToTokens,
     format_ident,
     quote,
 };
@@ -53,7 +54,6 @@ use crate::zz_runner::{
     MkErr,
     ToCollection,
     mk_flags,
-    to_debug,
 };
 use crate::zz_value_type::N;
 use crate::{
@@ -942,7 +942,7 @@ impl Maker {
 
         let with_self_math = self.cfg.flags.self_math;
         let with_self_bit = self.cfg.flags.self_bit;
-        let output = OperatorOutput::of(self.cfg.ty_out.as_ref());
+        let output = OperatorOutput::of(&self.cfg.ty_out);
 
         let bounds_for = |flags: &[Konsts]| {
             let is_konst = self.cfg.konst_for(flags);
@@ -2420,14 +2420,17 @@ impl Maker {
         }
 
         if self.cfg.flags.debug {
-            let fmt_str = format!("{}({})", ty, "{}");
+            let name = ty.to_string();
             let it = quote! {
                 impl ::core::fmt::Debug for #ty {
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,
                     ) -> ::core::fmt::Result {
-                        ::core::write!(f, #fmt_str, self.0)
+                        return f
+                            .debug_tuple(#name)
+                            .field(&self.0)
+                            .finish();
                     }
                 }
             };
@@ -2851,7 +2854,7 @@ impl Maker {
                     }
                 });
 
-                if self.cfg.ty_out.is_none() {
+                if self.cfg.ty_out.is_self() {
                     stream.extend(quote! {
                         #konst_assign impl ::core::ops::BitXorAssign for #ty {
                             #[inline(always)]
@@ -2887,7 +2890,7 @@ impl Maker {
             };
             stream.extend(it);
 
-            if self.cfg.ty_out.is_none() {
+            if self.cfg.ty_out.is_self() {
                 let it = quote! {
                     #konst_assign impl<T> ::core::ops::BitXorAssign<T> for #ty
                     where T: #trait_friend_bit + #assign_bounds
@@ -3235,7 +3238,7 @@ pub(crate) struct Cfg {
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
-    pub(crate) ty_out: Option<SelfConverter>,
+    pub(crate) ty_out: SelfConverter,
     pub(crate) profile: ProfileConfig,
 }
 
@@ -3357,7 +3360,7 @@ impl Cfg {
             self.flags.partial_ord = false;
         }
 
-        if self.ty_out.is_some() {
+        if !self.ty_out.is_self() {
             for name in [
                 "assign_add",
                 "assign_and",
@@ -3483,7 +3486,7 @@ impl Cfg {
                 "without" => self.parse_flags(rest, false)?,
                 "friends" => self.friends = Self::parse_friends(rest)?,
                 "get_raw" => self.get_raw = Some(rest.parse()?),
-                "out_type" => self.ty_out = Some(rest.parse()?),
+                "out_type" => self.ty_out = rest.parse()?,
                 "profile" => self.profile = ProfileConfig::parse(rest)?,
                 _ => return Ok(false),
             };
@@ -3513,7 +3516,7 @@ impl Cfg {
             validation: Default::default(),
             friends: Default::default(),
             flags: Box::default(),
-            ty_out: None,
+            ty_out: Default::default(),
             profile: Default::default(),
         };
     }
@@ -3569,17 +3572,16 @@ impl Debug for Cfg {
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(
-            f,
-            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, ty_out={}, profile={:?}, flags={:?}",
-            self.konst,
-            to_debug(&self.get_raw),
-            self.validation,
-            self.friends,
-            self.ty_out.is_some(),
-            self.profile.profile,
-            self.flags,
-        )
+        return f
+            .debug_struct("IntegralCfg")
+            .field("konst", &self.konst)
+            .field("get_raw", &self.get_raw.to_token_stream().to_string())
+            .field("validation", &self.validation)
+            .field("friends", &self.friends)
+            .field("ty_out", &!self.ty_out.is_self())
+            .field("profile", &self.profile.profile)
+            .field("flags", &self.flags)
+            .finish_non_exhaustive();
     }
 }
 

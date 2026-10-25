@@ -7,10 +7,7 @@ use std::sync::{
 };
 
 use proc_macro2::TokenStream;
-use quote::{
-    ToTokens,
-    quote,
-};
+use quote::quote;
 use syn::spanned::Spanned;
 
 macro_rules! mk_flags {
@@ -443,20 +440,6 @@ pub(crate) fn destruct(is_const: bool) -> Option<TokenStream> {
         true => Some(quote! { + [const] ::core::marker::Destruct }),
         false => None,
     };
-}
-
-pub(crate) fn to_debug<I>(it: I) -> String
-where
-    I: IntoIterator,
-    I::Item: ToTokens,
-{
-    let mut repr = it
-        .into_iter()
-        .map(|it| it.to_token_stream().to_string())
-        .vec()
-        .join(", ");
-    repr.push(']');
-    return "[".to_string() + &repr;
 }
 
 // ============================================================================

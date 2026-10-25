@@ -10,6 +10,7 @@ use syn::{
     Token,
     Type,
     parenthesized,
+    parse_quote,
 };
 
 use crate::zz_runner::MkErr;
@@ -18,6 +19,15 @@ use crate::zz_runner::MkErr;
 pub(crate) struct SelfConverter {
     pub(crate) conversion: Path,
     pub(crate) target: Type,
+}
+
+impl Default for SelfConverter {
+    fn default() -> Self {
+        return Self {
+            conversion: parse_quote! { Self },
+            target: parse_quote! { Self },
+        };
+    }
 }
 
 impl Parse for SelfConverter {
@@ -45,30 +55,38 @@ impl Parse for SelfConverter {
     }
 }
 
+impl SelfConverter {
+    pub(crate) fn is_self(&self) -> bool {
+        return self.conversion.is_ident("Self");
+    }
+}
+
 #[derive(Clone)]
-pub(crate) struct OperatorOutput<'a>(pub(crate) Option<&'a SelfConverter>);
+pub(crate) struct OperatorOutput<'a>(pub(crate) &'a SelfConverter);
 
 impl<'a> OperatorOutput<'a> {
-    pub(crate) fn of(it: Option<&'a SelfConverter>) -> Self {
+    pub(crate) fn of(it: &'a SelfConverter) -> Self {
         return Self(it);
     }
 
     pub(crate) fn ty(&self) -> TokenStream {
-        return match self.0 {
-            Some(SelfConverter { target, .. }) => quote! { #target },
-            None => quote! { Self },
-        };
+        if self.0.is_self() {
+            return quote! { Self };
+        }
+
+        let target = &self.0.target;
+        return quote! { #target };
     }
 
     pub(crate) fn convert(
         &self,
         value: TokenStream,
     ) -> TokenStream {
-        return match self.0 {
-            Some(SelfConverter { conversion, .. }) => quote! {
-                #conversion(#value)
-            },
-            None => value,
-        };
+        if self.0.is_self() {
+            return value;
+        }
+
+        let conversion = &self.0.conversion;
+        return quote! { #conversion(#value) };
     }
 }

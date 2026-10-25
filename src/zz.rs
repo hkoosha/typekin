@@ -27,7 +27,6 @@ use syn::{
 use crate::zz_runner::{
     MkErr,
     ToCollection,
-    to_debug,
 };
 use crate::zz_value_type::N;
 
@@ -194,12 +193,11 @@ impl Debug for ValidationCfg {
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(
-            f,
-            "ValidationCfg{{callback={}, ranges={}}}",
-            to_debug(&self.callbacks),
-            to_debug(&self.ranges),
-        )
+        return f
+            .debug_struct("ValidationCfg")
+            .field("callbacks_count", &self.callbacks.len())
+            .field("ranges_count", &self.ranges.len())
+            .finish();
     }
 }
 
