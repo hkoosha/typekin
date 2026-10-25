@@ -1,8 +1,7 @@
 use proc_macro2::TokenStream;
-use quote::{
-    ToTokens,
-    quote,
-};
+use quote::
+    ToTokens
+;
 use syn::{
     Fields,
     Item,
