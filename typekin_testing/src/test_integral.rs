@@ -252,7 +252,62 @@ impl EncodedWithDisplay {
 #[typekin::integral(without = [clone, copy, repr])]
 #[repr(transparent)]
 #[derive(Copy, Clone)]
-struct ManualIntegral(u8);
+struct IntegralWithCallerProvidedRepr(u8);
+
+#[derive(Debug, Eq, PartialEq)]
+struct OperatorOutput(u8);
+
+static OPERATOR_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static CHECKED_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[typekin::integral(
+    konst = none,
+    out_type = OutputSource::into_output(_) -> OperatorOutput,
+)]
+struct OutputSource(u8);
+
+impl OutputSource {
+    fn into_output(self) -> OperatorOutput {
+        OPERATOR_OUTPUT_CALLS
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return OperatorOutput(self.raw());
+    }
+}
+
+#[typekin::integral(
+    konst = nightly,
+    out_type = ConstOutputSource::into_output(_) -> OperatorOutput,
+)]
+struct ConstOutputSource(u8);
+
+impl ConstOutputSource {
+    const fn into_output(self) -> OperatorOutput {
+        return OperatorOutput(self.raw());
+    }
+}
+
+const CONST_OPERATOR_OUTPUT: OperatorOutput =
+    ConstOutputSource::make(2) + ConstOutputSource::make(3);
+
+const fn is_at_most_ten(value: u8) -> bool {
+    return value <= 10;
+}
+
+#[typekin::integral(
+    konst = none,
+    valid = is_at_most_ten,
+    out_type = CheckedOutputSource::into_output(_) -> OperatorOutput,
+)]
+struct CheckedOutputSource(u8);
+
+impl CheckedOutputSource {
+    fn into_output(self) -> OperatorOutput {
+        CHECKED_OUTPUT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return OperatorOutput(self.raw());
+    }
+}
 
 // ==============================================================================
 
@@ -266,6 +321,75 @@ mod tests {
         assert_de_tokens_error,
         assert_tokens,
     };
+
+    #[test]
+    fn output_type_maps_every_non_assignment_operator_once() {
+        OPERATOR_OUTPUT_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        assert_eq!(
+            OutputSource::make(2) + OutputSource::make(3),
+            OperatorOutput(5),
+        );
+        assert_eq!(OutputSource::make(5) + 2u8, OperatorOutput(7));
+        assert_eq!(
+            OutputSource::make(9) - OutputSource::make(2),
+            OperatorOutput(7),
+        );
+        assert_eq!(
+            OutputSource::make(3) * OutputSource::make(4),
+            OperatorOutput(12),
+        );
+        assert_eq!(
+            OutputSource::make(9) / OutputSource::make(2),
+            OperatorOutput(4),
+        );
+        assert_eq!(
+            OutputSource::make(9) % OutputSource::make(4),
+            OperatorOutput(1),
+        );
+        assert_eq!(
+            OutputSource::make(0b1100) & OutputSource::make(0b1010),
+            OperatorOutput(0b1000),
+        );
+        assert_eq!(
+            OutputSource::make(0b1100) | OutputSource::make(0b1010),
+            OperatorOutput(0b1110),
+        );
+        assert_eq!(
+            OutputSource::make(0b1100) ^ OutputSource::make(0b1010),
+            OperatorOutput(0b0110),
+        );
+        assert_eq!(!OutputSource::make(0b0011), OperatorOutput(0b1111_1100));
+        assert_eq!(OutputSource::make(3) << 2, OperatorOutput(12));
+        assert_eq!(OutputSource::make(12) >> 2, OperatorOutput(3));
+        assert_eq!(
+            OPERATOR_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            12,
+        );
+
+        let core_integer_result =
+            OutputSource::make(5).wrapping_add(OutputSource::make(1));
+        assert_eq!(core_integer_result.raw(), 6);
+    }
+
+    #[test]
+    fn output_type_uses_const_callback_in_const_operator() {
+        assert_eq!(CONST_OPERATOR_OUTPUT, OperatorOutput(5));
+    }
+
+    #[test]
+    fn output_type_callback_runs_after_source_validation() {
+        CHECKED_OUTPUT_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        assert_panics(|| {
+            let _ = CheckedOutputSource::try_make(8).unwrap()
+                + CheckedOutputSource::try_make(4).unwrap();
+        });
+        assert_eq!(
+            CHECKED_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+        );
+    }
 
     #[test]
     fn trusted_const_construction_bypasses_callback_and_range_validation() {
@@ -1700,7 +1824,7 @@ mod tests {
 
     #[test]
     fn traits_and_layout_can_be_supplied_by_the_caller() {
-        accepts_copy::<ManualIntegral>();
-        assert_eq!(ManualIntegral::make(1).raw(), 1);
+        accepts_copy::<IntegralWithCallerProvidedRepr>();
+        assert_eq!(IntegralWithCallerProvidedRepr::make(1).raw(), 1);
     }
 }

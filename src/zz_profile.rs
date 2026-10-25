@@ -9,21 +9,21 @@ use syn::{
 
 use crate::integral::{
     Cfg,
+    IntSettings,
     IntegralFlags,
-    Settings,
 };
 use crate::zz;
 use crate::zz::UcFirst;
 use crate::zz_runner::MkErr;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ProfileKind {
+pub(crate) enum IntProfile {
     Default,
     Circular,
     Sequential,
 }
 
-impl FromStr for ProfileKind {
+impl FromStr for IntProfile {
     type Err = &'static str;
 
     fn from_str(it: &str) -> Result<Self, Self::Err> {
@@ -43,18 +43,20 @@ pub(crate) enum Arithmetic {
     Checked,
 }
 
+// TODO can drop clone?
 #[derive(Clone)]
-pub(crate) struct Profile {
-    pub(crate) kind: ProfileKind,
+pub(crate) struct ProfileConfig {
+    pub(crate) profile: IntProfile,
+    #[allow(dead_code)]
     pub(crate) arithmetic: Arithmetic,
     pub(crate) circular_precedes: bool,
-    pub(crate) settings: Settings,
+    pub(crate) settings: IntSettings,
 }
 
-impl Default for Profile {
+impl Default for ProfileConfig {
     fn default() -> Self {
         return Self {
-            kind: ProfileKind::Default,
+            profile: IntProfile::Default,
             arithmetic: Arithmetic::Primitive,
             circular_precedes: false,
             settings: Default::default(),
@@ -62,27 +64,27 @@ impl Default for Profile {
     }
 }
 
-impl Profile {
-    fn arithmetic_for(it: ProfileKind) -> Arithmetic {
+impl ProfileConfig {
+    fn arithmetic_for(it: IntProfile) -> Arithmetic {
         return match it {
-            ProfileKind::Default => Arithmetic::Primitive,
-            ProfileKind::Circular => Arithmetic::Wrapping,
-            ProfileKind::Sequential => Arithmetic::Checked,
+            IntProfile::Default => Arithmetic::Primitive,
+            IntProfile::Circular => Arithmetic::Wrapping,
+            IntProfile::Sequential => Arithmetic::Checked,
         };
     }
 
     pub(crate) fn parse(it: ParseStream) -> syn::Result<Self> {
         let name = it.parse::<Ident>()?;
 
-        let kind = ProfileKind::from_str(&name.to_string().ucfirst())
-            .map_err(|err| name.errorful::<ProfileKind>(err))?;
+        let kind = IntProfile::from_str(&name.to_string().ucfirst())
+            .map_err(|err| name.errorful::<IntProfile>(err))?;
 
         let content;
         let _ = braced!(content in it);
         let mut profile = Self {
-            kind,
+            profile: kind,
             arithmetic: Self::arithmetic_for(kind),
-            circular_precedes: matches!(kind, ProfileKind::Circular),
+            circular_precedes: matches!(kind, IntProfile::Circular),
             settings: Default::default(),
         };
 
@@ -94,7 +96,9 @@ impl Profile {
                 "without" => {
                     Cfg::parse_flags_into(rest, false, &mut profile.settings)?
                 }
-                "precedes" if matches!(profile.kind, ProfileKind::Circular) => {
+                "precedes"
+                    if matches!(profile.profile, IntProfile::Circular) =>
+                {
                     profile.circular_precedes = rest.parse::<LitBool>()?.value;
                 }
                 _ => return Ok(false),
@@ -110,8 +114,10 @@ impl Profile {
         &self,
         flags: &mut IntegralFlags,
     ) {
-        if !matches!(self.kind, ProfileKind::Circular | ProfileKind::Sequential)
-        {
+        if !matches!(
+            self.profile,
+            IntProfile::Circular | IntProfile::Sequential
+        ) {
             return;
         }
 
@@ -144,7 +150,7 @@ impl Profile {
                 .expect("integral profile contains an unknown flag");
         }
 
-        if matches!(self.kind, ProfileKind::Circular) {
+        if matches!(self.profile, IntProfile::Circular) {
             flags.ord = false;
             flags.partial_ord = false;
         }

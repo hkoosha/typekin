@@ -51,9 +51,6 @@ fn trusted_empty_set_text(source: TrustEmptySetSource) -> String {
 )]
 struct EmptySetText(String);
 
-#[typekin::text(in = [])]
-struct CallbackEmptySetText(String);
-
 struct DropProbe(Rc<Cell<usize>>);
 
 impl DropProbe {
@@ -67,13 +64,6 @@ impl Drop for DropProbe {
         self.0.set(self.0.get() + 1);
     }
 }
-
-// =============================================================================
-
-#[typekin::text(without = [clone, repr])]
-#[repr(transparent)]
-#[derive(Clone)]
-struct ManualText(String);
 
 // =============================================================================
 
@@ -111,9 +101,6 @@ impl TrustSlugSource {
     ],
 )]
 struct Slug(String);
-
-#[typekin::text]
-struct PlainText(String);
 
 #[typekin::text]
 struct FullyGeneratedText(String);
@@ -549,8 +536,8 @@ mod tests {
 
     #[test]
     fn unvalidated_text_has_infallible_conversions() {
-        let from_string: PlainText = String::from("any value").into();
-        let from_str: PlainText = "another value".into();
+        let from_string: FullyGeneratedText = String::from("any value").into();
+        let from_str: FullyGeneratedText = "another value".into();
 
         assert_eq!(from_string.into_inner(), "any value");
         assert_eq!(String::from(from_str), "another value");
@@ -577,7 +564,7 @@ mod tests {
 
     #[test]
     fn checked_mutations_transform_unicode_and_return_removed_characters() {
-        let text = PlainText::from("a").try_push('é').unwrap();
+        let text = FullyGeneratedText::from("a").try_push('é').unwrap();
         assert_eq!(text.as_str(), "aé");
         let text = text.try_push_str("🍆z").unwrap();
         assert_eq!(text.as_str(), "aé🍆z");
@@ -602,15 +589,16 @@ mod tests {
         assert_eq!(removed, None);
         assert_eq!(text.as_str(), "");
 
-        let (text, removed) = PlainText::from("é").try_remove(0).unwrap();
+        let (text, removed) =
+            FullyGeneratedText::from("é").try_remove(0).unwrap();
         assert_eq!(removed, 'é');
         assert_eq!(text.as_str(), "");
     }
 
     #[test]
     fn checked_replacement_supports_byte_range_variants() {
-        fn text() -> PlainText {
-            return PlainText::from("aé🍆z");
+        fn text() -> FullyGeneratedText {
+            return FullyGeneratedText::from("aé🍆z");
         }
 
         assert_eq!(
@@ -672,7 +660,7 @@ mod tests {
         let mut state = RetainState { index: 0 };
         let mut visited = Vec::new();
         let visited_ref = &mut visited;
-        let text = PlainText::from("aé🍆界")
+        let text = FullyGeneratedText::from("aé🍆界")
             .try_retain(move |character| state.keep(character, visited_ref))
             .unwrap();
         assert_eq!(text.as_str(), "a🍆");
@@ -816,7 +804,7 @@ mod tests {
         }
 
         assert_panics(|| {
-            let _ = PlainText::from("").try_remove(0);
+            let _ = FullyGeneratedText::from("").try_remove(0);
         });
     }
 
@@ -1004,8 +992,11 @@ mod tests {
 
     #[test]
     fn traits_and_layout_can_be_supplied_by_the_caller() {
-        accepts_clone::<ManualText>();
-        assert_eq!(ManualText::try_from_str("text").unwrap().as_str(), "text");
+        accepts_clone::<ManuallyDerivedText>();
+        assert_eq!(
+            ManuallyDerivedText::try_from_str("text").unwrap().as_str(),
+            "text"
+        );
     }
 }
 
@@ -1022,7 +1013,7 @@ mod test_mutation_drop {
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
             ("membership", |raw| {
-                CallbackEmptySetText::try_make(raw).is_err()
+                CallbackEmptyDomain::try_make(raw).is_err()
             }),
             ("untrusted friend", |raw| {
                 assert_panics(|| EmptySetText::of(EmptySetSource(raw)));
@@ -1045,7 +1036,7 @@ mod test_mutation_drop {
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
             ("membership", |raw| {
-                CallbackEmptySetText::try_make(raw).is_err()
+                CallbackEmptyDomain::try_make(raw).is_err()
             }),
             ("untrusted friend", |raw| {
                 assert_panics(|| EmptySetText::of(EmptySetSource(raw)));
@@ -1068,7 +1059,7 @@ mod test_mutation_drop {
         let constructors: [(&str, Construction); 3] = [
             ("checked", |raw| EmptySetText::try_make(raw).is_err()),
             ("membership", |raw| {
-                CallbackEmptySetText::try_make(raw).is_err()
+                CallbackEmptyDomain::try_make(raw).is_err()
             }),
             ("untrusted friend", |raw| {
                 assert_panics(|| EmptySetText::of(EmptySetSource(raw)));

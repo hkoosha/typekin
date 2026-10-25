@@ -238,13 +238,6 @@ enum Flags {
     Write = 4,
 }
 
-#[derive(Copy, Clone)]
-#[repr(u8)]
-#[typekin::bitflag(without = [clone, copy, repr])]
-enum ManualFlag {
-    Read = 1,
-}
-
 // =============================================================================
 
 fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
@@ -992,9 +985,9 @@ mod tests {
 
     #[test]
     fn traits_and_layout_can_be_supplied_by_the_caller() {
-        accepts_copy_clone::<ManualFlag>();
+        accepts_copy_clone::<ManuallyDerivedFlag>();
 
-        assert_eq!(ManualFlag::Read.raw(), 1);
+        assert_eq!(ManuallyDerivedFlag::Read.raw(), 1);
     }
 }
 

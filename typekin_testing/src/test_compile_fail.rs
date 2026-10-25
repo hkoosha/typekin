@@ -165,6 +165,34 @@ mod tests {
     }
 
     #[test]
+    fn output_type_removes_bitxor_assignment() {
+        const SRC: &str = r#"
+                struct Output;
+
+                #[typekin::integral(
+                    konst = none,
+                    out_type = Point::into_output(_) -> Output,
+                )]
+                struct Point(u8);
+
+                impl Point {
+                    fn into_output(self) -> Output { Output }
+                }
+
+                fn requires_bitxor_assignment() {
+                    let mut point = Point::make(1);
+                    point ^= Point::make(2);
+                }
+            "#;
+
+        assert_rejected(
+            "output-type-removes-bitxor-assignment",
+            "BitXorAssign",
+            SRC,
+        );
+    }
+
+    #[test]
     fn self_operators_do_not_use_friendship() {
         const SRC: &str = r#"
                 #[typekin::integral(

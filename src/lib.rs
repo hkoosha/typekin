@@ -11,9 +11,10 @@ pub(crate) mod bitflag;
 pub(crate) mod constructor;
 pub(crate) mod friendship;
 pub(crate) mod integral;
-pub(crate) mod integral_profiles;
 pub(crate) mod text;
 pub(crate) mod zz;
+pub(crate) mod zz_conv;
+pub(crate) mod zz_profile;
 pub(crate) mod zz_runner;
 pub(crate) mod zz_value_type;
 

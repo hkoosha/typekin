@@ -348,8 +348,8 @@ Generation of individual features can be disabled (check integral's
 [cfg](src/integral.rs) and bitflag's [cfg](src/bitflag.rs))
 
 Integral profile options are scoped to the selected
-[profile](src/integral_profiles.rs): `profile = circular { precedes = false }`
-is accepted; `precedes` is an unknown attribute in `default` and `sequential`
+[profile](src/zz_profile.rs): `profile = circular { precedes = false }` is
+accepted; `precedes` is an unknown attribute in `default` and `sequential`
 profiles.
 
 ```rust

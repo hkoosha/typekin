@@ -3,13 +3,13 @@ mod tests {
     use quote::ToTokens;
 
     use crate::integral::Cfg;
-    use crate::integral_profiles::{
-        Arithmetic,
-        ProfileKind,
-    };
     use crate::zz::{
         Konst,
         Konsts,
+    };
+    use crate::zz_profile::{
+        Arithmetic,
+        IntProfile,
     };
     use crate::zz_runner::ToCollection;
 
@@ -431,7 +431,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.kind, ProfileKind::Default);
+        assert_eq!(config.profile.profile, IntProfile::Default);
         assert_eq!(config.profile.arithmetic, Arithmetic::Primitive);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -453,7 +453,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.kind, ProfileKind::Circular);
+        assert_eq!(config.profile.profile, IntProfile::Circular);
         assert_eq!(config.profile.arithmetic, Arithmetic::Wrapping);
         assert!(!config.profile.circular_precedes);
         assert!(config.flags.math_add);
@@ -476,7 +476,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
-        assert_eq!(config.profile.kind, ProfileKind::Sequential);
+        assert_eq!(config.profile.profile, IntProfile::Sequential);
         assert_eq!(config.profile.arithmetic, Arithmetic::Checked);
         assert!(config.flags.math_add);
         assert!(config.flags.math_sub);
@@ -519,12 +519,12 @@ mod tests {
     fn parses_output_type_conversion_with_generic_target() {
         let input = "
             konst = none,
-            out_type = crate::Point::into_offset(Self) -> Offset<u32>
+            out_type = crate::Point::into_offset(_) -> Offset<u32>
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
-        let out_type = config.out_type.expect("out_type should be recorded");
+        let out_type = config.ty_out.expect("out_type should be recorded");
 
         assert_eq!(
             out_type.conversion.to_token_stream().to_string(),
@@ -559,7 +559,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap().0;
 
-        assert_eq!(config.profile.kind, ProfileKind::Circular);
+        assert_eq!(config.profile.profile, IntProfile::Circular);
         assert!(config.profile.circular_precedes);
     }
 
@@ -599,14 +599,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_self_output_conversion_source() {
-        let input = "out_type = Point::into_offset(Point) -> Offset";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("out_type callbacks must take Self");
+    fn rejects_self_output_conversion_source() {
+        let input = "out_type = Point::into_offset(Self) -> Offset";
+        let error = syn::parse_str::<Cfg>(input).expect_err(
+            "out_type callbacks must take an underscore placeholder",
+        );
 
         assert_eq!(
             error.to_string(),
-            "out_type conversion requires a `Self` argument",
+            "type conversion requires a `_` argument",
         );
     }
 
@@ -628,7 +629,7 @@ mod tests {
     #[test]
     fn rejects_assignment_override_for_output_type() {
         let input = "
-            out_type = Point::into_offset(Self) -> Offset,
+            out_type = Point::into_offset(_) -> Offset,
             with = [assign_add]
         ";
         let error = syn::parse_str::<Cfg>(input)

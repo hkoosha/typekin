@@ -10,8 +10,11 @@ clippy: fmt
 build: fmt
   cargo build
 
-test: fmt build
-  time cargo test --offline
+test:       (z-test)
+slow-tests: (z-test 'slow_tests')
+
+z-test features='default': fmt build
+  time cargo test --features '{{ features }}' --offline
 
 clean:
   cargo clean

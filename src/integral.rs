@@ -20,15 +20,12 @@ use syn::parse::{
     Parse,
     ParseStream,
 };
-use syn::spanned::Spanned;
 use syn::{
     ExprRange,
     Fields,
     ItemStruct,
     Path,
-    Token,
     Type,
-    parenthesized,
     parse_quote,
 };
 
@@ -38,14 +35,18 @@ use crate::friendship::{
     Protocol,
     ProtocolFriend,
 };
-use crate::integral_profiles::{
-    Profile,
-    ProfileKind,
-};
 use crate::zz::{
     Konst,
     Konsts,
     ValidationCfg,
+};
+use crate::zz_conv::{
+    OperatorOutput,
+    SelfConverter,
+};
+use crate::zz_profile::{
+    IntProfile,
+    ProfileConfig,
 };
 use crate::zz_runner::{
     Merged,
@@ -941,6 +942,7 @@ impl Maker {
 
         let with_self_math = self.cfg.flags.self_math;
         let with_self_bit = self.cfg.flags.self_bit;
+        let output = OperatorOutput::of(self.cfg.ty_out.as_ref());
 
         let bounds_for = |flags: &[Konsts]| {
             let is_konst = self.cfg.konst_for(flags);
@@ -2040,16 +2042,18 @@ impl Maker {
                 Konsts::Shr,
                 Konsts::Math,
             ]));
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._shr(rhs) });
             let it = quote! {
                 #konst impl ::core::ops::Shr<usize> for #ty {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn shr(
                         self,
                         rhs: usize,
                     ) -> Self::Output {
-                        return self._shr(rhs);
+                        return #result;
                     }
                 }
             };
@@ -2061,16 +2065,18 @@ impl Maker {
                 Konsts::Shl,
                 Konsts::Math,
             ]));
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._shl(rhs) });
             let it = quote::quote! {
                 #konst impl ::core::ops::Shl<usize> for #ty {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn shl(
                         self,
                         rhs: usize,
                     ) -> Self::Output {
-                        return self._shl(rhs);
+                        return #result;
                     }
                 }
             };
@@ -2495,26 +2501,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._add(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Add for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn add(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._add(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._add(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Add<T> for #ty
                 where T: #trait_friend_math + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn add(
@@ -2522,7 +2532,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._add(it);
+                        return #result;
                     }
                 }
             };
@@ -2537,26 +2547,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._sub(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Sub for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn sub(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._sub(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._sub(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Sub<T> for #ty
                 where T: #trait_friend_math + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn sub(
@@ -2564,7 +2578,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._sub(it);
+                        return #result;
                     }
                 }
             };
@@ -2579,26 +2593,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._mul(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Mul for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn mul(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._mul(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._mul(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Mul<T> for #ty
                 where T: #trait_friend_math + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn mul(
@@ -2606,7 +2624,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._mul(it);
+                        return #result;
                     }
                 }
             };
@@ -2622,26 +2640,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._div(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Div for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn div(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._div(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._div(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Div<T> for #ty
                 where T: #trait_friend_math + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn div(
@@ -2649,7 +2671,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._div(it);
+                        return #result;
                     }
                 }
             };
@@ -2665,26 +2687,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_math {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._rem(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::Rem for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn rem(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._rem(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._rem(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::Rem<T> for #ty
                 where T: #trait_friend_math + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn rem(
@@ -2692,7 +2718,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._rem(it);
+                        return #result;
                     }
                 }
             };
@@ -2708,26 +2734,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._bitand(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitAnd for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn bitand(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._bitand(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._bitand(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::BitAnd<T> for #ty
                 where T: #trait_friend_bit + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitand(
@@ -2735,7 +2765,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._bitand(it);
+                        return #result;
                     }
                 }
             };
@@ -2750,26 +2780,30 @@ impl Maker {
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
             if with_self_bit {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._bitor(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitOr for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn bitor(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._bitor(rhs.0);
+                            return #result;
                         }
                     }
                 });
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._bitor(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::BitOr<T> for #ty
                 where T: #trait_friend_bit + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitor(
@@ -2777,7 +2811,7 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._bitor(it);
+                        return #result;
                     }
                 }
             };
@@ -2801,37 +2835,44 @@ impl Maker {
                 zz_runner::konst(self.cfg.konst_for(&assign_flags));
             let assign_bounds = bounds_for(&assign_flags);
             if with_self_bit {
+                let output_ty = output.ty();
+                let result = output.convert(quote! { self._bitxor(rhs.0) });
                 stream.extend(quote! {
                     #konst impl ::core::ops::BitXor for #ty {
-                        type Output = Self;
+                        type Output = #output_ty;
 
                         #[inline(always)]
                         fn bitxor(
                             self,
                             rhs: Self,
                         ) -> Self::Output {
-                            return self._bitxor(rhs.0);
+                            return #result;
                         }
                     }
                 });
-                stream.extend(quote! {
-                    #konst_assign impl ::core::ops::BitXorAssign for #ty {
-                        #[inline(always)]
-                        fn bitxor_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self._bitxor(rhs.0);
+
+                if self.cfg.ty_out.is_none() {
+                    stream.extend(quote! {
+                        #konst_assign impl ::core::ops::BitXorAssign for #ty {
+                            #[inline(always)]
+                            fn bitxor_assign(
+                                &mut self,
+                                rhs: Self,
+                            ) {
+                                *self = self._bitxor(rhs.0);
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
 
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._bitxor(it) });
             let it = quote! {
                 #konst impl<T> ::core::ops::BitXor<T> for #ty
                 where T: #trait_friend_bit + #bounds
                 {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitxor(
@@ -2839,28 +2880,30 @@ impl Maker {
                         rhs: T,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
-                        return self._bitxor(it);
+                        return #result;
                     }
                 }
 
             };
             stream.extend(it);
 
-            let it = quote! {
-                #konst_assign impl<T> ::core::ops::BitXorAssign<T> for #ty
-                where T: #trait_friend_bit + #assign_bounds
-                {
-                    #[inline(always)]
-                    fn bitxor_assign(
-                        &mut self,
-                        rhs: T,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self._bitxor(it);
+            if self.cfg.ty_out.is_none() {
+                let it = quote! {
+                    #konst_assign impl<T> ::core::ops::BitXorAssign<T> for #ty
+                    where T: #trait_friend_bit + #assign_bounds
+                    {
+                        #[inline(always)]
+                        fn bitxor_assign(
+                            &mut self,
+                            rhs: T,
+                        ) {
+                            let it = #fp_friend_conv(rhs);
+                            *self = self._bitxor(it);
+                        }
                     }
-                }
-            };
-            stream.extend(it);
+                };
+                stream.extend(it);
+            }
         }
 
         if self.cfg.flags.math_not {
@@ -2868,13 +2911,15 @@ impl Maker {
                 Konsts::Not,
                 Konsts::Bit,
             ]));
+            let output_ty = output.ty();
+            let result = output.convert(quote! { self._not() });
             let it = quote! {
                 #konst impl ::core::ops::Not for #ty {
-                    type Output = Self;
+                    type Output = #output_ty;
 
                     #[inline(always)]
                     fn not(self) -> Self::Output {
-                        return self._not();
+                        return #result;
                     }
                 }
             };
@@ -3173,43 +3218,8 @@ impl Parse for IntegralFriend {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct OutType {
-    pub(crate) conversion: Path,
-    pub(crate) target: Type,
-}
-
-impl Parse for OutType {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let conversion = input.parse::<Path>()?;
-        let content;
-        let _ = parenthesized!(content in input);
-        let source = content.parse::<Type>()?;
-
-        if !content.is_empty() {
-            return content.span().fail(
-                "out_type conversion requires exactly one `Self` argument",
-            );
-        }
-        else if !matches!(
-            &source,
-            Type::Path(path)
-                if path.qself.is_none() && path.path.is_ident("Self")
-        ) {
-            return source
-                .span()
-                .fail("out_type conversion requires a `Self` argument");
-        }
-
-        input.parse::<Token![->]>()?;
-        let target = input.parse::<Type>()?;
-
-        return Ok(Self { conversion, target });
-    }
-}
-
 #[derive(Clone, Default)]
-pub(crate) struct Settings {
+pub(crate) struct IntSettings {
     flags: BTreeMap<String, (bool, Span)>,
     konst_flags: BTreeMap<Konsts, (bool, Span)>,
     seen: BTreeMap<String, bool>,
@@ -3225,15 +3235,15 @@ pub(crate) struct Cfg {
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
-    pub(crate) out_type: Option<OutType>,
-    pub(crate) profile: Profile,
+    pub(crate) ty_out: Option<SelfConverter>,
+    pub(crate) profile: ProfileConfig,
 }
 
 impl Cfg {
     pub(crate) fn parse_flags_into(
         input: ParseStream,
         value_if_seen: bool,
-        settings: &mut Settings,
+        settings: &mut IntSettings,
     ) -> syn::Result<()> {
         let attrs = zz::one_or_list::<Ident>(input)?;
         let mut duplicated = BTreeMap::new();
@@ -3284,7 +3294,7 @@ impl Cfg {
         input: ParseStream,
         value_if_seen: bool,
     ) -> syn::Result<()> {
-        let mut settings = Settings {
+        let mut settings = IntSettings {
             flags: std::mem::take(&mut self.root_flags),
             konst_flags: std::mem::take(&mut self.root_konst_flags),
             seen: std::mem::take(&mut self.root_seen_flags),
@@ -3332,7 +3342,7 @@ impl Cfg {
         Self::apply_flag_settings(&mut self.flags, &self.root_flags);
         self.konst_flags.extend(self.root_konst_flags.clone());
 
-        if matches!(self.profile.kind, ProfileKind::Circular) {
+        if matches!(self.profile.profile, IntProfile::Circular) {
             for name in [
                 "ord",
                 "partial_ord",
@@ -3347,7 +3357,7 @@ impl Cfg {
             self.flags.partial_ord = false;
         }
 
-        if self.out_type.is_some() {
+        if self.ty_out.is_some() {
             for name in [
                 "assign_add",
                 "assign_and",
@@ -3473,8 +3483,8 @@ impl Cfg {
                 "without" => self.parse_flags(rest, false)?,
                 "friends" => self.friends = Self::parse_friends(rest)?,
                 "get_raw" => self.get_raw = Some(rest.parse()?),
-                "out_type" => self.out_type = Some(rest.parse()?),
-                "profile" => self.profile = Profile::parse(rest)?,
+                "out_type" => self.ty_out = Some(rest.parse()?),
+                "profile" => self.profile = ProfileConfig::parse(rest)?,
                 _ => return Ok(false),
             };
 
@@ -3503,7 +3513,7 @@ impl Cfg {
             validation: Default::default(),
             friends: Default::default(),
             flags: Box::default(),
-            out_type: None,
+            ty_out: None,
             profile: Default::default(),
         };
     }
@@ -3561,13 +3571,13 @@ impl Debug for Cfg {
     ) -> std::fmt::Result {
         write!(
             f,
-            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, out_type={}, profile={:?}, flags={:?}",
+            "IntegralCfg[konst={:?}, get_raw={}, validation={:?}, friends={:?}, ty_out={}, profile={:?}, flags={:?}",
             self.konst,
             to_debug(&self.get_raw),
             self.validation,
             self.friends,
-            self.out_type.is_some(),
-            self.profile.kind,
+            self.ty_out.is_some(),
+            self.profile.profile,
             self.flags,
         )
     }
