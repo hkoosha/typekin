@@ -33,6 +33,10 @@ impl Default for SelfConverter {
 impl Parse for SelfConverter {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let conversion = input.parse::<Path>()?;
+        if conversion.is_ident("Self") && !input.peek(syn::token::Paren) {
+            return Ok(Self::default());
+        }
+
         let content;
         let _ = parenthesized!(content in input);
         let source = content.parse::<Type>()?;

@@ -486,7 +486,7 @@ where
 
 // -------------------------------------
 
-pub(crate) trait MkErr: Spanned {
+pub(crate) trait MkErr {
     fn fail<T>(
         &self,
         msg: impl Display,
@@ -497,12 +497,20 @@ pub(crate) trait MkErr: Spanned {
     fn errorful<T>(
         &self,
         msg: impl Display,
+    ) -> syn::Error;
+}
+
+impl<U> MkErr for U
+where
+    U: Spanned,
+{
+    fn errorful<T>(
+        &self,
+        msg: impl Display,
     ) -> syn::Error {
         return syn::Error::new(self.span(), msg);
     }
 }
-
-impl<T> MkErr for T where T: Spanned {}
 
 // -------------------------------------
 

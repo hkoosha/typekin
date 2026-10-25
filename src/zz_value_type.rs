@@ -39,6 +39,31 @@ const N_RUST_NAMES: [&str; 12] = [
     "i64", "i128",
 ];
 
+pub(crate) const RESTRICTED_MATH_FLAGS: &[&str] = &[
+    "self_friend_math_ops",
+    "self_friend_math_bit",
+    "self_friend_rel",
+    "self_bit",
+    "bit_access",
+    "core_int",
+    "math_and",
+    "math_div",
+    "math_mul",
+    "math_not",
+    "math_or",
+    "math_rem",
+    "math_shl",
+    "math_shr",
+    "math_xor",
+    "assign_and",
+    "assign_div",
+    "assign_mul",
+    "assign_or",
+    "assign_rem",
+    "assign_shl",
+    "assign_shr",
+];
+
 impl N {
     pub fn of(name: impl AsRef<str>) -> Option<Self> {
         return match name.as_ref() {
