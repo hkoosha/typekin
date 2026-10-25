@@ -24,6 +24,7 @@ fn assert_rejected(
     );
 }
 
+#[cfg(test)]
 #[cfg(feature = "slow_tests")]
 mod tests {
     use super::*;

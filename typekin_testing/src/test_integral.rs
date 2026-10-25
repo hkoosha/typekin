@@ -374,6 +374,7 @@ struct SequentialExtended(u8);
 // ==============================================================================
 
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod tests {
     use super::*;
     use core::cmp::Ordering;

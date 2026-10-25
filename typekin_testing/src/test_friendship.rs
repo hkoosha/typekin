@@ -300,6 +300,7 @@ impl SelfScoped {
 // ==============================================================================
 
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod tests {
     use super::*;
 

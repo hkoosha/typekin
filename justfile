@@ -15,18 +15,20 @@ fmt:
   rumdl fmt --deny-config-warnings --no-cache *.md
   cargo fmt
 
-test-here:
+test-here: fmt
   time cargo test --offline
 
-test-there: fmt
-  cd ./typekin_testing && pwd && just test
+[working-directory: 'typekin_testing']
+test-there-fast:
+  just test-fast
 
-test-there-slow: fmt
-  cd ./typekin_testing && pwd && just test-slow
+[working-directory: 'typekin_testing']
+test-there-slow:
+  just test-slow
 
-test: test-here test-there
-
+test-fast: test-here test-there-fast
 test-slow: test-here test-there-slow
+alias test := test-fast
 
 build: fmt
   cargo build

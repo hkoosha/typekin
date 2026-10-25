@@ -18,6 +18,7 @@ pub fn assert_crate_compiles(
     );
 }
 
+#[cfg(test)]
 #[cfg(feature = "slow_tests")]
 mod tests {
     use super::*;

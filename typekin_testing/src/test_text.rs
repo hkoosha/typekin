@@ -215,8 +215,8 @@ struct CallbackEmptyDomain(String);
 #[typekin::text(in = [""])]
 struct EmptyStringOnly(String);
 
-#[allow(dead_code)]
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod tests {
     use super::*;
 
@@ -1001,6 +1001,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod test_mutation_drop {
     use super::*;
     use std::cell::Cell;

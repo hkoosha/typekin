@@ -256,6 +256,7 @@ fn accepts_copy_clone<T: Copy + Clone>() {}
 // =============================================================================
 
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod tests {
     use core::str::FromStr;
 
@@ -992,6 +993,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "fast_tests")]
 mod display_native_values {
     #[typekin::bitflag(with = display)]
     #[repr(u32)]

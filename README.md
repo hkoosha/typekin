@@ -360,15 +360,15 @@ non-assignment operators:
 struct Point(u32);
 ```
 
-The callback receives the validated `Point` result exactly once. Its target
-need not be `Copy`, an integral wrapper, or a friend. Constructors, raw access,
-comparisons, conversions, `map`, `try_map`, and explicitly named integer
-methods keep their normal result types. Assignment operators are unavailable
-because they must leave `Self` in place.
+The callback receives the validated `Point` result exactly once. Its target need
+not be `Copy`, an integral wrapper, or a friend. Constructors, raw access,
+comparisons, conversions, `map`, `try_map`, and explicitly named integer methods
+keep their normal result types. Assignment operators are unavailable because
+they must leave `Self` in place.
 
-The callback runs after the source result has been constructed and validated.
-An operation whose primitive result is invalid for the source wrapper cannot
-be recovered by mapping it to a valid target. Rust checks the callback's
+The callback runs after the source result has been constructed and validated. An
+operation whose primitive result is invalid for the source wrapper cannot be
+recovered by mapping it to a valid target. Rust checks the callback's
 visibility, signature, target validation, and constness. In a const operator,
 the callback must itself be const-callable.
 
@@ -381,11 +381,10 @@ Profiles select the ordinary arithmetic policy and default API surface:
 | `sequential {}` | Checked; panics on overflow or underflow | Ordinary linear ordering |
 
 For `circular` and `sequential`, same-type `+`, `-`, and their assignments
-remain enabled. Primitive arithmetic, bitwise operators, shifts, `core_int`,
-and bit access are disabled by default. A profile body can use `with` and
-`without` to change its operation set; re-enabled arithmetic uses that
-profile's wrapping or checked policy. Bitwise operations retain ordinary
-bitwise semantics.
+remain enabled. Primitive arithmetic, bitwise operators, shifts, `core_int`, and
+bit access are disabled by default. A profile body can use `with` and `without`
+to change its operation set; re-enabled arithmetic uses that profile's wrapping
+or checked policy. Bitwise operations retain ordinary bitwise semantics.
 
 ```rust
 #[typekin::integral(
@@ -410,11 +409,11 @@ struct SeqOffset(i32);
 `precedes` compares the backing bit patterns around the wrapping circle.
 Equality and values exactly half the numeric space apart do not precede each
 other. Use `raw()` for deliberate linear bit-pattern ordering. The one
-`out_type` policy cannot express a full mixed point/offset algebra: write
-mixed operations such as `Point + Offset -> Point` by hand.
+`out_type` policy cannot express a full mixed point/offset algebra: write mixed
+operations such as `Point + Offset -> Point` by hand.
 
-`precedes` is only valid inside `circular`; it defaults to `true`. `default`
-and `sequential` reject it. Circular profiles also reject explicit `ord` or
+`precedes` is only valid inside `circular`; it defaults to `true`. `default` and
+`sequential` reject it. Circular profiles also reject explicit `ord` or
 `partial_ord`. Profiles do not apply to generated bitflag value types; nested
 bitflag integral configuration supports only the default profile and no
 `out_type`.
