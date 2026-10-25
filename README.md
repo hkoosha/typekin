@@ -278,9 +278,11 @@ instead.
 conditions are ANDed; generated construction and enabled mathematical or bitwise
 operations reject values that fail them.
 
-`with = [non_zero]` adds a wrapper-wide nonzero constraint, including when no
-`domain` is declared. `without = [non_zero]` leaves the declared domain
-unchanged while suppressing nonzero storage inference.
+When the effective domain excludes zero, the generated private field uses the
+matching `core::num::NonZero*` type. `with = [non_zero]` adds a wrapper-wide
+nonzero constraint and selects that storage even when no `domain` is declared.
+`without = [non_zero]` opts out of `NonZero*` storage only: it leaves the
+declared domain and its validation unchanged.
 
 ```rust
 #[typekin::integral(domain = [1..=1023, 49_152..=65_535])]
@@ -381,15 +383,29 @@ Profiles select the ordinary arithmetic policy and default API surface:
 
 | Profile | Arithmetic | Ordering |
 | --- | --- | --- |
-| `default {}` | Primitive Rust arithmetic | Default `Ord` / `PartialOrd` behavior |
-| `circular {}` | Native-width wrapping | No `Ord` / `PartialOrd`; optional `precedes` |
+| `int {}` | Primitive Rust arithmetic | Default `Ord` / `PartialOrd` behavior |
 | `sequential {}` | Checked; panics on overflow or underflow | Ordinary linear ordering |
+| `wrapping {}` | `Wrapping` arithmetic | Ordinary linear ordering |
+| `circular {}` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; optional `precedes` |
 
 For `circular` and `sequential`, same-type `+`, `-`, and their assignments
 remain enabled. Primitive arithmetic, bitwise operators, shifts, `core_int`, and
-bit access are disabled by default. A profile body can use `with` and `without`
-to change its operation set; re-enabled arithmetic uses that profile's wrapping
-or checked policy. Bitwise operations retain ordinary bitwise semantics.
+bit access are disabled by default. `wrapping` retains the normal integral API
+surface. A profile body can use `with` and `without` to change its operation
+set; re-enabled arithmetic uses that profile's wrapping or checked policy.
+Bitwise operations retain ordinary bitwise semantics.
+
+`wrapping` stores its private field as `core::num::Wrapping<P>` and keeps
+ordinary `Ord` and `PartialOrd`. `circular` keeps primitive storage, removes
+linear ordering, and can emit `precedes`. Both wrap at the primitive width, but
+they intentionally model different APIs. A nonzero domain combined with
+`wrapping` uses `Wrapping<NonZeroP>` while `raw()` and all public conversion,
+parsing, and serialization APIs continue to use `P`.
+
+Physical storage rewriting requires a private tuple field. A configured
+`get_raw` accessor must still return `P`. Trusted friends may bypass semantic
+validation but cannot construct zero in `NonZero*` storage. Custom unchecked
+constructors are therefore unavailable when nonzero storage is selected.
 
 `profile` accepts one profile or an ordered list. Resolution starts from the
 default integral profile, then applies each profile's defaults and body in list
@@ -400,7 +416,7 @@ order. Untouched settings carry forward, later settings win, and root-level
 #[typekin::integral(
     konst = none,
     profile = [
-        default {
+        int {
             without = math_add,
         },
         circular {
@@ -426,11 +442,12 @@ other. Use `raw()` for deliberate linear bit-pattern ordering. The one
 `out_type` policy cannot express a full mixed point/offset algebra: write mixed
 operations such as `Point + Offset -> Point` by hand.
 
-`precedes` is only valid inside `circular`; it defaults to `true`. `default` and
-`sequential` reject it. Circular profiles also reject explicit `ord` or
-`partial_ord`. Profiles do not apply to generated bitflag value types; nested
-bitflag integral configuration supports only the default profile and no
-`out_type`.
+`precedes` is only valid inside `circular`; it defaults to `true`. `int`,
+`sequential`, and `wrapping` reject it. Circular profiles also reject explicit
+`ord` or `partial_ord`. Profiles do not apply to generated bitflag value types;
+nested bitflag integral configuration supports only the default profile and no
+`out_type`. Bitflag domains must include zero, and nested bitflag configuration
+cannot enable `non_zero`.
 
 ```rust
 struct Foo(u32);

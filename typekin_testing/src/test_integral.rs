@@ -125,6 +125,21 @@ struct NonZeroU16(u16);
 #[typekin::integral(konst = none, domain = 1..)]
 struct NonZeroU32(u32);
 
+#[typekin::integral(
+    konst = none,
+    domain = 1..,
+    profile = wrapping {},
+    without = fn_conv_raw,
+    get_raw = Self::value,
+)]
+struct CustomStoredRaw(u32);
+
+impl CustomStoredRaw {
+    const fn value(self) -> u32 {
+        return self.0.0.get();
+    }
+}
+
 #[typekin::integral(konst = none, domain = 1..)]
 struct NonZeroU64(u64);
 
@@ -239,6 +254,14 @@ struct Wide(u128);
 struct TrustEven(u8);
 
 const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
+
+#[typekin::integral(
+    konst = none,
+    domain = 1..,
+    profile = wrapping {},
+    friends = self(u8) -> unsafe,
+)]
+struct WrappingTrusted(u8);
 
 // ==============================================================================
 
@@ -927,6 +950,15 @@ mod tests {
     #[test]
     fn trusted_construction_cannot_bypass_non_zero_storage() {
         assert_panics(|| TrustEven::of(0u8));
+    }
+
+    #[test]
+    fn trusted_construction_preserves_combined_storage_validity() {
+        assert_panics(|| WrappingTrusted::of(0u8));
+
+        let value = WrappingTrusted::of(7u8);
+        let storage: core::num::Wrapping<core::num::NonZeroU8> = value.0;
+        assert_eq!(storage.0.get(), 7);
     }
 
     #[test]
@@ -1724,6 +1756,18 @@ mod tests {
         let mut raw_hasher = std::collections::hash_map::DefaultHasher::new();
         7u32.hash(&mut raw_hasher);
         assert_eq!(wrapped_hasher.finish(), raw_hasher.finish());
+    }
+
+    #[test]
+    fn rewritten_storage_preserves_a_custom_primitive_raw_accessor() {
+        let value = CustomStoredRaw::try_make(7).unwrap();
+        assert_eq!(value.value(), 7);
+
+        let mapped = value.map(|raw| raw + 2);
+        assert_eq!(mapped.value(), 9);
+
+        let sum = mapped + CustomStoredRaw::try_make(3).unwrap();
+        assert_eq!(sum.value(), 12);
     }
 
     #[test]

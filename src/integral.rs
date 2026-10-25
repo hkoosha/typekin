@@ -334,6 +334,21 @@ impl Maker {
         storage: StoragePlan,
     ) -> syn::Result<Self> {
         let cfg = Self::preprocess_cfg(cfg);
+        let (unchecked_flag, emits_unchecked) =
+            if cfg.validation.has_validation() {
+                ("fn_make_unchecked", cfg.flags.fn_make_unchecked)
+            }
+            else {
+                ("fn_make_checked", cfg.flags.fn_make_checked)
+            };
+        if storage.non_zero && !emits_unchecked {
+            let span = cfg
+                .explicit_flag(unchecked_flag)
+                .map_or_else(Span::call_site, |(_, span)| span);
+            return span.fail(
+                "nonzero storage does not support custom unchecked constructors",
+            );
+        }
 
         let mut this = Self {
             trait_seal: format_ident!("Seal"),

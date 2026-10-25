@@ -171,6 +171,49 @@ mod tests {
     }
 
     #[test]
+    fn non_zero_storage_rejects_a_custom_unchecked_constructor() {
+        let input = "
+            konst = none,
+            domain = 1..,
+            without = fn_make_unchecked,
+        ";
+        let config = syn::parse_str::<Cfg>(input);
+        assert!(config.is_ok(), "{input}");
+        let maker = Maker::new(
+            format_ident!("Point"),
+            format_ident!("u32"),
+            Box::new(config.unwrap()),
+            StoragePlan::new(N::U032, true, false),
+        );
+        assert!(maker.is_err(), "{input}");
+        let error = maker.err().unwrap();
+
+        assert_eq!(
+            error.to_string(),
+            "nonzero storage does not support custom unchecked constructors",
+        );
+    }
+
+    #[test]
+    fn wrapping_storage_allows_a_custom_unchecked_constructor() {
+        let input = "
+            konst = none,
+            profile = wrapping {},
+            without = fn_make_checked,
+        ";
+        let config = syn::parse_str::<Cfg>(input);
+        assert!(config.is_ok(), "{input}");
+        let maker = Maker::new(
+            format_ident!("Point"),
+            format_ident!("u32"),
+            Box::new(config.unwrap()),
+            StoragePlan::new(N::U032, false, true),
+        );
+
+        assert!(maker.is_ok(), "{input}");
+    }
+
+    #[test]
     fn accepts_friend_with_multiple_capabilities() {
         let input = "
             konst = none,

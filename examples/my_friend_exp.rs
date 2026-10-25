@@ -1233,12 +1233,12 @@ const _: () = {
     }
     if !(::core::mem::size_of::<PageHeader>() == ::core::mem::size_of::<u32>())
     {
-        panic!("invalid memory layout, mismatching sizes: #ty(#el) != #el");
+        ::core::panic!("invalid integral storage size");
     };
     if !(::core::mem::align_of::<PageHeader>()
         == ::core::mem::align_of::<u32>())
     {
-        panic!("invalid memory layout, mismatching alignment: #ty(#el) != #el");
+        ::core::panic!("invalid integral storage alignment");
     };
     const impl ::core::ops::Add for PageHeader {
         type Output = Self;
@@ -1625,7 +1625,9 @@ const _: () = {
             return match self.try_map(function) {
                 ::core::result::Result::Ok(value) => value,
                 ::core::result::Result::Err(_) => {
-                    ::core::panic!("integral mapping produced an invalid value")
+                    ::core::panic!(
+                        "mapping operation produced an invalid value"
+                    )
                 }
             };
         }
@@ -1812,19 +1814,19 @@ const _: () = {
         #[inline(always)]
         pub(self) const fn _shr(
             &self,
-            count: usize,
+            rhs: usize,
         ) -> Self {
             let lhs = Self::raw(*self);
-            let it = lhs >> count;
+            let it = lhs >> rhs;
             return Self::_unchecked(it);
         }
         #[inline(always)]
         pub(self) const fn _shl(
             &self,
-            count: usize,
+            rhs: usize,
         ) -> Self {
             let lhs = Self::raw(*self);
-            let it = lhs << count;
+            let it = lhs << rhs;
             return Self::_unchecked(it);
         }
         #[inline(always)]

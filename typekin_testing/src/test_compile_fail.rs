@@ -92,6 +92,75 @@ mod tests {
     }
 
     #[test]
+    fn wrapping_storage_requires_a_private_field() {
+        const SRC: &str = r#"
+                #[typekin::integral(profile = wrapping {})]
+                struct Code(pub u8);
+            "#;
+
+        assert_rejected(
+            "wrapping-storage-requires-private-field",
+            "integral storage can only rewrite a private tuple field",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn non_zero_storage_rejects_a_custom_unchecked_constructor() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    domain = 1..,
+                    without = fn_make_unchecked,
+                )]
+                struct Code(u8);
+
+                impl Code {
+                    const fn _unchecked(raw: u8) -> Self {
+                        return unsafe { core::mem::transmute(raw) };
+                    }
+                }
+            "#;
+
+        assert_rejected(
+            "non-zero-storage-rejects-custom-unchecked-constructor",
+            "nonzero storage does not support custom unchecked constructors",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn bitflag_rejects_non_zero_storage() {
+        const SRC: &str = r#"
+                #[typekin::bitflag(integral = [with = non_zero])]
+                enum Code {
+                    One = 1,
+                }
+            "#;
+
+        assert_rejected(
+            "bitflag-rejects-non-zero-storage",
+            "bitflag integral configuration does not support `non_zero`",
+            SRC,
+        );
+    }
+
+    #[test]
+    fn bitflag_rejects_a_domain_without_zero() {
+        const SRC: &str = r#"
+                #[typekin::bitflag(integral = [domain = 1..])]
+                enum Code {
+                    One = 1,
+                }
+            "#;
+
+        assert_rejected(
+            "bitflag-rejects-domain-without-zero",
+            "bitflag integral domain must include zero",
+            SRC,
+        );
+    }
+
+    #[test]
     fn validated_integral_has_no_make() {
         const SRC: &str = r#"
                 const fn is_even(value: u8) -> bool { value % 2 == 0 }

@@ -1852,6 +1852,11 @@ impl Cfg {
                         .span()
                         .fail("bitflag integral domain must include zero");
                 }
+                if int.requires_non_zero_storage() {
+                    return content.span().fail(
+                        "bitflag integral configuration cannot use nonzero storage",
+                    );
+                }
                 *self.int = int;
 
                 return Ok(true);
