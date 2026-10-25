@@ -5,6 +5,24 @@ const DEP_SERDE: &'static str = r#"
 serde = { version = "1", default-features = false, features = ["alloc"] }
 "#;
 
+pub fn assert_crate_compiles(
+    name: &str,
+    nightly: bool,
+    dependencies: &str,
+    source: &str,
+) {
+    if !has_slow_tests() {
+        return;
+    }
+
+    let output = compile(name, dependencies, source, nightly);
+    assert!(
+        output.status.success(),
+        "failed, {name}:\n{}",
+        output.stderr
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,4 @@
 use crate::*;
-use std::env;
 use std::error::Error;
 
 //noinspection RsConstantConditionIf
@@ -8,7 +7,7 @@ fn assert_rejected(
     expected_error: &str,
     source: &str,
 ) {
-    if !env::var("TYPEKIN_SLOW_TESTS").is_ok() {
+    if !has_slow_tests() {
         return;
     }
 

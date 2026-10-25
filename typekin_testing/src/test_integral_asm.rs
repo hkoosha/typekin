@@ -1,16 +1,28 @@
 use crate::*;
 use std::process::Command;
 
-#[test]
-fn unoptimized_integral() {
-    let dir = make_dir("unoptimized_asm");
-    let bin = dir.join("release").join("my_u32");
+fn assert_ok(
+    name: &str,
+    bin_name: &str,
+    opt_level: usize,
+    must_match: bool,
+    operations: &[Operation],
+) {
+    if !has_slow_tests() {
+        return;
+    }
 
-    build(0, "my_u32", &dir);
+    let dir = make_dir(name);
 
+    let bin = dir.join("release").join(bin_name);
+    build(opt_level, &bin_name, &dir);
     exe("bin", Command::new(&bin));
 
-    let (expected, unexpected) = assert_diff(&bin, U32_OPERATIONS);
+    let (expected, unexpected) = match must_match {
+        true => assert_match(&bin, operations),
+        false => assert_diff(&bin, operations),
+    };
+
     if !expected.is_empty() {
         let it = format!("expected found:\n\n{}", expected.join("\n"));
         eprintln!("{}", it);
@@ -21,58 +33,51 @@ fn unoptimized_integral() {
     }
 }
 
-#[test]
-fn optimized_integral() {
-    let dir = make_dir("optimized_asm");
-    let bin = dir.join("release").join("my_u32");
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    build(3, "my_u32", &dir);
-    exe("bin", Command::new(&bin));
-
-    let (expected, unexpected) = assert_match(&bin, U32_OPERATIONS);
-    if !expected.is_empty() {
-        let it = format!("expected found:\n\n{}", expected.join("\n"));
-        eprintln!("{}", it);
+    #[test]
+    fn unoptimized_integral_asm_level0() {
+        assert_ok(
+            "unoptimized_integral_asm_level0",
+            "my_u32",
+            0,
+            false,
+            U32_OPERATIONS,
+        );
     }
-    if !unexpected.is_empty() {
-        let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
-        panic!("{}", it);
+
+    #[test]
+    fn optimized_integral_asm_level3() {
+        assert_ok(
+            "optimized_integral_asm_level3",
+            "my_u32",
+            3,
+            true,
+            U32_OPERATIONS,
+        );
     }
-}
 
-#[test]
-fn optimized_integral_mapping() {
-    let dir = make_dir("optimized_map_asm");
-    let bin = dir.join("release").join("my_u32");
-    build(3, "my_u32", &dir);
-    exe("bin", Command::new(&bin));
-
-    let (expected, unexpected) = assert_match(&bin, U32_MAP_OPERATIONS);
-    if !expected.is_empty() {
-        let it = format!("expected found:\n\n{}", expected.join("\n"));
-        eprintln!("{}", it);
+    #[test]
+    fn optimized_integral_const_arm_level3() {
+        assert_ok(
+            "optimized_integral_const_arm_level3",
+            "my_u32_const",
+            3,
+            true,
+            U32_OPERATIONS,
+        );
     }
-    if !unexpected.is_empty() {
-        let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
-        panic!("{}", it);
-    }
-}
 
-#[test]
-fn optimized_integral_const() {
-    let dir = make_dir("optimized_asm_const");
-    let bin = dir.join("release").join("my_u32_const");
-
-    build(3, "my_u32_const", &dir);
-    exe("bin", Command::new(&bin));
-
-    let (expected, unexpected) = assert_match(&bin, U32_OPERATIONS);
-    if !expected.is_empty() {
-        let it = format!("expected found:\n\n{}", expected.join("\n"));
-        eprintln!("{}", it);
-    }
-    if !unexpected.is_empty() {
-        let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
-        panic!("{}", it);
+    #[test]
+    fn optimized_map_asm_level3() {
+        assert_ok(
+            "optimized_map_asm_level3",
+            "my_u32",
+            3,
+            true,
+            U32_MAP_OPERATIONS,
+        );
     }
 }

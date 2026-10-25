@@ -1,9 +1,12 @@
 use crate::FixtureDir;
-use std::fs;
 use std::path::Path;
 use std::process::{
     Command,
     ExitStatus,
+};
+use std::{
+    env,
+    fs,
 };
 
 const MANIFEST: &str = env!("CARGO_MANIFEST_DIR");
@@ -145,4 +148,13 @@ pub struct Output {
     pub status: ExitStatus,
     pub stdout: String,
     pub stderr: String,
+}
+
+pub fn has_slow_tests() -> bool {
+    return if cfg!(feature = "slow_tests") {
+        true
+    }
+    else {
+        false
+    };
 }

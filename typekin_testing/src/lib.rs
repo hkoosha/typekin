@@ -22,12 +22,19 @@ pub mod dir;
 pub mod ops;
 pub mod proc;
 
+#[cfg(test)]
 mod test_bitflag;
+#[cfg(test)]
 mod test_compile_fail;
+#[cfg(test)]
 mod test_friendship;
+#[cfg(test)]
 mod test_integral;
+#[cfg(test)]
 mod test_integral_asm;
+#[cfg(test)]
 mod test_no_std;
+#[cfg(test)]
 mod test_text;
 
 pub use crate::alloc::*;

@@ -135,17 +135,3 @@ pub fn accepts_copy<T: Copy>() {}
 pub fn accepts_clone<T: Clone>() {}
 
 pub fn accepts_debug<T: Debug>() {}
-
-pub fn assert_crate_compiles(
-    name: &str,
-    nightly: bool,
-    dependencies: &str,
-    source: &str,
-) {
-    let output = compile(name, dependencies, source, nightly);
-    assert!(
-        output.status.success(),
-        "failed, {name}:\n{}",
-        output.stderr
-    );
-}

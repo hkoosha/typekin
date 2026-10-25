@@ -10,6 +10,10 @@ description = "Unpublished crate only for testing the crate: typekin"
 
 publish = false
 
+[features]
+default = []
+slow_tests = []
+
 [lints.clippy]
 needless_return = "allow"
 
