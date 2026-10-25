@@ -101,8 +101,9 @@ impl AllocationWatch {
         self.active = false;
 
         let (addr, dealloc, alloc) = with(|it| {
+            let observation = (it.address, it.deallocations, it.reallocations);
             it.reset_for(std::ptr::null());
-            return (it.address, it.deallocations, it.reallocations);
+            return observation;
         });
 
         assert_eq!(addr, 0);

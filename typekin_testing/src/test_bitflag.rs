@@ -1014,6 +1014,15 @@ mod display_native_values {
         Negative = -1,
     }
 
+    fn assert_display(
+        value: impl core::fmt::Display,
+        expected: &str,
+    ) {
+        assert_eq!(format!("{value}"), expected);
+        assert_eq!(format!("{value:+014}"), expected);
+        assert_eq!(format!("{value:*^15.2}"), expected);
+    }
+
     #[test]
     fn displays_zero_wide_value_with_signed_minimum() {
         assert_eq!(Wide::High.to_string(), "High");
@@ -1021,15 +1030,11 @@ mod display_native_values {
 
         let raw = 0u32;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "");
 
         let raw = i16::MIN;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "0x8000");
     }
 
     #[test]
@@ -1039,15 +1044,11 @@ mod display_native_values {
 
         let raw = 0u32;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "");
 
         let raw = -123;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0xff84");
     }
 
     #[test]
@@ -1057,15 +1058,11 @@ mod display_native_values {
 
         let raw = 0u32;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "");
 
         let raw = 0;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "");
     }
 
     #[test]
@@ -1075,15 +1072,11 @@ mod display_native_values {
 
         let raw = 0u32;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "");
 
         let raw = i16::MAX;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0x7ffe");
     }
 
     #[test]
@@ -1093,15 +1086,11 @@ mod display_native_values {
 
         let raw = 0x8000_0001;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High");
 
         let raw = i16::MIN;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "0x8000");
     }
 
     #[test]
@@ -1111,15 +1100,11 @@ mod display_native_values {
 
         let raw = 0x8000_0001;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High");
 
         let raw = -123;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0xff84");
     }
 
     #[test]
@@ -1129,15 +1114,11 @@ mod display_native_values {
 
         let raw = 0x8000_0001;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High");
 
         let raw = 0;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "");
     }
 
     #[test]
@@ -1147,15 +1128,11 @@ mod display_native_values {
 
         let raw = 0x8000_0001;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High");
 
         let raw = i16::MAX;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0x7ffe");
     }
 
     #[test]
@@ -1165,15 +1142,11 @@ mod display_native_values {
 
         let raw = u32::MAX;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High | 0x7ffffffe");
 
         let raw = i16::MIN;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "0x8000");
     }
 
     #[test]
@@ -1183,15 +1156,11 @@ mod display_native_values {
 
         let raw = u32::MAX;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High | 0x7ffffffe");
 
         let raw = -123;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0xff84");
     }
 
     #[test]
@@ -1201,15 +1170,11 @@ mod display_native_values {
 
         let raw = u32::MAX;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High | 0x7ffffffe");
 
         let raw = 0;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "");
     }
 
     #[test]
@@ -1219,15 +1184,11 @@ mod display_native_values {
 
         let raw = u32::MAX;
         let value = Wide::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+014}"), format!("{raw:+014}"));
-        assert_eq!(format!("{value:*^15.2}"), format!("{raw:*^15.2}"));
+        assert_display(value, "Low | High | 0x7ffffffe");
 
         let raw = i16::MAX;
         let value = Signed::from_bits_retain(raw);
-        assert_eq!(format!("{value}"), format!("{raw}"));
-        assert_eq!(format!("{value:+09}"), format!("{raw:+09}"));
-        assert_eq!(format!("{value:_<10.2}"), format!("{raw:_<10.2}"));
+        assert_display(value, "Positive | 0x7ffe");
     }
 
     #[test]

@@ -90,6 +90,7 @@ pub fn compile(
     let fixture = FixtureDir::mkdir_suffixed(name);
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
         .canonicalize()
         .expect("canonicalize root");
     let root = root.to_str().expect("root must be valid UTF-8");
@@ -103,7 +104,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-typekin = {{ path = {} }}
+typekin = {{ path = "{}" }}
 {}
 "#,
         name, root, dependencies,
