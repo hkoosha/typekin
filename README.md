@@ -40,8 +40,8 @@ directory. This crate makes no backward-compatibility guarantees before version
 The supported public attribute macros are:
 
 - `#[typekin::integral]`: over a one-field tuple struct whose field is a
-  primitive integer.
-- `#[typekin::bitflag]`: over a unit enum with an integral `repr`.
+  primitive integer. Generic declarations require a private value field.
+- `#[typekin::bitflag]`: over a non-generic unit enum with an integral `repr`.
 - `#[typekin::text]` over non-generic one-field tuple struct whose field is an
   unqualified `String`.
 - `#[typekin::friends]`: over concrete, non-generic structs, enums, or unions.
@@ -244,6 +244,47 @@ controls where the generated protocol is placed. It has no generated validator
 to bypass: the configured `of_parts` function always runs, including its own
 checks. Relations and friend inputs can both be non-`Copy`.
 
+### Generic integral identities
+
+```rust
+#[typekin::integral]
+struct Tagged<'a, T: ?Sized = (), const SPACE: u8 = 7>(u32)
+where
+    T: 'a;
+
+fn main() {
+    let value = Tagged::<'static, str, 7>::make(42);
+    let copied = value;
+    assert_eq!(copied.raw(), value.raw());
+    assert_eq!(core::mem::size_of_val(&value), core::mem::size_of::<u32>());
+}
+```
+
+Integral declarations accept lifetimes, types, and const parameters, preserving
+their attributes, bounds, defaults, and `where` clauses. The source must still
+have exactly one concrete primitive integer field, not a generic numeric field.
+For generic declarations that field must be private: Typekin appends one private
+`core::marker::PhantomData` tuple field per parameter, in declaration order, so
+direct tuple construction has a different arity. Use `make`, `try_make`, or
+`of` rather than the tuple constructor.
+
+Lifetime markers use `PhantomData<&'a ()>`, type markers use `PhantomData<T>`,
+and const parameters use private marker types with the declared const type.
+Const-parameter types requiring nightly features need those gates in the
+consumer. Type markers have Rust's normal ownership, variance, drop-check,
+`Send`, and `Sync` behavior. Configured generated `Copy` and `Clone` impls do
+not require marker types to implement either trait; user-written bounds still
+apply. Formatting, hashing, parsing, and Serde likewise operate only on the
+numeric value.
+
+Markers add no runtime state, size, alignment, allocation, or wire data. Storage
+selection still affects only field zero, and `raw()` returns the primitive even
+with `NonZero` or `Wrapping` storage. Friendship protocols and operator facets
+retain all generic arguments, so a friend of one instantiation is not implicitly
+a friend of another. Non-generic declarations acquire no marker fields. This
+generic support is specific to `integral`, not `text`, standalone `friends`,
+or `bitflag`.
+
 ### Validation
 
 Place each constraint at the macro root. `valid` accepts either one callback
@@ -412,35 +453,73 @@ default integral profile, then applies each profile's defaults and body in list
 order. Untouched settings carry forward, later settings win, and root-level
 `with` and `without` are applied last.
 
+Facets select arithmetic and output conversion by the exact RHS type. Slots not
+claimed by an explicit facet use the root profile. A facet inherits root flags;
+use `with` to re-enable an operation disabled at the root:
+
 ```rust
-#[typekin::integral(
-    konst = none,
-    profile = [
-        int {
-            without = math_add,
-        },
-        circular {
-            precedes = true,
-        },
-    ],
-    out_type = SeqPoint::into_offset(_) -> SeqOffset,
-)]
-struct SeqPoint(u32);
+mod sealed {
+    pub trait Direction {}
+}
+trait Direction: sealed::Direction {}
+struct In;
+struct Out;
+impl sealed::Direction for In {}
+impl sealed::Direction for Out {}
+impl Direction for In {}
+impl Direction for Out {}
 
 #[typekin::integral(
     konst = none,
-    profile = circular {
-        precedes = false,
-    },
+    profile = circular {},
+    without = math_add,
+    out_type = Self::into_offset(_) -> SeqOffset<D>,
+    facets = [
+        circular {
+            with = math_add,
+            friends = Self::offset_raw(SeqOffset<D>) -> Math,
+            out_type = Self,
+        },
+    ],
 )]
-struct SeqOffset(i32);
+struct SeqPoint<D: Direction>(u32);
+
+#[typekin::integral(
+    konst = none,
+    profile = circular { precedes = false },
+)]
+struct SeqOffset<D: Direction>(i32);
+
+impl<D: Direction> SeqPoint<D> {
+    fn into_offset(self) -> SeqOffset<D> {
+        return SeqOffset::make(self.raw() as i32);
+    }
+
+    fn offset_raw(offset: SeqOffset<D>) -> u32 {
+        return offset.raw() as u32;
+    }
+}
+
+fn main() {
+    let maximum = SeqPoint::<Out>::make(u32::MAX);
+    let next = maximum + SeqOffset::<Out>::make(1);
+    let difference: SeqOffset<Out> = next - maximum;
+    assert_eq!(next.raw(), 0);
+    assert_eq!(difference.raw(), 1);
+}
 ```
 
 `precedes` compares the backing bit patterns around the wrapping circle.
 Equality and values exactly half the numeric space apart do not precede each
-other. Use `raw()` for deliberate linear bit-pattern ordering. The one
-`out_type` policy cannot express a full mixed point/offset algebra: write mixed
-operations such as `Point + Offset -> Point` by hand.
+other. Use `raw()` for deliberate linear bit-pattern ordering. Matching `In`
+operations work independently; mixing `SeqPoint<Out>` with `SeqOffset<In>` or
+`SeqPoint<In>` does not compile. `Self`-qualified callbacks refer to the LHS
+wrapper even when dispatched through an RHS implementation.
+
+The runnable [TCP sequence example](examples/my_tcp.rs) reproduces the
+directional point/offset model from `arena/TEXT.md`, including typed `SND.NXT`,
+`RCV.NXT`, and `SND.UNA` state. Run `cargo +stable run --example my_tcp`. It
+demonstrates sequence arithmetic and stream separation, not a TCP transport.
 
 `precedes` is only valid inside `circular`; it defaults to `true`. `int`,
 `sequential`, and `wrapping` reject it. Circular profiles also reject explicit

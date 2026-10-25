@@ -88,4 +88,26 @@ mod tests {
             SEQUENCE_OPERATIONS,
         );
     }
+
+    #[test]
+    fn unoptimized_generic_sequence_asm_level0() {
+        assert_ok(
+            "unoptimized_generic_sequence_asm_level0",
+            "my_sequence",
+            0,
+            false,
+            GENERIC_SEQUENCE_OPERATIONS,
+        );
+    }
+
+    #[test]
+    fn optimized_generic_sequence_asm_level3() {
+        assert_ok(
+            "optimized_generic_sequence_asm_level3",
+            "my_sequence",
+            3,
+            true,
+            GENERIC_SEQUENCE_OPERATIONS,
+        );
+    }
 }

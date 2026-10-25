@@ -35,6 +35,8 @@ mod test_integral_asm;
 #[cfg(test)]
 mod test_integral_generic;
 #[cfg(test)]
+mod test_integral_generic_compile;
+#[cfg(test)]
 mod test_no_std;
 #[cfg(test)]
 mod test_text;

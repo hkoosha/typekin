@@ -125,19 +125,62 @@ impl IntegralTarget {
                     let marker = this.fresh_ident(&format!(
                         "__Typekin{type_name}Const{index}",
                     ));
-                    let value = this.fresh_ident("VALUE");
                     let ty = &parameter.ty;
-                    this.const_markers.push(quote! {
-                        #[doc(hidden)]
-                        struct #marker<const #value: #ty>;
-                    });
-                    quote! { #marker<#name> }
+                    if this.uses_generic_names(ty.to_token_stream()) {
+                        // A nightly const type may itself depend on another
+                        // parameter. Keep its entire declaration scope, with
+                        // zero-sized fields for otherwise-unused parameters.
+                        let generics = this.external_generics();
+                        let (parameters, arguments, where_clause) =
+                            generics.split_for_impl();
+                        let fields = generics.params.iter().filter_map(|it| {
+                            return match it {
+                                GenericParam::Lifetime(it) => {
+                                    let lifetime = &it.lifetime;
+                                    Some(quote! { &#lifetime () })
+                                }
+                                GenericParam::Type(it) => {
+                                    let name = &it.ident;
+                                    Some(quote! { #name })
+                                }
+                                GenericParam::Const(_) => None,
+                            };
+                        });
+                        this.const_markers.push(quote! {
+                            #[doc(hidden)]
+                            struct #marker #parameters(
+                                #(::core::marker::PhantomData<#fields>),*
+                            ) #where_clause;
+                        });
+                        quote! { #marker #arguments }
+                    }
+                    else {
+                        let value = this.fresh_ident("VALUE");
+                        this.const_markers.push(quote! {
+                            #[doc(hidden)]
+                            struct #marker<const #value: #ty>;
+                        });
+                        quote! { #marker<#name> }
+                    }
                 }
             };
             this.phantom_types.push(phantom);
         }
 
         return this;
+    }
+
+    fn uses_generic_names(&self, tokens: TokenStream) -> bool {
+        return tokens.into_iter().any(|token| match token {
+            proc_macro2::TokenTree::Ident(ident) => {
+                ident == "Self"
+                    || self.occupied_names.contains(&ident.to_string())
+            }
+            proc_macro2::TokenTree::Group(group) => {
+                self.uses_generic_names(group.stream())
+            }
+            _ => false,
+        });
     }
 
     fn has_generics(&self) -> bool {

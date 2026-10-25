@@ -50,3 +50,26 @@ pub const SEQUENCE_OPERATIONS: &[Operation] = &[
         "wrapped_precedes_sequence",
     ),
 ];
+
+pub const GENERIC_SEQUENCE_OPERATIONS: &[Operation] = &[
+    Operation::new(
+        "generic point subtraction with generic output",
+        "raw_sub_generic_points",
+        "wrapped_sub_generic_points",
+    ),
+    Operation::new(
+        "generic point plus offset facet",
+        "raw_add_generic_offset",
+        "wrapped_add_generic_offset",
+    ),
+    Operation::new(
+        "generic point minus offset facet",
+        "raw_sub_generic_offset",
+        "wrapped_sub_generic_offset",
+    ),
+    Operation::new(
+        "generic circular precedes",
+        "raw_precedes_sequence",
+        "wrapped_precedes_generic_point",
+    ),
+];
