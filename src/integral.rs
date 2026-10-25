@@ -27,6 +27,7 @@ use syn::{
     ItemStruct,
     Path,
     Type,
+    braced,
     parse_quote,
 };
 
@@ -45,10 +46,7 @@ use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
 };
-use crate::zz_profile::{
-    Arithmetic,
-    Profiles,
-};
+use crate::zz_profile::{Arithmetic, FacetCfg, Profile, Profiles};
 use crate::zz_runner::{
     Merged,
     MkErr,
@@ -3311,7 +3309,6 @@ impl Maker {
 
 // =============================================================================
 
-#[derive(Clone)]
 struct IntegralFriend(Friend);
 
 impl Parse for IntegralFriend {
@@ -3331,6 +3328,28 @@ pub(crate) struct IntSettings {
     seen: BTreeMap<String, bool>,
 }
 
+pub(crate) struct DefaultFacetCfg {
+    pub(crate) profile: Profiles,
+    pub(crate) friends: BTreeSet<Friend>,
+    pub(crate) flags: Box<IntegralFlags>,
+    pub(crate) ty_out: SelfConverter,
+}
+
+impl Debug for DefaultFacetCfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return f
+            .debug_struct("DefaultFacetCfg")
+            .field("profile", &self.profile.arithmetic())
+            .field("friends", &self.friends)
+            .field("flags", &self.flags)
+            .field("ty_out", &!self.ty_out.is_self())
+            .finish();
+    }
+}
+
 pub(crate) struct Cfg {
     pub(crate) konst: Konst,
     konst_flags: BTreeMap<Konsts, (bool, Span)>,
@@ -3343,6 +3362,9 @@ pub(crate) struct Cfg {
     pub(crate) flags: Box<IntegralFlags>,
     pub(crate) ty_out: SelfConverter,
     pub(crate) profile: Profiles,
+    pub(crate) facets: Vec<FacetCfg>,
+    pub(crate) default_facet: Option<DefaultFacetCfg>,
+    facets_present: bool,
 }
 
 impl Cfg {
@@ -3499,6 +3521,13 @@ impl Cfg {
             }
         }
 
+        self.default_facet = self.facets_present.then(|| DefaultFacetCfg {
+            profile: self.profile.clone(),
+            friends: self.friends.clone(),
+            flags: self.flags.clone(),
+            ty_out: self.ty_out.clone(),
+        });
+
         return Ok(());
     }
 
@@ -3541,16 +3570,11 @@ impl Cfg {
             .any(|flag| self.konst_for(&[*flag]));
     }
 
-    fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
+    pub(crate) fn parse_friends_unexpanded(
+        input: ParseStream
+    ) -> syn::Result<BTreeSet<Friend>> {
         return zz::one_or_list::<IntegralFriend>(input)?
-            .map(|IntegralFriend(mut friend)| {
-                if friend.capabilities.contains(&format_ident!("Math")) {
-                    friend.capabilities.extend([
-                        format_ident!("Make"),
-                        format_ident!("Bit"),
-                    ]);
-                }
-
+            .map(|IntegralFriend(friend)| {
                 for capability in &friend.capabilities {
                     if !matches!(
                         capability.to_string().as_str(),
@@ -3563,6 +3587,22 @@ impl Cfg {
                 return Ok(friend);
             })
             .collect();
+    }
+
+    fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
+        let friends = Self::parse_friends_unexpanded(input)?
+            .into_iter()
+            .map(|mut friend| {
+                if friend.capabilities.contains(&format_ident!("Math")) {
+                    friend.capabilities.extend([
+                        format_ident!("Make"),
+                        format_ident!("Bit"),
+                    ]);
+                }
+                return friend;
+            })
+            .collect();
+        return Ok(friends);
     }
 
     pub(crate) fn add_friend(
@@ -3602,6 +3642,10 @@ impl Cfg {
                 "with" => self.parse_flags(rest, true)?,
                 "without" => self.parse_flags(rest, false)?,
                 "friends" => self.friends = Self::parse_friends(rest)?,
+                "facets" => {
+                    self.facets = zz::list::<FacetCfg>(rest)?.collect();
+                    self.facets_present = true;
+                }
                 "get_raw" => self.get_raw = Some(rest.parse()?),
                 "out_type" => self.ty_out = rest.parse()?,
                 "profile" => self.profile = rest.parse()?,
@@ -3634,6 +3678,9 @@ impl Cfg {
             flags: Box::default(),
             ty_out: Default::default(),
             profile: Default::default(),
+            facets: Default::default(),
+            default_facet: None,
+            facets_present: false,
         };
     }
 

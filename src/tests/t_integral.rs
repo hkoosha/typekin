@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use quote::ToTokens;
+    use quote::{
+        ToTokens,
+        format_ident,
+    };
 
     use crate::integral::Cfg;
     use crate::zz::{
@@ -585,6 +588,118 @@ mod tests {
         let config = this.unwrap();
 
         assert!(config.flags.math_add);
+    }
+
+    #[test]
+    fn parses_explicit_facets_and_normalizes_the_root_fallback() {
+        let input = "
+            konst = none,
+            profile = sequential {
+                without = math_add,
+            },
+            with = math_add,
+            friends = root_conv(RootRhs) -> Math,
+            out_type = Point::into_root(_) -> RootOutput,
+            facets = [
+                circular {
+                    friends = offset_conv(Offset) -> Math,
+                    with = [math_add, math_sub],
+                    out_type = Self,
+                },
+                default {
+                    friends = bits_conv(Bits) -> Bit,
+                    without = math_sub,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.facets.len(), 2);
+        assert_eq!(config.facets[0].profile.arithmetic(), Arithmetic::Wrapping,);
+        assert_eq!(
+            config.facets[1].profile.arithmetic(),
+            Arithmetic::Primitive,
+        );
+        assert!(
+            config.facets[0]
+                .ty_out
+                .as_ref()
+                .is_some_and(|it| it.is_self())
+        );
+        assert!(config.facets[1].ty_out.is_none());
+
+        let explicit_friend = config.facets[0].friends.iter().next().unwrap();
+        assert!(
+            explicit_friend
+                .capabilities
+                .contains(&format_ident!("Math"))
+        );
+        assert!(
+            !explicit_friend
+                .capabilities
+                .contains(&format_ident!("Make"))
+        );
+        assert!(!explicit_friend.capabilities.contains(&format_ident!("Bit")));
+
+        let default = config.default_facet.as_ref().unwrap();
+        assert_eq!(default.profile.arithmetic(), Arithmetic::Checked);
+        assert!(default.flags.math_add);
+        assert!(!default.ty_out.is_self());
+        let root_friend = default.friends.iter().next().unwrap();
+        assert!(root_friend.capabilities.contains(&format_ident!("Math")));
+        assert!(root_friend.capabilities.contains(&format_ident!("Make")));
+        assert!(root_friend.capabilities.contains(&format_ident!("Bit")));
+    }
+
+    #[test]
+    fn empty_facets_still_materialize_the_default_facet() {
+        let input = "konst = none, facets = []";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.facets.is_empty());
+        assert!(config.default_facet.is_some());
+    }
+
+    #[test]
+    fn omitted_facets_preserve_the_legacy_configuration_path() {
+        let input = "konst = none";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.facets.is_empty());
+        assert!(config.default_facet.is_none());
+    }
+
+    #[test]
+    fn facets_require_a_bracketed_list() {
+        let input = "facets = [default {}]";
+        let valid = syn::parse_str::<Cfg>(input);
+        assert!(valid.is_ok(), "{input}");
+
+        let input = "facets = default {}";
+        let invalid = syn::parse_str::<Cfg>(input);
+        assert!(invalid.is_err(), "{input}");
+    }
+
+    #[test]
+    fn rejects_duplicate_facet_fields() {
+        let input = "
+            facets = [
+                default {
+                    out_type = Self,
+                    out_type = Self,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicated arg", "{input}");
     }
 
     #[test]
