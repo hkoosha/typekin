@@ -1,6 +1,5 @@
 use crate::asm;
 use crate::ops::Operation;
-use crate::proc::compile;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::path::Path;

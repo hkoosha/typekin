@@ -128,8 +128,8 @@ typekin = {{ path = "{}" }}
             "check",
             "--offline",
             "--quiet",
-            "--manifest-path",
         ])
+        .arg("--manifest-path")
         .arg(&manifest)
         .arg("--target-dir")
         .arg(fixture.path.join("target"))
@@ -148,13 +148,4 @@ pub struct Output {
     pub status: ExitStatus,
     pub stdout: String,
     pub stderr: String,
-}
-
-pub fn has_slow_tests() -> bool {
-    return if cfg!(feature = "slow_tests") {
-        true
-    }
-    else {
-        false
-    };
 }

@@ -7,15 +7,10 @@ serde = { version = "1", default-features = false, features = ["alloc"] }
 
 pub fn assert_crate_compiles(
     name: &str,
-    nightly: bool,
     dependencies: &str,
     source: &str,
 ) {
-    if !has_slow_tests() {
-        return;
-    }
-
-    let output = compile(name, dependencies, source, nightly);
+    let output = compile(name, dependencies, source, true);
     assert!(
         output.status.success(),
         "failed, {name}:\n{}",
@@ -23,7 +18,7 @@ pub fn assert_crate_compiles(
     );
 }
 
-#[cfg(test)]
+#[cfg(feature = "slow_tests")]
 mod tests {
     use super::*;
 
@@ -48,7 +43,7 @@ pub fn parse_even(value: &str) -> Result<Even, ()> {
 }
 "#;
 
-        assert_crate_compiles("integral", false, DEP_NONE, SRC)
+        assert_crate_compiles("integral", DEP_NONE, SRC)
     }
 
     #[test]
@@ -75,7 +70,7 @@ pub fn build_permission(value: u8) -> PermissionValue {
 }
 "#;
 
-        assert_crate_compiles("bitflag", true, DEP_NONE, SRC)
+        assert_crate_compiles("bitflag", DEP_NONE, SRC)
     }
 
     #[test]
@@ -102,7 +97,7 @@ pub fn build_slug(value: &str) -> Result<Slug, ()> {
 }
 "#;
 
-        assert_crate_compiles("text", false, DEP_NONE, SRC)
+        assert_crate_compiles("text", DEP_NONE, SRC)
     }
 
     #[test]
@@ -134,6 +129,6 @@ pub enum Permission {
 }
 "#;
 
-        assert_crate_compiles("serde", false, DEP_SERDE, SRC);
+        assert_crate_compiles("serde", DEP_SERDE, SRC);
     }
 }

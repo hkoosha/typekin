@@ -7,10 +7,6 @@ fn assert_rejected(
     expected_error: &str,
     source: &str,
 ) {
-    if !has_slow_tests() {
-        return;
-    }
-
     let output = compile(name, "", source, true);
 
     assert!(
@@ -28,7 +24,7 @@ fn assert_rejected(
     );
 }
 
-#[cfg(test)]
+#[cfg(feature = "slow_tests")]
 mod tests {
     use super::*;
 

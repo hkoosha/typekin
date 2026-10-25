@@ -11,7 +11,7 @@ build: fmt
   cargo build
 
 test:       (z-test)
-slow-tests: (z-test 'slow_tests')
+test-slow: (z-test 'slow_tests')
 
 z-test features='default': fmt build
   time cargo test --features '{{ features }}' --offline

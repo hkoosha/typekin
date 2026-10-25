@@ -8,10 +8,6 @@ fn assert_ok(
     must_match: bool,
     operations: &[Operation],
 ) {
-    if !has_slow_tests() {
-        return;
-    }
-
     let dir = make_dir(name);
 
     let bin = dir.join("release").join(bin_name);
@@ -33,7 +29,7 @@ fn assert_ok(
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "slow_tests")]
 mod tests {
     use super::*;
 

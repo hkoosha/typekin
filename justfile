@@ -23,7 +23,12 @@ test-here:
 test-there: fmt
   cd ./typekin_testing && pwd && just test
 
+test-there-slow: fmt
+  cd ./typekin_testing && pwd && just test-slow
+
 test: test-here test-there
+
+test-slow: test-here test-there-slow
 
 build: fmt
   cargo build
