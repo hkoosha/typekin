@@ -16,13 +16,16 @@ fn assert_rejected(
 
     assert!(
         !output.status.success(),
-        "unexpectedly compiled: name={} output={:?}"
-        name, output,
+        "unexpectedly compiled: name={} output={:?}",
+        name,
+        output,
     );
     assert!(
         output.stderr.contains(expected_error),
-        "rejected for an unexpected reason; name={}, expected={}, output={:?}"
-        name, expected_error, output
+        "rejected for an unexpected reason; name={}, expected={}, output={:?}",
+        name,
+        expected_error,
+        output
     );
 }
 
