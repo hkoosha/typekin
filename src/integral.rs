@@ -45,7 +45,10 @@ use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
 };
-use crate::zz_profile::Profile;
+use crate::zz_profile::{
+    Arithmetic,
+    Profile,
+};
 use crate::zz_runner::{
     Merged,
     MkErr,
@@ -239,6 +242,35 @@ impl Maker {
         value: &TokenStream,
     ) -> TokenStream {
         return Self::validation_condition_for(&self.cfg, value);
+    }
+
+    fn arithmetic_expression(
+        &self,
+        primitive: TokenStream,
+        operation: &str,
+        lhs: TokenStream,
+        rhs: TokenStream,
+    ) -> TokenStream {
+        return match self.cfg.profile.arithmetic() {
+            Arithmetic::Primitive => primitive,
+            Arithmetic::Wrapping => {
+                let method = format_ident!("wrapping_{}", operation);
+                quote! { #lhs.#method(#rhs) }
+            }
+            Arithmetic::Checked => {
+                let method = format_ident!("checked_{}", operation);
+                quote! {
+                    match #lhs.#method(#rhs) {
+                        ::core::option::Option::Some(value) => value,
+                        ::core::option::Option::None => {
+                            ::core::panic!(
+                                "integral checked operation overflowed",
+                            );
+                        }
+                    }
+                }
+            }
+        };
     }
 
     fn fix_friendship(&mut self) -> syn::Result<()> {
@@ -642,13 +674,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_add {
+            let operation = self.arithmetic_expression(
+                quote! { lhs + rhs },
+                "add",
+                quote! { lhs },
+                quote! { rhs },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _add(
                     &self,
                     rhs: #el
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs + rhs;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -656,13 +695,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_sub {
+            let operation = self.arithmetic_expression(
+                quote! { lhs - rhs },
+                "sub",
+                quote! { lhs },
+                quote! { rhs },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _sub(
                     &self,
                     rhs: #el
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs - rhs;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -670,13 +716,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_mul {
+            let operation = self.arithmetic_expression(
+                quote! { lhs * rhs },
+                "mul",
+                quote! { lhs },
+                quote! { rhs },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _mul(
                     &self,
                     rhs: #el
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs * rhs;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -684,13 +737,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_div {
+            let operation = self.arithmetic_expression(
+                quote! { lhs / rhs },
+                "div",
+                quote! { lhs },
+                quote! { rhs },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _div(
                     &self,
                     rhs: #el
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs / rhs;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -698,13 +758,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_rem {
+            let operation = self.arithmetic_expression(
+                quote! { lhs % rhs },
+                "rem",
+                quote! { lhs },
+                quote! { rhs },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _rem(
                     &self,
                     rhs: #el
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs % rhs;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -713,6 +780,7 @@ impl Maker {
 
         if self.cfg.flags.fn_math_xor {
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _bitxor(
                     &self,
                     rhs: #el
@@ -727,6 +795,7 @@ impl Maker {
 
         if self.cfg.flags.fn_math_and {
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _bitand(
                     &self,
                     rhs: #el
@@ -741,6 +810,7 @@ impl Maker {
 
         if self.cfg.flags.fn_math_or {
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _bitor(
                     &self,
                     rhs: #el
@@ -754,13 +824,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_shr {
+            let operation = self.arithmetic_expression(
+                quote! { lhs >> count },
+                "shr",
+                quote! { lhs },
+                quote! { count as u32 },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _shr(
                     &self,
                     count: usize,
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs >> count;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -768,13 +845,20 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_shl {
+            let operation = self.arithmetic_expression(
+                quote! { lhs << count },
+                "shl",
+                quote! { lhs },
+                quote! { count as u32 },
+            );
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _shl(
                     &self,
                     count: usize,
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
-                    let it = lhs << count;
+                    let it = #operation;
                     return #fp_unchecked(it);
                 }
             };
@@ -783,12 +867,30 @@ impl Maker {
 
         if self.cfg.flags.fn_math_not {
             let it = quote! {
+                #[inline(always)]
                 pub(self) const fn _not(
                     &self,
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
                     let it = !lhs;
                     return #fp_unchecked(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        if self.cfg.profile.emits_precedes() {
+            let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
+            let konst = zz_runner::konst(self.cfg.konst_for(&[Konsts::Value]));
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn precedes(self, other: Self) -> bool {
+                    let lhs = #fp_get_raw(self) as #unsigned;
+                    let rhs = #fp_get_raw(other) as #unsigned;
+                    let difference = rhs.wrapping_sub(lhs);
+                    let half = (1 as #unsigned) << (#unsigned::BITS - 1);
+                    return difference != 0 && difference < half;
                 }
             };
             stream.extend(it);
@@ -2944,6 +3046,7 @@ impl Maker {
         if self.cfg.flags.fmt_binary {
             let it = quote! {
                 impl ::core::fmt::Binary for #ty {
+                    #[inline(always)]
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,
@@ -2959,6 +3062,7 @@ impl Maker {
         if self.cfg.flags.fmt_octal {
             let it = quote! {
                 impl ::core::fmt::Octal for #ty {
+                    #[inline(always)]
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,
@@ -2974,6 +3078,7 @@ impl Maker {
         if self.cfg.flags.fmt_hex_lower {
             let it = quote! {
                 impl ::core::fmt::LowerHex for #ty {
+                    #[inline(always)]
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,
@@ -2989,6 +3094,7 @@ impl Maker {
         if self.cfg.flags.fmt_hex_upper {
             let it = quote! {
                 impl ::core::fmt::UpperHex for #ty {
+                    #[inline(always)]
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,

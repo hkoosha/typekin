@@ -315,6 +315,40 @@ impl CheckedOutputSource {
 )]
 struct ExplicitSelfOutput(u8);
 
+#[typekin::integral(
+    konst = none,
+    profile = circular {},
+)]
+struct CircularSequence(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = circular {},
+)]
+struct CircularSigned(i8);
+
+#[typekin::integral(
+    konst = none,
+    profile = circular {
+        with = [math_mul, math_div, math_rem, math_shl, math_shr],
+    },
+)]
+struct CircularExtended(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = sequential {},
+)]
+struct SequentialCounter(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = sequential {
+        with = [math_mul, math_div, math_rem, math_shl, math_shr],
+    },
+)]
+struct SequentialExtended(u8);
+
 // ==============================================================================
 
 #[cfg(test)]
@@ -406,6 +440,91 @@ mod tests {
         let mut assigned = ExplicitSelfOutput::make(2);
         assigned += ExplicitSelfOutput::make(3);
         assert_eq!(assigned.raw(), 5);
+    }
+
+    #[test]
+    fn circular_profile_uses_wrapping_arithmetic_and_half_range_precedence() {
+        assert_eq!(
+            (CircularSequence::make(u8::MAX) + CircularSequence::make(1)).raw(),
+            0,
+        );
+        assert_eq!(
+            (CircularSequence::make(0) - CircularSequence::make(1)).raw(),
+            u8::MAX,
+        );
+
+        let mut assigned = CircularSequence::make(u8::MAX);
+        assigned += CircularSequence::make(1);
+        assert_eq!(assigned.raw(), 0);
+
+        assert!(CircularSequence::make(0).precedes(CircularSequence::make(1)));
+        assert!(
+            CircularSequence::make(u8::MAX).precedes(CircularSequence::make(0))
+        );
+        assert!(!CircularSequence::make(0).precedes(CircularSequence::make(0)));
+        assert!(
+            !CircularSequence::make(0).precedes(CircularSequence::make(128))
+        );
+        assert!(
+            !CircularSequence::make(128).precedes(CircularSequence::make(0))
+        );
+
+        assert!(CircularSigned::make(-1).precedes(CircularSigned::make(0)));
+        assert!(!CircularSigned::make(0).precedes(CircularSigned::make(-128)));
+        assert!(!CircularSigned::make(-128).precedes(CircularSigned::make(0)));
+    }
+
+    #[test]
+    fn circular_profile_applies_wrapping_policy_to_reenabled_operations() {
+        assert_eq!(
+            (CircularExtended::make(200) * CircularExtended::make(2)).raw(),
+            144,
+        );
+        assert_eq!(
+            (CircularExtended::make(10) / CircularExtended::make(3)).raw(),
+            3,
+        );
+        assert_eq!(
+            (CircularExtended::make(10) % CircularExtended::make(3)).raw(),
+            1,
+        );
+        assert_eq!((CircularExtended::make(128) << 1).raw(), 0);
+        assert_eq!((CircularExtended::make(16) >> 2).raw(), 4);
+    }
+
+    #[test]
+    fn sequential_profile_panics_on_overflow() {
+        assert_panics(|| {
+            let _ =
+                SequentialCounter::make(u8::MAX) + SequentialCounter::make(1);
+        });
+        assert_panics(|| {
+            let _ = SequentialCounter::make(0) - SequentialCounter::make(1);
+        });
+
+        let mut assigned = SequentialCounter::make(1);
+        assert_panics(move || assigned -= SequentialCounter::make(2));
+        assert_eq!(assigned.raw(), 1);
+    }
+
+    #[test]
+    fn sequential_profile_applies_checked_policy_to_reenabled_operations() {
+        assert_eq!(
+            (SequentialExtended::make(10) / SequentialExtended::make(3)).raw(),
+            3,
+        );
+        assert_eq!(
+            (SequentialExtended::make(10) % SequentialExtended::make(3)).raw(),
+            1,
+        );
+        assert_eq!((SequentialExtended::make(16) >> 2).raw(), 4);
+
+        assert_panics(|| {
+            let _ = SequentialExtended::make(200) * SequentialExtended::make(2);
+        });
+        assert_panics(|| {
+            let _ = SequentialExtended::make(128) << 8;
+        });
     }
 
     #[test]

@@ -189,6 +189,29 @@ mod tests {
     }
 
     #[test]
+    fn circular_profile_without_precedes_has_no_precedes_method() {
+        const SRC: &str = r#"
+                #[typekin::integral(
+                    konst = none,
+                    profile = circular {
+                        precedes = false,
+                    },
+                )]
+                struct Sequence(u8);
+
+                fn requires_precedes() {
+                    let _ = Sequence::make(0).precedes(Sequence::make(1));
+                }
+            "#;
+
+        assert_rejected(
+            "circular-profile-without-precedes",
+            "no method named `precedes`",
+            SRC,
+        );
+    }
+
+    #[test]
     fn self_operators_do_not_use_friendship() {
         const SRC: &str = r#"
                 #[typekin::integral(

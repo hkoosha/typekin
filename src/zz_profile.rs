@@ -61,6 +61,13 @@ impl Profile {
         return matches!(self, Self::Circular { .. });
     }
 
+    pub(crate) fn emits_precedes(&self) -> bool {
+        return match self {
+            Self::Circular { precedes, .. } => *precedes,
+            Self::Default { .. } | Self::Sequential { .. } => false,
+        };
+    }
+
     pub(crate) fn int_settings(&self) -> &IntSettings {
         return match self {
             Self::Default { settings }
