@@ -23,7 +23,10 @@ use syn::parse::{
     ParseStream,
 };
 use syn::spanned::Spanned as _;
+use syn::visit_mut::VisitMut as _;
 use syn::{
+    GenericParam,
+    Generics,
     Fields,
     ItemStruct,
     Path,
@@ -71,6 +74,282 @@ use crate::{
     zz,
     zz_runner,
 };
+
+#[derive(Clone)]
+pub(crate) struct IntegralTarget {
+    ident: Ident,
+    generics: Generics,
+    phantom_types: Vec<TokenStream>,
+    const_markers: Vec<TokenStream>,
+    occupied_names: BTreeSet<String>,
+}
+
+impl IntegralTarget {
+    fn new(ident: Ident, generics: Generics) -> Self {
+        let occupied_names = generics
+            .params
+            .iter()
+            .map(|parameter| match parameter {
+                GenericParam::Lifetime(parameter) => {
+                    parameter.lifetime.ident.to_string()
+                }
+                GenericParam::Type(parameter) => parameter.ident.to_string(),
+                GenericParam::Const(parameter) => parameter.ident.to_string(),
+            })
+            .collect();
+        let mut this = Self {
+            ident,
+            generics,
+            phantom_types: Vec::new(),
+            const_markers: Vec::new(),
+            occupied_names,
+        };
+
+        for (index, parameter) in this.generics.params.iter().enumerate() {
+            let phantom = match parameter {
+                GenericParam::Lifetime(parameter) => {
+                    let lifetime = &parameter.lifetime;
+                    quote! { &#lifetime () }
+                }
+                GenericParam::Type(parameter) => {
+                    let name = &parameter.ident;
+                    quote! { #name }
+                }
+                GenericParam::Const(parameter) => {
+                    let name = &parameter.ident;
+                    let type_name = this.ident.to_string();
+                    let type_name = type_name.trim_start_matches("r#");
+                    let marker = this.fresh_ident(&format!(
+                        "__Typekin{type_name}Const{index}",
+                    ));
+                    let value = this.fresh_ident("VALUE");
+                    let ty = &parameter.ty;
+                    this.const_markers.push(quote! {
+                        #[doc(hidden)]
+                        struct #marker<const #value: #ty>;
+                    });
+                    quote! { #marker<#name> }
+                }
+            };
+            this.phantom_types.push(phantom);
+        }
+
+        return this;
+    }
+
+    fn has_generics(&self) -> bool {
+        return !self.generics.params.is_empty();
+    }
+
+    fn ty(&self) -> TokenStream {
+        let ident = &self.ident;
+        let (_, arguments, _) = self.generics.split_for_impl();
+        return quote! { #ident #arguments };
+    }
+
+    fn constructor(&self) -> TokenStream {
+        let ident = &self.ident;
+        let (_, arguments, _) = self.generics.split_for_impl();
+        let arguments = arguments.as_turbofish();
+        return quote! { #ident #arguments };
+    }
+
+    fn arguments(&self) -> TokenStream {
+        let (_, arguments, _) = self.generics.split_for_impl();
+        return quote! { #arguments };
+    }
+
+    fn impl_header(
+        &self,
+        extra_parameters: &[GenericParam],
+        extra_predicates: &[syn::WherePredicate],
+    ) -> (TokenStream, TokenStream) {
+        let mut generics = self.generics.clone();
+        for parameter in extra_parameters {
+            if matches!(parameter, GenericParam::Lifetime(_)) {
+                let index = generics
+                    .params
+                    .iter()
+                    .take_while(|it| matches!(it, GenericParam::Lifetime(_)))
+                    .count();
+                generics.params.insert(index, parameter.clone());
+            }
+            else {
+                generics.params.push(parameter.clone());
+            }
+        }
+        if !extra_predicates.is_empty() {
+            generics
+                .make_where_clause()
+                .predicates
+                .extend(extra_predicates.iter().cloned());
+        }
+        let (parameters, _, where_clause) = generics.split_for_impl();
+        return (quote! { #parameters }, quote! { #where_clause });
+    }
+
+    fn external_generics(&self) -> Generics {
+        let mut generics = self.generics.clone();
+        TargetSelf(self.ty()).visit_generics_mut(&mut generics);
+        return generics;
+    }
+
+    fn qualify_path(&self, path: &Path) -> TokenStream {
+        if !self.has_generics() {
+            let mut path = path.clone();
+            if path.leading_colon.is_none()
+                && let Some(segment) = path.segments.first_mut()
+                && segment.ident == "Self"
+            {
+                segment.ident = self.ident.clone();
+            }
+            return quote! { #path };
+        }
+        let mut path: syn::ExprPath = parse_quote! { #path };
+        TargetSelf(self.ty()).visit_expr_path_mut(&mut path);
+        return quote! { #path };
+    }
+
+    fn external_type(&self, ty: &Type) -> TokenStream {
+        let mut ty = ty.clone();
+        TargetSelf(self.ty()).visit_type_mut(&mut ty);
+        return quote! { #ty };
+    }
+
+    fn operator_output<'a>(
+        &self,
+        configuration: &'a SelfConverter,
+        external: bool,
+    ) -> OperatorOutput<'a> {
+        let ty = if configuration.is_self() {
+            if external { self.ty() } else { quote! { Self } }
+        }
+        else if external {
+            self.external_type(&configuration.target)
+        }
+        else {
+            let ty = &configuration.target;
+            quote! { #ty }
+        };
+        let conversion = if configuration.is_self() {
+            TokenStream::new()
+        }
+        else {
+            self.qualify_path(&configuration.conversion)
+        };
+        return OperatorOutput::of(configuration, ty, conversion);
+    }
+
+    fn is_target(&self, path: &Path) -> bool {
+        return path.is_ident("Self")
+            || path.to_token_stream().to_string() == self.ty().to_string();
+    }
+
+    fn fresh_ident(&self, preferred: &str) -> Ident {
+        let mut name = preferred.to_owned();
+        if self.occupied_names.contains(&name) {
+            name = format!("__Typekin{preferred}");
+            while self.occupied_names.contains(&name) {
+                name.push('_');
+            }
+        }
+        return Ident::new(&name, Span::mixed_site());
+    }
+
+    fn fresh_lifetime(&self, preferred: &str) -> syn::Lifetime {
+        let mut name = preferred.to_owned();
+        if self.occupied_names.contains(&name) {
+            name = format!("__typekin_{preferred}");
+            while self.occupied_names.contains(&name) {
+                name.push('_');
+            }
+        }
+        return syn::Lifetime::new(&format!("'{name}"), Span::mixed_site());
+    }
+
+    fn layout_assertion(&self) -> Ident {
+        return self.fresh_ident("__TYPEKIN_LAYOUT_ASSERT");
+    }
+
+    fn construct(
+        &self,
+        storage: &StoragePlan,
+        constructor: TokenStream,
+        raw: TokenStream,
+        assert_layout: bool,
+    ) -> TokenStream {
+        return self.construct_storage(
+            constructor,
+            storage.storage_expression(raw),
+            assert_layout,
+        );
+    }
+
+    fn construct_storage(
+        &self,
+        constructor: TokenStream,
+        storage: TokenStream,
+        assert_layout: bool,
+    ) -> TokenStream {
+        if !self.has_generics() {
+            return quote! { #constructor(#storage) };
+        }
+        let markers = self
+            .phantom_types
+            .iter()
+            .map(|_| quote! { ::core::marker::PhantomData });
+        let assertion = assert_layout.then(|| {
+            let target = self.ty();
+            let name = self.layout_assertion();
+            quote! { let () = <#target>::#name; }
+        });
+        return quote! {{
+            #assertion
+            #constructor(#storage, #(#markers),*)
+        }};
+    }
+}
+
+struct TargetSelf(TokenStream);
+
+impl syn::visit_mut::VisitMut for TargetSelf {
+    fn visit_type_path_mut(&mut self, path: &mut syn::TypePath) {
+        syn::visit_mut::visit_type_path_mut(self, path);
+        if path.qself.is_none()
+            && path.path.leading_colon.is_none()
+            && path.path.segments.first().is_some_and(|it| it.ident == "Self")
+        {
+            let target = &self.0;
+            path.path.segments =
+                path.path.segments.iter().skip(1).cloned().collect();
+            *path = if path.path.segments.is_empty() {
+                parse_quote! { #target }
+            }
+            else {
+                let tail = &path.path;
+                parse_quote! { <#target>::#tail }
+            };
+        }
+    }
+
+    fn visit_expr_path_mut(&mut self, path: &mut syn::ExprPath) {
+        syn::visit_mut::visit_expr_path_mut(self, path);
+        if path.qself.is_none()
+            && path.path.leading_colon.is_none()
+            && path.path.segments.first().is_some_and(|it| it.ident == "Self")
+        {
+            if path.path.is_ident("Self") {
+                return;
+            }
+            let target = &self.0;
+            let tail = Path {
+                leading_colon: None,
+                segments: path.path.segments.iter().skip(1).cloned().collect(),
+            };
+            *path = parse_quote! { <#target>::#tail };
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct StoragePlan {
@@ -151,14 +430,6 @@ impl StoragePlan {
         };
     }
 
-    pub(crate) fn construct(
-        &self,
-        target: TokenStream,
-        raw: TokenStream,
-    ) -> TokenStream {
-        let storage = self.storage_expression(raw);
-        return quote! { #target(#storage) };
-    }
 
     pub(crate) fn extract(
         &self,
@@ -203,7 +474,7 @@ impl StoragePlan {
 
     pub(crate) fn layout_assertions(
         &self,
-        target: &Ident,
+        target: TokenStream,
     ) -> TokenStream {
         let raw = format_ident!("{}", self.raw.rust_name());
         return quote! {
@@ -232,37 +503,61 @@ pub(crate) fn integral(
     return zz_runner::catching(move || ekran(attr, item));
 }
 
-fn ekran(
+pub(crate) fn ekran(
     attr: Box<Cfg>,
     mut item: ItemStruct,
 ) -> syn::Result<TokenStream> {
-    let ty = item.ident.clone();
-
+    let target = IntegralTarget::new(
+        item.ident.clone(),
+        item.generics.clone(),
+    );
     let repr: Option<TokenStream> =
         attr.flags.repr.then(|| quote! { #[repr(transparent)] });
-    let derive_copy: Option<TokenStream> =
-        attr.flags.copy.then(|| quote! { #[derive(Copy)] });
-    let derive_clone: Option<TokenStream> =
-        attr.flags.clone.then(|| match attr.konst {
+    let derive_copy: Option<TokenStream> = (attr.flags.copy
+        && !target.has_generics())
+        .then(|| quote! { #[derive(Copy)] });
+    let derive_clone: Option<TokenStream> = (attr.flags.clone
+        && !target.has_generics())
+        .then(|| match attr.konst {
             Konst::Nightly => quote! { #[derive_const(Clone)] },
             Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
         });
 
-    let (el, field) = if let Fields::Unnamed(fields) = &mut item.fields
-        && fields.unnamed.len() == 1
-        && let Some(field) = fields.unnamed.first_mut()
-        && let Type::Path(path) = &field.ty
-        && let Some(id) = path.path.get_ident()
-        && N::rust_names().contains(&id.to_string().as_str())
-    {
-        (id.clone(), field)
-    }
+    let Fields::Unnamed(fields) = &item.fields
     else {
         return item.ident.fail(
             "expected a tuple struct with exactly one field \
             of primitive integral type",
         );
     };
+    if fields.unnamed.len() != 1 {
+        let span = fields
+            .unnamed
+            .iter()
+            .nth(1)
+            .map_or_else(|| item.ident.span(), syn::spanned::Spanned::span);
+        return span.fail(
+            "integral source declarations require exactly one primitive \
+            value field; phantom fields are generated automatically",
+        );
+    }
+    let field = fields.unnamed.first().unwrap();
+    let el = match &field.ty {
+        Type::Path(path) if path.qself.is_none() => {
+            path.path.get_ident().filter(|id| {
+                N::rust_names().contains(&id.to_string().as_str())
+            })
+        }
+        _ => None,
+    }
+    .ok_or_else(|| {
+        syn::Error::new(
+            field.ty.span(),
+            "integral value field must be a concrete primitive integer",
+        )
+    })?
+    .clone();
+    let field_visibility = &field.vis;
 
     let raw = N::of(el.to_string())
         .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
@@ -271,30 +566,84 @@ fn ekran(
         attr.requires_non_zero_storage(),
         attr.requires_wrapping_storage(),
     );
-    if storage.rewrites_field() {
-        let private = match &field.vis {
-            Visibility::Inherited => true,
-            Visibility::Restricted(visibility) => {
-                visibility.path.is_ident("self")
-            }
-            Visibility::Public(_) => false,
-        };
-        if !private {
-            return field.vis.fail(
-                "integral storage can only rewrite a private tuple field",
-            );
+    let private = match &field_visibility {
+        Visibility::Inherited => true,
+        Visibility::Restricted(visibility) => {
+            visibility.path.is_ident("self")
         }
+        Visibility::Public(_) => false,
+    };
+    if target.has_generics() && !private {
+        return field_visibility.fail(
+            "generic integral types require a private value field",
+        );
+    }
+    if storage.rewrites_field() && !private {
+        return field_visibility.fail(
+            "integral storage can only rewrite a private tuple field",
+        );
+    }
+
+    let Fields::Unnamed(fields) = &mut item.fields
+    else {
+        unreachable!("the integral shape was validated above");
+    };
+    let field = fields
+        .unnamed
+        .first_mut()
+        .expect("the integral shape was validated above");
+    if storage.rewrites_field() {
         field.ty = syn::parse2(storage.field_type())
             .expect("storage plans emit valid field types");
     }
+    for phantom_type in &target.phantom_types {
+        fields.unnamed.push(parse_quote! {
+            ::core::marker::PhantomData<#phantom_type>
+        });
+    }
 
-    let it = Maker::new(ty, el, attr, storage)?.ekran()?;
+    let (impl_generics, where_clause) = target.impl_header(&[], &[]);
+    let target_ty = target.ty();
+    let manual_copy = (attr.flags.copy && target.has_generics()).then(|| {
+        quote! {
+            impl #impl_generics ::core::marker::Copy for #target_ty
+            #where_clause
+            {}
+        }
+    });
+    let manual_clone = (attr.flags.clone && target.has_generics()).then(|| {
+        let konst = zz_runner::konst(matches!(attr.konst, Konst::Nightly));
+        let value = target.construct_storage(
+            quote! { Self },
+            quote! { self.0 },
+            attr.flags.assertions,
+        );
+        quote! {
+            #konst impl #impl_generics ::core::clone::Clone for #target_ty
+            #where_clause
+            {
+                #[inline(always)]
+                fn clone(&self) -> Self {
+                    return #value;
+                }
+            }
+        }
+    });
+    let markers = &target.const_markers;
+    let const_markers = quote! { #(#markers)* };
+
+    let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
 
     let stream = quote::quote! {
+        #const_markers
+
         #repr
         #derive_copy
         #derive_clone
         #item
+
+        #manual_copy
+        #manual_clone
 
         #[allow(dead_code)]
         #[allow(unused_qualifications)]
@@ -311,7 +660,7 @@ pub(crate) struct Maker {
     repr: N,
     storage: StoragePlan,
     el: Ident,
-    ty: Ident,
+    target: IntegralTarget,
 
     fn_conv: Ident,
     fp_get_raw: Path,
@@ -333,6 +682,21 @@ impl Maker {
         cfg: Box<Cfg>,
         storage: StoragePlan,
     ) -> syn::Result<Self> {
+        return Self::new_target(
+            IntegralTarget::new(ty, Generics::default()),
+            el,
+            cfg,
+            storage,
+        );
+    }
+
+    fn new_target(
+        target: IntegralTarget,
+        el: Ident,
+        cfg: Box<Cfg>,
+        storage: StoragePlan,
+    ) -> syn::Result<Self> {
+        let ty = &target.ident;
         let cfg = Self::preprocess_cfg(cfg);
         let (unchecked_flag, emits_unchecked) =
             if cfg.validation.has_validation() {
@@ -351,11 +715,11 @@ impl Maker {
         }
 
         let mut this = Self {
-            trait_seal: format_ident!("Seal"),
-            trait_friend_bit: format_ident!("Bit"),
-            trait_friend_make: format_ident!("Make"),
-            trait_friend_math: format_ident!("Math"),
-            trait_friend_rel: format_ident!("Rel"),
+            trait_seal: target.fresh_ident("Seal"),
+            trait_friend_bit: target.fresh_ident("Bit"),
+            trait_friend_make: target.fresh_ident("Make"),
+            trait_friend_math: target.fresh_ident("Math"),
+            trait_friend_rel: target.fresh_ident("Rel"),
 
             fp_unchecked: syn::parse_str(&cfg.flags.fp_unchecked)?,
             fp_get_raw: cfg
@@ -372,7 +736,7 @@ impl Maker {
             })?,
             storage,
             el,
-            ty,
+            target,
             cfg,
         };
 
@@ -392,15 +756,8 @@ impl Maker {
     fn target_qualified_path(
         &self,
         path: &Path,
-    ) -> Path {
-        let mut path = path.clone();
-        if path.leading_colon.is_none()
-            && let Some(segment) = path.segments.first_mut()
-            && segment.ident == "Self"
-        {
-            segment.ident = self.ty.clone();
-        }
-        return path;
+    ) -> TokenStream {
+        return self.target.qualify_path(path);
     }
 
     fn arithmetic_method_name(
@@ -470,7 +827,7 @@ impl Maker {
         conversion: Option<&Path>,
         value: TokenStream,
     ) -> TokenStream {
-        if ty.is_ident(&self.ty) {
+        if self.target.is_target(ty) {
             let fp_get_raw = self.target_qualified_path(&self.fp_get_raw);
             return quote! { #fp_get_raw(#value) };
         }
@@ -493,7 +850,10 @@ impl Maker {
         }
 
         return match conversion {
-            Some(conversion) => quote! { #conversion(#value) },
+            Some(conversion) => {
+                let conversion = self.target_qualified_path(conversion);
+                quote! { #conversion(#value) }
+            }
             None => quote! {
                 {
                     let relation: #relation = #value.into();
@@ -508,6 +868,9 @@ impl Maker {
             return TokenStream::new();
         }
 
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
+        let (parameters, arguments, where_clause) = generics.split_for_impl();
         let operators = self
             .cfg
             .facet_slots
@@ -515,16 +878,17 @@ impl Maker {
             .map(|slot| slot.operator)
             .collect::<BTreeSet<_>>();
         let traits = operators.iter().copied().map(|operator| {
-            let trait_name = format_ident!("{}Rhs", operator.name());
+            let trait_name = self
+                .target
+                .fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
-            let target = &self.ty;
             let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
             let konst = zz_runner::konst(is_konst);
 
             return quote! {
                 #[doc(hidden)]
                 #[allow(private_interfaces)]
-                pub #konst trait #trait_name {
+                pub #konst trait #trait_name #parameters #where_clause {
                     type Output;
 
                     fn #method(
@@ -536,13 +900,14 @@ impl Maker {
         });
         let implementations = self.cfg.facet_slots.iter().map(|(key, slot)| {
             let operator = key.operator;
-            let trait_name = format_ident!("{}Rhs", operator.name());
+            let trait_name = self
+                .target
+                .fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
-            let target = &self.ty;
-            let rhs_ty = slot
-                .rhs
-                .as_ref()
-                .map_or_else(|| quote! { #target }, |rhs| quote! { #rhs });
+            let rhs_ty = slot.rhs.as_ref().map_or_else(
+                || target.clone(),
+                |rhs| self.target.external_type(&parse_quote! { #rhs }),
+            );
             let rhs = match &slot.rhs {
                 Some(rhs) => self.friend_conversion_expression(
                     rhs,
@@ -557,13 +922,8 @@ impl Maker {
             };
             let lhs = self.target_qualified_path(&self.fp_get_raw);
             let unchecked = self.target_qualified_path(&self.fp_unchecked);
-            let output = OperatorOutput::of(&slot.ty_out);
-            let output_ty = if slot.ty_out.is_self() {
-                quote! { #target }
-            }
-            else {
-                output.ty()
-            };
+            let output = self.target.operator_output(&slot.ty_out, true);
+            let output_ty = output.ty();
             let result = output.convert(quote! { value });
             let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
             let operation =
@@ -571,7 +931,8 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
 
             return quote! {
-                #konst impl #trait_name for #rhs_ty {
+                #konst impl #parameters #trait_name #arguments for #rhs_ty
+                #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
@@ -589,29 +950,36 @@ impl Maker {
             };
         });
         let operator_impls = operators.iter().copied().map(|operator| {
-            let trait_name = format_ident!("{}Rhs", operator.name());
+            let trait_name = self
+                .target
+                .fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
             let operation = format_ident!("{}", operator.name());
-            let target = &self.ty;
+            let rhs = self.target.fresh_ident("T");
             let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
+            let (impl_generics, where_clause) = self.target.impl_header(
+                &[parse_quote! { #rhs }],
+                &[parse_quote! {
+                    #rhs: #bonst #trait_name #arguments #destruct
+                }],
+            );
 
             return quote! {
                 #[allow(private_bounds)]
-                #konst impl<T> ::core::ops::#operation<T> for #target
-                where
-                    T: #bonst #trait_name #destruct,
-                {
-                    type Output = <T as #trait_name>::Output;
+                #konst impl #impl_generics ::core::ops::#operation<#rhs>
+                    for #target
+                #where_clause {
+                    type Output = <#rhs as #trait_name #arguments>::Output;
 
                     #[inline(always)]
                     fn #method(
                         self,
-                        rhs: T,
+                        rhs: #rhs,
                     ) -> Self::Output {
-                        return <T as #trait_name>::#method(self, rhs);
+                        return <#rhs as #trait_name #arguments>::#method(self, rhs);
                     }
                 }
             };
@@ -625,12 +993,19 @@ impl Maker {
     }
 
     fn fix_friendship(&mut self) -> syn::Result<()> {
-        let target = &self.ty;
+        let target: Path = syn::parse2(self.target.ty())
+            .expect("integral targets emit valid type paths");
         let relation = &self.el;
         let self1 = &self.cfg;
         let validated = self1.validation.has_validation();
         let has_make = self.cfg.flags.self_friend_make;
-        let target_friend = Friend::from(target);
+        let target_friend = self
+            .cfg
+            .friends
+            .iter()
+            .find(|friend| self.target.is_target(&friend.ty))
+            .cloned()
+            .unwrap_or_else(|| Friend::from(&target));
 
         if let Some(it) = self.cfg.friends.get(&target_friend) {
             if it.capabilities.contains(&format_ident!("Math")) {
@@ -647,7 +1022,7 @@ impl Maker {
         }
 
         for (f_def, conv, is_validated) in [
-            (target_friend, Some(parse_quote! { #target::raw }), false),
+            (target_friend, Some(parse_quote! { Self::raw }), false),
             (
                 Friend::from(relation),
                 Some(parse_quote! { self }),
@@ -668,18 +1043,31 @@ impl Maker {
                 it.capabilities.insert(format_ident!("Make"));
             }
 
-            if !f_def.ty.is_ident(target) && self.cfg.flags.self_friend_math_ops
+            if !self.target.is_target(&f_def.ty)
+                && self.cfg.flags.self_friend_math_ops
             {
                 it.capabilities.insert(format_ident!("Math"));
             }
 
-            if f_def.ty.is_ident(target) || self.cfg.flags.self_friend_rel {
+            if self.target.is_target(&f_def.ty) || self.cfg.flags.self_friend_rel {
                 it.capabilities.insert(format_ident!("Rel"));
             }
 
-            if !f_def.ty.is_ident(target) && self.cfg.flags.self_friend_math_bit
+            if !self.target.is_target(&f_def.ty)
+                && self.cfg.flags.self_friend_math_bit
             {
                 it.capabilities.insert(format_ident!("Bit"));
+            }
+
+            // Generic Self operations share the RHS protocol: separate Self
+            // impls would overlap when downstream parameters satisfy it.
+            if self.target.has_generics() && self.target.is_target(&f_def.ty) {
+                if self.cfg.flags.self_math {
+                    it.capabilities.insert(format_ident!("Math"));
+                }
+                if self.cfg.flags.self_bit {
+                    it.capabilities.insert(format_ident!("Bit"));
+                }
             }
 
             assert!(self.cfg.friends.insert(it));
@@ -704,9 +1092,19 @@ impl Maker {
         return Ok(());
     }
 
+    fn protocol_capability(&self, capability: &Ident) -> Ident {
+        return match capability.to_string().as_str() {
+            "Make" => self.trait_friend_make.clone(),
+            "Math" => self.trait_friend_math.clone(),
+            "Bit" => self.trait_friend_bit.clone(),
+            "Rel" => self.trait_friend_rel.clone(),
+            _ => self.target.fresh_ident(&capability.to_string()),
+        };
+    }
+
     fn ekran_friendship(&self) -> TokenStream {
         let faceted = self.cfg.facets_present();
-        let target = self.ty.clone();
+        let target = self.target.ty();
         let relation_ident = &self.el;
         let relation: Type = parse_quote! { #relation_ident };
         let seal = self.trait_seal.clone();
@@ -720,19 +1118,19 @@ impl Maker {
         let capabilities = [
             (
                 self.cfg.flags.friendzone_friend_make,
-                self.trait_friend_make.clone(),
+                format_ident!("Make"),
             ),
             (
                 self.cfg.flags.friendzone_friend_math_ops,
-                self.trait_friend_math.clone(),
+                format_ident!("Math"),
             ),
             (
                 self.cfg.flags.friendzone_friend_math_bit,
-                self.trait_friend_bit.clone(),
+                format_ident!("Bit"),
             ),
             (
                 self.cfg.flags.friendzone_friend_rel,
-                self.trait_friend_rel.clone(),
+                format_ident!("Rel"),
             ),
             (true, crate::friendship::cfg::trust_capability()),
         ]
@@ -741,6 +1139,7 @@ impl Maker {
         .filter(|capability| {
             return !faceted || !Self::is_operator_capability(capability);
         })
+        .map(|capability| self.protocol_capability(&capability))
         .vec();
         let friends = match self.cfg.flags.friends {
             false => vec![],
@@ -756,13 +1155,13 @@ impl Maker {
                             return !faceted
                                 || !Self::is_operator_capability(capability);
                         })
-                        .cloned()
+                        .map(|capability| self.protocol_capability(capability))
                         .collect::<BTreeSet<_>>();
                     if capabilities.is_empty() {
                         return None;
                     }
 
-                    let conversion = if friend.ty.is_ident(&self.ty) {
+                    let conversion = if self.target.is_target(&friend.ty) {
                         None
                     }
                     else {
@@ -774,26 +1173,29 @@ impl Maker {
                         Some(quote! { return #value; })
                     };
 
+                    let friend_ty = &friend.ty;
                     return Some(ProtocolFriend {
-                        ty: friend.ty.clone(),
+                        ty: syn::parse2(self.target.external_type(
+                            &parse_quote! { #friend_ty },
+                        ))
+                        .expect("friend types remain valid after target lowering"),
                         capabilities,
                         conversion,
                     });
                 })
                 .vec(),
         };
-        let mut checked = self.fp_unchecked.clone();
-        if checked.leading_colon.is_none()
-            && let Some(segment) = checked.segments.first_mut()
-            && segment.ident == "Self"
-        {
-            segment.ident = target.clone();
-        }
-        let trusted =
-            self.storage.construct(quote! { #target }, quote! { raw });
+        let checked = self.target_qualified_path(&self.fp_unchecked);
+        let trusted = self.target.construct(
+            &self.storage,
+            self.target.constructor(),
+            quote! { raw },
+            self.cfg.flags.assertions,
+        );
 
         let protocol = crate::friendship::emit_protocol(Protocol {
             target,
+            generics: self.target.external_generics(),
             relation,
             seal,
             conversion,
@@ -803,7 +1205,9 @@ impl Maker {
             target_conversion,
             construction: Some(Construction {
                 make: self.trait_friend_make.clone(),
-                trusted: crate::friendship::cfg::trust_capability(),
+                trusted: self.protocol_capability(
+                    &crate::friendship::cfg::trust_capability(),
+                ),
                 trusted_constructor: trusted,
                 checked: quote! { #checked },
             }),
@@ -825,27 +1229,30 @@ impl Maker {
         let items = self.ekran_items();
         let bit_access = self.ekran_bit_access_items();
 
-        let ty = &self.ty;
+        let ty = self.target.ty();
+        let (impl_generics, where_clause) =
+            self.target.impl_header(&[], &[]);
         return Ok(quote::quote! {
             #impls
 
-            impl #ty {
+            impl #impl_generics #ty #where_clause {
                 #items
             }
 
             #[allow(clippy::unnecessary_cast)]
-            impl #ty {
+            impl #impl_generics #ty #where_clause {
                 #bit_access
             }
         });
     }
 
     pub(crate) fn ekran_items(&self) -> TokenStream {
-        let ty = &self.ty;
+        let ty = self.target.ty();
         let el = &self.el;
         let fp_unchecked = &self.fp_unchecked;
         let fp_get_raw = &self.fp_get_raw;
         let raw = self.storage.extract(quote! { self.0 });
+        let arguments = self.target.arguments();
 
         let mut stream = TokenStream::new();
 
@@ -858,19 +1265,20 @@ impl Maker {
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
             let what = &self.trait_friend_make;
+            let parameter = self.target.fresh_ident("T");
 
             let fn_of = format_ident!("of");
 
             let it = quote! {
                 #[inline(always)]
                 #[allow(private_bounds)]
-                pub #konst fn #fn_of<T>(
-                    it: T,
+                pub #konst fn #fn_of<#parameter>(
+                    it: #parameter,
                 ) -> #ty
                 where
-                    T: #bonst #what #destruct,
+                    #parameter: #bonst #what #arguments #destruct,
                 {
-                    return <T as #what>::make(it);
+                    return <#parameter as #what #arguments>::make(it);
                 }
             };
             stream.extend(it);
@@ -882,10 +1290,11 @@ impl Maker {
                 Konsts::Conversion,
             ]));
             let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
+            let fn_of = self.target_qualified_path(&parse_quote! { Self::of });
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn #fn_make(it: #el) -> #ty {
-                    return #ty::of(it);
+                    return #fn_of(it);
                 }
             };
             stream.extend(it);
@@ -931,18 +1340,23 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
+            let callback = self.target.fresh_ident("F");
             let value = quote! { value };
             let validation = self.cfg.validation.emit(&value);
-            let constructed =
-                self.storage.construct(quote! { Self }, value.clone());
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                self.cfg.flags.assertions,
+            );
             let it = quote! {
                 #[inline(always)]
-                pub #konst fn try_map<F>(
+                pub #konst fn try_map<#callback>(
                     self,
-                    function: F,
+                    function: #callback,
                 ) -> ::core::result::Result<Self, #el>
                 where
-                    F: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
                 {
                     let value = function(#fp_get_raw(self));
                     return if #validation {
@@ -955,12 +1369,12 @@ impl Maker {
 
                 #[inline(always)]
                 #[track_caller]
-                pub #konst fn map<F>(
+                pub #konst fn map<#callback>(
                     self,
-                    function: F,
+                    function: #callback,
                 ) -> Self
                 where
-                    F: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
                 {
                     return match self.try_map(function) {
                         ::core::result::Result::Ok(value) => value,
@@ -1196,8 +1610,12 @@ impl Maker {
                 zz_runner::konst(self.cfg.konst_for(&[Konsts::TryMake]));
             let value = quote! { it };
             let validation = self.cfg.validation.emit(&value);
-            let constructed =
-                self.storage.construct(quote! { Self }, value.clone());
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                self.cfg.flags.assertions,
+            );
             let it = quote! {
                 #[inline(always)]
                 pub #konst fn try_make(it: #el) -> Result<Self, #el> {
@@ -1229,8 +1647,12 @@ impl Maker {
         {
             let value = quote! { it };
             let validation = self.cfg.validation.emit(&value);
-            let constructed =
-                self.storage.construct(quote! { Self }, value.clone());
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                self.cfg.flags.assertions,
+            );
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
@@ -1248,8 +1670,12 @@ impl Maker {
         else if self.cfg.flags.fn_make_checked
             && !self1.validation.has_validation()
         {
-            let constructed =
-                self.storage.construct(quote! { Self }, quote! { it });
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                quote! { it },
+                self.cfg.flags.assertions,
+            );
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
@@ -1267,8 +1693,12 @@ impl Maker {
             ]));
             let value = quote! { value };
             let validation = self.cfg.validation.emit(&value);
-            let constructed =
-                self.storage.construct(quote! { Self }, value.clone());
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                self.cfg.flags.assertions,
+            );
             let it = quote! {
                 #[inline(always)]
                 #[track_caller]
@@ -1300,27 +1730,52 @@ impl Maker {
     }
 
     pub(crate) fn ekran_impls(&self) -> syn::Result<TokenStream> {
-        let ty = &self.ty;
+        let ty = self.target.ty();
+        let (impl_generics, where_clause) =
+            self.target.impl_header(&[], &[]);
+        let arguments = self.target.arguments();
+        let rhs_ty = self.target.fresh_ident("T");
+        let (rhs_impl_generics, _) =
+            self.target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
+        let rhs_where_clause = |bounds: TokenStream| {
+            return self.target.impl_header(
+                &[parse_quote! { #rhs_ty }],
+                &[parse_quote! { #rhs_ty: #bounds }],
+            ).1;
+        };
         let el = &self.el;
         let value = quote! { value };
         let validation = self.cfg.validation.emit(&value);
 
-        let trait_friend_bit = &self.trait_friend_bit;
-        let trait_friend_math = &self.trait_friend_math;
-        let trait_friend_rel = &self.trait_friend_rel;
-        let trait_seal = &self.trait_seal;
+        let bit = &self.trait_friend_bit;
+        let math = &self.trait_friend_math;
+        let rel = &self.trait_friend_rel;
+        let seal = &self.trait_seal;
+        let trait_friend_bit = quote! { #bit #arguments };
+        let trait_friend_math = quote! { #math #arguments };
+        let trait_friend_rel = quote! { #rel #arguments };
+        let trait_seal = quote! { #seal #arguments };
 
         let fn_conv = &self.fn_conv;
-        let fp_friend_conv = quote! { #trait_seal::#fn_conv };
+        let fp_friend_conv = if self.target.has_generics() {
+            quote! { <#rhs_ty as #trait_seal>::#fn_conv }
+        }
+        else {
+            quote! { #trait_seal::#fn_conv }
+        };
         let fp_get_raw = &self.fp_get_raw;
         let rhs_raw = self.storage.extract(quote! { rhs.0 });
         let self_raw = self.storage.extract(quote! { self.0 });
         let self_raw_ref = self.storage.extract_ref(quote! { self.0 });
 
         let global_operators = !self.cfg.facets_present();
-        let with_self_math = self.cfg.flags.self_math && global_operators;
-        let with_self_bit = self.cfg.flags.self_bit && global_operators;
-        let output = OperatorOutput::of(&self.cfg.ty_out);
+        let with_self_math = self.cfg.flags.self_math
+            && global_operators
+            && !self.target.has_generics();
+        let with_self_bit = self.cfg.flags.self_bit
+            && global_operators
+            && !self.target.has_generics();
+        let output = self.target.operator_output(&self.cfg.ty_out, false);
 
         let bounds_for = |flags: &[Konsts]| {
             let is_konst = self.cfg.konst_for(flags);
@@ -1334,7 +1789,8 @@ impl Maker {
 
         if self.cfg.flags.as_ref_ {
             let it = quote! {
-                impl ::core::convert::AsRef<#el> for #ty {
+                impl #impl_generics ::core::convert::AsRef<#el> for #ty
+                #where_clause {
                     #[inline(always)]
                     fn as_ref(&self) -> &#el {
                         return #self_raw_ref;
@@ -1345,10 +1801,15 @@ impl Maker {
         }
 
         if self.cfg.flags.from_str {
-            let constructed =
-                self.storage.construct(quote! { Self }, quote! { value });
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                quote! { value },
+                self.cfg.flags.assertions,
+            );
             stream.extend(quote! {
-                impl ::core::str::FromStr for #ty {
+                impl #impl_generics ::core::str::FromStr for #ty
+                #where_clause {
                     type Err = ();
 
                     #[inline(always)]
@@ -1375,17 +1836,27 @@ impl Maker {
         }
 
         if self.cfg.flags.serde {
-            let constructed =
-                self.storage.construct(quote! { Self }, quote! { value });
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                quote! { value },
+                self.cfg.flags.assertions,
+            );
+            let serializer = self.target.fresh_ident("S");
+            let deserializer = self.target.fresh_ident("D");
+            let de = self.target.fresh_lifetime("de");
+            let (de_generics, de_where_clause) =
+                self.target.impl_header(&[parse_quote! { #de }], &[]);
             stream.extend(quote! {
-                impl ::serde::Serialize for #ty {
+                impl #impl_generics ::serde::Serialize for #ty
+                #where_clause {
                     #[inline(always)]
-                    fn serialize<S>(
+                    fn serialize<#serializer>(
                         &self,
-                        serializer: S,
-                    ) -> ::core::result::Result<S::Ok, S::Error>
+                        serializer: #serializer,
+                    ) -> ::core::result::Result<#serializer::Ok, #serializer::Error>
                     where
-                        S: ::serde::Serializer,
+                        #serializer: ::serde::Serializer,
                     {
                         let value = #fp_get_raw(*self);
                         return <#el as ::serde::Serialize>::serialize(
@@ -1395,16 +1866,17 @@ impl Maker {
                     }
                 }
 
-                impl<'de> ::serde::Deserialize<'de> for #ty {
+                impl #de_generics ::serde::Deserialize<#de> for #ty
+                #de_where_clause {
                     #[inline(always)]
-                    fn deserialize<D>(
-                        deserializer: D,
-                    ) -> ::core::result::Result<Self, D::Error>
+                    fn deserialize<#deserializer>(
+                        deserializer: #deserializer,
+                    ) -> ::core::result::Result<Self, #deserializer::Error>
                     where
-                        D: ::serde::Deserializer<'de>,
+                        #deserializer: ::serde::Deserializer<#de>,
                     {
                         let value =
-                            <#el as ::serde::Deserialize<'de>>::deserialize(
+                            <#el as ::serde::Deserialize<#de>>::deserialize(
                                 deserializer,
                             )?;
 
@@ -1413,7 +1885,7 @@ impl Maker {
                         }
                         else {
                             ::core::result::Result::Err(
-                                <D::Error as ::serde::de::Error>::custom(
+                                <#deserializer::Error as ::serde::de::Error>::custom(
                                     "invalid value",
                                 ),
                             )
@@ -1425,7 +1897,7 @@ impl Maker {
 
         if self.cfg.flags.core_int {
             let it = quote! {
-                impl #ty {
+                impl #impl_generics #ty #where_clause {
                     /// The number of bits in the wrapped primitive integer.
                     pub const BITS: u32 = #el::BITS;
 
@@ -1531,7 +2003,7 @@ impl Maker {
                 Konsts::Value,
             ]));
             let it = quote! {
-                impl #ty {
+                impl #impl_generics #ty #where_clause {
                     #[inline(always)]
                     pub #konst fn rotate_left(self, n: u32) -> Self {
                         return Self::_core_int(#fp_get_raw(self).rotate_left(n));
@@ -1772,7 +2244,7 @@ impl Maker {
             stream.extend(it);
 
             let it = quote! {
-                impl #ty {
+                impl #impl_generics #ty #where_clause {
                     #[inline(always)]
                     pub #konst fn midpoint(self, rhs: Self) -> Self {
                         return Self::_core_int(
@@ -1989,7 +2461,7 @@ impl Maker {
             stream.extend(it);
 
             let it = quote! {
-                impl #ty {
+                impl #impl_generics #ty #where_clause {
                     #[inline(always)]
                     pub #konst fn overflowing_add(self, rhs: Self) -> (Self, bool) {
                         let (value, overflowed) =
@@ -2082,7 +2554,7 @@ impl Maker {
                 let unsigned =
                     format_ident!("{}", self.repr.unsigned_rust_name());
                 let it = quote! {
-                    impl #ty {
+                    impl #impl_generics #ty #where_clause {
                         #[inline(always)]
                         pub #konst fn cast_unsigned(self) -> #unsigned {
                             return #fp_get_raw(self).cast_unsigned();
@@ -2222,7 +2694,7 @@ impl Maker {
                         }
                     });
                 let it = quote! {
-                    impl #ty {
+                    impl #impl_generics #ty #where_clause {
                         #[inline(always)]
                         pub #konst fn cast_signed(self) -> #signed {
                             return #fp_get_raw(self).cast_signed();
@@ -2380,10 +2852,11 @@ impl Maker {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("into_{}", it.rust_name());
                     return quote! {
-                       #konst impl ::core::convert::Into<#target> for #ty {
+                       #konst impl #impl_generics ::core::convert::Into<#target> for #ty
+                       #where_clause {
                            #[inline(always)]
                            fn into(self) -> #target {
-                                return #ty::#conv(self);
+                                return Self::#conv(self);
                            }
                        }
                     };
@@ -2404,12 +2877,13 @@ impl Maker {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("try_into_{}", it.rust_name());
                     return quote! {
-                       #konst impl ::core::convert::TryInto<#target> for #ty {
+                       #konst impl #impl_generics ::core::convert::TryInto<#target> for #ty
+                       #where_clause {
                            type Error = ();
 
                            #[inline(always)]
                            fn try_into(self) -> ::core::result::Result<#target, Self::Error> {
-                                return #ty::#conv(self);
+                                return Self::#conv(self);
                            }
 
                        }
@@ -2430,7 +2904,8 @@ impl Maker {
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(rhs) });
             let it = quote! {
-                #konst impl ::core::ops::Shr<usize> for #ty {
+                #konst impl #impl_generics ::core::ops::Shr<usize> for #ty
+                #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
@@ -2456,7 +2931,8 @@ impl Maker {
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(rhs) });
             let it = quote::quote! {
-                #konst impl ::core::ops::Shl<usize> for #ty {
+                #konst impl #impl_generics ::core::ops::Shl<usize> for #ty
+                #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
@@ -2483,7 +2959,8 @@ impl Maker {
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
             let it = quote! {
-                #konst impl ::core::ops::ShrAssign<usize> for #ty {
+                #konst impl #impl_generics ::core::ops::ShrAssign<usize> for #ty
+                #where_clause {
                     #[inline(always)]
                     fn shr_assign(
                         &mut self,
@@ -2508,7 +2985,8 @@ impl Maker {
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
             let it = quote! {
-                #konst impl ::core::ops::ShlAssign<usize> for #ty {
+                #konst impl #impl_generics ::core::ops::ShlAssign<usize> for #ty
+                #where_clause {
                     #[inline(always)]
                     fn shl_assign(
                         &mut self,
@@ -2533,7 +3011,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::BitAndAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::BitAndAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn bitand_assign(
                             &mut self,
@@ -2545,14 +3024,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::BitAndAssign<T> for #ty
-                where T: #trait_friend_bit + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::BitAndAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn bitand_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self._bitand(it);
@@ -2577,7 +3057,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::AddAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::AddAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn add_assign(
                             &mut self,
@@ -2589,14 +3070,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::AddAssign<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::AddAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn add_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self.#method(it);
@@ -2621,7 +3103,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::SubAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::SubAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn sub_assign(
                             &mut self,
@@ -2633,14 +3116,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::SubAssign<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::SubAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn sub_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self.#method(it);
@@ -2665,7 +3149,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::MulAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::MulAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn mul_assign(
                             &mut self,
@@ -2677,14 +3162,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::MulAssign<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::MulAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn mul_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self.#method(it);
@@ -2709,7 +3195,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::DivAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::DivAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn div_assign(
                             &mut self,
@@ -2721,14 +3208,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::DivAssign<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::DivAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn div_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self.#method(it);
@@ -2753,7 +3241,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::RemAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::RemAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn rem_assign(
                             &mut self,
@@ -2765,14 +3254,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::RemAssign<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::RemAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn rem_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self.#method(it);
@@ -2794,7 +3284,8 @@ impl Maker {
             let bounds = bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
-                    #konst impl ::core::ops::BitOrAssign for #ty {
+                    #konst impl #impl_generics ::core::ops::BitOrAssign for #ty
+                    #where_clause {
                         #[inline(always)]
                         fn bitor_assign(
                             &mut self,
@@ -2806,14 +3297,15 @@ impl Maker {
                 });
             }
 
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::BitOrAssign<T> for #ty
-                where T: #trait_friend_bit + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::BitOrAssign<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn bitor_assign(
                         &mut self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) {
                         let it = #fp_friend_conv(rhs);
                         *self = self._bitor(it);
@@ -2829,9 +3321,9 @@ impl Maker {
         }
 
         if self.cfg.flags.debug {
-            let name = ty.to_string();
+            let name = self.target.ident.to_string();
             let it = quote! {
-                impl ::core::fmt::Debug for #ty {
+                impl #impl_generics ::core::fmt::Debug for #ty #where_clause {
                     fn fmt(
                         &self,
                         f: &mut ::core::fmt::Formatter<'_>,
@@ -2847,15 +3339,16 @@ impl Maker {
         }
 
         if self.cfg.flags.hash {
+            let hasher = self.target.fresh_ident("H");
             let it = quote! {
-                impl ::core::hash::Hash for #ty {
+                impl #impl_generics ::core::hash::Hash for #ty #where_clause {
                     #[inline(always)]
-                    fn hash<H>(
+                    fn hash<#hasher>(
                         &self,
-                        state: &mut H,
+                        state: &mut #hasher,
                     )
                     where
-                        H: ::core::hash::Hasher,
+                        #hasher: ::core::hash::Hasher,
                     {
                         return ::core::hash::Hash::hash(&#self_raw, state);
                     }
@@ -2871,7 +3364,7 @@ impl Maker {
             ]));
             // TODO why can't we do derive?
             let it = quote! {
-                #konst impl ::core::cmp::Eq for #ty {}
+                #konst impl #impl_generics ::core::cmp::Eq for #ty #where_clause {}
             };
             stream.extend(it);
         }
@@ -2882,7 +3375,7 @@ impl Maker {
                 Konsts::Comparison,
             ]));
             let it = quote! {
-                #konst impl ::core::cmp::Ord for #ty {
+                #konst impl #impl_generics ::core::cmp::Ord for #ty #where_clause {
                     #[inline(always)]
                     fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
                         return self.partial_cmp(other).unwrap();
@@ -2894,8 +3387,21 @@ impl Maker {
         }
 
         if self.cfg.flags.assertions {
-            let it = self.storage.layout_assertions(ty);
-            stream.extend(it);
+            let assertions =
+                self.storage.layout_assertions(quote! { #ty });
+            if self.target.has_generics() {
+                let name = self.target.layout_assertion();
+                stream.extend(quote! {
+                    impl #impl_generics #ty #where_clause {
+                        const #name: () = {
+                            #assertions
+                        };
+                    }
+                });
+            }
+            else {
+                stream.extend(assertions);
+            }
         }
 
         if self.cfg.flags.math_add && global_operators {
@@ -2912,7 +3418,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::Add for #ty {
+                    #konst impl #impl_generics ::core::ops::Add for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -2928,16 +3434,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::Add<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::Add<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn add(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -2961,7 +3468,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::Sub for #ty {
+                    #konst impl #impl_generics ::core::ops::Sub for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -2977,16 +3484,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::Sub<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::Sub<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn sub(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3010,7 +3518,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::Mul for #ty {
+                    #konst impl #impl_generics ::core::ops::Mul for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3026,16 +3534,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::Mul<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::Mul<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn mul(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3060,7 +3569,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::Div for #ty {
+                    #konst impl #impl_generics ::core::ops::Div for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3076,16 +3585,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::Div<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::Div<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn div(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3110,7 +3620,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::Rem for #ty {
+                    #konst impl #impl_generics ::core::ops::Rem for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3126,16 +3636,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_math + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::Rem<T> for #ty
-                where T: #trait_friend_math + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::Rem<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn rem(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3157,7 +3668,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitand(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::BitAnd for #ty {
+                    #konst impl #impl_generics ::core::ops::BitAnd for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3173,16 +3684,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitand(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::BitAnd<T> for #ty
-                where T: #trait_friend_bit + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::BitAnd<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitand(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3203,7 +3715,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitor(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::BitOr for #ty {
+                    #konst impl #impl_generics ::core::ops::BitOr for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3219,16 +3731,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitor(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::BitOr<T> for #ty
-                where T: #trait_friend_bit + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::BitOr<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitor(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3258,7 +3771,7 @@ impl Maker {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitxor(#rhs_raw) });
                 stream.extend(quote! {
-                    #konst impl ::core::ops::BitXor for #ty {
+                    #konst impl #impl_generics ::core::ops::BitXor for #ty #where_clause {
                         type Output = #output_ty;
 
                         #[inline(always)]
@@ -3273,7 +3786,8 @@ impl Maker {
 
                 if self.cfg.ty_out.is_self() {
                     stream.extend(quote! {
-                        #konst_assign impl ::core::ops::BitXorAssign for #ty {
+                        #konst_assign impl #impl_generics ::core::ops::BitXorAssign for #ty
+                        #where_clause {
                             #[inline(always)]
                             fn bitxor_assign(
                                 &mut self,
@@ -3288,16 +3802,17 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitxor(it) });
+            let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #bounds });
             let it = quote! {
-                #konst impl<T> ::core::ops::BitXor<T> for #ty
-                where T: #trait_friend_bit + #bounds
+                #konst impl #rhs_impl_generics ::core::ops::BitXor<#rhs_ty> for #ty
+                #rhs_where
                 {
                     type Output = #output_ty;
 
                     #[inline(always)]
                     fn bitxor(
                         self,
-                        rhs: T,
+                        rhs: #rhs_ty,
                     ) -> Self::Output {
                         let it = #fp_friend_conv(rhs);
                         return #result;
@@ -3308,14 +3823,15 @@ impl Maker {
             stream.extend(it);
 
             if self.cfg.ty_out.is_self() {
+                let rhs_where = rhs_where_clause(quote! { #trait_friend_bit + #assign_bounds });
                 let it = quote! {
-                    #konst_assign impl<T> ::core::ops::BitXorAssign<T> for #ty
-                    where T: #trait_friend_bit + #assign_bounds
+                    #konst_assign impl #rhs_impl_generics ::core::ops::BitXorAssign<#rhs_ty> for #ty
+                    #rhs_where
                     {
                         #[inline(always)]
                         fn bitxor_assign(
                             &mut self,
-                            rhs: T,
+                            rhs: #rhs_ty,
                         ) {
                             let it = #fp_friend_conv(rhs);
                             *self = self._bitxor(it);
@@ -3334,7 +3850,7 @@ impl Maker {
             let output_ty = output.ty();
             let result = output.convert(quote! { self._not() });
             let it = quote! {
-                #konst impl ::core::ops::Not for #ty {
+                #konst impl #impl_generics ::core::ops::Not for #ty #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
@@ -3348,7 +3864,7 @@ impl Maker {
 
         if self.cfg.flags.display {
             stream.extend(quote! {
-                impl ::core::fmt::Display for #ty {
+                impl #impl_generics ::core::fmt::Display for #ty #where_clause {
                     #[inline(always)]
                     fn fmt(
                         &self,
@@ -3363,7 +3879,7 @@ impl Maker {
 
         if self.cfg.flags.fmt_binary {
             let it = quote! {
-                impl ::core::fmt::Binary for #ty {
+                impl #impl_generics ::core::fmt::Binary for #ty #where_clause {
                     #[inline(always)]
                     fn fmt(
                         &self,
@@ -3379,7 +3895,7 @@ impl Maker {
 
         if self.cfg.flags.fmt_octal {
             let it = quote! {
-                impl ::core::fmt::Octal for #ty {
+                impl #impl_generics ::core::fmt::Octal for #ty #where_clause {
                     #[inline(always)]
                     fn fmt(
                         &self,
@@ -3395,7 +3911,7 @@ impl Maker {
 
         if self.cfg.flags.fmt_hex_lower {
             let it = quote! {
-                impl ::core::fmt::LowerHex for #ty {
+                impl #impl_generics ::core::fmt::LowerHex for #ty #where_clause {
                     #[inline(always)]
                     fn fmt(
                         &self,
@@ -3411,7 +3927,7 @@ impl Maker {
 
         if self.cfg.flags.fmt_hex_upper {
             let it = quote! {
-                impl ::core::fmt::UpperHex for #ty {
+                impl #impl_generics ::core::fmt::UpperHex for #ty #where_clause {
                     #[inline(always)]
                     fn fmt(
                         &self,
@@ -3432,15 +3948,17 @@ impl Maker {
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
+            let rhs_where = rhs_where_clause(quote! {
+                #trait_friend_rel + #bounds + ::core::marker::Copy
+            });
             let it = quote! {
-                #konst impl<T> ::core::cmp::PartialEq<T> for #ty
-                where T: #trait_friend_rel + #bounds
-                    + ::core::marker::Copy
+                #konst impl #rhs_impl_generics ::core::cmp::PartialEq<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn eq(
                         &self,
-                        rhs: &T,
+                        rhs: &#rhs_ty,
                     ) -> bool {
                         let lhs = #fp_get_raw(*self);
                         let rhs = #fp_friend_conv(*rhs);
@@ -3458,15 +3976,17 @@ impl Maker {
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
             let bounds = bounds_for(&flags);
+            let rhs_where = rhs_where_clause(quote! {
+                #trait_friend_rel + #bounds + ::core::marker::Copy
+            });
             let it = quote! {
-                #konst impl<T> ::core::cmp::PartialOrd<T> for #ty
-                where T: #trait_friend_rel + #bounds
-                    + ::core::marker::Copy
+                #konst impl #rhs_impl_generics ::core::cmp::PartialOrd<#rhs_ty> for #ty
+                #rhs_where
                 {
                     #[inline(always)]
                     fn partial_cmp(
                         &self,
-                        rhs: &T,
+                        rhs: &#rhs_ty,
                     ) -> ::core::option::Option<::core::cmp::Ordering> {
                         let lhs = #fp_get_raw(*self);
                         let rhs = #fp_friend_conv(*rhs);

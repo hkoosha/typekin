@@ -435,7 +435,7 @@ pub(crate) mod cfg {
 
 #[derive(Clone)]
 pub(crate) struct ProtocolFriend {
-    pub(crate) ty: syn::Path,
+    pub(crate) ty: Type,
     pub(crate) capabilities: std::collections::BTreeSet<Ident>,
     pub(crate) conversion: Option<TokenStream>,
 }
@@ -448,7 +448,8 @@ pub(crate) struct Construction {
 }
 
 pub(crate) struct Protocol {
-    pub(crate) target: Ident,
+    pub(crate) target: TokenStream,
+    pub(crate) generics: syn::Generics,
     pub(crate) relation: Type,
     pub(crate) seal: Ident,
     pub(crate) conversion: Ident,
@@ -467,10 +468,12 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     let conversion = &protocol.conversion;
     let konst = zz_runner::konst(protocol.konst);
     let bonst = zz_runner::bonst(protocol.konst);
+    let (parameters, arguments, where_clause) =
+        protocol.generics.split_for_impl();
 
     let seal_declaration = protocol.emit_seal.then(|| {
         quote! {
-            #konst trait #seal {
+            #konst trait #seal #parameters #where_clause {
                 fn #conversion(self) -> #relation;
             }
         }
@@ -498,7 +501,9 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
             quote! {
                 #safety
-                #konst #unsafe_ trait #capability: #bonst #seal {
+                #konst #unsafe_ trait #capability #parameters:
+                    #bonst #seal #arguments
+                #where_clause {
                     #method
                 }
             }
@@ -506,7 +511,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
     let target_seal = protocol.target_conversion.as_ref().map(|body| {
         quote! {
-            #konst impl #seal for #target {
+            #konst impl #parameters #seal #arguments for #target
+            #where_clause {
                 #[inline(always)]
                 fn #conversion(self) -> #relation {
                     #body
@@ -519,7 +525,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
         let ty = &friend.ty;
         let seal_impl = friend.conversion.as_ref().map(|body| {
             quote! {
-                #konst impl #seal for #ty {
+                #konst impl #parameters #seal #arguments for #ty
+                #where_clause {
                     #[inline(always)]
                     fn #conversion(self) -> #relation {
                         #body
@@ -550,14 +557,15 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                     Some(quote! {
                         #[inline(always)]
                         fn make(self) -> #target {
-                            let raw = <Self as #seal>::#conversion(self);
+                            let raw = <Self as #seal #arguments>::#conversion(self);
                             return #constructor;
                         }
                     })
                 });
 
             quote! {
-                #konst #unsafe_ impl #capability for #ty {
+                #konst #unsafe_ impl #parameters #capability #arguments for #ty
+                #where_clause {
                     #method
                 }
             }

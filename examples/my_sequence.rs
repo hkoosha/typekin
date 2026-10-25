@@ -1,7 +1,16 @@
-use core::ops::{
-    Add,
-    Sub,
-};
+mod sealed {
+    pub trait Direction {}
+}
+
+trait Direction: sealed::Direction {}
+
+struct In;
+struct Out;
+
+impl sealed::Direction for In {}
+impl sealed::Direction for Out {}
+impl Direction for In {}
+impl Direction for Out {}
 
 #[typekin::integral(
     konst = none,
@@ -11,9 +20,16 @@ use core::ops::{
         },
         circular {},
     ],
-    out_type = SeqPoint::into_offset(_) -> SeqOffset,
+    out_type = Self::into_offset(_) -> SeqOffset<D>,
+    facets = [
+        circular {
+            with = math_add,
+            friends = Self::offset_raw(SeqOffset<D>) -> Math,
+            out_type = Self,
+        },
+    ],
 )]
-struct SeqPoint(u32);
+struct SeqPoint<D: Direction>(u32);
 
 #[typekin::integral(
     konst = none,
@@ -21,7 +37,7 @@ struct SeqPoint(u32);
         precedes = false,
     },
 )]
-struct SeqOffset(i32);
+struct SeqOffset<D: Direction>(i32);
 
 #[typekin::integral(
     konst = none,
@@ -36,50 +52,37 @@ struct WrappingCounter(u32);
 )]
 struct NonZeroSerial(u32);
 
-impl SeqPoint {
-    fn into_offset(self) -> SeqOffset {
+impl<D: Direction> SeqPoint<D> {
+    fn into_offset(self) -> SeqOffset<D> {
         return SeqOffset::make(self.raw() as i32);
     }
-}
 
-impl Add<SeqOffset> for SeqPoint {
-    type Output = Self;
-
-    #[inline(always)]
-    fn add(
-        self,
-        rhs: SeqOffset,
-    ) -> Self::Output {
-        return Self::make(self.raw().wrapping_add(rhs.raw() as u32));
+    fn offset_raw(offset: SeqOffset<D>) -> u32 {
+        return offset.raw() as u32;
     }
 }
 
-impl Sub<SeqOffset> for SeqPoint {
-    type Output = Self;
 
-    #[inline(always)]
-    fn sub(
-        self,
-        rhs: SeqOffset,
-    ) -> Self::Output {
-        return Self::make(self.raw().wrapping_sub(rhs.raw() as u32));
-    }
-}
 
-fn main() {
-    let maximum = SeqPoint::make(u32::MAX);
-    let zero = SeqPoint::make(0);
+fn directional_sequence<D: Direction>() {
+    let maximum = SeqPoint::<D>::make(u32::MAX);
+    let zero = SeqPoint::<D>::make(0);
     let offset = zero - maximum;
 
     assert_eq!(offset.raw(), 1);
     assert!(maximum.precedes(zero));
     assert!(!zero.precedes(SeqPoint::make(1 << 31)));
 
-    let wrapped = maximum + SeqOffset::make(1);
+    let wrapped = maximum + SeqOffset::<D>::make(1);
     assert_eq!(wrapped.raw(), 0);
 
-    let offset = SeqOffset::make(i32::MAX) + SeqOffset::make(1);
+    let offset = SeqOffset::<D>::make(i32::MAX) + SeqOffset::<D>::make(1);
     assert_eq!(offset.raw(), i32::MIN);
+}
+
+fn main() {
+    directional_sequence::<In>();
+    directional_sequence::<Out>();
 
     let maximum = WrappingCounter::make(u32::MAX);
     let wrapped = maximum + WrappingCounter::make(1);

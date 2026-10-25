@@ -1615,8 +1615,9 @@ impl Maker {
                     },
                 };
 
+                let ty = &friend.ty;
                 return Ok(Some(ProtocolFriend {
-                    ty: friend.ty.clone(),
+                    ty: syn::parse_quote! { #ty },
                     capabilities,
                     conversion: Some(conversion),
                 }));
@@ -1625,9 +1626,11 @@ impl Maker {
             .into_iter()
             .flatten()
             .vec();
+        let target = &self.ty;
 
         return Ok(crate::friendship::emit_protocol(Protocol {
-            target: self.ty.clone(),
+            target: quote! { #target },
+            generics: syn::Generics::default(),
             relation,
             seal: format_ident!("FlagSeal"),
             conversion: format_ident!(

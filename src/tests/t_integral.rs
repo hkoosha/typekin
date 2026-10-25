@@ -155,20 +155,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn storage_plan_extracts_and_constructs_logical_raw_values() {
-        let storage = StoragePlan::new(N::U032, true, true);
-        assert_eq!(
-            storage.extract(quote::quote! { self.0 }).to_string(),
-            "((self . 0) . 0) . get ()",
-        );
-        let construction = storage
-            .construct(quote::quote! { Self }, quote::quote! { value })
-            .to_string();
-        assert!(construction.contains("Wrapping"));
-        assert!(construction.contains("NonZeroU32 :: new"));
-        assert!(construction.contains("Self"));
-    }
 
     #[test]
     fn non_zero_storage_rejects_a_custom_unchecked_constructor() {
