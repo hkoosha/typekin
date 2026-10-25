@@ -158,6 +158,13 @@ struct ExplicitlyPrivateNonZero(pub(self) u8);
 
 #[typekin::integral(
     konst = none,
+    domain = 1..,
+    with = [display, serde],
+)]
+struct NonZeroSerde(u8);
+
+#[typekin::integral(
+    konst = none,
     domain = 1..=10,
     without = non_zero,
 )]
@@ -361,6 +368,24 @@ struct CheckedOutputSource(u8);
 impl CheckedOutputSource {
     fn into_output(self) -> OperatorOutput {
         CHECKED_OUTPUT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return OperatorOutput(self.raw());
+    }
+}
+
+static NON_ZERO_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[typekin::integral(
+    konst = none,
+    with = non_zero,
+    out_type = NonZeroOutputSource::into_output(_) -> OperatorOutput,
+)]
+struct NonZeroOutputSource(u8);
+
+impl NonZeroOutputSource {
+    fn into_output(self) -> OperatorOutput {
+        NON_ZERO_OUTPUT_CALLS
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         return OperatorOutput(self.raw());
     }
 }
@@ -657,6 +682,30 @@ mod tests {
         assert_eq!(
             CHECKED_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
             0,
+        );
+    }
+
+    #[test]
+    fn non_zero_reconstruction_precedes_output_conversion() {
+        NON_ZERO_OUTPUT_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        let lhs = NonZeroOutputSource::try_make(2).unwrap();
+        let rhs = NonZeroOutputSource::try_make(2).unwrap();
+        assert_panics(|| {
+            let _ = lhs - rhs;
+        });
+        assert_eq!(
+            NON_ZERO_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+        );
+
+        let lhs = NonZeroOutputSource::try_make(2).unwrap();
+        let rhs = NonZeroOutputSource::try_make(3).unwrap();
+        let result = lhs + rhs;
+        assert_eq!(result, OperatorOutput(5));
+        assert_eq!(
+            NON_ZERO_OUTPUT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            1,
         );
     }
 
@@ -1546,6 +1595,78 @@ mod tests {
         assert_eq!(signed.raw(), 9i32);
         assert_eq!(NonZeroU32::try_make(0), Err(0));
         assert_eq!(NonZeroI32::try_make(0), Err(0));
+    }
+
+    #[test]
+    fn non_zero_storage_preserves_maps_and_parsing() {
+        let value = NonZeroU32::try_make(2).unwrap();
+        let mapped = value.try_map(|raw| raw + 3);
+        assert_eq!(mapped.map(NonZeroU32::raw), Ok(5));
+
+        let value = NonZeroU32::try_make(2).unwrap();
+        assert_eq!(value.try_map(|_| 0), Err(0));
+        assert_eq!("7".parse::<NonZeroU32>().map(NonZeroU32::raw), Ok(7));
+        assert_eq!("0".parse::<NonZeroU32>(), Err(()));
+    }
+
+    #[test]
+    fn non_zero_storage_preserves_raw_views_and_formatting() {
+        use core::hash::{
+            Hash,
+            Hasher,
+        };
+
+        let value = NonZeroU32::try_make(7).unwrap();
+        let raw: &u32 = value.as_ref();
+        assert_eq!(*raw, 7);
+        assert_eq!(value.into_u64(), 7u64);
+        assert_eq!(format!("{value:?}"), "NonZeroU32(7)");
+        assert_eq!(format!("{value:b}"), "111");
+
+        let mut wrapped_hasher =
+            std::collections::hash_map::DefaultHasher::new();
+        value.hash(&mut wrapped_hasher);
+        let mut raw_hasher = std::collections::hash_map::DefaultHasher::new();
+        7u32.hash(&mut raw_hasher);
+        assert_eq!(wrapped_hasher.finish(), raw_hasher.finish());
+    }
+
+    #[test]
+    fn non_zero_storage_preserves_serde_wire_values() {
+        assert_tokens(
+            &NonZeroSerde::try_make(7).unwrap().readable(),
+            &[Token::U8(7)],
+        );
+        assert_tokens(
+            &NonZeroSerde::try_make(7).unwrap().compact(),
+            &[Token::U8(7)],
+        );
+        assert_de_tokens_error::<NonZeroSerde>(
+            &[Token::U8(0)],
+            "invalid value",
+        );
+        assert_eq!(format!("{}", NonZeroSerde::try_make(7).unwrap()), "7");
+    }
+
+    #[test]
+    fn non_zero_storage_reconstructs_operations_and_integer_methods() {
+        let lhs = NonZeroU32::try_make(2).unwrap();
+        let rhs = NonZeroU32::try_make(3).unwrap();
+        assert_eq!((lhs + rhs).raw(), 5);
+
+        let mut assigned = NonZeroU32::try_make(2).unwrap();
+        assigned += NonZeroU32::try_make(3).unwrap();
+        assert_eq!(assigned.raw(), 5);
+
+        let lhs = NonZeroU32::try_make(2).unwrap();
+        let rhs = NonZeroU32::try_make(2).unwrap();
+        assert_panics(|| {
+            let _ = lhs - rhs;
+        });
+
+        let lhs = NonZeroU32::try_make(2).unwrap();
+        let rhs = NonZeroU32::try_make(2).unwrap();
+        assert_eq!(lhs.checked_sub(rhs), None);
     }
 
     #[test]
