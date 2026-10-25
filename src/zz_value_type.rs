@@ -405,6 +405,33 @@ impl PartialOrd for RangeEnding {
 
 // =============================================================================
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Shl,
+    Shr,
+}
+
+impl ArithmeticOp {
+    pub(crate) fn name(self) -> &'static str {
+        return match self {
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Rem => "rem",
+            Self::Shl => "shl",
+            Self::Shr => "shr",
+        };
+    }
+}
+
+// =============================================================================
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Operator {
     Add,

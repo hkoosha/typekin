@@ -385,6 +385,105 @@ struct SequentialExtended(u8);
 )]
 struct LayeredProfiles(u8);
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct FacetResult(u8);
+
+#[derive(Copy, Clone)]
+pub struct FacetOffset(u8);
+
+#[derive(Copy, Clone)]
+pub struct FacetChecked(u8);
+
+#[derive(Copy, Clone)]
+pub struct FacetBits(u8);
+
+fn facet_offset_raw(value: FacetOffset) -> u8 {
+    return value.0;
+}
+
+fn facet_checked_raw(value: FacetChecked) -> u8 {
+    return value.0;
+}
+
+fn facet_bits_raw(value: FacetBits) -> u8 {
+    return value.0;
+}
+
+#[typekin::integral(
+    konst = none,
+    profile = circular {},
+    out_type = FacetPoint::into_result(_) -> FacetResult,
+    facets = [
+        circular {
+            friends = facet_offset_raw(FacetOffset) -> Math,
+            out_type = Self,
+        },
+        sequential {
+            friends = facet_checked_raw(FacetChecked) -> Math,
+            without = math_sub,
+            out_type = Self,
+        },
+        int {
+            friends = facet_bits_raw(FacetBits) -> Bit,
+            with = math_xor,
+            out_type = Self,
+        },
+    ],
+)]
+pub struct FacetPoint(u8);
+
+impl FacetPoint {
+    fn into_result(self) -> FacetResult {
+        return FacetResult(self.raw());
+    }
+}
+
+#[derive(Copy, Clone)]
+struct FacetConstOffset(u8);
+
+const fn facet_const_offset_raw(value: FacetConstOffset) -> u8 {
+    return value.0;
+}
+
+#[typekin::integral(
+    konst = nightly,
+    facets = [
+        int {
+            friends = facet_const_offset_raw(FacetConstOffset) -> Math,
+            without = math_sub,
+        },
+    ],
+)]
+struct FacetConstPoint(u8);
+
+const FACET_CONST_RESULT: FacetConstPoint =
+    FacetConstPoint::make(2) + FacetConstOffset(3);
+
+#[derive(Debug, Eq, PartialEq)]
+struct FacetValidatedResult(u8);
+
+static FACET_OUTPUTS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+const fn facet_valid(value: u8) -> bool {
+    return value != 5;
+}
+
+#[typekin::integral(
+    konst = none,
+    valid = facet_valid,
+    out_type = FacetValidated::into_result(_) -> FacetValidatedResult,
+    facets = [],
+)]
+struct FacetValidated(u8);
+
+impl FacetValidated {
+    fn into_result(self) -> FacetValidatedResult {
+        FACET_OUTPUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return FacetValidatedResult(self.raw());
+    }
+}
+
 // ==============================================================================
 
 #[cfg(test)]
@@ -398,6 +497,43 @@ mod tests {
         assert_de_tokens_error,
         assert_tokens,
     };
+
+    #[test]
+    fn facets_dispatch_by_rhs_with_independent_policies_and_outputs() {
+        let wrapped = FacetPoint::make(u8::MAX) + FacetOffset(1);
+        assert_eq!(wrapped.raw(), 0);
+
+        let same_type = FacetPoint::make(2) + FacetPoint::make(3);
+        assert_eq!(same_type, FacetResult(5));
+
+        let bits = FacetPoint::make(0b1100) ^ FacetBits(0b1010);
+        assert_eq!(bits.raw(), 0b0110);
+
+        assert_panics(|| {
+            let _ = FacetPoint::make(u8::MAX) + FacetChecked(1);
+        });
+    }
+
+    #[test]
+    fn facets_preserve_constness_and_validate_before_output_conversion() {
+        assert_eq!(FACET_CONST_RESULT.raw(), 5);
+
+        let lhs = FacetValidated::try_make(2).unwrap();
+        let rhs = FacetValidated::try_make(3).unwrap();
+        FACET_OUTPUTS.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        assert_panics(|| {
+            let _ = lhs + rhs;
+        });
+        assert_eq!(FACET_OUTPUTS.load(std::sync::atomic::Ordering::Relaxed), 0,);
+
+        let lhs = FacetValidated::try_make(2).unwrap();
+        let rhs = FacetValidated::try_make(2).unwrap();
+        let result = lhs + rhs;
+
+        assert_eq!(result, FacetValidatedResult(4));
+        assert_eq!(FACET_OUTPUTS.load(std::sync::atomic::Ordering::Relaxed), 1,);
+    }
 
     #[test]
     fn output_type_maps_every_non_assignment_operator_once() {

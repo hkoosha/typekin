@@ -62,6 +62,7 @@ use crate::zz_runner::{
     mk_flags,
 };
 use crate::zz_value_type::{
+    ArithmeticOp,
     N,
     Operator,
 };
@@ -191,33 +192,18 @@ impl Maker {
         return cfg;
     }
 
-    fn arithmetic_expression(
+    fn target_qualified_path(
         &self,
-        primitive: TokenStream,
-        operation: &str,
-        lhs: TokenStream,
-        rhs: TokenStream,
-    ) -> TokenStream {
-        return match self.cfg.profile.arithmetic() {
-            Arithmetic::Primitive => primitive,
-            Arithmetic::Wrapping => {
-                let method = format_ident!("wrapping_{}", operation);
-                quote! { #lhs.#method(#rhs) }
-            }
-            Arithmetic::Checked => {
-                let method = format_ident!("checked_{}", operation);
-                quote! {
-                    match #lhs.#method(#rhs) {
-                        ::core::option::Option::Some(value) => value,
-                        ::core::option::Option::None => {
-                            ::core::panic!(
-                                "operation overflowed",
-                            );
-                        }
-                    }
-                }
-            }
-        };
+        path: &Path,
+    ) -> Path {
+        let mut path = path.clone();
+        if path.leading_colon.is_none()
+            && let Some(segment) = path.segments.first_mut()
+            && segment.ident == "Self"
+        {
+            segment.ident = self.ty.clone();
+        }
+        return path;
     }
 
     fn is_operator_capability(capability: &Ident) -> bool {
@@ -231,7 +217,7 @@ impl Maker {
         value: TokenStream,
     ) -> TokenStream {
         if ty.is_ident(&self.ty) {
-            let fp_get_raw = &self.fp_get_raw;
+            let fp_get_raw = self.target_qualified_path(&self.fp_get_raw);
             return quote! { #fp_get_raw(#value) };
         }
 
@@ -263,7 +249,7 @@ impl Maker {
         };
     }
 
-    fn ekran_facet_dispatch_traits(&self) -> TokenStream {
+    fn ekran_facet_dispatch(&self) -> TokenStream {
         if self.cfg.default_facet.is_none() {
             return TokenStream::new();
         }
@@ -274,27 +260,113 @@ impl Maker {
             .keys()
             .map(|slot| slot.operator)
             .collect::<BTreeSet<_>>();
-        return operators
-            .into_iter()
-            .map(|operator| {
-                let trait_name = format_ident!("{}Rhs", operator.name());
-                let method = format_ident!("{}", operator.method_name());
-                let target = &self.ty;
-                let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
-                let konst = zz_runner::konst(is_konst);
+        let traits = operators.iter().copied().map(|operator| {
+            let trait_name = format_ident!("{}Rhs", operator.name());
+            let method = format_ident!("{}", operator.method_name());
+            let target = &self.ty;
+            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let konst = zz_runner::konst(is_konst);
 
-                return quote! {
-                    #konst trait #trait_name {
-                        type Output;
+            return quote! {
+                #[doc(hidden)]
+                #[allow(private_interfaces)]
+                pub #konst trait #trait_name {
+                    type Output;
 
-                        fn #method(
-                            lhs: #target,
-                            rhs: Self,
-                        ) -> Self::Output;
+                    fn #method(
+                        lhs: #target,
+                        rhs: Self,
+                    ) -> Self::Output;
+                }
+            };
+        });
+        let implementations = self.cfg.facet_slots.iter().map(|(key, slot)| {
+            let operator = key.operator;
+            let trait_name = format_ident!("{}Rhs", operator.name());
+            let method = format_ident!("{}", operator.method_name());
+            let target = &self.ty;
+            let rhs_ty = slot
+                .rhs
+                .as_ref()
+                .map_or_else(|| quote! { #target }, |rhs| quote! { #rhs });
+            let rhs = match &slot.rhs {
+                Some(rhs) => self.friend_conversion_expression(
+                    rhs,
+                    slot.conversion.as_ref(),
+                    quote! { rhs },
+                ),
+                None => {
+                    let fp_get_raw =
+                        self.target_qualified_path(&self.fp_get_raw);
+                    quote! { #fp_get_raw(rhs) }
+                }
+            };
+            let lhs = self.target_qualified_path(&self.fp_get_raw);
+            let unchecked = self.target_qualified_path(&self.fp_unchecked);
+            let operation = slot.arithmetic.make_operator_expr(operator);
+            let output = OperatorOutput::of(&slot.ty_out);
+            let output_ty = if slot.ty_out.is_self() {
+                quote! { #target }
+            }
+            else {
+                output.ty()
+            };
+            let result = output.convert(quote! { value });
+            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let konst = zz_runner::konst(is_konst);
+
+            return quote! {
+                #konst impl #trait_name for #rhs_ty {
+                    type Output = #output_ty;
+
+                    #[inline(always)]
+                    fn #method(
+                        lhs: #target,
+                        rhs: #rhs_ty,
+                    ) -> Self::Output {
+                        let lhs = #lhs(lhs);
+                        let rhs = #rhs;
+                        let value = #operation;
+                        let value = #unchecked(value);
+                        return #result;
                     }
-                };
-            })
-            .merged();
+                }
+            };
+        });
+        let operator_impls = operators.iter().copied().map(|operator| {
+            let trait_name = format_ident!("{}Rhs", operator.name());
+            let method = format_ident!("{}", operator.method_name());
+            let operation = format_ident!("{}", operator.name());
+            let target = &self.ty;
+            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
+
+            return quote! {
+                #[allow(private_bounds)]
+                #konst impl<T> ::core::ops::#operation<T> for #target
+                where
+                    T: #bonst #trait_name #destruct,
+                {
+                    type Output = <T as #trait_name>::Output;
+
+                    #[inline(always)]
+                    fn #method(
+                        self,
+                        rhs: T,
+                    ) -> Self::Output {
+                        return <T as #trait_name>::#method(self, rhs);
+                    }
+                }
+            };
+        });
+
+        return quote! {
+            #(#traits)*
+            #(#implementations)*
+            #(#operator_impls)*
+        };
     }
 
     fn fix_friendship(&mut self) -> syn::Result<()> {
@@ -479,7 +551,7 @@ impl Maker {
             }),
             konst: self.cfg.konst_friendship(),
         });
-        let dispatch = self.ekran_facet_dispatch_traits();
+        let dispatch = self.ekran_facet_dispatch();
         return quote! {
             #protocol
             #dispatch
@@ -698,12 +770,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_add {
-            let operation = self.arithmetic_expression(
-                quote! { lhs + rhs },
-                "add",
-                quote! { lhs },
-                quote! { rhs },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Add);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _add(
@@ -719,12 +787,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_sub {
-            let operation = self.arithmetic_expression(
-                quote! { lhs - rhs },
-                "sub",
-                quote! { lhs },
-                quote! { rhs },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Sub);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _sub(
@@ -740,12 +804,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_mul {
-            let operation = self.arithmetic_expression(
-                quote! { lhs * rhs },
-                "mul",
-                quote! { lhs },
-                quote! { rhs },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Mul);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _mul(
@@ -761,12 +821,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_div {
-            let operation = self.arithmetic_expression(
-                quote! { lhs / rhs },
-                "div",
-                quote! { lhs },
-                quote! { rhs },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Div);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _div(
@@ -782,12 +838,8 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_rem {
-            let operation = self.arithmetic_expression(
-                quote! { lhs % rhs },
-                "rem",
-                quote! { lhs },
-                quote! { rhs },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Rem);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _rem(
@@ -848,17 +900,13 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_shr {
-            let operation = self.arithmetic_expression(
-                quote! { lhs >> count },
-                "shr",
-                quote! { lhs },
-                quote! { count as u32 },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Shr);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _shr(
                     &self,
-                    count: usize,
+                    rhs: usize,
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
                     let it = #operation;
@@ -869,17 +917,13 @@ impl Maker {
         }
 
         if self.cfg.flags.fn_math_shl {
-            let operation = self.arithmetic_expression(
-                quote! { lhs << count },
-                "shl",
-                quote! { lhs },
-                quote! { count as u32 },
-            );
+            let operation =
+                self.cfg.profile.arithmetic().make_expr(ArithmeticOp::Shl);
             let it = quote! {
                 #[inline(always)]
                 pub(self) const fn _shl(
                     &self,
-                    count: usize,
+                    rhs: usize,
                 ) -> Self {
                     let lhs = #fp_get_raw(*self);
                     let it = #operation;

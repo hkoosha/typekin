@@ -7,8 +7,13 @@ use std::fmt::{
 use proc_macro2::{
     Ident,
     Span,
+    TokenStream,
 };
-use quote::ToTokens;
+use quote::{
+    ToTokens,
+    format_ident,
+    quote,
+};
 use syn::parse::{
     Parse,
     ParseStream,
@@ -32,13 +37,83 @@ use crate::zz_runner::{
     MySpanned,
     snake_case_of,
 };
-use crate::zz_value_type::Operator;
+use crate::zz_value_type::{
+    ArithmeticOp,
+    Operator,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Arithmetic {
     Primitive,
     Wrapping,
     Checked,
+}
+
+impl Arithmetic {
+    pub(crate) fn make_expr(
+        self,
+        it: ArithmeticOp,
+    ) -> TokenStream {
+        let primitive = match it {
+            ArithmeticOp::Add => quote! { lhs + rhs },
+            ArithmeticOp::Sub => quote! { lhs - rhs },
+            ArithmeticOp::Mul => quote! { lhs * rhs },
+            ArithmeticOp::Div => quote! { lhs / rhs },
+            ArithmeticOp::Rem => quote! { lhs % rhs },
+            ArithmeticOp::Shl => quote! { lhs << rhs },
+            ArithmeticOp::Shr => quote! { lhs >> rhs },
+        };
+
+        return match self {
+            Arithmetic::Primitive => primitive,
+            Arithmetic::Wrapping => {
+                let method = format_ident!("wrapping_{}", it.name());
+                let rhs = Self::rhs_for(it);
+                quote! { lhs.#method(#rhs) }
+            }
+            Arithmetic::Checked => {
+                let method = format_ident!("checked_{}", it.name());
+                let rhs = Self::rhs_for(it);
+                quote! {
+                    match lhs.#method(#rhs) {
+                        ::core::option::Option::Some(value) => value,
+                        ::core::option::Option::None => {
+                            ::core::panic!(
+                                "operation overflowed",
+                            );
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    pub(crate) fn make_operator_expr(
+        self,
+        operator: Operator,
+    ) -> TokenStream {
+        return match operator {
+            Operator::BitAnd => quote! { lhs & rhs },
+            Operator::BitOr => quote! { lhs | rhs },
+            Operator::BitXor => quote! { lhs ^ rhs },
+            Operator::Add => self.make_expr(ArithmeticOp::Add),
+            Operator::Sub => self.make_expr(ArithmeticOp::Sub),
+            Operator::Mul => self.make_expr(ArithmeticOp::Mul),
+            Operator::Div => self.make_expr(ArithmeticOp::Div),
+            Operator::Rem => self.make_expr(ArithmeticOp::Rem),
+        };
+    }
+
+    fn rhs_for(operation: ArithmeticOp) -> TokenStream {
+        return match operation {
+            ArithmeticOp::Shl | ArithmeticOp::Shr => quote! { rhs as u32 },
+            ArithmeticOp::Add
+            | ArithmeticOp::Sub
+            | ArithmeticOp::Mul
+            | ArithmeticOp::Div
+            | ArithmeticOp::Rem => quote! { rhs },
+        };
+    }
 }
 
 #[derive(Clone, Default)]

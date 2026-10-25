@@ -952,7 +952,7 @@ mod tests {
     }
 
     #[test]
-    fn facets_replace_operator_friendship_with_dispatch_traits() {
+    fn facets_emit_dispatch_traits_slots_and_blanket_operators() {
         let expansion = expansion_of(
             "
                 konst = none,
@@ -966,19 +966,22 @@ mod tests {
             ",
         );
 
-        assert!(expansion.contains("trait AddRhs"));
-        assert!(expansion.contains("trait SubRhs"));
+        assert!(expansion.contains("pub trait AddRhs"));
+        assert!(expansion.contains("pub trait SubRhs"));
         assert!(!expansion.contains("trait Math : Seal"));
         assert!(!expansion.contains("trait Bit : Seal"));
         assert!(!expansion.contains("impl Math for Offset"));
         assert!(!expansion.contains("impl Bit for Offset"));
         assert!(
-            !expansion
+            expansion
                 .contains("impl < T > :: core :: ops :: Add < T > for Point")
         );
+        assert!(expansion.contains("T : AddRhs"));
+        assert!(expansion.contains("impl AddRhs for Other"));
+        assert!(expansion.contains("impl AddRhs for Offset"));
+        assert!(expansion.contains("impl AddRhs for Point"));
         assert!(!expansion.contains(":: core :: ops :: Add for Point"));
         assert!(!expansion.contains(":: core :: ops :: AddAssign"));
-        assert!(!expansion.contains("Other"));
     }
 
     #[test]
