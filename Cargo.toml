@@ -55,6 +55,12 @@ path = "examples/my_sequence.rs"
 name = "my_sequence_exp"
 path = "examples/my_sequence_exp.rs"
 [[example]]
+name = "my_tcp"
+path = "examples/my_tcp.rs"
+[[example]]
+name = "my_tcp_exp"
+path = "examples/my_tcp_exp.rs"
+[[example]]
 name = "my_flag"
 path = "examples/my_flag.rs"
 [[example]]

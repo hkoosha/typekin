@@ -78,7 +78,7 @@ z-new it file:
     >> justfile
 
 [parallel]
-all: u32-expand u16-expand non-expand sequence-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand unchecked-expand
+all: u32-expand u16-expand non-expand sequence-expand tcp-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand unchecked-expand
   just fmt
 
 [group("example")]
@@ -120,6 +120,11 @@ non: non-expand fmt
 sequence-expand: (z-expand 'my_sequence')
 [group("example")]
 sequence: sequence-expand fmt
+
+[group("example")]
+tcp-expand: (z-expand 'my_tcp')
+[group("example")]
+tcp: tcp-expand fmt
 
 [group("example")]
 flag-expand: (z-expand 'my_flag')
