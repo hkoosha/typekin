@@ -235,6 +235,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_facets_in_integral() {
+        let input = "
+            integral = [
+                facets = []
+            ]
+        ";
+        let error = syn::parse_str::<Cfg>(input)
+            .expect_err("bitflag values cannot use integral facets");
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral configuration does not support facets",
+        );
+    }
+
+    #[test]
     fn accepts_konst_nightly() {
         let it = "
             konst = nightly

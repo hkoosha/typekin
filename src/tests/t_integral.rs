@@ -682,6 +682,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
+        assert!(config.facets_present());
         assert!(config.facets.is_empty());
         assert!(config.default_facet.is_some());
     }
@@ -693,6 +694,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
 
+        assert!(!config.facets_present());
         assert!(config.facets.is_empty());
         assert!(config.default_facet.is_none());
     }

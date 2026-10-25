@@ -1817,6 +1817,11 @@ impl Cfg {
 
                 let mut int =
                     integral::Cfg::parse_with_konst_unresolved(&content)?;
+                if int.facets_present() {
+                    return content.span().fail(
+                        "bitflag integral configuration does not support facets",
+                    );
+                }
                 if !int.ty_out.is_self() {
                     return int.ty_out.conversion.fail(
                         "bitflag integral configuration does not support out_type",

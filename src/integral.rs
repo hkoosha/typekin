@@ -250,7 +250,7 @@ impl Maker {
     }
 
     fn ekran_facet_dispatch(&self) -> TokenStream {
-        if self.cfg.default_facet.is_none() {
+        if !self.cfg.facets_present() {
             return TokenStream::new();
         }
 
@@ -450,7 +450,7 @@ impl Maker {
     }
 
     fn ekran_friendship(&self) -> TokenStream {
-        let faceted = self.cfg.default_facet.is_some();
+        let faceted = self.cfg.facets_present();
         let target = self.ty.clone();
         let relation_ident = &self.el;
         let relation: Type = parse_quote! { #relation_ident };
@@ -1116,7 +1116,7 @@ impl Maker {
         let fp_friend_conv = quote! { #trait_seal::#fn_conv };
         let fp_get_raw = &self.fp_get_raw;
 
-        let global_operators = self.cfg.default_facet.is_none();
+        let global_operators = !self.cfg.facets_present();
         let with_self_math = self.cfg.flags.self_math && global_operators;
         let with_self_bit = self.cfg.flags.self_bit && global_operators;
         let output = OperatorOutput::of(&self.cfg.ty_out);
@@ -3416,6 +3416,10 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
+    pub(crate) fn facets_present(&self) -> bool {
+        return self.facets_present;
+    }
+
     pub(crate) fn parse_flags_into(
         input: ParseStream,
         value_if_seen: bool,
@@ -3636,7 +3640,7 @@ impl Cfg {
 
     fn resolve_facets(&mut self) -> syn::Result<()> {
         self.facet_slots.clear();
-        if !self.facets_present {
+        if !self.facets_present() {
             return Ok(());
         }
 
@@ -3851,7 +3855,7 @@ impl Cfg {
             }
         }
 
-        self.default_facet = self.facets_present.then(|| DefaultFacetCfg {
+        self.default_facet = self.facets_present().then(|| DefaultFacetCfg {
             profile: self.profile.clone(),
             friends: self.friends.clone(),
             flags: self.flags.clone(),
