@@ -4544,7 +4544,7 @@ impl Cfg {
                 if friend.capabilities.contains(&format_ident!("Math")) {
                     Self::insert_slots(
                         &mut slots,
-                        &Operator::math_items(),
+                        Operator::math_items(),
                         &flags,
                         Some(&friend.ty),
                         friend.conv.as_ref(),
@@ -4557,7 +4557,7 @@ impl Cfg {
                 if friend.capabilities.contains(&format_ident!("Bit")) {
                     Self::insert_slots(
                         &mut slots,
-                        &Operator::bit_items(),
+                        Operator::bit_items(),
                         &flags,
                         Some(&friend.ty),
                         friend.conv.as_ref(),
@@ -4573,7 +4573,7 @@ impl Cfg {
                 let conversion: Path = parse_quote! { Self::raw };
                 Self::insert_slots(
                     &mut slots,
-                    &Operator::math_items(),
+                    Operator::math_items(),
                     &flags,
                     None,
                     Some(&conversion),
@@ -4588,7 +4588,7 @@ impl Cfg {
                 let conversion: Path = parse_quote! { Self::raw };
                 Self::insert_slots(
                     &mut slots,
-                    &Operator::bit_items(),
+                    Operator::bit_items(),
                     &flags,
                     None,
                     Some(&conversion),
@@ -4606,7 +4606,7 @@ impl Cfg {
             if friend.capabilities.contains(&format_ident!("Math")) {
                 Self::insert_slots(
                     &mut slots,
-                    &Operator::math_items(),
+                    Operator::math_items(),
                     &default.flags,
                     Some(&friend.ty),
                     friend.conv.as_ref(),
@@ -4619,7 +4619,7 @@ impl Cfg {
             if friend.capabilities.contains(&format_ident!("Bit")) {
                 Self::insert_slots(
                     &mut slots,
-                    &Operator::bit_items(),
+                    Operator::bit_items(),
                     &default.flags,
                     Some(&friend.ty),
                     friend.conv.as_ref(),
@@ -4635,7 +4635,7 @@ impl Cfg {
         if default.flags.self_math {
             Self::insert_slots(
                 &mut slots,
-                &Operator::math_items(),
+                Operator::math_items(),
                 &default.flags,
                 None,
                 Some(&conversion),
@@ -4648,7 +4648,7 @@ impl Cfg {
         if default.flags.self_bit {
             Self::insert_slots(
                 &mut slots,
-                &Operator::bit_items(),
+                Operator::bit_items(),
                 &default.flags,
                 None,
                 Some(&conversion),
@@ -4802,7 +4802,7 @@ impl Cfg {
         let defaults = [format_ident!("Math")].into_iter().collect();
         return Friend::parse_with_valid(
             input,
-            &vec![
+            &[
                 format_ident!("Make"),
                 format_ident!("Math"),
                 format_ident!("Bit"),

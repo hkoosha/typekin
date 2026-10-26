@@ -577,7 +577,7 @@ impl FromStr for Operator {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         return Self::items()
-            .into_iter()
+            .iter()
             .find(|it| it.name() == s)
             .cloned()
             .ok_or("unknown operator");

@@ -210,7 +210,7 @@ pub(crate) mod cfg {
 
         pub(crate) fn parse_with_expansion(
             input: ParseStream,
-            valid: &Vec<Ident>,
+            valid: &[Ident],
             defaults: &BTreeSet<Ident>,
             expansions: &HashMap<Ident, Vec<Ident>>,
         ) -> syn::Result<BTreeSet<Friend>> {
