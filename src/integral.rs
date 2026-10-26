@@ -4817,13 +4817,11 @@ impl Cfg {
         let defaults = [format_ident!("Math")].into_iter().collect();
         return Friend::parse_with_expansion(
             input,
-            &vec![
-                format_ident!("Make"),
+            &[format_ident!("Make"),
                 format_ident!("Math"),
                 format_ident!("Bit"),
                 format_ident!("Rel"),
-                format_ident!("UnsafeTrust"),
-            ],
+                format_ident!("UnsafeTrust")],
             &defaults,
             &([
                 (
