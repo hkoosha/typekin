@@ -226,6 +226,15 @@ impl Default for Circular {
     }
 }
 
+impl Circular {
+    fn without_precedes() -> Self {
+        return Self {
+            settings: Default::default(),
+            precedes: false,
+        };
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct Sequential {
     settings: IntSettings,
@@ -245,6 +254,7 @@ pub(crate) struct Point {
 pub(crate) enum Profile {
     Int(Int),
     Circular(Circular),
+    Delta(Circular),
     Sequential(Sequential),
     Wrapping(Wrapping),
     Point(Point),
@@ -255,6 +265,7 @@ impl Profile {
         let this = match snake_case_of(&it.to_string()).as_str() {
             "int" => Self::Int(Int::default()),
             "circular" => Self::Circular(Circular::default()),
+            "delta" => Self::Delta(Circular::without_precedes()),
             "sequential" => Self::Sequential(Sequential::default()),
             "wrapping" => Self::Wrapping(Wrapping::default()),
             "point" => Self::Point(Point::default()),
@@ -290,7 +301,9 @@ impl Profile {
     pub(crate) fn arithmetic(&self) -> Option<Arithmetic> {
         return match self {
             Self::Int { .. } => Some(Arithmetic::Primitive),
-            Self::Circular { .. } => Some(Arithmetic::PrimitiveWrapping),
+            Self::Circular { .. } | Self::Delta(_) => {
+                Some(Arithmetic::PrimitiveWrapping)
+            }
             Self::Sequential { .. } => Some(Arithmetic::Checked),
             Self::Wrapping { .. } => Some(Arithmetic::WrapperWrapping),
             Self::Point { .. } => None,
@@ -298,7 +311,7 @@ impl Profile {
     }
 
     pub(crate) fn is_circular(&self) -> bool {
-        return matches!(self, Self::Circular { .. });
+        return matches!(self, Self::Circular(_) | Self::Delta(_));
     }
 
     pub(crate) fn emits_precedes(&self) -> bool {
@@ -309,6 +322,7 @@ impl Profile {
         return match self {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
+            | Self::Delta(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
             | Self::Wrapping(Wrapping { settings, .. })
             | Self::Point(Point { settings, .. }) => settings,
@@ -319,6 +333,7 @@ impl Profile {
         return match self {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
+            | Self::Delta(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
             | Self::Wrapping(Wrapping { settings, .. })
             | Self::Point(Point { settings, .. }) => settings,
@@ -331,7 +346,9 @@ impl Profile {
     ) {
         return match self {
             Self::Int { .. } => {}
-            Self::Circular { .. } => profile_apply_circular(it),
+            Self::Circular { .. } | Self::Delta(_) => {
+                profile_apply_circular(it)
+            }
             Self::Sequential { .. } => profile_apply_sequential(it),
             Self::Wrapping { .. } => {}
             Self::Point { .. } => profile_apply_point(it),
@@ -343,7 +360,7 @@ impl Profile {
         name: &str,
     ) -> bool {
         return match self {
-            Self::Circular { .. } => {
+            Self::Circular(_) | Self::Delta(_) => {
                 matches!(name, "ord" | "partial_ord")
                     || IntegralFlags::restricted_math_flags().contains(&name)
             }
@@ -428,6 +445,15 @@ impl Profiles {
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Profile> {
         return self.0.iter();
+    }
+
+    pub(crate) fn single_mut(&mut self) -> &mut Profile {
+        assert_eq!(
+            self.0.len(),
+            1,
+            "fixed profile configuration needs one profile"
+        );
+        return self.0.first_mut().expect("fixed profile cannot be empty");
     }
 }
 
@@ -516,7 +542,7 @@ impl Parse for FacetCfg {
                         // and finally unify this for everything:
                         friends = Cfg::parse_friends_unexpanded(rest)?;
                     }
-                    "out_type" => ty_out = Some(rest.parse()?),
+                    "produce" => ty_out = Some(rest.parse()?),
                     _ => return Ok(false),
                 }
 

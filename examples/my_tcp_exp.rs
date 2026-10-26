@@ -1327,12 +1327,14 @@ const _: () = {
 
 impl<D: Direction> SeqPoint<D> {
     #[inline(always)]
-    fn into_offset(self) -> SeqOffset<D> {
-        return SeqOffset::make(self.raw() as i32);
+    const fn into_offset(self) -> SeqOffset<D> {
+        return match SeqOffset::try_make(self.raw() as i32) {
+            Ok(value) => value,
+            Err(_) => panic!("unvalidated sequence offset rejected"),
+        };
     }
-
     #[inline(always)]
-    fn offset_raw(offset: SeqOffset<D>) -> u32 {
+    const fn offset_raw(offset: SeqOffset<D>) -> u32 {
         return offset.raw() as u32;
     }
 }

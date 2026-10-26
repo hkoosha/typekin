@@ -57,6 +57,7 @@ use crate::zz_profile::{
     FacetOwner,
     FacetSlot,
     FacetSlotKey,
+    Profile,
     Profiles,
 };
 use crate::zz_runner::{
@@ -4736,7 +4737,7 @@ impl Cfg {
             ] {
                 if let Some((true, span)) = self.explicit_flag(name) {
                     return span
-                        .fail("out_type cannot generate assignment operators");
+                        .fail("produce cannot generate assignment operators");
                 }
                 self.flags
                     .set_bool(name, false)
@@ -4856,6 +4857,7 @@ impl Cfg {
         &mut self,
         input: ParseStream,
         allow_konst: bool,
+        fixed_profile: bool,
     ) -> syn::Result<()> {
         return zz::parse_inner(input, |attr, rest| {
             if self.validation.parse_attr(attr, rest)? {
@@ -4876,8 +4878,16 @@ impl Cfg {
                     self.facets = zz::one_or_list::<FacetCfg>(rest)?.collect();
                     self.facets_present = true;
                 }
+                "precedes" if fixed_profile => {
+                    if !self.profile.single_mut().parse_attr(attr, rest)? {
+                        return Ok(false);
+                    }
+                }
+                "profile" if fixed_profile => {
+                    return attr.fail("profile is selected by this macro");
+                }
                 "get_raw" => self.get_raw = Some(rest.parse()?),
-                "out_type" => self.ty_out = rest.parse()?,
+                "produce" => self.ty_out = rest.parse()?,
                 "profile" => self.profile = rest.parse()?,
                 _ => return Ok(false),
             };
@@ -4886,11 +4896,27 @@ impl Cfg {
         });
     }
 
+    pub(crate) fn parse_with_profile(
+        input: ParseStream,
+        profile_name: &str,
+    ) -> syn::Result<Self> {
+        let profile =
+            Profile::from_name(Ident::new(profile_name, Span::call_site()))
+                .expect("integral profile macro has a valid profile name");
+        let mut this = Self {
+            profile: Profiles::one(profile),
+            ..Default::default()
+        };
+        this.parse_attrs(input, true, true)?;
+        this.resolve()?;
+        return Ok(this);
+    }
+
     pub(crate) fn parse_with_konst_unresolved(
         input: ParseStream
     ) -> syn::Result<Self> {
         let mut this = Self::without_konst();
-        this.parse_attrs(input, false)?;
+        this.parse_attrs(input, false, false)?;
         return Ok(this);
     }
 
@@ -4925,7 +4951,7 @@ impl Debug for Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
-        this.parse_attrs(input, true)?;
+        this.parse_attrs(input, true, false)?;
         this.resolve()?;
         return Ok(this);
     }

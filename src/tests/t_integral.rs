@@ -4,6 +4,7 @@ mod tests {
         ToTokens,
         format_ident,
     };
+    use syn::parse::Parser as _;
 
     use crate::integral::{
         Cfg,
@@ -39,6 +40,59 @@ mod tests {
         let expansion = maker.unwrap().ekran();
         assert!(expansion.is_ok(), "{input}");
         return expansion.unwrap().to_string();
+    }
+
+    fn profile_config(
+        profile: &str,
+        input: &str,
+    ) -> syn::Result<Cfg> {
+        let parser = |input: syn::parse::ParseStream| {
+            return Cfg::parse_with_profile(input, profile);
+        };
+
+        return parser.parse_str(input);
+    }
+
+    #[test]
+    fn fixed_profile_parser_applies_delta_and_root_settings() {
+        let input = "with = math_mul";
+        let this = profile_config("delta", input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+        assert!(config.flags.math_mul);
+    }
+
+    #[test]
+    fn circular_profile_parser_accepts_direct_precedes() {
+        let input = "precedes = false";
+        let this = profile_config("circular", input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+    }
+
+    #[test]
+    fn fixed_profile_parser_rejects_profile_override() {
+        let input = "profile = wrapping";
+        let this = profile_config("delta", input);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), "profile is selected by this macro");
+    }
+
+    #[test]
+    fn delta_profile_parser_rejects_direct_precedes() {
+        let input = "precedes = true";
+        let this = profile_config("delta", input);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown attribute");
     }
 
     #[test]
@@ -788,10 +842,10 @@ mod tests {
     }
 
     #[test]
-    fn point_profile_preserves_disabled_precedence() {
+    fn point_profile_preserves_delta_policy() {
         let input = "
             konst = none,
-            profile = [circular { precedes = false }, point {}]
+            profile = [delta, point]
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -853,7 +907,7 @@ mod tests {
         let input = "
             konst = none,
             profile = [int { with = [math_add, assign_add] }, point {}],
-            out_type = Point::into_offset(_) -> Offset
+            produce = Point::into_offset(_) -> Offset
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -937,6 +991,58 @@ mod tests {
         assert!(!config.flags.core_int);
         assert!(!config.flags.ord);
         assert!(!config.flags.partial_ord);
+    }
+
+    #[test]
+    fn delta_profile_inherits_circular_defaults_without_precedes() {
+        let input = "konst = none, profile = delta";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
+        assert!(config.flags.math_add);
+        assert!(config.flags.math_sub);
+        assert!(config.flags.assign_add);
+        assert!(config.flags.assign_sub);
+        assert!(!config.flags.math_mul);
+        assert!(!config.flags.core_int);
+        assert!(!config.flags.ord);
+        assert!(!config.flags.partial_ord);
+
+        let expansion = expansion_of(input);
+        assert!(!expansion.contains("precedes"));
+    }
+
+    #[test]
+    fn delta_profile_accepts_circular_operation_settings() {
+        let input = "
+            konst = none,
+            profile = delta {
+                with = math_mul,
+            }
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.flags.math_mul);
+        assert!(!config.profile.emits_precedes());
+    }
+
+    #[test]
+    fn delta_profile_treats_precedes_as_unknown() {
+        let input = "
+            profile = delta {
+                precedes = true,
+            }
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown attribute", "{input}");
     }
 
     #[test]
@@ -1156,12 +1262,12 @@ mod tests {
             },
             with = math_add,
             friend = root_conv(RootRhs) -> Math,
-            out_type = Point::into_root(_) -> RootOutput,
+            produce = Point::into_root(_) -> RootOutput,
             facet = [
                 circular {
                     friend = offset_conv(Offset) -> Math,
                     with = [math_add, math_sub],
-                    out_type = Self,
+                    produce = Self,
                 },
                 int {
                     friend = bits_conv(Bits) -> Bit,
@@ -1264,10 +1370,10 @@ mod tests {
             facet = sequential {
                 with = math_add,
                 friend = offset_raw(Offset) -> Math,
-                out_type = Self,
+                produce = Self,
             },
             without = math_add,
-            out_type = Point::into_offset(_) -> Offset
+            produce = Point::into_offset(_) -> Offset
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -1325,8 +1431,8 @@ mod tests {
         let input = "
             facet = [
                 int {
-                    out_type = Self,
-                    out_type = Self,
+                    produce = Self,
+                    produce = Self,
                 },
             ]
         ";
@@ -1342,17 +1448,17 @@ mod tests {
             konst = none,
             profile = circular {},
             friend = offset_conv(Offset) -> Math,
-            out_type = Point::into_offset(_) -> RootOutput,
+            produce = Point::into_offset(_) -> RootOutput,
             facet = [
                 sequential {
                     friend = offset_conv(Offset) -> Math,
                     without = math_sub,
-                    out_type = Self,
+                    produce = Self,
                 },
                 circular {
                     with = [self_math, math_sub],
                     without = math_add,
-                    out_type = Point::into_self_offset(_) -> SelfOutput,
+                    produce = Point::into_self_offset(_) -> SelfOutput,
                 },
             ]
         ";
@@ -1613,10 +1719,10 @@ mod tests {
     }
 
     #[test]
-    fn parses_output_type_conversion_with_generic_target() {
+    fn parses_produce_conversion_with_generic_target() {
         let input = "
             konst = none,
-            out_type = crate::Point::into_offset(_) -> Offset<u32>
+            produce = crate::Point::into_offset(_) -> Offset<u32>
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -1652,7 +1758,7 @@ mod tests {
     #[test]
     fn self_output_type_preserves_assignment_operators() {
         let input = "
-            out_type = Self(_) -> Self,
+            produce = Self(_) -> Self,
             with = [assign_add]
         ";
         let config = syn::parse_str::<Cfg>(input)
@@ -1736,10 +1842,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_self_output_conversion_source() {
-        let input = "out_type = Point::into_offset(Self) -> Offset";
+    fn rejects_self_produce_conversion_source() {
+        let input = "produce = Point::into_offset(Self) -> Offset";
         let error = syn::parse_str::<Cfg>(input).expect_err(
-            "out_type callbacks must take an underscore placeholder",
+            "produce callbacks must take an underscore placeholder",
         );
 
         assert_eq!(
@@ -1764,17 +1870,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_assignment_override_for_output_type() {
+    fn rejects_assignment_override_for_produce() {
         let input = "
-            out_type = Point::into_offset(_) -> Offset,
+            produce = Point::into_offset(_) -> Offset,
             with = [assign_add]
         ";
         let error = syn::parse_str::<Cfg>(input)
-            .expect_err("out_type cannot retain assignment operators");
+            .expect_err("produce cannot retain assignment operators");
 
         assert_eq!(
             error.to_string(),
-            "out_type cannot generate assignment operators",
+            "produce cannot generate assignment operators",
         );
     }
 

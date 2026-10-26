@@ -1,6 +1,5 @@
-#[typekin::integral(
-    profile = circular {},
-    out_type = CircularSequence::into_raw(_) -> u32,
+#[typekin::circular(
+    produce = CircularSequence::into_raw(_) -> u32,
 )]
 pub struct CircularSequence(u32);
 
@@ -14,18 +13,18 @@ pub struct Out;
 
 #[typekin::integral(
     profile = [circular {}, point {}],
-    out_type = Self::into_offset(_) -> GenericOffset<D>,
+    produce = Self::into_offset(_) -> GenericOffset<D>,
     facet = [
         circular {
             with = math_add,
             friend = Self::offset_raw(GenericOffset<D>) -> Math,
-            out_type = Self,
+            produce = Self,
         },
     ],
 )]
 pub struct GenericPoint<D>(u32);
 
-#[typekin::integral(profile = circular { precedes = false })]
+#[typekin::delta]
 pub struct GenericOffset<D>(i32);
 
 impl<D> GenericPoint<D> {

@@ -15,33 +15,24 @@ impl Direction for Out {}
 #[typekin::integral(
     konst = none,
     profile = [circular, point],
-    out_type = Self::into_offset(_) -> SeqOffset<D>,
+    produce = Self::into_offset(_) -> SeqOffset<D>,
     facet = circular {
         with = math_add,
         friend = Self::offset_raw(SeqOffset<D>) -> Math,
-        out_type = Self,
+        produce = Self,
     },
 )]
 struct SeqPoint<D: Direction>(u32);
 
-#[typekin::integral(
-    konst = none,
-    profile = circular {
-        precedes = false,
-    },
-)]
+#[typekin::delta(konst = none)]
 struct SeqOffset<D: Direction>(i32);
 
-#[typekin::integral(
-    konst = none,
-    profile = wrapping,
-)]
+#[typekin::wrapping(konst = none)]
 struct WrappingCounter(u32);
 
-#[typekin::integral(
+#[typekin::wrapping(
     konst = none,
     domain = 1..,
-    profile = wrapping,
 )]
 struct NonZeroSerial(u32);
 

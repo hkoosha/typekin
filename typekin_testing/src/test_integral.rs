@@ -350,7 +350,7 @@ static CHECKED_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
 
 #[typekin::integral(
     konst = none,
-    out_type = OutputSource::into_output(_) -> OperatorOutput,
+    produce = OutputSource::into_output(_) -> OperatorOutput,
 )]
 struct OutputSource(u8);
 
@@ -364,7 +364,7 @@ impl OutputSource {
 
 #[typekin::integral(
     konst = nightly,
-    out_type = ConstOutputSource::into_output(_) -> OperatorOutput,
+    produce = ConstOutputSource::into_output(_) -> OperatorOutput,
 )]
 struct ConstOutputSource(u8);
 
@@ -384,7 +384,7 @@ const fn is_at_most_ten(value: u8) -> bool {
 #[typekin::integral(
     konst = none,
     valid = is_at_most_ten,
-    out_type = CheckedOutputSource::into_output(_) -> OperatorOutput,
+    produce = CheckedOutputSource::into_output(_) -> OperatorOutput,
 )]
 struct CheckedOutputSource(u8);
 
@@ -401,7 +401,7 @@ static NON_ZERO_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
 #[typekin::integral(
     konst = none,
     with = non_zero,
-    out_type = NonZeroOutputSource::into_output(_) -> OperatorOutput,
+    produce = NonZeroOutputSource::into_output(_) -> OperatorOutput,
 )]
 struct NonZeroOutputSource(u8);
 
@@ -425,7 +425,7 @@ impl BoundedOutput {
 
 #[typekin::integral(
     konst = none,
-    out_type = TargetCheckedSource::into_output(_) -> BoundedOutput,
+    produce = TargetCheckedSource::into_output(_) -> BoundedOutput,
 )]
 struct TargetCheckedSource(u8);
 
@@ -435,36 +435,31 @@ impl TargetCheckedSource {
     }
 }
 
-#[typekin::integral(
+#[typekin::int(
     konst = none,
-    out_type = Self(_) -> Self,
+    produce = Self(_) -> Self,
 )]
 struct ExplicitSelfOutput(u8);
 
-#[typekin::integral(
-    konst = none,
-    profile = circular,
-)]
+#[typekin::circular(konst = none)]
 struct CircularSequence(u8);
 
-#[typekin::integral(
-    konst = none,
-    profile = circular {},
-)]
+#[typekin::circular(konst = none)]
 struct CircularSigned(i8);
 
-#[typekin::integral(
+#[typekin::delta(konst = none)]
+struct DeltaSequence(u8);
+
+#[typekin::circular(konst = none, precedes = false)]
+struct CircularWithoutPrecedes(u8);
+
+#[typekin::circular(
     konst = none,
-    profile = circular {
-        with = [math_mul, math_div, math_rem, math_shl, math_shr],
-    },
+    with = [math_mul, math_div, math_rem, math_shl, math_shr],
 )]
 struct CircularExtended(u8);
 
-#[typekin::integral(
-    konst = none,
-    profile = wrapping,
-)]
+#[typekin::wrapping(konst = none)]
 struct WrappingSequence(u8);
 
 #[typekin::integral(
@@ -483,10 +478,7 @@ struct ConstWrappingSequence(u8);
 const CONST_WRAPPING_RESULT: ConstWrappingSequence =
     ConstWrappingSequence::make(u8::MAX) + ConstWrappingSequence::make(1);
 
-#[typekin::integral(
-    konst = none,
-    profile = sequential,
-)]
+#[typekin::sequential(konst = none)]
 struct SequentialCounter(u8);
 
 #[typekin::integral(
@@ -511,10 +503,9 @@ struct SequentialExtended(u8);
 )]
 struct LayeredProfiles(u8);
 
-#[typekin::integral(
+#[typekin::point(
     konst = none,
-    profile = point,
-    out_type = Self::into_difference(_) -> i16,
+    produce = Self::into_difference(_) -> i16,
 )]
 struct LinearPoint(i16);
 
@@ -527,7 +518,7 @@ impl LinearPoint {
 #[typekin::integral(
     konst = none,
     profile = [sequential, point],
-    out_type = Self::into_difference(_) -> u8,
+    produce = Self::into_difference(_) -> u8,
 )]
 struct CheckedPoint(u8);
 
@@ -540,7 +531,7 @@ impl CheckedPoint {
 #[typekin::integral(
     konst = none,
     profile = [wrapping, point],
-    out_type = Self::into_difference(_) -> u8,
+    produce = Self::into_difference(_) -> u8,
 )]
 struct WrappingPoint(u8);
 
@@ -553,11 +544,11 @@ impl WrappingPoint {
 #[typekin::integral(
     konst = none,
     profile = [circular, point],
-    out_type = Self::into_difference(_) -> u8,
+    produce = Self::into_difference(_) -> u8,
     facet = point {
         with = math_add,
         friend = facet_offset_raw(FacetOffset) -> Math,
-        out_type = Self,
+        produce = Self,
     },
 )]
 pub struct SurfaceFacetPoint(u8);
@@ -602,25 +593,25 @@ fn facet_wrapping_raw(value: FacetWrapping) -> u8 {
 #[typekin::integral(
     konst = none,
     profile = circular {},
-    out_type = FacetPoint::into_result(_) -> FacetResult,
+    produce = FacetPoint::into_result(_) -> FacetResult,
     facet = [
         circular {
             friend = facet_offset_raw(FacetOffset) -> Math,
-            out_type = Self,
+            produce = Self,
         },
         sequential {
             friend = facet_checked_raw(FacetChecked) -> Math,
             without = math_sub,
-            out_type = Self,
+            produce = Self,
         },
         int {
             friend = facet_bits_raw(FacetBits) -> Bit,
             with = math_xor,
-            out_type = Self,
+            produce = Self,
         },
         wrapping {
             friend = facet_wrapping_raw(FacetWrapping) -> Math,
-            out_type = Self,
+            produce = Self,
         },
     ],
 )]
@@ -667,7 +658,7 @@ const fn facet_valid(value: u8) -> bool {
     konst = none,
     valid = facet_valid,
     with = non_zero,
-    out_type = FacetValidated::into_result(_) -> FacetValidatedResult,
+    produce = FacetValidated::into_result(_) -> FacetValidatedResult,
     facet = [
         wrapping {
             with = self_math,
@@ -929,6 +920,28 @@ mod tests {
         assert!(!CircularSigned::make(0).precedes(CircularSigned::make(-128)));
         assert!(!CircularSigned::make(-128).precedes(CircularSigned::make(0)));
     }
+
+    #[test]
+    fn delta_profile_uses_circular_arithmetic_without_serial_precedence() {
+        let maximum = DeltaSequence::make(u8::MAX);
+        let one = DeltaSequence::make(1);
+        let zero = maximum + one;
+        let restored = zero - one;
+
+        assert_eq!(zero.raw(), 0);
+        assert_eq!(restored.raw(), u8::MAX);
+    }
+
+    #[test]
+    fn circular_shorthand_can_disable_precedes() {
+        let maximum = CircularWithoutPrecedes::make(u8::MAX);
+        let one = CircularWithoutPrecedes::make(1);
+        let zero = maximum + one;
+
+        assert_eq!(zero.raw(), 0);
+    }
+
+
 
     #[test]
     fn circular_profile_applies_wrapping_policy_to_reenabled_operations() {

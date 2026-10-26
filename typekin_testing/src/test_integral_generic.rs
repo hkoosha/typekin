@@ -62,7 +62,7 @@ impl<T> Checked<T> {
 }
 
 #[typekin::integral(
-    out_type = Self::into_tagged(_) -> Tagged<T>,
+    produce = Self::into_tagged(_) -> Tagged<T>,
     with = math_xor,
 )]
 struct Producing<T>(u32);
@@ -81,7 +81,7 @@ struct OnlySelf;
     facet = [
         circular {
             friend = Self::delta_raw(Tagged<T>) -> Math,
-            out_type = Self,
+            produce = Self,
         },
     ],
 )]
@@ -114,16 +114,16 @@ impl Direction for Out {}
 
 #[typekin::integral(
     profile = [circular, point],
-    out_type = Self::into_offset(_) -> Offset<'a, D, SPACE>,
+    produce = Self::into_offset(_) -> Offset<'a, D, SPACE>,
     facet = circular {
         with = math_add,
         friend = Self::offset_raw(Offset<'a, D, SPACE>) -> Math,
-        out_type = Self,
+        produce = Self,
     },
 )]
 struct Point<'a, D: Direction, const SPACE: u8>(u32);
 
-#[typekin::integral( profile = circular { precedes = false })]
+#[typekin::delta]
 struct Offset<'a, D: Direction, const SPACE: u8>(i32);
 
 impl<'a, D: Direction, const SPACE: u8> Point<'a, D, SPACE> {

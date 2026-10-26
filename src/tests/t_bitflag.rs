@@ -200,18 +200,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_output_type_in_integral() {
+    fn rejects_produce_in_integral() {
         let it = "
             integral = [
-                out_type = FlagValue::into_output(_) -> Output
+                produce = FlagValue::into_output(_) -> Output
             ]
         ";
         let error = syn::parse_str::<Cfg>(it)
-            .expect_err("bitflag values cannot have a custom output type");
+            .expect_err("bitflag values cannot have a custom produced type");
 
         assert_eq!(
             error.to_string(),
-            "bitflag integral configuration does not support out_type",
+            "bitflag integral configuration does not support produce",
         );
     }
 

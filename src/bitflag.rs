@@ -1836,7 +1836,7 @@ impl Cfg {
                 }
                 if !int.ty_out.is_self() {
                     return int.ty_out.conversion.fail(
-                        "bitflag integral configuration does not support out_type",
+                        "bitflag integral configuration does not support produce",
                     );
                 }
                 if !int.profile.is_default() {

@@ -12,31 +12,30 @@ impl sealed::Direction for Out {}
 impl Direction for In {}
 impl Direction for Out {}
 
-#[typekin::integral(
-    profile = circular,
+#[typekin::circular(
     without = math_add,
-    out_type = Self::into_offset(_) -> SeqOffset<D>,
+    produce = Self::into_offset(_) -> SeqOffset<D>,
     facet = circular {
         with = math_add,
+        produce = Self,
         friend = Self::offset_raw(SeqOffset<D>) -> Math,
-        out_type = Self,
     },
 )]
 struct SeqPoint<D: Direction>(u32);
 
-#[typekin::integral(
-    profile = circular { precedes = false },
-)]
+#[typekin::delta]
 struct SeqOffset<D: Direction>(i32);
 
 impl<D: Direction> SeqPoint<D> {
     #[inline(always)]
-    fn into_offset(self) -> SeqOffset<D> {
-        return SeqOffset::make(self.raw() as i32);
+    const fn into_offset(self) -> SeqOffset<D> {
+        return match SeqOffset::try_make(self.raw() as i32) {
+            Ok(value) => value,
+            Err(_) => panic!("unvalidated sequence offset rejected"),
+        };
     }
-
     #[inline(always)]
-    fn offset_raw(offset: SeqOffset<D>) -> u32 {
+    const fn offset_raw(offset: SeqOffset<D>) -> u32 {
         return offset.raw() as u32;
     }
 }

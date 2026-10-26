@@ -395,15 +395,15 @@ option.
 Generation of individual features can be disabled (check integral's
 [cfg](src/integral.rs) and bitflag's [cfg](src/bitflag.rs))
 
-### Integral output types and profiles
+### Integral production and profiles
 
-`#[typekin::integral]` can configure one result type for all generated
+`#[typekin::integral]` can use `produce` to configure one result type for all
 non-assignment operators:
 
 ```rust
 #[typekin::integral(
     konst = none,
-    out_type = Point::into_offset(_) -> Offset,
+    produce = Point::into_offset(_) -> Offset,
 )]
 struct Point(u32);
 ```
@@ -427,30 +427,46 @@ Profiles select the ordinary arithmetic policy and default API surface:
 | `int` | Primitive Rust arithmetic | Default `Ord` / `PartialOrd` behavior |
 | `sequential` | Checked; panics on overflow or underflow | Ordinary linear ordering |
 | `wrapping` | `Wrapping` arithmetic | Ordinary linear ordering |
-| `circular` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; optional `precedes` |
+| `circular` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; serial `precedes` |
+| `delta` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; no `precedes` |
 | `point` | Unchanged; primitive arithmetic when used alone | Unchanged |
 
-For `circular` and `sequential`, same-type `+`, `-`, and their assignments
-remain enabled. Primitive arithmetic, bitwise operators, shifts, `core_int`, and
-bit access are disabled by default. `wrapping` retains the normal integral API
-surface. A profile body can use `with` and `without` to change its operation
-set; re-enabled arithmetic uses that profile's wrapping or checked policy.
-Bitwise operations retain ordinary bitwise semantics.
+Each profile also has a fixed-profile attribute macro: `#[typekin::int(...)]`,
+`#[typekin::sequential(...)]`, `#[typekin::wrapping(...)]`,
+`#[typekin::circular(...)]`, `#[typekin::delta(...)]`, and
+`#[typekin::point(...)]`. Each is equivalent to
+`#[typekin::integral(profile = NAME, ...)]`; use `integral` for profile lists.
+Its arguments are ordinary integral arguments, while `circular` additionally
+accepts `precedes` directly. The selected profile cannot be overridden with
+`profile = ...`.
 
-`point` models positions rather than offsets. It uses the same restricted
-integer API as `circular` and `sequential`, additionally disables `+` and `+=`,
-and leaves subtraction enabled. Compose it with an arithmetic profile, such as
+For `circular`, `delta`, and `sequential`, same-type `+`, `-`, and their
+assignments remain enabled. Primitive arithmetic, bitwise operators, shifts,
+`core_int`, and bit access are disabled by default. `wrapping` retains the
+normal integral API surface. A profile body can use `with` and `without` to
+change its operation set; re-enabled arithmetic uses that profile's wrapping or
+checked policy. Bitwise operations retain ordinary bitwise semantics.
+
+`point` models positions rather than offsets. It uses the same restricted API as
+`circular`, `delta`, and `sequential`, additionally disables `+` and `+=`, and
+leaves subtraction enabled. Compose it with an arithmetic profile, such as
 `[circular, point]` or `[sequential, point]`. It preserves that profile's
-arithmetic, storage, ordering, and `precedes` setting. Configure `out_type` for
+arithmetic, storage, ordering, and `precedes` setting. Configure `produce` for
 point differences and explicit facets for point-plus-offset and
 point-minus-offset; the offset type and conversions are not inferred.
 
+`delta` inherits `circular` and fixes `precedes = false`. Use it for signed or
+unsigned relative changes, where serial precedence is meaningless. It keeps
+circular's primitive storage and wrapping arithmetic while omitting the
+`precedes` method.
+
 `wrapping` stores its private field as `core::num::Wrapping<P>` and keeps
 ordinary `Ord` and `PartialOrd`. `circular` keeps primitive storage, removes
-linear ordering, and can emit `precedes`. Both wrap at the primitive width, but
-they intentionally model different APIs. A nonzero domain combined with
-`wrapping` uses `Wrapping<NonZeroP>` while `raw()` and all public conversion,
-parsing, and serialization APIs continue to use `P`.
+linear ordering, and emits `precedes`. `delta` keeps the same arithmetic and
+storage but omits serial precedence. All three profiles wrap at the primitive
+width, but they intentionally model different APIs. A nonzero domain combined
+with `wrapping` uses `Wrapping<NonZeroP>` while `raw()` and all public
+conversion, parsing, and serialization APIs continue to use `P`.
 
 Physical storage rewriting requires a private tuple field. A configured
 `get_raw` accessor must still return `P`. Trusted friends may bypass semantic
@@ -464,8 +480,8 @@ order. Untouched settings carry forward, later settings win, and root-level
 arithmetic policy; a following `point` profile does not replace it.
 
 Empty bodies are optional for profiles and facets: `profile = circular`,
-`profile = [circular, point]`, and `facet = circular` use defaults. Keep braces
-for configuration, such as `circular { precedes = false }`.
+`profile = [circular, point]`, `profile = delta`, and `facet = circular` use
+defaults. Keep braces for configuration, such as `delta { with = math_mul }`.
 
 `facet` accepts one declaration directly or a bracketed list. Facets select
 arithmetic and output conversion by the exact RHS type. Slots not claimed by an
@@ -485,23 +501,19 @@ impl sealed::Direction for Out {}
 impl Direction for In {}
 impl Direction for Out {}
 
-#[typekin::integral(
+#[typekin::circular(
     konst = none,
-    profile = circular,
     without = math_add,
-    out_type = Self::into_offset(_) -> SeqOffset<D>,
+    produce = Self::into_offset(_) -> SeqOffset<D>,
     facet = circular {
         with = math_add,
         friend = Self::offset_raw(SeqOffset<D>) -> Math,
-        out_type = Self,
+        produce = Self,
     },
 )]
 struct SeqPoint<D: Direction>(u32);
 
-#[typekin::integral(
-    konst = none,
-    profile = circular { precedes = false },
-)]
+#[typekin::delta(konst = none)]
 struct SeqOffset<D: Direction>(i32);
 
 impl<D: Direction> SeqPoint<D> {
@@ -535,12 +547,12 @@ directional point/offset model from `arena/TEXT.md`, including typed `SND.NXT`,
 `RCV.NXT`, and `SND.UNA` state. Run `cargo +stable run --example my_tcp`. It
 demonstrates sequence arithmetic and stream separation, not a TCP transport.
 
-`precedes` is only valid inside `circular`; it defaults to `true`. `int`,
-`sequential`, and `wrapping` reject it. Circular profiles also reject explicit
-`ord` or `partial_ord`. Profiles do not apply to generated bitflag value types;
-nested bitflag integral configuration supports only the default profile and no
-`out_type`. Bitflag domains must include zero, and nested bitflag configuration
-cannot enable `non_zero`.
+`precedes` is only valid inside `circular`; it defaults to `true`. `delta`
+always omits it, while `int`, `sequential`, and `wrapping` reject it. Circular
+and delta profiles also reject explicit `ord` or `partial_ord`. Profiles do not
+apply to generated bitflag value types; nested bitflag integral configuration
+supports only the default profile and no `produce`. Bitflag domains must include
+zero, and nested bitflag configuration cannot enable `non_zero`.
 
 ```rust
 struct Foo(u32);

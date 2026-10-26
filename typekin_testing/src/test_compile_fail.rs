@@ -297,7 +297,7 @@ mod tests {
 
                 #[typekin::integral(
                     konst = none,
-                    out_type = Point::into_output(_) -> Output,
+                    produce = Point::into_output(_) -> Output,
                 )]
                 struct Point(u8);
 
