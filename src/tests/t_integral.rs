@@ -8,9 +8,9 @@ mod tests {
 
     use crate::integral::{
         Cfg,
-        Maker,
         NonZeroPolicy,
         StoragePlan,
+        ekran_with,
     };
     use crate::zz::{
         Konst,
@@ -30,14 +30,12 @@ mod tests {
     fn expansion_of(input: &str) -> String {
         let config = syn::parse_str::<Cfg>(input);
         assert!(config.is_ok(), "{input}");
-        let maker = Maker::new(
+        let expansion = ekran_with(
             format_ident!("Point"),
             format_ident!("u32"),
             Box::new(config.unwrap()),
             StoragePlan::primitive(N::U032),
         );
-        assert!(maker.is_ok(), "{input}");
-        let expansion = maker.unwrap().ekran();
         assert!(expansion.is_ok(), "{input}");
         return expansion.unwrap().to_string();
     }
@@ -239,7 +237,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(input);
         assert!(config.is_ok(), "{input}");
-        let maker = Maker::new(
+        let maker = ekran_with(
             format_ident!("Point"),
             format_ident!("u32"),
             Box::new(config.unwrap()),
@@ -263,7 +261,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(input);
         assert!(config.is_ok(), "{input}");
-        let maker = Maker::new(
+        let maker = ekran_with(
             format_ident!("Point"),
             format_ident!("u32"),
             Box::new(config.unwrap()),

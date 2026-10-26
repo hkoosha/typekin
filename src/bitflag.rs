@@ -229,13 +229,12 @@ impl Maker {
                 let raw = N::of(self.el.to_string()).ok_or_else(|| {
                     syn::Error::new(self.el.span(), "unknown integral type")
                 })?;
-                integral::Maker::new(
+                integral::ekran_with(
                     self.vl,
                     self.el,
                     self.cfg.int,
                     integral::StoragePlan::primitive(raw),
                 )?
-                .ekran()?
             }
         };
 

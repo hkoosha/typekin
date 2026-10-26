@@ -83,7 +83,182 @@ const MAKE: &str = "Make";
 const REL: &str = "Rel";
 const UNSAFE: &str = "Unsafe";
 
-pub(crate) struct IntegralTarget {
+pub(crate) fn integral(
+    attr: Box<Cfg>,
+    item: ItemStruct,
+) -> proc_macro::TokenStream {
+    return zz_runner::catching(move || ekran(attr, item)).into();
+}
+
+pub(crate) fn ekran(
+    attr: Box<Cfg>,
+    mut item: ItemStruct,
+) -> syn::Result<TokenStream> {
+    let target = IntegralTarget::new(item.ident.clone(), item.generics.clone());
+    let repr: Option<TokenStream> =
+        attr.flags.repr.then(|| quote! { #[repr(transparent)] });
+    let derive_copy: Option<TokenStream> = (attr.flags.copy
+        && !target.has_generics())
+    .then(|| quote! { #[derive(Copy)] });
+    let derive_clone: Option<TokenStream> = (attr.flags.clone
+        && !target.has_generics())
+    .then(|| match attr.konst {
+        Konst::Nightly => quote! { #[derive_const(Clone)] },
+        Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
+    });
+
+    let Fields::Unnamed(fields) = &item.fields
+    else {
+        return item.ident.fail(
+            "expected a tuple struct with exactly one field \
+            of primitive integral type",
+        );
+    };
+    if fields.unnamed.len() != 1 {
+        let span = fields
+            .unnamed
+            .iter()
+            .nth(1)
+            .map_or_else(|| item.ident.span(), syn::spanned::Spanned::span);
+        return span.fail(
+            "integral source declarations require exactly one primitive \
+            value field; phantom fields are generated automatically",
+        );
+    }
+    let field = fields.unnamed.first().unwrap();
+    let el = match &field.ty {
+        Type::Path(path) if path.qself.is_none() => path
+            .path
+            .get_ident()
+            .filter(|id| N::rust_names().contains(&id.to_string().as_str())),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        syn::Error::new(
+            field.ty.span(),
+            "integral value field must be a concrete primitive integer",
+        )
+    })?
+    .clone();
+    let field_visibility = &field.vis;
+
+    let raw = N::of(el.to_string())
+        .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
+    let storage = StoragePlan::new(
+        raw,
+        attr.requires_non_zero_storage(),
+        attr.requires_wrapping_storage(),
+    );
+    let private = match &field_visibility {
+        Visibility::Inherited => true,
+        Visibility::Restricted(visibility) => visibility.path.is_ident("self"),
+        Visibility::Public(_) => false,
+    };
+    if target.has_generics() && !private {
+        return field_visibility
+            .fail("generic integral types require a private value field");
+    }
+    if storage.rewrites_field() && !private {
+        return field_visibility
+            .fail("integral storage can only rewrite a private tuple field");
+    }
+
+    let Fields::Unnamed(fields) = &mut item.fields
+    else {
+        unreachable!("the integral shape was validated above");
+    };
+    let field = fields
+        .unnamed
+        .first_mut()
+        .expect("the integral shape was validated above");
+    if storage.rewrites_field() {
+        field.ty = syn::parse2(storage.field_type())
+            .expect("storage plans emit valid field types");
+    }
+    for phantom_type in &target.phantom_types {
+        fields.unnamed.push(parse_quote! {
+            ::core::marker::PhantomData<#phantom_type>
+        });
+    }
+
+    let (impl_generics, where_clause) = target.impl_header(&[], &[]);
+    let target_ty = target.ty();
+    let manual_copy = (attr.flags.copy && target.has_generics()).then(|| {
+        quote! {
+            impl #impl_generics ::core::marker::Copy for #target_ty
+            #where_clause
+            {}
+        }
+    });
+    let manual_clone = (attr.flags.clone && target.has_generics()).then(|| {
+        let konst = zz_runner::konst(matches!(attr.konst, Konst::Nightly));
+        let value = target.construct_storage(
+            quote! { Self },
+            quote! { self.0 },
+            attr.flags.assertions,
+        );
+        quote! {
+            #konst impl #impl_generics ::core::clone::Clone for #target_ty
+            #where_clause
+            {
+                #[inline(always)]
+                fn clone(&self) -> Self {
+                    return #value;
+                }
+            }
+        }
+    });
+    let markers = &target.const_markers;
+    let const_markers = quote! { #(#markers)* };
+
+    let tree = attr
+        .tree
+        .as_ref()
+        .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
+        .transpose()?;
+
+    let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
+
+    let stream = quote::quote! {
+        #const_markers
+
+        #repr
+        #derive_copy
+        #derive_clone
+        #item
+        #tree
+
+
+        #manual_copy
+        #manual_clone
+
+        #[allow(dead_code)]
+        #[allow(unused_qualifications)]
+        #[allow(clippy::unnecessary_cast)]
+        const _: () = {
+            #it
+        };
+    };
+
+    return Ok(stream);
+}
+
+pub(crate) fn ekran_with(
+    ty: Ident,
+    el: Ident,
+    cfg: Box<Cfg>,
+    storage: StoragePlan,
+) -> syn::Result<TokenStream> {
+    return Maker::new_target(
+        IntegralTarget::new(ty, Generics::default()),
+        el,
+        cfg,
+        storage,
+    )?
+    .ekran();
+}
+
+struct IntegralTarget {
     ident: Ident,
     generics: Generics,
     phantom_types: Vec<TokenStream>,
@@ -92,7 +267,7 @@ pub(crate) struct IntegralTarget {
 }
 
 impl IntegralTarget {
-    pub(crate) fn new(
+    fn new(
         ident: Ident,
         generics: Generics,
     ) -> Self {
@@ -469,7 +644,7 @@ impl StoragePlan {
         };
     }
 
-    pub(crate) fn rewrites_field(&self) -> bool {
+    fn rewrites_field(&self) -> bool {
         return self.non_zero || self.wrapping;
     }
 
@@ -520,7 +695,7 @@ impl StoragePlan {
         };
     }
 
-    pub(crate) fn extract(
+    fn extract(
         &self,
         storage: TokenStream,
     ) -> TokenStream {
@@ -539,7 +714,7 @@ impl StoragePlan {
         };
     }
 
-    pub(crate) fn extract_ref(
+    fn extract_ref(
         &self,
         storage: TokenStream,
     ) -> TokenStream {
@@ -561,7 +736,7 @@ impl StoragePlan {
         };
     }
 
-    pub(crate) fn layout_assertions(
+    fn layout_assertions(
         &self,
         target: TokenStream,
     ) -> TokenStream {
@@ -583,166 +758,6 @@ impl StoragePlan {
             };
         };
     }
-}
-
-pub(crate) fn integral(
-    attr: Box<Cfg>,
-    item: ItemStruct,
-) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || ekran(attr, item)).into();
-}
-
-pub(crate) fn ekran(
-    attr: Box<Cfg>,
-    mut item: ItemStruct,
-) -> syn::Result<TokenStream> {
-    let target = IntegralTarget::new(item.ident.clone(), item.generics.clone());
-    let repr: Option<TokenStream> =
-        attr.flags.repr.then(|| quote! { #[repr(transparent)] });
-    let derive_copy: Option<TokenStream> = (attr.flags.copy
-        && !target.has_generics())
-    .then(|| quote! { #[derive(Copy)] });
-    let derive_clone: Option<TokenStream> = (attr.flags.clone
-        && !target.has_generics())
-    .then(|| match attr.konst {
-        Konst::Nightly => quote! { #[derive_const(Clone)] },
-        Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
-    });
-
-    let Fields::Unnamed(fields) = &item.fields
-    else {
-        return item.ident.fail(
-            "expected a tuple struct with exactly one field \
-            of primitive integral type",
-        );
-    };
-    if fields.unnamed.len() != 1 {
-        let span = fields
-            .unnamed
-            .iter()
-            .nth(1)
-            .map_or_else(|| item.ident.span(), syn::spanned::Spanned::span);
-        return span.fail(
-            "integral source declarations require exactly one primitive \
-            value field; phantom fields are generated automatically",
-        );
-    }
-    let field = fields.unnamed.first().unwrap();
-    let el = match &field.ty {
-        Type::Path(path) if path.qself.is_none() => path
-            .path
-            .get_ident()
-            .filter(|id| N::rust_names().contains(&id.to_string().as_str())),
-        _ => None,
-    }
-    .ok_or_else(|| {
-        syn::Error::new(
-            field.ty.span(),
-            "integral value field must be a concrete primitive integer",
-        )
-    })?
-    .clone();
-    let field_visibility = &field.vis;
-
-    let raw = N::of(el.to_string())
-        .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
-    let storage = StoragePlan::new(
-        raw,
-        attr.requires_non_zero_storage(),
-        attr.requires_wrapping_storage(),
-    );
-    let private = match &field_visibility {
-        Visibility::Inherited => true,
-        Visibility::Restricted(visibility) => visibility.path.is_ident("self"),
-        Visibility::Public(_) => false,
-    };
-    if target.has_generics() && !private {
-        return field_visibility
-            .fail("generic integral types require a private value field");
-    }
-    if storage.rewrites_field() && !private {
-        return field_visibility
-            .fail("integral storage can only rewrite a private tuple field");
-    }
-
-    let Fields::Unnamed(fields) = &mut item.fields
-    else {
-        unreachable!("the integral shape was validated above");
-    };
-    let field = fields
-        .unnamed
-        .first_mut()
-        .expect("the integral shape was validated above");
-    if storage.rewrites_field() {
-        field.ty = syn::parse2(storage.field_type())
-            .expect("storage plans emit valid field types");
-    }
-    for phantom_type in &target.phantom_types {
-        fields.unnamed.push(parse_quote! {
-            ::core::marker::PhantomData<#phantom_type>
-        });
-    }
-
-    let (impl_generics, where_clause) = target.impl_header(&[], &[]);
-    let target_ty = target.ty();
-    let manual_copy = (attr.flags.copy && target.has_generics()).then(|| {
-        quote! {
-            impl #impl_generics ::core::marker::Copy for #target_ty
-            #where_clause
-            {}
-        }
-    });
-    let manual_clone = (attr.flags.clone && target.has_generics()).then(|| {
-        let konst = zz_runner::konst(matches!(attr.konst, Konst::Nightly));
-        let value = target.construct_storage(
-            quote! { Self },
-            quote! { self.0 },
-            attr.flags.assertions,
-        );
-        quote! {
-            #konst impl #impl_generics ::core::clone::Clone for #target_ty
-            #where_clause
-            {
-                #[inline(always)]
-                fn clone(&self) -> Self {
-                    return #value;
-                }
-            }
-        }
-    });
-    let markers = &target.const_markers;
-    let const_markers = quote! { #(#markers)* };
-
-    let tree = attr
-        .tree
-        .as_ref()
-        .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
-        .transpose()?;
-
-    let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
-
-    let stream = quote::quote! {
-        #const_markers
-
-        #repr
-        #derive_copy
-        #derive_clone
-        #item
-        #tree
-
-
-        #manual_copy
-        #manual_clone
-
-        #[allow(dead_code)]
-        #[allow(unused_qualifications)]
-        #[allow(clippy::unnecessary_cast)]
-        const _: () = {
-            #it
-        };
-    };
-
-    return Ok(stream);
 }
 
 struct Ctx {
@@ -866,7 +881,7 @@ impl Ctx {
     }
 }
 
-pub(crate) struct Maker {
+struct Maker {
     repr: N,
     storage: StoragePlan,
     el: Ident,
@@ -875,21 +890,7 @@ pub(crate) struct Maker {
 }
 
 impl Maker {
-    pub(crate) fn new(
-        ty: Ident,
-        el: Ident,
-        cfg: Box<Cfg>,
-        storage: StoragePlan,
-    ) -> syn::Result<Self> {
-        return Self::new_target(
-            IntegralTarget::new(ty, Generics::default()),
-            el,
-            cfg,
-            storage,
-        );
-    }
-
-    pub(crate) fn new_target(
+    fn new_target(
         target: IntegralTarget,
         el: Ident,
         mut cfg: Box<Cfg>,
@@ -1282,7 +1283,7 @@ impl Maker {
         };
     }
 
-    pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
+    fn ekran(&self) -> syn::Result<TokenStream> {
         let friends = self.ekran_friendship();
         let impls = self.ekran_impls()?;
         let items = self.ekran_items();
@@ -5477,7 +5478,6 @@ pub(crate) struct Cfg {
 }
 
 impl Cfg {
-    #[allow(dead_code)]
     pub(crate) fn requires_non_zero_storage(&self) -> bool {
         return match self.non_zero {
             NonZeroPolicy::Infer => self.validation.domain_excludes_zero(),
