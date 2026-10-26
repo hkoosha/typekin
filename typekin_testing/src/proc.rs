@@ -11,6 +11,12 @@ use std::{
 
 const MANIFEST: &str = env!("CARGO_MANIFEST_DIR");
 
+pub const DEP_NONE: &'static str = "";
+
+pub const DEP_SERDE: &'static str = r#"
+serde = { version = "1", default-features = false, features = ["alloc"] }
+"#;
+
 pub fn build(
     optimization_level: usize,
     bin: &str,

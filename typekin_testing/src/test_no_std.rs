@@ -1,10 +1,5 @@
 use crate::*;
 
-const DEP_NONE: &'static str = "";
-const DEP_SERDE: &'static str = r#"
-serde = { version = "1", default-features = false, features = ["alloc"] }
-"#;
-
 #[cfg(test)]
 #[cfg(feature = "test_slow_only")]
 mod tests {

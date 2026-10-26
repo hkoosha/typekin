@@ -1,27 +1,4 @@
 use crate::*;
-//noinspection RsConstantConditionIf
-fn assert_rejected(
-    name: &str,
-    expected_error: &str,
-    source: &str,
-) {
-    let output = compile(name, "", source, true);
-
-    assert!(
-        !output.status.success(),
-        "unexpectedly compiled: name={} output={:?}",
-        name,
-        output,
-    );
-    assert!(
-        output.stderr.contains(expected_error),
-        "rejected for an unexpected reason; name={}, expected={}, output={:?}",
-        name,
-        expected_error,
-        output
-    );
-}
-
 #[cfg(test)]
 #[cfg(feature = "test_slow_only")]
 mod tests {

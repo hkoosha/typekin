@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
+#[cfg(feature = "test_slow_only")]
 pub use slow_asserts::*;
 
 pub fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
@@ -191,5 +192,28 @@ pub mod slow_asserts {
             let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
             panic!("{}", it);
         }
+    }
+
+    //noinspection RsConstantConditionIf
+    pub fn assert_rejected(
+        name: &str,
+        expected_error: &str,
+        source: &str,
+    ) {
+        let output = compile(name, "", source, true);
+
+        assert!(
+            !output.status.success(),
+            "unexpectedly compiled: name={} output={:?}",
+            name,
+            output,
+        );
+        assert!(
+            output.stderr.contains(expected_error),
+            "rejected for an unexpected reason; name={}, expected={}, output={:?}",
+            name,
+            expected_error,
+            output
+        );
     }
 }
