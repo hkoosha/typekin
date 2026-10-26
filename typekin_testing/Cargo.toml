@@ -11,13 +11,12 @@ description = "Unpublished crate only for testing the crate: typekin"
 publish = false
 
 [features]
-default = ["fast_tests"]
-slow_tests = []
-fast_tests = []
+default = ["test_fast"]
+test_slow = ["test_fast"]
+test_fast = []
 
 [lints.clippy]
 needless_return = "allow"
-missing_safety_doc = "allow"
 
 [lints.cargo]
 unused_dependencies = "allow"
@@ -29,18 +28,18 @@ serde_test = "1"
 
 [[bin]]
 name = "my_u32"
-path = "src/my_u32.rs"
+path = "src/fixture_my_u32.rs"
 test = false
 bench = false
 
 [[bin]]
 name = "my_u32_const"
-path = "src/my_u32_const.rs"
+path = "src/fixture_my_u32_const.rs"
 test = false
 bench = false
 
 [[bin]]
 name = "my_sequence"
-path = "src/my_sequence.rs"
+path = "src/fixture_my_sequence.rs"
 test = false
 bench = false

@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn accepts_friend_with_single_capability() {
         let input = "
-            friends = crate::convert(crate::source::Source) -> Make,
+            friend = crate::convert(crate::source::Source) -> Make,
             konst = none
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -202,7 +202,7 @@ mod tests {
     fn accepts_friend_with_multiple_capabilities() {
         let input = "
             konst = none,
-            friends = crate::convert(crate::source::Source) -> [Make, unsafe],
+            friend = crate::convert(crate::source::Source) -> [Make, unsafe],
             valid = is_valid
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -214,7 +214,7 @@ mod tests {
         let input = "
             konst = none,
             valid = is_valid,
-            friends = Foo(crate::source::Source) -> Bit
+            friend = Foo(crate::source::Source) -> Bit
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -224,7 +224,7 @@ mod tests {
     fn accepts_friend_with_multiple_capabilities_and_range() {
         let input = "
             konst = none,
-            friends = Foo(crate::source::Source) -> [Math, Bit],
+            friend = Foo(crate::source::Source) -> [Math, Bit],
             domain = 1..=4
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -235,7 +235,7 @@ mod tests {
     fn accepts_implicit_friend() {
         let input = "
             konst = none,
-            friends = _(Foo) -> Math
+            friend = _(Foo) -> Math
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
@@ -245,7 +245,7 @@ mod tests {
     fn accepts_implicit_friend_with_multiple_capabilities() {
         let input = "
             konst = none,
-            friends = _(Foo) -> [Math, Bit],
+            friend = _(Foo) -> [Math, Bit],
             with = [display]
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -256,7 +256,7 @@ mod tests {
     fn accepts_multiple_friends() {
         let input = "
             konst = none,
-            friends = [convert(Source) -> Make, Foo(Other) -> [Math, Bit]],
+            friend = [convert(Source) -> Make, Foo(Other) -> [Math, Bit]],
             valid = is_valid
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -267,7 +267,7 @@ mod tests {
     fn accepts_empty_friends() {
         let input = "
             konst = none,
-            friends = [],
+            friend = [],
             valid = is_valid
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -278,7 +278,7 @@ mod tests {
     fn rejects_multiple_single_explicit_friends() {
         let input = "
             konst = none,
-            friends = convert(Source) -> Make,
+            friend = convert(Source) -> Make,
             convert(Other) -> Make
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -289,7 +289,7 @@ mod tests {
     fn rejects_multiple_single_implicit_friends() {
         let input = "
             konst = none,
-            friends = _(Source) -> Bit,
+            friend = _(Source) -> Bit,
             _(Other) -> Bit
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -300,7 +300,7 @@ mod tests {
     fn rejects_missing_single_friend() {
         let input = "
             konst = none,
-            friends =
+            friend =
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -310,7 +310,7 @@ mod tests {
     fn rejects_missing_single_friend_before_validation() {
         let input = "
             konst = none,
-            friends =,
+            friend =,
             valid = is_valid
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -321,7 +321,7 @@ mod tests {
     fn rejects_conversion_without_source() {
         let input = "
             konst = none,
-            friends = convert() -> Make
+            friend = convert() -> Make
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -331,7 +331,7 @@ mod tests {
     fn rejects_conversion_without_capabilities() {
         let input = "
             konst = none,
-            friends = convert(Source) ->
+            friend = convert(Source) ->
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -341,7 +341,7 @@ mod tests {
     fn rejects_non_identifier_friend_capability() {
         let input = "
             konst = none,
-            friends = convert(Source) -> [Make, 1]
+            friend = convert(Source) -> [Make, 1]
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -351,7 +351,7 @@ mod tests {
     fn rejects_unknown_friend_capability() {
         let input = "
             konst = none,
-            friends = _(Source) -> Unknown
+            friend = _(Source) -> Unknown
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -361,7 +361,7 @@ mod tests {
     fn rejects_unknown_attribute_after_implicit_friend() {
         let input = "
             konst = none,
-            friends = _(Source) -> [Bit],
+            friend = _(Source) -> [Bit],
             unknown = true
         ";
         let this = syn::parse_str::<Cfg>(input);
@@ -372,8 +372,8 @@ mod tests {
     fn rejects_duplicate_friends_after_implicit_friend() {
         let input = "
             konst = none,
-            friends = _(Source) -> Bit,
-            friends = []
+            friend = _(Source) -> Bit,
+            friend = []
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn default_profile_preserves_integral_defaults() {
-        let input = "konst = none, profile = int {}";
+        let input = "konst = none, profile = int";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
@@ -643,6 +643,272 @@ mod tests {
         assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
         assert!(config.flags.math_add);
         assert!(config.flags.ord);
+    }
+
+    #[test]
+    fn bare_profile_preserves_following_root_flags() {
+        let input = "
+            konst = none,
+            profile = circular,
+            without = math_add
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
+        assert!(config.flags.math_sub);
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn bare_profiles_mix_with_configured_profiles() {
+        let input = "
+            konst = none,
+            profile = [circular, point { with = math_add }]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
+        assert!(config.profile.emits_precedes());
+        assert!(config.flags.math_add);
+    }
+
+    #[test]
+    fn bare_profiles_require_separators() {
+        let input = "profile = [circular point]";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.span().start().column, input.find("point").unwrap(),);
+    }
+
+    #[test]
+    fn bare_facet_preserves_following_root_flags() {
+        let input = "
+            konst = none,
+            facet = [circular],
+            without = math_add
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(
+            config.facets[0].profile.arithmetic(),
+            Arithmetic::PrimitiveWrapping,
+        );
+        assert!(config.flags.math_sub);
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn bare_facets_keep_configured_dispatch() {
+        let input = "
+            konst = none,
+            profile = circular {},
+            facet = [
+                int,
+                sequential {
+                    with = math_mul,
+                    friend = offset_raw(Offset) -> Math,
+                },
+                circular,
+            ],
+            without = math_add
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+        let slot = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Mul,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(slot.arithmetic, Arithmetic::Checked);
+        assert!(!config.facet_slots.contains_key(&FacetSlotKey {
+            operator: Operator::Add,
+            rhs: "Offset".to_string(),
+        }));
+    }
+
+    #[test]
+    fn bare_facets_require_separators() {
+        let input = "facet = [circular point]";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.span().start().column, input.find("point").unwrap(),);
+    }
+
+    #[test]
+    fn point_profile_restricts_integer_operations() {
+        let input = "konst = none, profile = point {}";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Primitive);
+        assert!(config.flags.math_sub);
+        assert!(!config.flags.math_add);
+        assert!(!config.flags.assign_add);
+        assert!(!config.flags.math_mul);
+        assert!(!config.flags.self_friend_math_ops);
+        assert!(!config.flags.self_friend_math_bit);
+        assert!(!config.flags.self_friend_rel);
+        assert!(!config.flags.self_bit);
+        assert!(!config.flags.bit_access);
+        assert!(!config.flags.core_int);
+        assert!(config.flags.ord);
+        assert!(config.flags.partial_ord);
+    }
+
+    #[test]
+    fn point_profile_preserves_circular_policy() {
+        let input = "
+            konst = none,
+            profile = [circular {}, point {}]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::PrimitiveWrapping);
+        assert!(config.profile.is_circular());
+        assert!(config.profile.emits_precedes());
+        assert!(!config.flags.ord);
+        assert!(!config.flags.partial_ord);
+        assert!(!config.flags.math_add);
+        assert!(config.flags.math_sub);
+    }
+
+    #[test]
+    fn point_profile_preserves_disabled_precedence() {
+        let input = "
+            konst = none,
+            profile = [circular { precedes = false }, point {}]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.profile.is_circular());
+        assert!(!config.profile.emits_precedes());
+    }
+
+    #[test]
+    fn point_profile_preserves_checked_policy() {
+        let input = "
+            konst = none,
+            profile = [sequential {}, point {}]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::Checked);
+        assert!(config.flags.ord);
+        assert!(config.flags.partial_ord);
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn point_profile_preserves_wrapping_storage() {
+        let input = "
+            konst = none,
+            profile = [wrapping {}, point {}]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert_eq!(config.profile.arithmetic(), Arithmetic::WrapperWrapping);
+        assert!(config.requires_wrapping_storage());
+        assert!(config.flags.ord);
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn point_profile_allows_explicit_addition() {
+        let input = "
+            konst = none,
+            profile = point { with = assign_add },
+            with = math_add
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.flags.math_add);
+        assert!(config.flags.assign_add);
+    }
+
+    #[test]
+    fn point_profile_resets_earlier_addition_overrides() {
+        let input = "
+            konst = none,
+            profile = [int { with = [math_add, assign_add] }, point {}],
+            out_type = Point::into_offset(_) -> Offset
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(!config.flags.math_add);
+        assert!(!config.flags.assign_add);
+        assert!(config.flags.math_sub);
+    }
+
+    #[test]
+    fn point_profile_preserves_circular_ordering_restriction() {
+        let input = "
+            profile = [circular {}, point {}],
+            with = ord
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert!(error.to_string().contains("linear ordering"), "{input}");
+    }
+
+    #[test]
+    fn point_profile_rejects_precedes_configuration() {
+        let input = "profile = point { precedes = true }";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert!(error.to_string().contains("unknown attribute"), "{input}");
+    }
+
+    #[test]
+    fn point_facet_inherits_root_arithmetic() {
+        let input = "
+            konst = none,
+            profile = circular {},
+            facet = [
+                point {
+                    with = math_add,
+                    friend = offset_raw(Offset) -> Math,
+                },
+            ]
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+        let slot = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(slot.arithmetic, Arithmetic::PrimitiveWrapping);
     }
 
     #[test]
@@ -750,12 +1016,12 @@ mod tests {
     fn wrapping_facet_selects_wrapper_wide_storage_after_resolution() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 wrapping {
-                    friends = offset(Offset) -> Math,
+                    friend = offset(Offset) -> Math,
                 },
                 sequential {
-                    friends = checked(Checked) -> Math,
+                    friend = checked(Checked) -> Math,
                 },
             ]
         ";
@@ -790,9 +1056,9 @@ mod tests {
         let input = "
             konst = none,
             profile = wrapping {},
-            facets = [
+            facet = [
                 int {
-                    friends = offset(Offset) -> Math,
+                    friend = offset(Offset) -> Math,
                 },
             ]
         ";
@@ -889,16 +1155,16 @@ mod tests {
                 without = math_add,
             },
             with = math_add,
-            friends = root_conv(RootRhs) -> Math,
+            friend = root_conv(RootRhs) -> Math,
             out_type = Point::into_root(_) -> RootOutput,
-            facets = [
+            facet = [
                 circular {
-                    friends = offset_conv(Offset) -> Math,
+                    friend = offset_conv(Offset) -> Math,
                     with = [math_add, math_sub],
                     out_type = Self,
                 },
                 int {
-                    friends = bits_conv(Bits) -> Bit,
+                    friend = bits_conv(Bits) -> Bit,
                     without = math_sub,
                 },
             ]
@@ -949,7 +1215,7 @@ mod tests {
 
     #[test]
     fn empty_facets_still_materialize_the_default_facet() {
-        let input = "konst = none, facets = []";
+        let input = "konst = none, facet = []";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let config = this.unwrap();
@@ -972,20 +1238,92 @@ mod tests {
     }
 
     #[test]
-    fn facets_require_a_bracketed_list() {
-        let input = "facets = [int {}]";
-        let valid = syn::parse_str::<Cfg>(input);
-        assert!(valid.is_ok(), "{input}");
+    fn single_facet_preserves_following_root_flags() {
+        let input = "
+            konst = none,
+            facet = circular,
+            without = math_add
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
 
-        let input = "facets = int {}";
-        let invalid = syn::parse_str::<Cfg>(input);
-        assert!(invalid.is_err(), "{input}");
+        assert_eq!(
+            config.facets[0].profile.arithmetic(),
+            Arithmetic::PrimitiveWrapping,
+        );
+        assert!(config.flags.math_sub);
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn single_configured_facet_preserves_dispatch() {
+        let input = "
+            konst = none,
+            profile = circular,
+            facet = sequential {
+                with = math_add,
+                friend = offset_raw(Offset) -> Math,
+                out_type = Self,
+            },
+            without = math_add,
+            out_type = Point::into_offset(_) -> Offset
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+        let slot = config
+            .facet_slots
+            .get(&FacetSlotKey {
+                operator: Operator::Add,
+                rhs: "Offset".to_string(),
+            })
+            .unwrap();
+
+        assert_eq!(slot.arithmetic, Arithmetic::Checked);
+        assert!(slot.ty_out.is_self());
+        assert!(!config.ty_out.is_self());
+        assert!(!config.flags.math_add);
+    }
+
+    #[test]
+    fn friend_generation_flag_uses_singular_name() {
+        let input = "konst = none, without = friend";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(!config.flags.friend);
+    }
+
+    #[test]
+    fn rejects_plural_friend_argument() {
+        let input = "friends = self(u8) -> Make";
+        let this = syn::parse_str::<Cfg>(input);
+
+        assert!(this.is_err(), "{input}");
+    }
+
+    #[test]
+    fn rejects_plural_facet_argument() {
+        let input = "facets = circular";
+        let this = syn::parse_str::<Cfg>(input);
+
+        assert!(this.is_err(), "{input}");
+    }
+
+    #[test]
+    fn rejects_plural_friend_flag() {
+        let input = "without = friends";
+        let this = syn::parse_str::<Cfg>(input);
+
+        assert!(this.is_err(), "{input}");
     }
 
     #[test]
     fn rejects_duplicate_facet_fields() {
         let input = "
-            facets = [
+            facet = [
                 int {
                     out_type = Self,
                     out_type = Self,
@@ -1003,11 +1341,11 @@ mod tests {
         let input = "
             konst = none,
             profile = circular {},
-            friends = offset_conv(Offset) -> Math,
+            friend = offset_conv(Offset) -> Math,
             out_type = Point::into_offset(_) -> RootOutput,
-            facets = [
+            facet = [
                 sequential {
-                    friends = offset_conv(Offset) -> Math,
+                    friend = offset_conv(Offset) -> Math,
                     without = math_sub,
                     out_type = Self,
                 },
@@ -1072,12 +1410,12 @@ mod tests {
     fn rejects_duplicate_explicit_facet_slots() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 circular {
-                    friends = first(Offset) -> Math,
+                    friend = first(Offset) -> Math,
                 },
                 sequential {
-                    friends = second(Offset) -> Math,
+                    friend = second(Offset) -> Math,
                 },
             ]
         ";
@@ -1092,13 +1430,13 @@ mod tests {
     fn permits_distinct_operations_for_the_same_rhs() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 circular {
-                    friends = first(Offset) -> Math,
+                    friend = first(Offset) -> Math,
                     without = math_sub,
                 },
                 circular {
-                    friends = second(Offset) -> Math,
+                    friend = second(Offset) -> Math,
                     without = math_add,
                 },
             ]
@@ -1111,9 +1449,9 @@ mod tests {
     fn rejects_unsupported_facet_friend_capabilities() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 int {
-                    friends = make(Source) -> Make,
+                    friend = make(Source) -> Make,
                 },
             ]
         ";
@@ -1130,10 +1468,10 @@ mod tests {
     fn rejects_wrapper_wide_precedes_in_a_facet() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 circular {
                     precedes = false,
-                    friends = convert(Source) -> Math,
+                    friend = convert(Source) -> Math,
                 },
             ]
         ";
@@ -1150,9 +1488,9 @@ mod tests {
     fn rejects_wrapper_wide_flags_in_a_facet() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 int {
-                    friends = convert(Source) -> Math,
+                    friend = convert(Source) -> Math,
                     with = display,
                 },
             ]
@@ -1170,9 +1508,9 @@ mod tests {
     fn rejects_facet_assignment_requests() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 int {
-                    friends = convert(Source) -> Math,
+                    friend = convert(Source) -> Math,
                     with = assign_add,
                 },
             ]
@@ -1190,9 +1528,9 @@ mod tests {
     fn rejects_contradictory_facet_flags() {
         let input = "
             konst = none,
-            facets = [
+            facet = [
                 int {
-                    friends = convert(Source) -> Math,
+                    friend = convert(Source) -> Math,
                     with = math_add,
                     without = math_add,
                 },
@@ -1212,7 +1550,7 @@ mod tests {
         let expansion = expansion_of(
             "
                 konst = none,
-                friends = convert(Offset) -> [Math, Rel]
+                friend = convert(Offset) -> [Math, Rel]
             ",
         );
 
@@ -1231,10 +1569,10 @@ mod tests {
             "
                 konst = none,
                 profile = circular {},
-                friends = convert(Offset) -> [Math, Rel],
-                facets = [
+                friend = convert(Offset) -> [Math, Rel],
+                facet = [
                     circular {
-                        friends = other(Other) -> Math,
+                        friend = other(Other) -> Math,
                     },
                 ]
             ",
@@ -1263,8 +1601,8 @@ mod tests {
         let expansion = expansion_of(
             "
                 konst = none,
-                friends = convert(Offset) -> [Math, Rel],
-                facets = []
+                friend = convert(Offset) -> [Math, Rel],
+                facet = []
             ",
         );
 
@@ -1722,7 +2060,7 @@ mod tests {
         let error = syn::parse_str::<Cfg>(
             "
                 konst = none,
-                facets = [
+                facet = [
                     int {
                         with = non_zero,
                     },
@@ -1739,7 +2077,7 @@ mod tests {
 
     #[test]
     fn defaults_missing_konst_to_crate_default() {
-        let config = syn::parse_str::<Cfg>("friends = [Foo(u8) -> Bit]")
+        let config = syn::parse_str::<Cfg>("friend = [Foo(u8) -> Bit]")
             .expect("konst should default to the crate feature");
 
         assert_eq!(config.konst, Konst::default());
@@ -1753,7 +2091,7 @@ mod tests {
     #[test]
     fn accepts_explicit_friend_capabilities() {
         let config = syn::parse_str::<Cfg>(
-            "konst = none, friends = [convert(u8) -> [Make, Bit]]",
+            "konst = none, friend = [convert(u8) -> [Make, Bit]]",
         )
         .expect("integral capabilities should parse");
         let friend = config.friends.iter().next().unwrap();
@@ -1765,7 +2103,7 @@ mod tests {
     #[test]
     fn expands_math_friend_capability_without_rel() {
         let config =
-            syn::parse_str::<Cfg>("konst = none, friends = [Foo(u8) -> Math]")
+            syn::parse_str::<Cfg>("konst = none, friend = [Foo(u8) -> Math]")
                 .expect(
                     "Math should expand to integral operation capabilities",
                 );
@@ -1780,7 +2118,7 @@ mod tests {
     #[test]
     fn defaults_omitted_friend_capabilities_to_math() {
         let config = syn::parse_str::<Cfg>(
-            "konst = none, friends = [convert(Source), Foo(Other)]",
+            "konst = none, friend = [convert(Source), Foo(Other)]",
         )
         .expect("integral friends may omit their capabilities");
 
@@ -1795,7 +2133,7 @@ mod tests {
     #[test]
     fn preserves_explicit_empty_friend_capabilities() {
         let config =
-            syn::parse_str::<Cfg>("konst = none, friends = Foo(Source) -> []")
+            syn::parse_str::<Cfg>("konst = none, friend = Foo(Source) -> []")
                 .expect("an explicit empty capability list should parse");
         let friend = config.friends.iter().next().unwrap();
 
@@ -1804,7 +2142,7 @@ mod tests {
 
     #[test]
     fn rejects_legacy_friend_levels() {
-        syn::parse_str::<Cfg>("konst = none, friends = [u8(level = [Full])]")
+        syn::parse_str::<Cfg>("konst = none, friend = [u8(level = [Full])]")
             .expect_err("levels were replaced by capabilities");
     }
 
@@ -1826,7 +2164,7 @@ mod tests {
         let input = format!(
             "
                 konst = none,
-                friends = [Foo(Source) -> {capabilities}]
+                friend = [Foo(Source) -> {capabilities}]
             "
         );
         let this = syn::parse_str::<Cfg>(&input);
@@ -1839,7 +2177,7 @@ mod tests {
         let input = format!(
             "
                 konst = none,
-                friends = [Foo(Source) -> {capabilities}]
+                friend = [Foo(Source) -> {capabilities}]
             "
         );
         let this = syn::parse_str::<Cfg>(&input);
@@ -1852,7 +2190,7 @@ mod tests {
         let input = format!(
             "
                 konst = none,
-                friends = [Foo(Source) -> {capabilities}]
+                friend = [Foo(Source) -> {capabilities}]
             "
         );
         let this = syn::parse_str::<Cfg>(&input);
@@ -1865,7 +2203,7 @@ mod tests {
         let input = format!(
             "
                 konst = none,
-                friends = [Foo(Source) -> {capabilities}]
+                friend = [Foo(Source) -> {capabilities}]
             "
         );
         let this = syn::parse_str::<Cfg>(&input);
@@ -1878,7 +2216,7 @@ mod tests {
         let input = format!(
             "
                 konst = none,
-                friends = [Source(cap = Make, trusted = {trusted})]
+                friend = [Source(cap = Make, trusted = {trusted})]
             "
         );
         let this = syn::parse_str::<Cfg>(&input);

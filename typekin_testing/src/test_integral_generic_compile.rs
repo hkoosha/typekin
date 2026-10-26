@@ -1,20 +1,29 @@
 use crate::*;
 
-#[cfg(feature = "slow_tests")]
+#[cfg(feature = "test_slow")]
 mod tests {
     use super::*;
 
-    fn reject(name: &str, source: &str) {
+    fn reject(
+        name: &str,
+        source: &str,
+    ) {
         let output = compile(name, "", source, false);
         assert!(!output.status.success(), "{name}: {output:?}");
     }
 
-    fn reject_tcp(name: &str, operation: &str) {
-        let source = format!("{}
+    fn reject_tcp(
+        name: &str,
+        operation: &str,
+    ) {
+        let source = format!(
+            "{}
 fn forbidden() {{
     {operation}
 }}
-", include_str!("../../examples/my_tcp.rs"));
+",
+            include_str!("../../examples/my_tcp.rs")
+        );
         reject(name, &source);
     }
 
@@ -236,7 +245,8 @@ fn forbidden() {{
                 return (mapped + parsed).raw();
             }
         ";
-        let dependencies = "serde = { version = \"1\", default-features = false }";
+        let dependencies =
+            "serde = { version = \"1\", default-features = false }";
         let output = compile("generic-no-std", dependencies, source, false);
         assert!(output.status.success(), "{output:?}");
     }

@@ -168,7 +168,7 @@ impl Parse for Cfg {
             match attr {
                 "relationship" => relationship = Some(stream.parse()?),
                 "maker" => maker = stream.parse()?,
-                "friends" => friends = zz::one_or_list(stream)?.set(),
+                "friend" => friends = zz::one_or_list(stream)?.set(),
                 "scope" => scope = Some(stream.parse()?),
                 _ => return Ok(false),
             };

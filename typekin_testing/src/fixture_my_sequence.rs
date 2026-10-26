@@ -1,5 +1,4 @@
 #[typekin::integral(
-    konst = none,
     profile = circular {},
     out_type = CircularSequence::into_raw(_) -> u32,
 )]
@@ -14,21 +13,19 @@ impl CircularSequence {
 pub struct Out;
 
 #[typekin::integral(
-    konst = none,
-    profile = circular {},
-    without = math_add,
+    profile = [circular {}, point {}],
     out_type = Self::into_offset(_) -> GenericOffset<D>,
-    facets = [
+    facet = [
         circular {
             with = math_add,
-            friends = Self::offset_raw(GenericOffset<D>) -> Math,
+            friend = Self::offset_raw(GenericOffset<D>) -> Math,
             out_type = Self,
         },
     ],
 )]
 pub struct GenericPoint<D>(u32);
 
-#[typekin::integral(konst = none, profile = circular { precedes = false })]
+#[typekin::integral(profile = circular { precedes = false })]
 pub struct GenericOffset<D>(i32);
 
 impl<D> GenericPoint<D> {
@@ -82,7 +79,10 @@ pub extern "C" fn wrapped_precedes_sequence(
 
 #[unsafe(no_mangle)]
 #[inline(never)]
-pub extern "C" fn raw_sub_generic_points(lhs: u32, rhs: u32) -> i32 {
+pub extern "C" fn raw_sub_generic_points(
+    lhs: u32,
+    rhs: u32,
+) -> i32 {
     return lhs.wrapping_sub(rhs) as i32;
 }
 
@@ -97,7 +97,10 @@ pub extern "C" fn wrapped_sub_generic_points(
 
 #[unsafe(no_mangle)]
 #[inline(never)]
-pub extern "C" fn raw_add_generic_offset(lhs: u32, rhs: i32) -> u32 {
+pub extern "C" fn raw_add_generic_offset(
+    lhs: u32,
+    rhs: i32,
+) -> u32 {
     return lhs.wrapping_add(rhs as u32);
 }
 
@@ -112,7 +115,10 @@ pub extern "C" fn wrapped_add_generic_offset(
 
 #[unsafe(no_mangle)]
 #[inline(never)]
-pub extern "C" fn raw_sub_generic_offset(lhs: u32, rhs: i32) -> u32 {
+pub extern "C" fn raw_sub_generic_offset(
+    lhs: u32,
+    rhs: i32,
+) -> u32 {
     return lhs.wrapping_sub(rhs as u32);
 }
 
@@ -149,18 +155,31 @@ fn main() {
         CircularSequence::make(0),
     ));
     assert_eq!(raw_sub_generic_points(0, 1), -1);
-    assert_eq!(wrapped_sub_generic_points(
-        GenericPoint::make(0), GenericPoint::make(1),
-    ), -1);
+    assert_eq!(
+        wrapped_sub_generic_points(
+            GenericPoint::make(0),
+            GenericPoint::make(1),
+        ),
+        -1
+    );
     assert_eq!(raw_add_generic_offset(u32::MAX, 1), 0);
-    assert_eq!(wrapped_add_generic_offset(
-        GenericPoint::make(u32::MAX), GenericOffset::make(1),
-    ), 0);
+    assert_eq!(
+        wrapped_add_generic_offset(
+            GenericPoint::make(u32::MAX),
+            GenericOffset::make(1),
+        ),
+        0
+    );
     assert_eq!(raw_sub_generic_offset(0, 1), u32::MAX);
-    assert_eq!(wrapped_sub_generic_offset(
-        GenericPoint::make(0), GenericOffset::make(1),
-    ), u32::MAX);
+    assert_eq!(
+        wrapped_sub_generic_offset(
+            GenericPoint::make(0),
+            GenericOffset::make(1),
+        ),
+        u32::MAX
+    );
     assert!(wrapped_precedes_generic_point(
-        GenericPoint::make(u32::MAX), GenericPoint::make(0),
+        GenericPoint::make(u32::MAX),
+        GenericPoint::make(0),
     ));
 }

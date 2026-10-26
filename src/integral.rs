@@ -170,7 +170,10 @@ impl IntegralTarget {
         return this;
     }
 
-    fn uses_generic_names(&self, tokens: TokenStream) -> bool {
+    fn uses_generic_names(
+        &self,
+        tokens: TokenStream,
+    ) -> bool {
         return tokens.into_iter().any(|token| match token {
             proc_macro2::TokenTree::Ident(ident) => {
                 ident == "Self"
@@ -1079,14 +1082,14 @@ impl Maker {
         if let Some(it) = self.cfg.friends.get(&target_friend) {
             if it.capabilities.contains(&format_ident!("Math")) {
                 return it.ty.fail(
-                    "self math operations use `with_self_math`, not `friends`",
+                    "self math operations use `self_math`, not `friend`",
                 );
             }
 
             if it.capabilities.contains(&format_ident!("Bit")) {
-                return it.ty.fail(
-                    "self bit operations use `with_self_bit`, not `friends`",
-                );
+                return it
+                    .ty
+                    .fail("self bit operations use `self_bit`, not `friend`");
             }
         }
 
@@ -1209,7 +1212,7 @@ impl Maker {
         })
         .map(|capability| self.protocol_capability(&capability))
         .vec();
-        let friends = match self.cfg.flags.friends {
+        let friends = match self.cfg.flags.friend {
             false => vec![],
             true => self
                 .cfg
@@ -4531,7 +4534,8 @@ impl Cfg {
             Self::validate_facet(facet)?;
 
             let flags = Self::resolved_facet_flags(&default.flags, facet);
-            let arithmetic = facet.profile.arithmetic();
+            let arithmetic =
+                facet.profile.arithmetic_or(default.profile.arithmetic());
             let ty_out = facet.ty_out.as_ref().unwrap_or(&default.ty_out);
             let owner = FacetOwner::Explicit(index);
 
@@ -4867,9 +4871,9 @@ impl Cfg {
                 "error" => zz::parse_unit_error(rest)?,
                 "with" => self.parse_flags(rest, true)?,
                 "without" => self.parse_flags(rest, false)?,
-                "friends" => self.friends = Self::parse_friends(rest)?,
-                "facets" => {
-                    self.facets = zz::list::<FacetCfg>(rest)?.collect();
+                "friend" => self.friends = Self::parse_friends(rest)?,
+                "facet" => {
+                    self.facets = zz::one_or_list::<FacetCfg>(rest)?.collect();
                     self.facets_present = true;
                 }
                 "get_raw" => self.get_raw = Some(rest.parse()?),
@@ -5030,7 +5034,7 @@ mk_flags! {
         pub math_sub: bool,
         pub math_xor: bool,
 
-        pub friends: bool,
+        pub friend: bool,
         pub self_friend_make: bool,
         pub self_friend_math_bit: bool,
         pub self_friend_math_ops: bool,

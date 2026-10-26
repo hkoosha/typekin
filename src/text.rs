@@ -275,7 +275,7 @@ impl Parse for Cfg {
                 "in" => {
                     rest.span().fail("`in` was renamed to `domain`")?;
                 }
-                "friends" => this.parse_friends(rest)?,
+                "friend" => this.parse_friends(rest)?,
                 "with" => this.parse_flags(rest, true)?,
                 "without" => this.parse_flags(rest, false)?,
                 _ => return Ok(false),

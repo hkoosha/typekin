@@ -1,7 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::
-    ToTokens
-;
+use quote::ToTokens;
 use syn::{
     Fields,
     Item,
@@ -20,7 +18,8 @@ fn expand(source: &str) -> syn::Result<TokenStream> {
 }
 
 fn type_path(ty: &syn::Type) -> &syn::Path {
-    let syn::Type::Path(path) = ty else {
+    let syn::Type::Path(path) = ty
+    else {
         panic!("expected an emitted type path");
     };
     assert!(path.qself.is_none());
@@ -29,11 +28,13 @@ fn type_path(ty: &syn::Type) -> &syn::Path {
 
 fn type_argument(path: &syn::Path) -> &syn::Type {
     let syn::PathArguments::AngleBracketed(arguments) =
-        &path.segments.last().unwrap().arguments else {
+        &path.segments.last().unwrap().arguments
+    else {
         panic!("expected a marker type argument");
     };
     assert_eq!(arguments.args.len(), 1);
-    let syn::GenericArgument::Type(argument) = &arguments.args[0] else {
+    let syn::GenericArgument::Type(argument) = &arguments.args[0]
+    else {
         panic!("expected a marker type path");
     };
     return argument;
@@ -117,12 +118,14 @@ fn generic_shape_preserves_declaration_and_marker_order() {
     );
     assert_eq!(types.len(), 6);
     assert!(type_path(types[0]).is_ident("u32"));
-    let syn::Type::Reference(lifetime_marker) = phantom_argument(types[1]) else {
+    let syn::Type::Reference(lifetime_marker) = phantom_argument(types[1])
+    else {
         panic!("lifetime markers must borrow the unit type");
     };
     assert_eq!(lifetime_marker.lifetime.as_ref().unwrap().ident, "a");
     assert!(lifetime_marker.mutability.is_none());
-    let syn::Type::Tuple(unit) = &*lifetime_marker.elem else {
+    let syn::Type::Tuple(unit) = &*lifetime_marker.elem
+    else {
         panic!("lifetime markers must borrow the unit type");
     };
     assert!(unit.elems.is_empty());

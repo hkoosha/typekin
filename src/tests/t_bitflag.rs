@@ -10,7 +10,7 @@ mod tests {
     #[test]
     fn attrs_friends_and_konst() {
         let it = "
-            friends = crate::convert(crate::source::Source) -> Inspector,
+            friend = crate::convert(crate::source::Source) -> Inspector,
             konst = stable
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -21,7 +21,7 @@ mod tests {
     fn attrs_konst_and_friends_and_integral() {
         let it = "
             konst = stable,
-            friends = crate::convert(crate::source::Source) -> [Bit, unsafe],
+            friend = crate::convert(crate::source::Source) -> [Bit, unsafe],
             integral = []
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -33,7 +33,7 @@ mod tests {
         let it = "
             konst = stable,
             integral = [],
-            friends = Foo(crate::source::Source) -> Bit
+            friend = Foo(crate::source::Source) -> Bit
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -44,7 +44,7 @@ mod tests {
         let it = "
             konst = stable,
             integral = [
-                friends = crate::convert(crate::source::Source) -> Make,
+                friend = crate::convert(crate::source::Source) -> Make,
                 valid = is_valid,
             ]
         ";
@@ -57,7 +57,7 @@ mod tests {
         let it = "
             integral = [
                 valid = is_valid,
-                friends = Foo(crate::source::Source) -> [Math, Bit]
+                friend = Foo(crate::source::Source) -> [Math, Bit]
             ],
             suffix = \"Value\"
         ";
@@ -68,9 +68,9 @@ mod tests {
     #[test]
     fn attrs_friend_and_integral() {
         let it = "
-            friends = [],
+            friend = [],
             integral = [
-                friends = [],
+                friend = [],
                 valid = is_valid
             ]
         ";
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn rejects_dangling_friend() {
         let it = "
-            friends = convert(Source) -> Bit,
+            friend = convert(Source) -> Bit,
             convert(Other) -> Bit
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -92,7 +92,7 @@ mod tests {
     fn rejects_dangling_friend_in_integral() {
         let it = "
             integral = [
-                friends = _(Source) -> Math,
+                friend = _(Source) -> Math,
                 _(Other) -> Math
             ]
         ";
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn rejects_incomplete_friend() {
         let it = "
-            friends =
+            friend =
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn rejects_incomplete_friend_in_integral() {
         let it = "
-            integral = [friends =]
+            integral = [friend =]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn rejects_incomplete_friend_combined() {
         let it = "
-            friends =,
+            friend =,
             integral = []
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -132,7 +132,7 @@ mod tests {
     fn rejects_incomplete_friend_in_integral_combined() {
         let it = "
             integral = [
-                friends =,
+                friend =,
                 valid = is_valid
             ]
         ";
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn rejects_invalid_cap() {
         let it = "
-            friends = convert(Source) -> [Bit, 1]
+            friend = convert(Source) -> [Bit, 1]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn rejects_invalid_cap_in_integral() {
         let it = "
-            integral = [friends = _(Source) -> Inspector]
+            integral = [friend = _(Source) -> Inspector]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn rejects_unknown_attr() {
         let it = "
-            friends = _(Source) -> Bit,
+            friend = _(Source) -> Bit,
             unknown = true
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -172,7 +172,7 @@ mod tests {
     fn rejects_unknown_attr_in_integral_combined() {
         let it = "
             integral = [
-                friends = _(Source) -> [Math, Bit],
+                friend = _(Source) -> [Math, Bit],
                 unknown = true
             ]
         ";
@@ -183,8 +183,8 @@ mod tests {
     #[test]
     fn rejects_duplicated_friends() {
         let it = "
-            friends = _(Source) -> Bit,
-            friends = []
+            friend = _(Source) -> Bit,
+            friend = []
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
@@ -238,7 +238,7 @@ mod tests {
     fn rejects_facets_in_integral() {
         let input = "
             integral = [
-                facets = []
+                facet = []
             ]
         ";
         let error = syn::parse_str::<Cfg>(input)
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn defaults_missing_konst_to_crate_default() {
         let it = "
-            friends = [Foo(u8) -> Bit]
+            friend = [Foo(u8) -> Bit]
         ";
 
         let config = syn::parse_str::<Cfg>(it)
@@ -560,7 +560,7 @@ mod tests {
     fn accepts_friend_capabilities() {
         let it = "
             konst = none,
-            friends = [Foo(u8) -> [Bit]],
+            friend = [Foo(u8) -> [Bit]],
             integral = []
         ";
 
@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn rejects_legacy_friend_levels() {
         let it = "
-            friends = [u8(conv = self, level = [Bit])],
+            friend = [u8(conv = self, level = [Bit])],
             integral = []
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn accepts_unsafe_friend() {
         let it = "
-            friends = [Foo(Source) -> unsafe]
+            friend = [Foo(Source) -> unsafe]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -594,7 +594,7 @@ mod tests {
     #[test]
     fn accepts_unsafe_and_bit_friend() {
         let it = "
-            friends = [Foo(Source) -> [Bit, unsafe]]
+            friend = [Foo(Source) -> [Bit, unsafe]]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn accepts_unsafe_integral_friends() {
         let it = "
-            integral = [friends = [Foo(Source) -> unsafe]]
+            integral = [friend = [Foo(Source) -> unsafe]]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn accepts_unsafe_integral_friends_combined() {
         let it = "
-            integral = [friends = [Foo(Source) -> [Math, Bit, unsafe]]]
+            integral = [friend = [Foo(Source) -> [Math, Bit, unsafe]]]
         ";
         let input = format!("konst = none, {it}");
         let this = syn::parse_str::<Cfg>(&input);
@@ -622,11 +622,11 @@ mod tests {
     #[test]
     fn accept_flag_friend_and_integral_friend() {
         let it = "
-            friends = [
+            friend = [
                 convert(Source) -> Inspector
             ],
             integral = [
-                friends = [Foo(Other) -> Math]
+                friend = [Foo(Other) -> Math]
             ]
         ";
 

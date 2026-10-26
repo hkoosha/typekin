@@ -6,7 +6,7 @@ mod tests {
     #[test]
     fn accepts_friend_path() {
         let it = "
-            friends = crate::convert(crate::source::Source) -> Inspect,
+            friend = crate::convert(crate::source::Source) -> Inspect,
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -16,7 +16,7 @@ mod tests {
     fn accepts_friend_and_rel_and_seal() {
         let it = "
             relation = u8,
-            friends = crate::convert(crate::source::Source) -> [Inspect, unsafe],
+            friend = crate::convert(crate::source::Source) -> [Inspect, unsafe],
             seal = Seal
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -28,7 +28,7 @@ mod tests {
         let it = "
             relation = u8,
             value = u16,
-            friends = Foo(crate::source::Source) -> Inspect
+            friend = Foo(crate::source::Source) -> Inspect
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -38,7 +38,7 @@ mod tests {
     fn accepts_rel_and_friend_and_conv() {
         let it = "
             relation = u8,
-            friends = Foo(crate::source::Source) -> [Inspect, unsafe],
+            friend = Foo(crate::source::Source) -> [Inspect, unsafe],
             conversion = into_value
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn accepts_friend_self() {
         let it = "
-            friends = _(Foo) -> Inspect,
+            friend = _(Foo) -> Inspect,
             relation = u8
         ";
         let this = syn::parse_str::<Cfg>(it);
@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn accepts_friends_empty() {
         let it = "
-            friends = []
+            friend = []
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn accepts_friends_multi() {
         let it = "
-            friends = [
+            friend = [
                 into_make(Source) -> Make,
                 into_bit(Source) -> Bit
             ]
@@ -80,7 +80,7 @@ mod tests {
     fn rejects_unknown_friendship_generation_flags() {
         let it = "
             relation = u8,
-            friends = convert(Source) -> Make,
+            friend = convert(Source) -> Make,
             with = [serde]
         ";
 
@@ -93,7 +93,7 @@ mod tests {
     fn rejects_legacy_self_implicit_conversion_syntax() {
         let it = "
             relation = u8,
-            friends = Self(Foo) -> Inspect
+            friend = Self(Foo) -> Inspect
         ";
 
         let error = syn::parse_str::<Cfg>(it).unwrap_err();
@@ -108,7 +108,7 @@ mod tests {
     fn rejects_duplicate_capability_for_source() {
         let it = "
             relation = u8,
-            friends = [
+            friend = [
                 into_make(Source) -> Make,
                 into_other(Source) -> Make
             ]
@@ -120,7 +120,7 @@ mod tests {
     fn rejects_duplicate_capability_in_multi_capability_friend() {
         let it = "
             relation = u8,
-            friends = [
+            friend = [
                 into(Source) -> [Make, Bit],
                 into_other(Source) -> Bit
             ]
@@ -132,7 +132,7 @@ mod tests {
     fn rejects_multiple_single_explicit_friends() {
         let it = "
             relation = u8,
-            friends = convert(Source) -> Inspect,
+            friend = convert(Source) -> Inspect,
             convert(Other) -> Inspect
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
@@ -142,7 +142,7 @@ mod tests {
     fn rejects_multiple_single_implicit_friends() {
         let it = "
             relation = u8,
-            friends = _(Source) -> Inspect,
+            friend = _(Source) -> Inspect,
             _(Other) -> Inspect
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
@@ -152,7 +152,7 @@ mod tests {
     fn rejects_multiple_default_friends() {
         let it = "
             relation = u8,
-            friends = _ -> Inspect,
+            friend = _ -> Inspect,
             _ -> Extra
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
@@ -162,7 +162,7 @@ mod tests {
     fn rejects_missing_single_friend() {
         let it = "
             relation = u8,
-            friends =
+            friend =
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -171,7 +171,7 @@ mod tests {
     fn rejects_missing_single_friend_before_attribute() {
         let it = "
             relation = u8,
-            friends =,
+            friend =,
             seal = Seal
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
@@ -181,7 +181,7 @@ mod tests {
     fn rejects_conversion_without_source() {
         let it = "
             relation = u8,
-            friends = convert() -> Inspect
+            friend = convert() -> Inspect
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -190,7 +190,7 @@ mod tests {
     fn rejects_conversion_without_capabilities() {
         let it = "
             relation = u8,
-            friends = convert(Source) ->
+            friend = convert(Source) ->
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -199,7 +199,7 @@ mod tests {
     fn rejects_non_identifier_friend_capability() {
         let it = "
             relation = u8,
-            friends = convert(Source) -> [Inspect, 1]
+            friend = convert(Source) -> [Inspect, 1]
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -208,7 +208,7 @@ mod tests {
     fn rejects_unknown_attribute_after_custom_friend() {
         let it = "
             relation = u8,
-            friends = Foo(Source) -> [Inspect, unsafe],
+            friend = Foo(Source) -> [Inspect, unsafe],
             unknown = true
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
@@ -218,8 +218,8 @@ mod tests {
     fn rejects_duplicate_friends_after_custom_friend() {
         let it = "
             relation = u8,
-            friends = Foo(Source) -> Inspect,
-            friends = []
+            friend = Foo(Source) -> Inspect,
+            friend = []
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -230,7 +230,7 @@ mod tests {
             relation = u8,
             mod = protocol,
             scope = protocol,
-            friends = _ -> Inspect
+            friend = _ -> Inspect
         ";
         assert!(syn::parse_str::<Cfg>(it).is_err(), "{it}");
     }
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn accepts_constructor_friend_with_neighboring_attributes() {
         let it = "
-            friends = crate::source::Source,
+            friend = crate::source::Source,
             relationship = Self::new,
             scope = self
         ";
@@ -250,7 +250,7 @@ mod tests {
     fn accepts_constructor_friend_with_maker() {
         let it = "
             relationship = Self::new,
-            friends = crate::source::Source,
+            friend = crate::source::Source,
             maker = from_source,
             scope = _
         ";
@@ -263,7 +263,7 @@ mod tests {
         let it = "
             relationship = crate::construct,
             maker = from_source,
-            friends = Source,
+            friend = Source,
             scope = pub(crate) constructors
         ";
         let this = syn::parse_str::<MakeCfg>(it);
@@ -274,7 +274,7 @@ mod tests {
     fn accepts_multiple_constructor_friends() {
         let it = "
             relationship = Self::new,
-            friends = [crate::source::Source, Other],
+            friend = [crate::source::Source, Other],
             maker = from_source,
             scope = self
         ";
@@ -286,7 +286,7 @@ mod tests {
     fn accepts_empty_constructor_friends() {
         let it = "
             relationship = Self::new,
-            friends = [],
+            friend = [],
             maker = from_source,
             scope = _
         ";
@@ -298,14 +298,14 @@ mod tests {
     fn constructor_requires_scope() {
         let it = "
             relationship = Self::new,
-            friends = Source
+            friend = Source
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
 
         let it = "
             relationship = Self::new,
-            friends = Source,
+            friend = Source,
             scope = self
         ";
         let this = syn::parse_str::<MakeCfg>(it);
@@ -317,7 +317,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = Source, Other
+            friend = Source, Other
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -328,7 +328,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends =
+            friend =
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -339,7 +339,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends =,
+            friend =,
             maker = from_source
         ";
         let this = syn::parse_str::<MakeCfg>(it);
@@ -351,7 +351,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = 1
+            friend = 1
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -362,7 +362,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = convert(Source)
+            friend = convert(Source)
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -373,7 +373,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = [convert(Source)]
+            friend = [convert(Source)]
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -384,7 +384,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = _(Source) -> Make
+            friend = _(Source) -> Make
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -395,7 +395,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = Source -> Make
+            friend = Source -> Make
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
@@ -406,7 +406,7 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = Source,
+            friend = Source,
             unknown = true
         ";
         let this = syn::parse_str::<MakeCfg>(it);
@@ -418,8 +418,8 @@ mod tests {
         let it = "
             relationship = Self::new,
             scope = self,
-            friends = Source,
-            friends = []
+            friend = Source,
+            friend = []
         ";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");

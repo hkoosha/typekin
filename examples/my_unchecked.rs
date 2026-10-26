@@ -1,5 +1,5 @@
 #[typekin::integral(
-    friends = MyFriend::my_conv(MyFriend) -> unsafe,
+    friend = MyFriend::my_conv(MyFriend) -> unsafe,
 )]
 pub struct MyUnchecked(u32);
 

@@ -1,6 +1,6 @@
 #[typekin::integral(
     konst = none,
-    friends = MyFriend::my_conv(MyFriend) -> [],
+    friend = MyFriend::my_conv(MyFriend) -> [],
 )]
 pub struct MyU32(u32);
 

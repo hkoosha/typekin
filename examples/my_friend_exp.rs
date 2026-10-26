@@ -147,28 +147,23 @@ const _: () = {
             return PageHeader::_unchecked(raw);
         }
     }
-    impl ::core::convert::AsRef<u32> for PageHeader {
+    impl AsRef<u32> for PageHeader {
         #[inline(always)]
         fn as_ref(&self) -> &u32 {
             return &self.0;
         }
     }
-    impl ::core::str::FromStr for PageHeader {
+    impl core::str::FromStr for PageHeader {
         type Err = ();
         #[inline(always)]
-        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
-            let value = match <u32 as ::core::str::FromStr>::from_str(source) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(_) => {
-                    return ::core::result::Result::Err(());
+        fn from_str(source: &str) -> Result<Self, Self::Err> {
+            let value = match <u32 as core::str::FromStr>::from_str(source) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Err(());
                 }
             };
-            return if true {
-                ::core::result::Result::Ok(Self(value))
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return { Ok(Self(value)) };
         }
     }
     impl PageHeader {
@@ -199,11 +194,11 @@ const _: () = {
             return Self::raw(self).trailing_ones();
         }
         #[inline(always)]
-        pub const fn highest_one(self) -> ::core::option::Option<u32> {
+        pub const fn highest_one(self) -> Option<u32> {
             return Self::raw(self).highest_one();
         }
         #[inline(always)]
-        pub const fn lowest_one(self) -> ::core::option::Option<u32> {
+        pub const fn lowest_one(self) -> Option<u32> {
             return Self::raw(self).lowest_one();
         }
         #[inline(always)]
@@ -225,27 +220,27 @@ const _: () = {
         pub const fn checked_ilog(
             self,
             base: Self,
-        ) -> ::core::option::Option<u32> {
+        ) -> Option<u32> {
             return Self::raw(self).checked_ilog(Self::raw(base));
         }
         #[inline(always)]
-        pub const fn checked_ilog2(self) -> ::core::option::Option<u32> {
+        pub const fn checked_ilog2(self) -> Option<u32> {
             return Self::raw(self).checked_ilog2();
         }
         #[inline(always)]
-        pub const fn checked_ilog10(self) -> ::core::option::Option<u32> {
+        pub const fn checked_ilog10(self) -> Option<u32> {
             return Self::raw(self).checked_ilog10();
         }
         #[inline(always)]
-        pub const fn to_be_bytes(self) -> [u8; ::core::mem::size_of::<u32>()] {
+        pub const fn to_be_bytes(self) -> [u8; size_of::<u32>()] {
             return Self::raw(self).to_be_bytes();
         }
         #[inline(always)]
-        pub const fn to_le_bytes(self) -> [u8; ::core::mem::size_of::<u32>()] {
+        pub const fn to_le_bytes(self) -> [u8; size_of::<u32>()] {
             return Self::raw(self).to_le_bytes();
         }
         #[inline(always)]
-        pub const fn to_ne_bytes(self) -> [u8; ::core::mem::size_of::<u32>()] {
+        pub const fn to_ne_bytes(self) -> [u8; size_of::<u32>()] {
             return Self::raw(self).to_ne_bytes();
         }
     }
@@ -297,150 +292,122 @@ const _: () = {
             return Self::_core_int(u32::from_le(Self::raw(value)));
         }
         #[inline(always)]
-        pub const fn from_ne_bytes(
-            bytes: [u8; ::core::mem::size_of::<u32>()]
-        ) -> Self {
+        pub const fn from_ne_bytes(bytes: [u8; size_of::<u32>()]) -> Self {
             return Self::_core_int(u32::from_ne_bytes(bytes));
         }
         #[inline(always)]
-        pub const fn from_be_bytes(
-            bytes: [u8; ::core::mem::size_of::<u32>()]
-        ) -> Self {
+        pub const fn from_be_bytes(bytes: [u8; size_of::<u32>()]) -> Self {
             return Self::_core_int(u32::from_be_bytes(bytes));
         }
         #[inline(always)]
-        pub const fn from_le_bytes(
-            bytes: [u8; ::core::mem::size_of::<u32>()]
-        ) -> Self {
+        pub const fn from_le_bytes(bytes: [u8; size_of::<u32>()]) -> Self {
             return Self::_core_int(u32::from_le_bytes(bytes));
         }
         #[inline(always)]
         pub const fn checked_add(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_add(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_sub(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_sub(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
-        pub const fn checked_neg(self) -> ::core::option::Option<Self> {
+        pub const fn checked_neg(self) -> Option<Self> {
             return match Self::raw(self).checked_neg() {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_mul(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_mul(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_div(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_div(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_rem(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_rem(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_div_euclid(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_div_euclid(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_rem_euclid(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_rem_euclid(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_shl(
             self,
             rhs: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_shl(rhs) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_shr(
             self,
             rhs: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_shr(rhs) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_pow(
             self,
             exp: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_pow(exp) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
     }
@@ -847,14 +814,10 @@ const _: () = {
             return Self::_core_int(Self::raw(self).next_power_of_two());
         }
         #[inline(always)]
-        pub const fn checked_next_power_of_two(
-            self
-        ) -> ::core::option::Option<Self> {
+        pub const fn checked_next_power_of_two(self) -> Option<Self> {
             return match Self::raw(self).checked_next_power_of_two() {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
@@ -877,14 +840,12 @@ const _: () = {
         pub const fn checked_next_multiple_of(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self)
                 .checked_next_multiple_of(Self::raw(rhs))
             {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
@@ -932,85 +893,85 @@ const _: () = {
             return (Self::_core_int(low), Self::_core_int(high));
         }
     }
-    const impl ::core::convert::Into<usize> for PageHeader {
+    const impl Into<usize> for PageHeader {
         #[inline(always)]
         fn into(self) -> usize {
-            return PageHeader::into_usize(self);
+            return Self::into_usize(self);
         }
     }
-    const impl ::core::convert::Into<u32> for PageHeader {
+    const impl Into<u32> for PageHeader {
         #[inline(always)]
         fn into(self) -> u32 {
-            return PageHeader::into_u32(self);
+            return Self::into_u32(self);
         }
     }
-    const impl ::core::convert::Into<u64> for PageHeader {
+    const impl Into<u64> for PageHeader {
         #[inline(always)]
         fn into(self) -> u64 {
-            return PageHeader::into_u64(self);
+            return Self::into_u64(self);
         }
     }
-    const impl ::core::convert::Into<u128> for PageHeader {
+    const impl Into<u128> for PageHeader {
         #[inline(always)]
         fn into(self) -> u128 {
-            return PageHeader::into_u128(self);
+            return Self::into_u128(self);
         }
     }
-    const impl ::core::convert::Into<i64> for PageHeader {
+    const impl Into<i64> for PageHeader {
         #[inline(always)]
         fn into(self) -> i64 {
-            return PageHeader::into_i64(self);
+            return Self::into_i64(self);
         }
     }
-    const impl ::core::convert::Into<i128> for PageHeader {
+    const impl Into<i128> for PageHeader {
         #[inline(always)]
         fn into(self) -> i128 {
-            return PageHeader::into_i128(self);
+            return Self::into_i128(self);
         }
     }
-    const impl ::core::convert::TryInto<isize> for PageHeader {
+    const impl TryInto<isize> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
-            return PageHeader::try_into_isize(self);
+        fn try_into(self) -> Result<isize, Self::Error> {
+            return Self::try_into_isize(self);
         }
     }
-    const impl ::core::convert::TryInto<u8> for PageHeader {
+    const impl TryInto<u8> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
-            return PageHeader::try_into_u8(self);
+        fn try_into(self) -> Result<u8, Self::Error> {
+            return Self::try_into_u8(self);
         }
     }
-    const impl ::core::convert::TryInto<u16> for PageHeader {
+    const impl TryInto<u16> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
-            return PageHeader::try_into_u16(self);
+        fn try_into(self) -> Result<u16, Self::Error> {
+            return Self::try_into_u16(self);
         }
     }
-    const impl ::core::convert::TryInto<i8> for PageHeader {
+    const impl TryInto<i8> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
-            return PageHeader::try_into_i8(self);
+        fn try_into(self) -> Result<i8, Self::Error> {
+            return Self::try_into_i8(self);
         }
     }
-    const impl ::core::convert::TryInto<i16> for PageHeader {
+    const impl TryInto<i16> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
-            return PageHeader::try_into_i16(self);
+        fn try_into(self) -> Result<i16, Self::Error> {
+            return Self::try_into_i16(self);
         }
     }
-    const impl ::core::convert::TryInto<i32> for PageHeader {
+    const impl TryInto<i32> for PageHeader {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
-            return PageHeader::try_into_i32(self);
+        fn try_into(self) -> Result<i32, Self::Error> {
+            return Self::try_into_i32(self);
         }
     }
-    const impl ::core::ops::Shr<usize> for PageHeader {
+    const impl core::ops::Shr<usize> for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn shr(
@@ -1020,7 +981,7 @@ const _: () = {
             return self._shr(rhs);
         }
     }
-    const impl ::core::ops::Shl<usize> for PageHeader {
+    const impl core::ops::Shl<usize> for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn shl(
@@ -1030,7 +991,7 @@ const _: () = {
             return self._shl(rhs);
         }
     }
-    const impl ::core::ops::ShrAssign<usize> for PageHeader {
+    const impl core::ops::ShrAssign<usize> for PageHeader {
         #[inline(always)]
         fn shr_assign(
             &mut self,
@@ -1039,7 +1000,7 @@ const _: () = {
             *self = self._shr(other);
         }
     }
-    const impl ::core::ops::ShlAssign<usize> for PageHeader {
+    const impl core::ops::ShlAssign<usize> for PageHeader {
         #[inline(always)]
         fn shl_assign(
             &mut self,
@@ -1048,7 +1009,7 @@ const _: () = {
             *self = self._shl(other);
         }
     }
-    const impl ::core::ops::BitAndAssign for PageHeader {
+    const impl core::ops::BitAndAssign for PageHeader {
         #[inline(always)]
         fn bitand_assign(
             &mut self,
@@ -1057,9 +1018,9 @@ const _: () = {
             *self = self._bitand(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitAndAssign<T> for PageHeader
+    const impl<T> core::ops::BitAndAssign<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn bitand_assign(
@@ -1070,7 +1031,7 @@ const _: () = {
             *self = self._bitand(it);
         }
     }
-    const impl ::core::ops::AddAssign for PageHeader {
+    const impl core::ops::AddAssign for PageHeader {
         #[inline(always)]
         fn add_assign(
             &mut self,
@@ -1079,9 +1040,9 @@ const _: () = {
             *self = self._add(rhs.0);
         }
     }
-    const impl<T> ::core::ops::AddAssign<T> for PageHeader
+    const impl<T> core::ops::AddAssign<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn add_assign(
@@ -1092,7 +1053,7 @@ const _: () = {
             *self = self._add(it);
         }
     }
-    const impl ::core::ops::SubAssign for PageHeader {
+    const impl core::ops::SubAssign for PageHeader {
         #[inline(always)]
         fn sub_assign(
             &mut self,
@@ -1101,9 +1062,9 @@ const _: () = {
             *self = self._sub(rhs.0);
         }
     }
-    const impl<T> ::core::ops::SubAssign<T> for PageHeader
+    const impl<T> core::ops::SubAssign<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn sub_assign(
@@ -1114,7 +1075,7 @@ const _: () = {
             *self = self._sub(it);
         }
     }
-    const impl ::core::ops::MulAssign for PageHeader {
+    const impl core::ops::MulAssign for PageHeader {
         #[inline(always)]
         fn mul_assign(
             &mut self,
@@ -1123,9 +1084,9 @@ const _: () = {
             *self = self._mul(rhs.0);
         }
     }
-    const impl<T> ::core::ops::MulAssign<T> for PageHeader
+    const impl<T> core::ops::MulAssign<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn mul_assign(
@@ -1136,7 +1097,7 @@ const _: () = {
             *self = self._mul(it);
         }
     }
-    const impl ::core::ops::DivAssign for PageHeader {
+    const impl core::ops::DivAssign for PageHeader {
         #[inline(always)]
         fn div_assign(
             &mut self,
@@ -1145,9 +1106,9 @@ const _: () = {
             *self = self._div(rhs.0);
         }
     }
-    const impl<T> ::core::ops::DivAssign<T> for PageHeader
+    const impl<T> core::ops::DivAssign<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn div_assign(
@@ -1158,7 +1119,7 @@ const _: () = {
             *self = self._div(it);
         }
     }
-    const impl ::core::ops::RemAssign for PageHeader {
+    const impl core::ops::RemAssign for PageHeader {
         #[inline(always)]
         fn rem_assign(
             &mut self,
@@ -1167,9 +1128,9 @@ const _: () = {
             *self = self._rem(rhs.0);
         }
     }
-    const impl<T> ::core::ops::RemAssign<T> for PageHeader
+    const impl<T> core::ops::RemAssign<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn rem_assign(
@@ -1180,7 +1141,7 @@ const _: () = {
             *self = self._rem(it);
         }
     }
-    const impl ::core::ops::BitOrAssign for PageHeader {
+    const impl core::ops::BitOrAssign for PageHeader {
         #[inline(always)]
         fn bitor_assign(
             &mut self,
@@ -1189,9 +1150,9 @@ const _: () = {
             *self = self._bitor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitOrAssign<T> for PageHeader
+    const impl<T> core::ops::BitOrAssign<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn bitor_assign(
@@ -1202,45 +1163,42 @@ const _: () = {
             *self = self._bitor(it);
         }
     }
-    impl ::core::fmt::Debug for PageHeader {
+    impl core::fmt::Debug for PageHeader {
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             return f.debug_tuple("PageHeader").field(&self.0).finish();
         }
     }
-    impl ::core::hash::Hash for PageHeader {
+    impl core::hash::Hash for PageHeader {
         #[inline(always)]
         fn hash<H>(
             &self,
             state: &mut H,
         ) where
-            H: ::core::hash::Hasher,
+            H: core::hash::Hasher,
         {
-            return ::core::hash::Hash::hash(&self.0, state);
+            return core::hash::Hash::hash(&self.0, state);
         }
     }
-    const impl ::core::cmp::Eq for PageHeader {}
-    const impl ::core::cmp::Ord for PageHeader {
+    const impl Eq for PageHeader {}
+    const impl Ord for PageHeader {
         #[inline(always)]
         fn cmp(
             &self,
             other: &Self,
-        ) -> ::core::cmp::Ordering {
+        ) -> core::cmp::Ordering {
             return self.partial_cmp(other).unwrap();
         }
     }
-    if !(::core::mem::size_of::<PageHeader>() == ::core::mem::size_of::<u32>())
-    {
-        ::core::panic!("invalid integral storage size");
+    if !(size_of::<PageHeader>() == size_of::<u32>()) {
+        core::panic!("invalid integral storage size");
     };
-    if !(::core::mem::align_of::<PageHeader>()
-        == ::core::mem::align_of::<u32>())
-    {
-        ::core::panic!("invalid integral storage alignment");
+    if !(align_of::<PageHeader>() == align_of::<u32>()) {
+        core::panic!("invalid integral storage alignment");
     };
-    const impl ::core::ops::Add for PageHeader {
+    const impl core::ops::Add for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn add(
@@ -1250,9 +1208,9 @@ const _: () = {
             return self._add(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Add<T> for PageHeader
+    const impl<T> core::ops::Add<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1264,7 +1222,7 @@ const _: () = {
             return self._add(it);
         }
     }
-    const impl ::core::ops::Sub for PageHeader {
+    const impl core::ops::Sub for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn sub(
@@ -1274,9 +1232,9 @@ const _: () = {
             return self._sub(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Sub<T> for PageHeader
+    const impl<T> core::ops::Sub<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1288,7 +1246,7 @@ const _: () = {
             return self._sub(it);
         }
     }
-    const impl ::core::ops::Mul for PageHeader {
+    const impl core::ops::Mul for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn mul(
@@ -1298,9 +1256,9 @@ const _: () = {
             return self._mul(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Mul<T> for PageHeader
+    const impl<T> core::ops::Mul<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1312,7 +1270,7 @@ const _: () = {
             return self._mul(it);
         }
     }
-    const impl ::core::ops::Div for PageHeader {
+    const impl core::ops::Div for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn div(
@@ -1322,9 +1280,9 @@ const _: () = {
             return self._div(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Div<T> for PageHeader
+    const impl<T> core::ops::Div<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1336,7 +1294,7 @@ const _: () = {
             return self._div(it);
         }
     }
-    const impl ::core::ops::Rem for PageHeader {
+    const impl core::ops::Rem for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn rem(
@@ -1346,9 +1304,9 @@ const _: () = {
             return self._rem(rhs.0);
         }
     }
-    const impl<T> ::core::ops::Rem<T> for PageHeader
+    const impl<T> core::ops::Rem<T> for PageHeader
     where
-        T: Math + [const] Seal + [const] ::core::marker::Destruct,
+        T: Math + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1360,7 +1318,7 @@ const _: () = {
             return self._rem(it);
         }
     }
-    const impl ::core::ops::BitAnd for PageHeader {
+    const impl core::ops::BitAnd for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn bitand(
@@ -1370,9 +1328,9 @@ const _: () = {
             return self._bitand(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitAnd<T> for PageHeader
+    const impl<T> core::ops::BitAnd<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1384,7 +1342,7 @@ const _: () = {
             return self._bitand(it);
         }
     }
-    const impl ::core::ops::BitOr for PageHeader {
+    const impl core::ops::BitOr for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn bitor(
@@ -1394,9 +1352,9 @@ const _: () = {
             return self._bitor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitOr<T> for PageHeader
+    const impl<T> core::ops::BitOr<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1408,7 +1366,7 @@ const _: () = {
             return self._bitor(it);
         }
     }
-    const impl ::core::ops::BitXor for PageHeader {
+    const impl core::ops::BitXor for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn bitxor(
@@ -1418,7 +1376,7 @@ const _: () = {
             return self._bitxor(rhs.0);
         }
     }
-    const impl ::core::ops::BitXorAssign for PageHeader {
+    const impl core::ops::BitXorAssign for PageHeader {
         #[inline(always)]
         fn bitxor_assign(
             &mut self,
@@ -1427,9 +1385,9 @@ const _: () = {
             *self = self._bitxor(rhs.0);
         }
     }
-    const impl<T> ::core::ops::BitXor<T> for PageHeader
+    const impl<T> core::ops::BitXor<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         type Output = Self;
         #[inline(always)]
@@ -1441,9 +1399,9 @@ const _: () = {
             return self._bitxor(it);
         }
     }
-    const impl<T> ::core::ops::BitXorAssign<T> for PageHeader
+    const impl<T> core::ops::BitXorAssign<T> for PageHeader
     where
-        T: Bit + [const] Seal + [const] ::core::marker::Destruct,
+        T: Bit + [const] Seal + [const] core::marker::Destruct,
     {
         #[inline(always)]
         fn bitxor_assign(
@@ -1454,59 +1412,56 @@ const _: () = {
             *self = self._bitxor(it);
         }
     }
-    const impl ::core::ops::Not for PageHeader {
+    const impl core::ops::Not for PageHeader {
         type Output = Self;
         #[inline(always)]
         fn not(self) -> Self::Output {
             return self._not();
         }
     }
-    impl ::core::fmt::Binary for PageHeader {
+    impl core::fmt::Binary for PageHeader {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::Binary::fmt(&raw, f);
+            return core::fmt::Binary::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::Octal for PageHeader {
+    impl core::fmt::Octal for PageHeader {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::Octal::fmt(&raw, f);
+            return core::fmt::Octal::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::LowerHex for PageHeader {
+    impl core::fmt::LowerHex for PageHeader {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::LowerHex::fmt(&raw, f);
+            return core::fmt::LowerHex::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::UpperHex for PageHeader {
+    impl core::fmt::UpperHex for PageHeader {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::UpperHex::fmt(&raw, f);
+            return core::fmt::UpperHex::fmt(&raw, f);
         }
     }
-    const impl<T> ::core::cmp::PartialEq<T> for PageHeader
+    const impl<T> PartialEq<T> for PageHeader
     where
-        T: Rel
-            + [const] Seal
-            + [const] ::core::marker::Destruct
-            + ::core::marker::Copy,
+        T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
     {
         #[inline(always)]
         fn eq(
@@ -1518,21 +1473,18 @@ const _: () = {
             return lhs == rhs;
         }
     }
-    const impl<T> ::core::cmp::PartialOrd<T> for PageHeader
+    const impl<T> PartialOrd<T> for PageHeader
     where
-        T: Rel
-            + [const] Seal
-            + [const] ::core::marker::Destruct
-            + ::core::marker::Copy,
+        T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
     {
         #[inline(always)]
         fn partial_cmp(
             &self,
             rhs: &T,
-        ) -> ::core::option::Option<::core::cmp::Ordering> {
+        ) -> Option<core::cmp::Ordering> {
             let lhs = Self::raw(*self);
             let rhs = Seal::conv_page_header(*rhs);
-            return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
+            return PartialOrd::partial_cmp(&lhs, &rhs);
         }
     }
     impl PageHeader {
@@ -1540,7 +1492,7 @@ const _: () = {
         #[allow(private_bounds)]
         pub const fn of<T>(it: T) -> PageHeader
         where
-            T: [const] Make + [const] ::core::marker::Destruct,
+            T: [const] Make + [const] core::marker::Destruct,
         {
             return <T as Make>::make(it);
         }
@@ -1599,18 +1551,12 @@ const _: () = {
         pub const fn try_map<F>(
             self,
             function: F,
-        ) -> ::core::result::Result<Self, u32>
+        ) -> Result<Self, u32>
         where
-            F: [const] ::core::ops::FnOnce(u32) -> u32
-                + [const] ::core::marker::Destruct,
+            F: [const] FnOnce(u32) -> u32 + [const] core::marker::Destruct,
         {
             let value = function(Self::raw(self));
-            return if true {
-                ::core::result::Result::Ok(Self(value))
-            }
-            else {
-                ::core::result::Result::Err(value)
-            };
+            return { Ok(Self(value)) };
         }
         #[inline(always)]
         #[track_caller]
@@ -1619,125 +1565,92 @@ const _: () = {
             function: F,
         ) -> Self
         where
-            F: [const] ::core::ops::FnOnce(u32) -> u32
-                + [const] ::core::marker::Destruct,
+            F: [const] FnOnce(u32) -> u32 + [const] core::marker::Destruct,
         {
             return match self.try_map(function) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(_) => {
-                    ::core::panic!(
-                        "mapping operation produced an invalid value"
-                    )
+                Ok(value) => value,
+                Err(_) => {
+                    core::panic!("mapping operation produced an invalid value")
                 }
             };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_usize(self) -> ::core::result::Result<usize, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as usize);
+        pub const fn try_into_usize(self) -> Result<usize, ()> {
+            return Ok(Self::raw(self) as usize);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u32(self) -> ::core::result::Result<u32, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as u32);
+        pub const fn try_into_u32(self) -> Result<u32, ()> {
+            return Ok(Self::raw(self) as u32);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u64(self) -> ::core::result::Result<u64, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as u64);
+        pub const fn try_into_u64(self) -> Result<u64, ()> {
+            return Ok(Self::raw(self) as u64);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u128(self) -> ::core::result::Result<u128, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as u128);
+        pub const fn try_into_u128(self) -> Result<u128, ()> {
+            return Ok(Self::raw(self) as u128);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i64(self) -> ::core::result::Result<i64, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as i64);
+        pub const fn try_into_i64(self) -> Result<i64, ()> {
+            return Ok(Self::raw(self) as i64);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i128(self) -> ::core::result::Result<i128, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as i128);
+        pub const fn try_into_i128(self) -> Result<i128, ()> {
+            return Ok(Self::raw(self) as i128);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_isize(self) -> ::core::result::Result<isize, ()> {
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
             let r = Self::raw(self);
             let t = r as isize;
             let s = t as u32;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u8(self) -> ::core::result::Result<u8, ()> {
+        pub const fn try_into_u8(self) -> Result<u8, ()> {
             let r = Self::raw(self);
             let t = r as u8;
             let s = t as u32;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u16(self) -> ::core::result::Result<u16, ()> {
+        pub const fn try_into_u16(self) -> Result<u16, ()> {
             let r = Self::raw(self);
             let t = r as u16;
             let s = t as u32;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i8(self) -> ::core::result::Result<i8, ()> {
+        pub const fn try_into_i8(self) -> Result<i8, ()> {
             let r = Self::raw(self);
             let t = r as i8;
             let s = t as u32;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i16(self) -> ::core::result::Result<i16, ()> {
+        pub const fn try_into_i16(self) -> Result<i16, ()> {
             let r = Self::raw(self);
             let t = r as i16;
             let s = t as u32;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i32(self) -> ::core::result::Result<i32, ()> {
+        pub const fn try_into_i32(self) -> Result<i32, ()> {
             let r = Self::raw(self);
             let t = r as i32;
             let s = t as u32;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         pub(self) const fn _add(
@@ -1851,9 +1764,9 @@ const _: () = {
         pub(self) fn _cmp(
             self,
             rhs: u32,
-        ) -> ::core::cmp::Ordering {
+        ) -> core::cmp::Ordering {
             let lhs = Self::raw(self);
-            return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
+            return PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
         }
         #[inline(always)]
         pub const fn try_make(it: u32) -> Result<Self, u32> {
@@ -1867,18 +1780,13 @@ const _: () = {
         #[inline(always)]
         #[track_caller]
         pub(self) const fn _core_int(value: u32) -> Self {
-            return Self(value);
+            {
+                return Self(value);
+            }
         }
         #[inline(always)]
-        pub(self) const fn _core_int_checked(
-            value: u32
-        ) -> ::core::option::Option<Self> {
-            return if true {
-                ::core::option::Option::Some(Self(value))
-            }
-            else {
-                ::core::option::Option::None
-            };
+        pub(self) const fn _core_int_checked(value: u32) -> Option<Self> {
+            return { Some(Self(value)) };
         }
     }
     #[allow(clippy::unnecessary_cast)]
@@ -1896,40 +1804,37 @@ const _: () = {
         #[must_use]
         #[inline(always)]
         pub const fn byte0(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 0usize)) & (0xFF as u32)) as u8;
+            return (Self::raw(self) >> 8 * 0usize & 0xFF as u32) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte1(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 1usize)) & (0xFF as u32)) as u8;
+            return (Self::raw(self) >> 8 * 1usize & 0xFF as u32) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte2(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 2usize)) & (0xFF as u32)) as u8;
+            return (Self::raw(self) >> 8 * 2usize & 0xFF as u32) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte3(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 3usize)) & (0xFF as u32)) as u8;
+            return (Self::raw(self) >> 8 * 3usize & 0xFF as u32) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word0(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 0usize)) & (0xFFFF as u32))
-                as u16;
+            return (Self::raw(self) >> 16 * 0usize & 0xFFFF as u32) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word1(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 1usize)) & (0xFFFF as u32))
-                as u16;
+            return (Self::raw(self) >> 16 * 1usize & 0xFFFF as u32) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn dword0(self) -> u32 {
-            return ((Self::raw(self) >> (32 * 0usize)) & (0xFFFFFFFF as u32))
-                as u32;
+            return (Self::raw(self) >> 32 * 0usize & 0xFFFFFFFF as u32) as u32;
         }
     }
 };

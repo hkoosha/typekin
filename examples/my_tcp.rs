@@ -13,35 +13,19 @@ impl Direction for In {}
 impl Direction for Out {}
 
 #[typekin::integral(
-    konst = none,
-    profile = circular {},
-    without = [
-        math_add,
-        self_friend_math_ops,
-        self_friend_math_bit,
-        self_friend_rel,
-        core_int,
-    ],
+    profile = circular,
+    without = math_add,
     out_type = Self::into_offset(_) -> SeqOffset<D>,
-    facets = [
-        circular {
-            with = math_add,
-            friends = Self::offset_raw(SeqOffset<D>) -> Math,
-            out_type = Self,
-        },
-    ],
+    facet = circular {
+        with = math_add,
+        friend = Self::offset_raw(SeqOffset<D>) -> Math,
+        out_type = Self,
+    },
 )]
 struct SeqPoint<D: Direction>(u32);
 
 #[typekin::integral(
-    konst = none,
     profile = circular { precedes = false },
-    without = [
-        self_friend_math_ops,
-        self_friend_math_bit,
-        self_friend_rel,
-        core_int,
-    ],
 )]
 struct SeqOffset<D: Direction>(i32);
 
@@ -90,10 +74,9 @@ fn sequence_arithmetic<D: Direction>() {
     assert_eq!(two - three, SeqOffset::<D>::make(-1));
     assert_eq!(max - min, SeqOffset::<D>::make(-1));
 
-    assert_eq!(core::mem::size_of::<SeqPoint<D>>(), 4);
-    assert_eq!(core::mem::align_of::<SeqPoint<D>>(),
-        core::mem::align_of::<u32>());
-    assert_eq!(core::mem::size_of::<SeqOffset<D>>(), 4);
+    assert_eq!(size_of::<SeqPoint<D>>(), 4);
+    assert_eq!(align_of::<SeqPoint<D>>(), align_of::<u32>());
+    assert_eq!(size_of::<SeqOffset<D>>(), 4);
 }
 
 fn main() {

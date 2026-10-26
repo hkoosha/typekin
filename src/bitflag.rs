@@ -1809,7 +1809,7 @@ impl Cfg {
             }
             "with" => self.parse_flags(rest, true)?,
             "without" => self.parse_flags(rest, false)?,
-            "friends" => {
+            "friend" => {
                 let friends = zz::one_or_list(rest)?.set();
                 self.friends = friends;
             }

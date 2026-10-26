@@ -44,7 +44,7 @@ fn trusted_empty_set_text(source: TrustEmptySetSource) -> String {
 
 #[typekin::text(
     domain = [],
-    friends = [
+    friend = [
         empty_set_text(EmptySetSource) -> Make,
         trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
     ],
@@ -95,7 +95,7 @@ impl TrustSlugSource {
 
 #[typekin::text(
     domain = ["draft", "published"],
-    friends = [
+    friend = [
         SlugSource::into_string(SlugSource) -> Make,
         TrustSlugSource::into_string(TrustSlugSource) -> unsafe,
     ],
@@ -111,7 +111,7 @@ struct FullyGeneratedText(String);
 struct ManuallyDerivedText(String);
 
 #[typekin::text(
-    friends = SlugSource::into_string(SlugSource) -> Make,
+    friend = SlugSource::into_string(SlugSource) -> Make,
     valid = is_slug,
 )]
 struct CallbackText(String);
@@ -122,7 +122,7 @@ struct CallbackChainText(String);
 #[typekin::text(domain = ["", "é"])]
 struct LiteralText(String);
 
-#[typekin::text(friends = self(Self) -> [Rel])]
+#[typekin::text(friend = self(Self) -> [Rel])]
 struct DisplayText(String);
 
 #[typekin::text(without = display)]
@@ -185,7 +185,7 @@ struct SerdeText(String);
 
 #[typekin::text(
     valid = is_slug,
-    friends = Self::into_inner(Self) -> [Rel, unsafe],
+    friend = Self::into_inner(Self) -> [Rel, unsafe],
 )]
 struct RelatedText(String);
 
@@ -202,7 +202,7 @@ fn trusted_text(source: TrustSource) -> String {
 
 #[typekin::text(
     domain = [],
-    friends = [
+    friend = [
         checked_text(CheckedSource) -> Make,
         trusted_text(TrustSource) -> [unsafe],
     ],
@@ -216,7 +216,7 @@ struct CallbackEmptyDomain(String);
 struct EmptyStringOnly(String);
 
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
 
@@ -1001,7 +1001,7 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod test_mutation_drop {
     use super::*;
     use std::cell::Cell;

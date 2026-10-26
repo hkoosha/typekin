@@ -1,7 +1,7 @@
 #[typekin::text(
     std = true,
     domain = ["draft", "published", "published-new", "archive", "-"],
-    friends = into_my_tag(MyHeadline<'_>) -> Make,
+    friend = into_my_tag(MyHeadline<'_>) -> Make,
 )]
 pub struct MyTag(String);
 

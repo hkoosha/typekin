@@ -1,6 +1,4 @@
 use crate::*;
-use std::error::Error;
-
 //noinspection RsConstantConditionIf
 fn assert_rejected(
     name: &str,
@@ -25,7 +23,7 @@ fn assert_rejected(
 }
 
 #[cfg(test)]
-#[cfg(feature = "slow_tests")]
+#[cfg(feature = "test_slow")]
 mod tests {
     use super::*;
 
@@ -61,7 +59,7 @@ mod tests {
     fn facet_cannot_select_non_zero_storage() {
         const SRC: &str = r#"
                 #[typekin::integral(
-                    facets = [
+                    facet = [
                         int {
                             with = non_zero,
                         },
@@ -188,7 +186,7 @@ mod tests {
 
                 #[typekin::integral(
                     konst = none,
-                    friends = into_u8(MakeSource) -> Make,
+                    friend = into_u8(MakeSource) -> Make,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -210,7 +208,7 @@ mod tests {
 
                 #[typekin::integral(
                     konst = none,
-                    friends = into_u8(BitSource) -> Bit,
+                    friend = into_u8(BitSource) -> Bit,
                 )]
                 #[repr(transparent)]
                 #[derive(Copy, Clone)]
@@ -321,6 +319,73 @@ mod tests {
     }
 
     #[test]
+    fn point_profile_has_no_point_addition() {
+        let source = "
+            #[typekin::integral(konst = none, profile = point {})]
+            struct Position(u8);
+
+            fn forbidden() {
+                let lhs = Position::make(1);
+                let rhs = Position::make(2);
+                let _ = lhs + rhs;
+            }
+        ";
+
+        assert_rejected("point-addition", "cannot add", source);
+    }
+
+    #[test]
+    fn point_profile_has_no_point_addition_assignment() {
+        let source = "
+            #[typekin::integral(konst = none, profile = point {})]
+            struct Position(u8);
+
+            fn forbidden() {
+                let mut lhs = Position::make(1);
+                let rhs = Position::make(2);
+                lhs += rhs;
+            }
+        ";
+
+        assert_rejected("point-addition-assignment", "AddAssign", source);
+    }
+
+    #[test]
+    fn point_profile_has_no_primitive_subtraction() {
+        let source = "
+            #[typekin::integral(konst = none, profile = point {})]
+            struct Position(u8);
+
+            fn forbidden() {
+                let position = Position::make(2);
+                let primitive = 1u8;
+                let _ = position - primitive;
+            }
+        ";
+
+        assert_rejected("point-primitive-subtraction", "u8: Math", source);
+    }
+
+    #[test]
+    fn point_profile_has_no_core_integer_helpers() {
+        let source = "
+            #[typekin::integral(konst = none, profile = point {})]
+            struct Position(u8);
+
+            fn forbidden() {
+                let position = Position::make(1);
+                let _ = position.count_ones();
+            }
+        ";
+
+        assert_rejected(
+            "point-core-integer-helpers",
+            "no method named `count_ones`",
+            source,
+        );
+    }
+
+    #[test]
     fn circular_profile_without_precedes_has_no_precedes_method() {
         const SRC: &str = r#"
                 #[typekin::integral(
@@ -408,23 +473,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn self_operators_do_not_use_friendship() {
-        const SRC: &str = r#"
-                #[typekin::integral(
-                    konst = none,
-                    friends = Number(Number) -> Math,
-                )]
-                #[repr(transparent)]
-                #[derive(Copy, Clone)]
-                struct Number(u8);
-            "#;
-        assert_rejected(
-            "self-operators-do-not-use-friendship",
-            "self math operations use `with_self_math`, not `friends`",
-            SRC,
-        );
-    }
 
     #[test]
     fn without_removes_from_str() {

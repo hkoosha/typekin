@@ -1,5 +1,4 @@
 use crate::*;
-use std::process::Command;
 
 fn assert_ok(
     name: &str,
@@ -12,7 +11,7 @@ fn assert_ok(
 
     let bin = dir.join("release").join(bin_name);
     build(opt_level, &bin_name, &dir);
-    exe("bin", Command::new(&bin));
+    exe("bin", std::process::Command::new(&bin));
 
     let (expected, unexpected) = match must_match {
         true => assert_match(&bin, operations),
@@ -30,7 +29,7 @@ fn assert_ok(
 }
 
 #[cfg(test)]
-#[cfg(feature = "slow_tests")]
+#[cfg(feature = "test_slow")]
 mod tests {
     use super::*;
 

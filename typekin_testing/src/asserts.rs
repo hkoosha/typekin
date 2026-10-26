@@ -1,5 +1,8 @@
-use crate::asm;
 use crate::ops::Operation;
+use crate::{
+    asm,
+    compile,
+};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::path::Path;
@@ -123,6 +126,12 @@ pub fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
     assert!(result.is_err());
 }
 
+pub fn unsafe_assert_panics<T>(f: impl FnOnce() -> T) {
+    assert_panics(std::panic::AssertUnwindSafe(f))
+}
+
+pub fn accepts_copy_clone<T: Copy + Clone>() {}
+
 pub fn accepts_ord<T: Ord>() {}
 
 pub fn accepts_eq<T: Eq>() {}
@@ -134,3 +143,16 @@ pub fn accepts_copy<T: Copy>() {}
 pub fn accepts_clone<T: Clone>() {}
 
 pub fn accepts_debug<T: Debug>() {}
+
+pub fn assert_crate_compiles(
+    name: &str,
+    dependencies: &str,
+    source: &str,
+) {
+    let output = compile(name, dependencies, source, true);
+    assert!(
+        output.status.success(),
+        "failed, {name}:\n{}",
+        output.stderr
+    );
+}

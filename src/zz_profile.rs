@@ -236,12 +236,18 @@ pub(crate) struct Wrapping {
     settings: IntSettings,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct Point {
+    settings: IntSettings,
+}
+
 #[derive(Clone)]
 pub(crate) enum Profile {
     Int(Int),
     Circular(Circular),
     Sequential(Sequential),
     Wrapping(Wrapping),
+    Point(Point),
 }
 
 impl Profile {
@@ -251,6 +257,7 @@ impl Profile {
             "circular" => Self::Circular(Circular::default()),
             "sequential" => Self::Sequential(Sequential::default()),
             "wrapping" => Self::Wrapping(Wrapping::default()),
+            "point" => Self::Point(Point::default()),
             _ => return it.fail("unknown profile"),
         };
 
@@ -280,12 +287,13 @@ impl Profile {
         return Ok(true);
     }
 
-    pub(crate) fn arithmetic(&self) -> Arithmetic {
+    pub(crate) fn arithmetic(&self) -> Option<Arithmetic> {
         return match self {
-            Self::Int { .. } => Arithmetic::Primitive,
-            Self::Circular { .. } => Arithmetic::PrimitiveWrapping,
-            Self::Sequential { .. } => Arithmetic::Checked,
-            Self::Wrapping { .. } => Arithmetic::WrapperWrapping,
+            Self::Int { .. } => Some(Arithmetic::Primitive),
+            Self::Circular { .. } => Some(Arithmetic::PrimitiveWrapping),
+            Self::Sequential { .. } => Some(Arithmetic::Checked),
+            Self::Wrapping { .. } => Some(Arithmetic::WrapperWrapping),
+            Self::Point { .. } => None,
         };
     }
 
@@ -302,7 +310,8 @@ impl Profile {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
-            | Self::Wrapping(Wrapping { settings, .. }) => settings,
+            | Self::Wrapping(Wrapping { settings, .. })
+            | Self::Point(Point { settings, .. }) => settings,
         };
     }
 
@@ -311,7 +320,8 @@ impl Profile {
             Self::Int(Int { settings, .. })
             | Self::Circular(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
-            | Self::Wrapping(Wrapping { settings, .. }) => settings,
+            | Self::Wrapping(Wrapping { settings, .. })
+            | Self::Point(Point { settings, .. }) => settings,
         };
     }
 
@@ -324,6 +334,7 @@ impl Profile {
             Self::Circular { .. } => profile_apply_circular(it),
             Self::Sequential { .. } => profile_apply_sequential(it),
             Self::Wrapping { .. } => {}
+            Self::Point { .. } => profile_apply_point(it),
         };
     }
 
@@ -339,6 +350,10 @@ impl Profile {
             Self::Sequential { .. } => {
                 IntegralFlags::restricted_math_flags().contains(&name)
             }
+            Self::Point { .. } => {
+                matches!(name, "math_add" | "assign_add")
+                    || IntegralFlags::restricted_math_flags().contains(&name)
+            }
             _ => false,
         };
     }
@@ -349,11 +364,13 @@ impl Parse for Profile {
         let name = input.parse::<Ident>()?;
         let mut profile = Self::from_name(name)?;
 
-        let content;
-        let _ = braced!(content in input);
-        zz::parse_inner(&content, |attr, rest| {
-            return profile.parse_attr(attr, rest);
-        })?;
+        if input.peek(syn::token::Brace) {
+            let content;
+            let _ = braced!(content in input);
+            zz::parse_inner(&content, |attr, rest| {
+                return profile.parse_attr(attr, rest);
+            })?;
+        }
 
         return Ok(profile);
     }
@@ -368,13 +385,27 @@ impl Profiles {
     }
 
     fn effective(&self) -> Option<&Profile> {
-        return self.0.last();
+        return self
+            .0
+            .iter()
+            .rev()
+            .find(|profile| profile.arithmetic().is_some());
     }
 
     pub(crate) fn arithmetic(&self) -> Arithmetic {
+        return self.arithmetic_or(Arithmetic::Primitive);
+    }
+
+    pub(crate) fn arithmetic_or(
+        &self,
+        fallback: Arithmetic,
+    ) -> Arithmetic {
         return self
-            .effective()
-            .map_or(Arithmetic::Primitive, Profile::arithmetic);
+            .0
+            .iter()
+            .rev()
+            .find_map(Profile::arithmetic)
+            .unwrap_or(fallback);
     }
 
     pub(crate) fn requires_wrapping_storage(&self) -> bool {
@@ -414,6 +445,12 @@ fn profile_apply_circular(it: &mut IntegralFlags) {
 
 fn profile_apply_sequential(it: &mut IntegralFlags) {
     profile_apply_restricted_math(it);
+}
+
+fn profile_apply_point(it: &mut IntegralFlags) {
+    profile_apply_restricted_math(it);
+    it.math_add = false;
+    it.assign_add = false;
 }
 
 fn profile_apply_restricted_math(it: &mut IntegralFlags) {
@@ -461,29 +498,31 @@ impl Parse for FacetCfg {
         let mut ty_out = None;
         let mut precedes_span = None;
 
-        let content;
-        let _ = braced!(content in input);
-        zz::parse_inner(&content, |attr, rest| {
-            if attr == "precedes" {
-                precedes_span = Some(rest.span());
-            }
-            if profile.parse_attr(attr, rest)? {
-                return Ok(true);
-            }
-
-            match attr {
-                "friends" => {
-                    // TODO unify friend config of int & flag,
-                    // and then unify friendship for everything
-                    // and finally unify this for everything:
-                    friends = Cfg::parse_friends_unexpanded(rest)?;
+        if input.peek(syn::token::Brace) {
+            let content;
+            let _ = braced!(content in input);
+            zz::parse_inner(&content, |attr, rest| {
+                if attr == "precedes" {
+                    precedes_span = Some(rest.span());
                 }
-                "out_type" => ty_out = Some(rest.parse()?),
-                _ => return Ok(false),
-            }
+                if profile.parse_attr(attr, rest)? {
+                    return Ok(true);
+                }
 
-            return Ok(true);
-        })?;
+                match attr {
+                    "friend" => {
+                        // TODO unify friend config of int & flag,
+                        // and then unify friendship for everything
+                        // and finally unify this for everything:
+                        friends = Cfg::parse_friends_unexpanded(rest)?;
+                    }
+                    "out_type" => ty_out = Some(rest.parse()?),
+                    _ => return Ok(false),
+                }
+
+                return Ok(true);
+            })?;
+        }
 
         return Ok(Self {
             profile: Profiles::one(profile),

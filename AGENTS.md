@@ -116,12 +116,14 @@ constness, and runtime cost as API behavior.
 - When making a breaking change, do not add compatibility checks, warnings,
   failures, migration code, or migration diagnostics for compatibility with the
   prior behavior unless explicitly asked to do so.
-- `friends` accepts one declaration directly or a bracketed list. Specifications
-  use `conversion(SourceType) -> Capability` or a bracketed capability list.
-  Integral can use `self(PrimitiveType)` for a direct primitive relation; there
-  is no `_` friend syntax and no standalone marker declaration. Constructor
-  friend selectors accept one type or a list of types. Do not restore the
-  obsolete `conv`/`cap` argument grammar.
+- `friend` configuration accepts one declaration directly or a bracketed list.
+  Specifications use `conversion(SourceType) -> Capability` or a bracketed
+  capability list. Integral can use `self(PrimitiveType)` for a direct primitive
+  relation; there is no `_` friend syntax and no standalone marker declaration.
+  Constructor friend selectors accept one type or a list of types. Do not
+  restore the obsolete `conv`/`cap` argument grammar.
+- `facet` accepts one declaration directly or a bracketed list. Profile and
+  facet bodies are optional when no settings are needed.
 - Keep emitted names and ordering deterministic. Use the existing primitive
   metadata and naming helpers rather than duplicating type tables.
 - Follow the established entry-point shape: parse configuration and item,

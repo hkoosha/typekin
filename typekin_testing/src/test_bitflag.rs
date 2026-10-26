@@ -1,8 +1,8 @@
 #[typekin::bitflag(
     with = display,
-    friends = self(u8) -> Bit,
+    friend = self(u8) -> Bit,
     integral = [
-        friends = self(u8) -> [Math, Rel],
+        friend = self(u8) -> [Math, Rel],
     ],
 )]
 #[repr(u8)]
@@ -216,12 +216,12 @@ const fn is_even(bits: u8) -> bool {
 
 #[repr(u8)]
 #[typekin::bitflag(
-    friends = [
+    friend = [
         trusted_bits(TrustBits) -> [Bit, unsafe],
         bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
     ],
     integral = [
-        friends = [
+        friend = [
             default_bits(DefaultBits) -> Make,
             checked_bits(CheckedBits) -> [Make],
             trusted_bits(TrustBits) -> [Bit, unsafe],
@@ -240,26 +240,17 @@ enum Flags {
 
 // =============================================================================
 
-fn assert_panics<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
-    std::panic::set_hook(Box::new(move |_| {}));
-    let result = std::panic::catch_unwind(f);
-    let _ = std::panic::take_hook();
-    assert!(result.is_err());
-}
-
-fn unsafe_assert_panics<T>(f: impl FnOnce() -> T) {
-    assert_panics(std::panic::AssertUnwindSafe(f))
-}
-
-fn accepts_copy_clone<T: Copy + Clone>() {}
-
-// =============================================================================
-
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod tests {
     use core::str::FromStr;
 
+    use super::*;
+    use crate::{
+        accepts_copy_clone,
+        assert_panics,
+        unsafe_assert_panics,
+    };
     use serde_test::{
         Compact,
         Configure,
@@ -268,8 +259,6 @@ mod tests {
         assert_de_tokens_error,
         assert_tokens,
     };
-
-    use super::*;
 
     #[test]
     fn value_empty() {
@@ -993,7 +982,7 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod display_native_values {
     #[typekin::bitflag(with = display)]
     #[repr(u32)]

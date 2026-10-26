@@ -8,7 +8,7 @@
 
 // VALUE:   0b00000000_00000000_00000000_00000000;
 // FORMAT:  ^ID......^ ^STATE.^ ^UNUSED^ ^DATA..^
-#[typekin::integral(konst = nightly, friends = [
+#[typekin::integral(konst = nightly, friend = [
     id_to_header(PageId) -> [Math, Rel],
     state_to_header(PageState) -> [Math, Rel],
     PageData::to_header(PageData) -> [Math, Rel],

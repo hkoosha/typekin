@@ -10,16 +10,17 @@
 #![feature(derive_const)]
 #![feature(negative_impls)]
 
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::path::Path;
-use std::process::Command;
-
+#[cfg(test)]
 pub mod alloc;
+#[cfg(test)]
 pub mod asm;
+#[cfg(test)]
 pub mod asserts;
+#[cfg(test)]
 pub mod dir;
+#[cfg(test)]
 pub mod ops;
+#[cfg(test)]
 pub mod proc;
 
 #[cfg(test)]
@@ -41,12 +42,16 @@ mod test_no_std;
 #[cfg(test)]
 mod test_text;
 
-pub use crate::alloc::*;
-pub use crate::asm::*;
-pub use crate::asserts::*;
-pub use crate::dir::*;
-pub use crate::ops::*;
-pub use crate::proc::*;
+#[cfg(test)]
+pub use crate::{
+    alloc::*,
+    asm::*,
+    asserts::*,
+    dir::*,
+    ops::*,
+    proc::*,
+};
 
+#[cfg(test)]
 #[global_allocator]
 static ALLOCATOR: ObservedAllocator = ObservedAllocator;

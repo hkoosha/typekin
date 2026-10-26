@@ -93,7 +93,7 @@ const fn accepts_ranged(_: u8) -> bool {
 
 #[typekin::integral(
     konst = nightly,
-    friends = self(u8) -> [Math, Rel],
+    friend = self(u8) -> [Math, Rel],
     valid = [is_even, is_not_fifty],
     domain = 2..=100,
 )]
@@ -101,7 +101,7 @@ struct Even(u8);
 
 #[typekin::integral(
     konst = nightly,
-    friends = [self(u8) -> [Math, Rel]],
+    friend = [self(u8) -> [Math, Rel]],
     domain = [2..=4, 8..10],
     valid = accepts_ranged,
 )]
@@ -237,7 +237,7 @@ const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
 
 #[typekin::integral(
     konst = nightly,
-    friends = self(u16) -> [Math, Rel],
+    friend = self(u16) -> [Math, Rel],
     get_raw = Self::value
 )]
 struct CustomRaw(u16);
@@ -247,7 +247,7 @@ struct Wide(u128);
 
 #[typekin::integral(
     konst = nightly,
-    friends = self(u8) -> [Math, unsafe],
+    friend = self(u8) -> [Math, unsafe],
     valid = is_even,
     domain = 2..=10,
 )]
@@ -259,7 +259,7 @@ const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
     konst = none,
     domain = 1..,
     profile = wrapping {},
-    friends = self(u8) -> unsafe,
+    friend = self(u8) -> unsafe,
 )]
 struct WrappingTrusted(u8);
 
@@ -292,7 +292,7 @@ fn bit_only_raw(source: BitOnlySource) -> u8 {
 }
 
 #[typekin::integral(
-    friends = [
+    friend = [
         default_raw(DefaultSource) -> Make,
         checked_raw(CheckedSource) -> [Make],
         trusted_raw(TrustSource) -> [Math, unsafe],
@@ -306,7 +306,7 @@ fn bit_only_raw(source: BitOnlySource) -> u8 {
 struct Number(u8);
 
 #[typekin::integral(
-    friends = [
+    friend = [
         self(TrustSelfNumber) -> unsafe,
         self(u8) -> unsafe,
     ],
@@ -443,7 +443,7 @@ struct ExplicitSelfOutput(u8);
 
 #[typekin::integral(
     konst = none,
-    profile = circular {},
+    profile = circular,
 )]
 struct CircularSequence(u8);
 
@@ -463,7 +463,7 @@ struct CircularExtended(u8);
 
 #[typekin::integral(
     konst = none,
-    profile = wrapping {},
+    profile = wrapping,
 )]
 struct WrappingSequence(u8);
 
@@ -485,7 +485,7 @@ const CONST_WRAPPING_RESULT: ConstWrappingSequence =
 
 #[typekin::integral(
     konst = none,
-    profile = sequential {},
+    profile = sequential,
 )]
 struct SequentialCounter(u8);
 
@@ -510,6 +510,63 @@ struct SequentialExtended(u8);
     ],
 )]
 struct LayeredProfiles(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = point,
+    out_type = Self::into_difference(_) -> i16,
+)]
+struct LinearPoint(i16);
+
+impl LinearPoint {
+    fn into_difference(self) -> i16 {
+        return self.raw();
+    }
+}
+
+#[typekin::integral(
+    konst = none,
+    profile = [sequential, point],
+    out_type = Self::into_difference(_) -> u8,
+)]
+struct CheckedPoint(u8);
+
+impl CheckedPoint {
+    fn into_difference(self) -> u8 {
+        return self.raw();
+    }
+}
+
+#[typekin::integral(
+    konst = none,
+    profile = [wrapping, point],
+    out_type = Self::into_difference(_) -> u8,
+)]
+struct WrappingPoint(u8);
+
+impl WrappingPoint {
+    fn into_difference(self) -> u8 {
+        return self.raw();
+    }
+}
+
+#[typekin::integral(
+    konst = none,
+    profile = [circular, point],
+    out_type = Self::into_difference(_) -> u8,
+    facet = point {
+        with = math_add,
+        friend = facet_offset_raw(FacetOffset) -> Math,
+        out_type = Self,
+    },
+)]
+pub struct SurfaceFacetPoint(u8);
+
+impl SurfaceFacetPoint {
+    fn into_difference(self) -> u8 {
+        return self.raw();
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct FacetResult(u8);
@@ -546,23 +603,23 @@ fn facet_wrapping_raw(value: FacetWrapping) -> u8 {
     konst = none,
     profile = circular {},
     out_type = FacetPoint::into_result(_) -> FacetResult,
-    facets = [
+    facet = [
         circular {
-            friends = facet_offset_raw(FacetOffset) -> Math,
+            friend = facet_offset_raw(FacetOffset) -> Math,
             out_type = Self,
         },
         sequential {
-            friends = facet_checked_raw(FacetChecked) -> Math,
+            friend = facet_checked_raw(FacetChecked) -> Math,
             without = math_sub,
             out_type = Self,
         },
         int {
-            friends = facet_bits_raw(FacetBits) -> Bit,
+            friend = facet_bits_raw(FacetBits) -> Bit,
             with = math_xor,
             out_type = Self,
         },
         wrapping {
-            friends = facet_wrapping_raw(FacetWrapping) -> Math,
+            friend = facet_wrapping_raw(FacetWrapping) -> Math,
             out_type = Self,
         },
     ],
@@ -584,9 +641,9 @@ const fn facet_const_offset_raw(value: FacetConstOffset) -> u8 {
 
 #[typekin::integral(
     konst = nightly,
-    facets = [
+    facet = [
         wrapping {
-            friends = facet_const_offset_raw(FacetConstOffset) -> Math,
+            friend = facet_const_offset_raw(FacetConstOffset) -> Math,
             without = math_sub,
         },
     ],
@@ -611,7 +668,7 @@ const fn facet_valid(value: u8) -> bool {
     valid = facet_valid,
     with = non_zero,
     out_type = FacetValidated::into_result(_) -> FacetValidatedResult,
-    facets = [
+    facet = [
         wrapping {
             with = self_math,
         },
@@ -629,7 +686,7 @@ impl FacetValidated {
 // ==============================================================================
 
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
     use core::cmp::Ordering;
@@ -796,6 +853,49 @@ mod tests {
         let mut assigned = ExplicitSelfOutput::make(2);
         assigned += ExplicitSelfOutput::make(3);
         assert_eq!(assigned.raw(), 5);
+    }
+
+    #[test]
+    fn linear_point_differences_use_the_explicit_output_type() {
+        let source = LinearPoint::make(12);
+        let origin = LinearPoint::make(5);
+        let forward: i16 = source - origin;
+        let backward: i16 = origin - source;
+
+        assert_eq!(forward, 7);
+        assert_eq!(backward, -7);
+        assert!(origin < source);
+    }
+
+    #[test]
+    fn checked_point_subtraction_rejects_underflow() {
+        let source = CheckedPoint::make(0);
+        let origin = CheckedPoint::make(1);
+
+        assert_panics(|| {
+            let _ = source - origin;
+        });
+    }
+
+    #[test]
+    fn wrapping_point_differences_keep_wrapping_storage() {
+        let source = WrappingPoint::make(0);
+        let origin = WrappingPoint::make(1);
+        let _storage: core::num::Wrapping<u8> = source.0;
+        let difference: u8 = source - origin;
+
+        assert_eq!(difference, u8::MAX);
+    }
+
+    #[test]
+    fn point_facet_preserves_root_wrapping_policy() {
+        let maximum = SurfaceFacetPoint::make(u8::MAX);
+        let offset = FacetOffset(1);
+        let wrapped = maximum + offset;
+        let restored = wrapped - offset;
+
+        assert_eq!(wrapped.raw(), 0);
+        assert_eq!(restored.raw(), maximum.raw());
     }
 
     #[test]

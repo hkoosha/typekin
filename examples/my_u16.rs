@@ -1,6 +1,6 @@
 #[typekin::integral(
     konst = none,
-    friends = self(u16) -> Math,
+    friend = self(u16) -> Math,
 )]
 pub struct MyU16(u16);
 

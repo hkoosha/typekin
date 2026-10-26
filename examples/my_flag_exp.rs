@@ -165,7 +165,7 @@ const _: () = {
             return MyFlags::_unchecked(raw);
         }
     }
-    impl ::core::convert::AsRef<u128> for MyFlags {
+    impl AsRef<u128> for MyFlags {
         #[inline(always)]
         fn as_ref(&self) -> &u128 {
             return &self.0;
@@ -199,11 +199,11 @@ const _: () = {
             return Self::raw(self).trailing_ones();
         }
         #[inline(always)]
-        pub const fn highest_one(self) -> ::core::option::Option<u32> {
+        pub const fn highest_one(self) -> Option<u32> {
             return Self::raw(self).highest_one();
         }
         #[inline(always)]
-        pub const fn lowest_one(self) -> ::core::option::Option<u32> {
+        pub const fn lowest_one(self) -> Option<u32> {
             return Self::raw(self).lowest_one();
         }
         #[inline(always)]
@@ -225,27 +225,27 @@ const _: () = {
         pub const fn checked_ilog(
             self,
             base: Self,
-        ) -> ::core::option::Option<u32> {
+        ) -> Option<u32> {
             return Self::raw(self).checked_ilog(Self::raw(base));
         }
         #[inline(always)]
-        pub const fn checked_ilog2(self) -> ::core::option::Option<u32> {
+        pub const fn checked_ilog2(self) -> Option<u32> {
             return Self::raw(self).checked_ilog2();
         }
         #[inline(always)]
-        pub const fn checked_ilog10(self) -> ::core::option::Option<u32> {
+        pub const fn checked_ilog10(self) -> Option<u32> {
             return Self::raw(self).checked_ilog10();
         }
         #[inline(always)]
-        pub const fn to_be_bytes(self) -> [u8; ::core::mem::size_of::<u128>()] {
+        pub const fn to_be_bytes(self) -> [u8; size_of::<u128>()] {
             return Self::raw(self).to_be_bytes();
         }
         #[inline(always)]
-        pub const fn to_le_bytes(self) -> [u8; ::core::mem::size_of::<u128>()] {
+        pub const fn to_le_bytes(self) -> [u8; size_of::<u128>()] {
             return Self::raw(self).to_le_bytes();
         }
         #[inline(always)]
-        pub const fn to_ne_bytes(self) -> [u8; ::core::mem::size_of::<u128>()] {
+        pub const fn to_ne_bytes(self) -> [u8; size_of::<u128>()] {
             return Self::raw(self).to_ne_bytes();
         }
     }
@@ -297,150 +297,122 @@ const _: () = {
             return Self::_core_int(u128::from_le(Self::raw(value)));
         }
         #[inline(always)]
-        pub const fn from_ne_bytes(
-            bytes: [u8; ::core::mem::size_of::<u128>()]
-        ) -> Self {
+        pub const fn from_ne_bytes(bytes: [u8; size_of::<u128>()]) -> Self {
             return Self::_core_int(u128::from_ne_bytes(bytes));
         }
         #[inline(always)]
-        pub const fn from_be_bytes(
-            bytes: [u8; ::core::mem::size_of::<u128>()]
-        ) -> Self {
+        pub const fn from_be_bytes(bytes: [u8; size_of::<u128>()]) -> Self {
             return Self::_core_int(u128::from_be_bytes(bytes));
         }
         #[inline(always)]
-        pub const fn from_le_bytes(
-            bytes: [u8; ::core::mem::size_of::<u128>()]
-        ) -> Self {
+        pub const fn from_le_bytes(bytes: [u8; size_of::<u128>()]) -> Self {
             return Self::_core_int(u128::from_le_bytes(bytes));
         }
         #[inline(always)]
         pub const fn checked_add(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_add(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_sub(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_sub(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
-        pub const fn checked_neg(self) -> ::core::option::Option<Self> {
+        pub const fn checked_neg(self) -> Option<Self> {
             return match Self::raw(self).checked_neg() {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_mul(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_mul(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_div(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_div(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_rem(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_rem(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_div_euclid(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_div_euclid(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_rem_euclid(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_rem_euclid(Self::raw(rhs)) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_shl(
             self,
             rhs: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_shl(rhs) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_shr(
             self,
             rhs: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_shr(rhs) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
         pub const fn checked_pow(
             self,
             exp: u32,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self).checked_pow(exp) {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
     }
@@ -827,14 +799,10 @@ const _: () = {
             return Self::_core_int(Self::raw(self).next_power_of_two());
         }
         #[inline(always)]
-        pub const fn checked_next_power_of_two(
-            self
-        ) -> ::core::option::Option<Self> {
+        pub const fn checked_next_power_of_two(self) -> Option<Self> {
             return match Self::raw(self).checked_next_power_of_two() {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
@@ -857,14 +825,12 @@ const _: () = {
         pub const fn checked_next_multiple_of(
             self,
             rhs: Self,
-        ) -> ::core::option::Option<Self> {
+        ) -> Option<Self> {
             return match Self::raw(self)
                 .checked_next_multiple_of(Self::raw(rhs))
             {
-                ::core::option::Option::Some(value) => {
-                    Self::_core_int_checked(value)
-                }
-                ::core::option::Option::None => ::core::option::Option::None,
+                Some(value) => Self::_core_int_checked(value),
+                None => None,
             };
         }
         #[inline(always)]
@@ -912,90 +878,90 @@ const _: () = {
             return (Self::_core_int(low), Self::_core_int(high));
         }
     }
-    impl ::core::convert::Into<u128> for MyFlags {
+    impl Into<u128> for MyFlags {
         #[inline(always)]
         fn into(self) -> u128 {
-            return MyFlags::into_u128(self);
+            return Self::into_u128(self);
         }
     }
-    impl ::core::convert::TryInto<usize> for MyFlags {
+    impl TryInto<usize> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<usize, Self::Error> {
-            return MyFlags::try_into_usize(self);
+        fn try_into(self) -> Result<usize, Self::Error> {
+            return Self::try_into_usize(self);
         }
     }
-    impl ::core::convert::TryInto<isize> for MyFlags {
+    impl TryInto<isize> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<isize, Self::Error> {
-            return MyFlags::try_into_isize(self);
+        fn try_into(self) -> Result<isize, Self::Error> {
+            return Self::try_into_isize(self);
         }
     }
-    impl ::core::convert::TryInto<u8> for MyFlags {
+    impl TryInto<u8> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u8, Self::Error> {
-            return MyFlags::try_into_u8(self);
+        fn try_into(self) -> Result<u8, Self::Error> {
+            return Self::try_into_u8(self);
         }
     }
-    impl ::core::convert::TryInto<u16> for MyFlags {
+    impl TryInto<u16> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u16, Self::Error> {
-            return MyFlags::try_into_u16(self);
+        fn try_into(self) -> Result<u16, Self::Error> {
+            return Self::try_into_u16(self);
         }
     }
-    impl ::core::convert::TryInto<u32> for MyFlags {
+    impl TryInto<u32> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u32, Self::Error> {
-            return MyFlags::try_into_u32(self);
+        fn try_into(self) -> Result<u32, Self::Error> {
+            return Self::try_into_u32(self);
         }
     }
-    impl ::core::convert::TryInto<u64> for MyFlags {
+    impl TryInto<u64> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<u64, Self::Error> {
-            return MyFlags::try_into_u64(self);
+        fn try_into(self) -> Result<u64, Self::Error> {
+            return Self::try_into_u64(self);
         }
     }
-    impl ::core::convert::TryInto<i8> for MyFlags {
+    impl TryInto<i8> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i8, Self::Error> {
-            return MyFlags::try_into_i8(self);
+        fn try_into(self) -> Result<i8, Self::Error> {
+            return Self::try_into_i8(self);
         }
     }
-    impl ::core::convert::TryInto<i16> for MyFlags {
+    impl TryInto<i16> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i16, Self::Error> {
-            return MyFlags::try_into_i16(self);
+        fn try_into(self) -> Result<i16, Self::Error> {
+            return Self::try_into_i16(self);
         }
     }
-    impl ::core::convert::TryInto<i32> for MyFlags {
+    impl TryInto<i32> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i32, Self::Error> {
-            return MyFlags::try_into_i32(self);
+        fn try_into(self) -> Result<i32, Self::Error> {
+            return Self::try_into_i32(self);
         }
     }
-    impl ::core::convert::TryInto<i64> for MyFlags {
+    impl TryInto<i64> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i64, Self::Error> {
-            return MyFlags::try_into_i64(self);
+        fn try_into(self) -> Result<i64, Self::Error> {
+            return Self::try_into_i64(self);
         }
     }
-    impl ::core::convert::TryInto<i128> for MyFlags {
+    impl TryInto<i128> for MyFlags {
         type Error = ();
         #[inline(always)]
-        fn try_into(self) -> ::core::result::Result<i128, Self::Error> {
-            return MyFlags::try_into_i128(self);
+        fn try_into(self) -> Result<i128, Self::Error> {
+            return Self::try_into_i128(self);
         }
     }
-    impl ::core::ops::Shr<usize> for MyFlags {
+    impl core::ops::Shr<usize> for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn shr(
@@ -1005,7 +971,7 @@ const _: () = {
             return self._shr(rhs);
         }
     }
-    impl ::core::ops::Shl<usize> for MyFlags {
+    impl core::ops::Shl<usize> for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn shl(
@@ -1015,7 +981,7 @@ const _: () = {
             return self._shl(rhs);
         }
     }
-    impl ::core::ops::ShrAssign<usize> for MyFlags {
+    impl core::ops::ShrAssign<usize> for MyFlags {
         #[inline(always)]
         fn shr_assign(
             &mut self,
@@ -1024,7 +990,7 @@ const _: () = {
             *self = self._shr(other);
         }
     }
-    impl ::core::ops::ShlAssign<usize> for MyFlags {
+    impl core::ops::ShlAssign<usize> for MyFlags {
         #[inline(always)]
         fn shl_assign(
             &mut self,
@@ -1033,7 +999,7 @@ const _: () = {
             *self = self._shl(other);
         }
     }
-    impl ::core::ops::BitAndAssign for MyFlags {
+    impl core::ops::BitAndAssign for MyFlags {
         #[inline(always)]
         fn bitand_assign(
             &mut self,
@@ -1042,7 +1008,7 @@ const _: () = {
             *self = self._bitand(rhs.0);
         }
     }
-    impl<T> ::core::ops::BitAndAssign<T> for MyFlags
+    impl<T> core::ops::BitAndAssign<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1055,7 +1021,7 @@ const _: () = {
             *self = self._bitand(it);
         }
     }
-    impl ::core::ops::AddAssign for MyFlags {
+    impl core::ops::AddAssign for MyFlags {
         #[inline(always)]
         fn add_assign(
             &mut self,
@@ -1064,7 +1030,7 @@ const _: () = {
             *self = self._add(rhs.0);
         }
     }
-    impl<T> ::core::ops::AddAssign<T> for MyFlags
+    impl<T> core::ops::AddAssign<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1077,7 +1043,7 @@ const _: () = {
             *self = self._add(it);
         }
     }
-    impl ::core::ops::SubAssign for MyFlags {
+    impl core::ops::SubAssign for MyFlags {
         #[inline(always)]
         fn sub_assign(
             &mut self,
@@ -1086,7 +1052,7 @@ const _: () = {
             *self = self._sub(rhs.0);
         }
     }
-    impl<T> ::core::ops::SubAssign<T> for MyFlags
+    impl<T> core::ops::SubAssign<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1099,7 +1065,7 @@ const _: () = {
             *self = self._sub(it);
         }
     }
-    impl ::core::ops::MulAssign for MyFlags {
+    impl core::ops::MulAssign for MyFlags {
         #[inline(always)]
         fn mul_assign(
             &mut self,
@@ -1108,7 +1074,7 @@ const _: () = {
             *self = self._mul(rhs.0);
         }
     }
-    impl<T> ::core::ops::MulAssign<T> for MyFlags
+    impl<T> core::ops::MulAssign<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1121,7 +1087,7 @@ const _: () = {
             *self = self._mul(it);
         }
     }
-    impl ::core::ops::DivAssign for MyFlags {
+    impl core::ops::DivAssign for MyFlags {
         #[inline(always)]
         fn div_assign(
             &mut self,
@@ -1130,7 +1096,7 @@ const _: () = {
             *self = self._div(rhs.0);
         }
     }
-    impl<T> ::core::ops::DivAssign<T> for MyFlags
+    impl<T> core::ops::DivAssign<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1143,7 +1109,7 @@ const _: () = {
             *self = self._div(it);
         }
     }
-    impl ::core::ops::RemAssign for MyFlags {
+    impl core::ops::RemAssign for MyFlags {
         #[inline(always)]
         fn rem_assign(
             &mut self,
@@ -1152,7 +1118,7 @@ const _: () = {
             *self = self._rem(rhs.0);
         }
     }
-    impl<T> ::core::ops::RemAssign<T> for MyFlags
+    impl<T> core::ops::RemAssign<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1165,7 +1131,7 @@ const _: () = {
             *self = self._rem(it);
         }
     }
-    impl ::core::ops::BitOrAssign for MyFlags {
+    impl core::ops::BitOrAssign for MyFlags {
         #[inline(always)]
         fn bitor_assign(
             &mut self,
@@ -1174,7 +1140,7 @@ const _: () = {
             *self = self._bitor(rhs.0);
         }
     }
-    impl<T> ::core::ops::BitOrAssign<T> for MyFlags
+    impl<T> core::ops::BitOrAssign<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1187,43 +1153,42 @@ const _: () = {
             *self = self._bitor(it);
         }
     }
-    impl ::core::fmt::Debug for MyFlags {
+    impl core::fmt::Debug for MyFlags {
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             return f.debug_tuple("MyFlags").field(&self.0).finish();
         }
     }
-    impl ::core::hash::Hash for MyFlags {
+    impl core::hash::Hash for MyFlags {
         #[inline(always)]
         fn hash<H>(
             &self,
             state: &mut H,
         ) where
-            H: ::core::hash::Hasher,
+            H: core::hash::Hasher,
         {
-            return ::core::hash::Hash::hash(&self.0, state);
+            return core::hash::Hash::hash(&self.0, state);
         }
     }
-    impl ::core::cmp::Eq for MyFlags {}
-    impl ::core::cmp::Ord for MyFlags {
+    impl Eq for MyFlags {}
+    impl Ord for MyFlags {
         #[inline(always)]
         fn cmp(
             &self,
             other: &Self,
-        ) -> ::core::cmp::Ordering {
+        ) -> core::cmp::Ordering {
             return self.partial_cmp(other).unwrap();
         }
     }
-    if !(::core::mem::size_of::<MyFlags>() == ::core::mem::size_of::<u128>()) {
-        ::core::panic!("invalid integral storage size");
+    if !(size_of::<MyFlags>() == size_of::<u128>()) {
+        core::panic!("invalid integral storage size");
     };
-    if !(::core::mem::align_of::<MyFlags>() == ::core::mem::align_of::<u128>())
-    {
-        ::core::panic!("invalid integral storage alignment");
+    if !(align_of::<MyFlags>() == align_of::<u128>()) {
+        core::panic!("invalid integral storage alignment");
     };
-    impl ::core::ops::Add for MyFlags {
+    impl core::ops::Add for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn add(
@@ -1233,7 +1198,7 @@ const _: () = {
             return self._add(rhs.0);
         }
     }
-    impl<T> ::core::ops::Add<T> for MyFlags
+    impl<T> core::ops::Add<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1247,7 +1212,7 @@ const _: () = {
             return self._add(it);
         }
     }
-    impl ::core::ops::Sub for MyFlags {
+    impl core::ops::Sub for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn sub(
@@ -1257,7 +1222,7 @@ const _: () = {
             return self._sub(rhs.0);
         }
     }
-    impl<T> ::core::ops::Sub<T> for MyFlags
+    impl<T> core::ops::Sub<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1271,7 +1236,7 @@ const _: () = {
             return self._sub(it);
         }
     }
-    impl ::core::ops::Mul for MyFlags {
+    impl core::ops::Mul for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn mul(
@@ -1281,7 +1246,7 @@ const _: () = {
             return self._mul(rhs.0);
         }
     }
-    impl<T> ::core::ops::Mul<T> for MyFlags
+    impl<T> core::ops::Mul<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1295,7 +1260,7 @@ const _: () = {
             return self._mul(it);
         }
     }
-    impl ::core::ops::Div for MyFlags {
+    impl core::ops::Div for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn div(
@@ -1305,7 +1270,7 @@ const _: () = {
             return self._div(rhs.0);
         }
     }
-    impl<T> ::core::ops::Div<T> for MyFlags
+    impl<T> core::ops::Div<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1319,7 +1284,7 @@ const _: () = {
             return self._div(it);
         }
     }
-    impl ::core::ops::Rem for MyFlags {
+    impl core::ops::Rem for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn rem(
@@ -1329,7 +1294,7 @@ const _: () = {
             return self._rem(rhs.0);
         }
     }
-    impl<T> ::core::ops::Rem<T> for MyFlags
+    impl<T> core::ops::Rem<T> for MyFlags
     where
         T: Math + Seal,
     {
@@ -1343,7 +1308,7 @@ const _: () = {
             return self._rem(it);
         }
     }
-    impl ::core::ops::BitAnd for MyFlags {
+    impl core::ops::BitAnd for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitand(
@@ -1353,7 +1318,7 @@ const _: () = {
             return self._bitand(rhs.0);
         }
     }
-    impl<T> ::core::ops::BitAnd<T> for MyFlags
+    impl<T> core::ops::BitAnd<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1367,7 +1332,7 @@ const _: () = {
             return self._bitand(it);
         }
     }
-    impl ::core::ops::BitOr for MyFlags {
+    impl core::ops::BitOr for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitor(
@@ -1377,7 +1342,7 @@ const _: () = {
             return self._bitor(rhs.0);
         }
     }
-    impl<T> ::core::ops::BitOr<T> for MyFlags
+    impl<T> core::ops::BitOr<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1391,7 +1356,7 @@ const _: () = {
             return self._bitor(it);
         }
     }
-    impl ::core::ops::BitXor for MyFlags {
+    impl core::ops::BitXor for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn bitxor(
@@ -1401,7 +1366,7 @@ const _: () = {
             return self._bitxor(rhs.0);
         }
     }
-    impl ::core::ops::BitXorAssign for MyFlags {
+    impl core::ops::BitXorAssign for MyFlags {
         #[inline(always)]
         fn bitxor_assign(
             &mut self,
@@ -1410,7 +1375,7 @@ const _: () = {
             *self = self._bitxor(rhs.0);
         }
     }
-    impl<T> ::core::ops::BitXor<T> for MyFlags
+    impl<T> core::ops::BitXor<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1424,7 +1389,7 @@ const _: () = {
             return self._bitxor(it);
         }
     }
-    impl<T> ::core::ops::BitXorAssign<T> for MyFlags
+    impl<T> core::ops::BitXorAssign<T> for MyFlags
     where
         T: Bit + Seal,
     {
@@ -1437,49 +1402,49 @@ const _: () = {
             *self = self._bitxor(it);
         }
     }
-    impl ::core::fmt::Binary for MyFlags {
+    impl core::fmt::Binary for MyFlags {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::Binary::fmt(&raw, f);
+            return core::fmt::Binary::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::Octal for MyFlags {
+    impl core::fmt::Octal for MyFlags {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::Octal::fmt(&raw, f);
+            return core::fmt::Octal::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::LowerHex for MyFlags {
+    impl core::fmt::LowerHex for MyFlags {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::LowerHex::fmt(&raw, f);
+            return core::fmt::LowerHex::fmt(&raw, f);
         }
     }
-    impl ::core::fmt::UpperHex for MyFlags {
+    impl core::fmt::UpperHex for MyFlags {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let raw = Self::raw(*self);
-            return ::core::fmt::UpperHex::fmt(&raw, f);
+            return core::fmt::UpperHex::fmt(&raw, f);
         }
     }
-    impl<T> ::core::cmp::PartialEq<T> for MyFlags
+    impl<T> PartialEq<T> for MyFlags
     where
-        T: Rel + Seal + ::core::marker::Copy,
+        T: Rel + Seal + Copy,
     {
         #[inline(always)]
         fn eq(
@@ -1491,18 +1456,18 @@ const _: () = {
             return lhs == rhs;
         }
     }
-    impl<T> ::core::cmp::PartialOrd<T> for MyFlags
+    impl<T> PartialOrd<T> for MyFlags
     where
-        T: Rel + Seal + ::core::marker::Copy,
+        T: Rel + Seal + Copy,
     {
         #[inline(always)]
         fn partial_cmp(
             &self,
             rhs: &T,
-        ) -> ::core::option::Option<::core::cmp::Ordering> {
+        ) -> Option<core::cmp::Ordering> {
             let lhs = Self::raw(*self);
             let rhs = Seal::conv_my_flags(*rhs);
-            return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
+            return PartialOrd::partial_cmp(&lhs, &rhs);
         }
     }
     impl MyFlags {
@@ -1534,17 +1499,12 @@ const _: () = {
         pub fn try_map<F>(
             self,
             function: F,
-        ) -> ::core::result::Result<Self, u128>
+        ) -> Result<Self, u128>
         where
-            F: ::core::ops::FnOnce(u128) -> u128,
+            F: FnOnce(u128) -> u128,
         {
             let value = function(Self::raw(self));
-            return if true {
-                ::core::result::Result::Ok(Self(value))
-            }
-            else {
-                ::core::result::Result::Err(value)
-            };
+            return { Ok(Self(value)) };
         }
         #[inline(always)]
         #[track_caller]
@@ -1553,164 +1513,107 @@ const _: () = {
             function: F,
         ) -> Self
         where
-            F: ::core::ops::FnOnce(u128) -> u128,
+            F: FnOnce(u128) -> u128,
         {
             return match self.try_map(function) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(_) => {
-                    ::core::panic!(
-                        "mapping operation produced an invalid value"
-                    )
+                Ok(value) => value,
+                Err(_) => {
+                    core::panic!("mapping operation produced an invalid value")
                 }
             };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u128(self) -> ::core::result::Result<u128, ()> {
-            return ::core::result::Result::Ok(Self::raw(self) as u128);
+        pub const fn try_into_u128(self) -> Result<u128, ()> {
+            return Ok(Self::raw(self) as u128);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_usize(self) -> ::core::result::Result<usize, ()> {
+        pub const fn try_into_usize(self) -> Result<usize, ()> {
             let r = Self::raw(self);
             let t = r as usize;
             let s = t as u128;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_isize(self) -> ::core::result::Result<isize, ()> {
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
             let r = Self::raw(self);
             let t = r as isize;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u8(self) -> ::core::result::Result<u8, ()> {
+        pub const fn try_into_u8(self) -> Result<u8, ()> {
             let r = Self::raw(self);
             let t = r as u8;
             let s = t as u128;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u16(self) -> ::core::result::Result<u16, ()> {
+        pub const fn try_into_u16(self) -> Result<u16, ()> {
             let r = Self::raw(self);
             let t = r as u16;
             let s = t as u128;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u32(self) -> ::core::result::Result<u32, ()> {
+        pub const fn try_into_u32(self) -> Result<u32, ()> {
             let r = Self::raw(self);
             let t = r as u32;
             let s = t as u128;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u64(self) -> ::core::result::Result<u64, ()> {
+        pub const fn try_into_u64(self) -> Result<u64, ()> {
             let r = Self::raw(self);
             let t = r as u64;
             let s = t as u128;
-            return if s == r && true {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i8(self) -> ::core::result::Result<i8, ()> {
+        pub const fn try_into_i8(self) -> Result<i8, ()> {
             let r = Self::raw(self);
             let t = r as i8;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i16(self) -> ::core::result::Result<i16, ()> {
+        pub const fn try_into_i16(self) -> Result<i16, ()> {
             let r = Self::raw(self);
             let t = r as i16;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i32(self) -> ::core::result::Result<i32, ()> {
+        pub const fn try_into_i32(self) -> Result<i32, ()> {
             let r = Self::raw(self);
             let t = r as i32;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i64(self) -> ::core::result::Result<i64, ()> {
+        pub const fn try_into_i64(self) -> Result<i64, ()> {
             let r = Self::raw(self);
             let t = r as i64;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i128(self) -> ::core::result::Result<i128, ()> {
+        pub const fn try_into_i128(self) -> Result<i128, ()> {
             let r = Self::raw(self);
             let t = r as i128;
             let s = t as u128;
-            return if s == r && t >= 0 {
-                ::core::result::Result::Ok(t)
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         pub(self) const fn _add(
@@ -1824,9 +1727,9 @@ const _: () = {
         pub(self) fn _cmp(
             self,
             rhs: u128,
-        ) -> ::core::cmp::Ordering {
+        ) -> core::cmp::Ordering {
             let lhs = Self::raw(self);
-            return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
+            return PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
         }
         #[inline(always)]
         pub const fn try_make(it: u128) -> Result<Self, u128> {
@@ -1840,18 +1743,13 @@ const _: () = {
         #[inline(always)]
         #[track_caller]
         pub(self) const fn _core_int(value: u128) -> Self {
-            return Self(value);
+            {
+                return Self(value);
+            }
         }
         #[inline(always)]
-        pub(self) const fn _core_int_checked(
-            value: u128
-        ) -> ::core::option::Option<Self> {
-            return if true {
-                ::core::option::Option::Some(Self(value))
-            }
-            else {
-                ::core::option::Option::None
-            };
+        pub(self) const fn _core_int_checked(value: u128) -> Option<Self> {
+            return { Some(Self(value)) };
         }
     }
     #[allow(clippy::unnecessary_cast)]
@@ -1869,166 +1767,158 @@ const _: () = {
         #[must_use]
         #[inline(always)]
         pub const fn byte0(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 0usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 0usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte1(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 1usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 1usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte2(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 2usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 2usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte3(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 3usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 3usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte4(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 4usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 4usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte5(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 5usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 5usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte6(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 6usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 6usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte7(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 7usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 7usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte8(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 8usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 8usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte9(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 9usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 9usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte10(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 10usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 10usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte11(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 11usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 11usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte12(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 12usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 12usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte13(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 13usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 13usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte14(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 14usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 14usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn byte15(self) -> u8 {
-            return ((Self::raw(self) >> (8 * 15usize)) & (0xFF as u128)) as u8;
+            return (Self::raw(self) >> 8 * 15usize & 0xFF as u128) as u8;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word0(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 0usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 0usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word1(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 1usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 1usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word2(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 2usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 2usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word3(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 3usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 3usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word4(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 4usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 4usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word5(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 5usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 5usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word6(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 6usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 6usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn word7(self) -> u16 {
-            return ((Self::raw(self) >> (16 * 7usize)) & (0xFFFF as u128))
-                as u16;
+            return (Self::raw(self) >> 16 * 7usize & 0xFFFF as u128) as u16;
         }
         #[must_use]
         #[inline(always)]
         pub const fn dword0(self) -> u32 {
-            return ((Self::raw(self) >> (32 * 0usize)) & (0xFFFFFFFF as u128))
+            return (Self::raw(self) >> 32 * 0usize & 0xFFFFFFFF as u128)
                 as u32;
         }
         #[must_use]
         #[inline(always)]
         pub const fn dword1(self) -> u32 {
-            return ((Self::raw(self) >> (32 * 1usize)) & (0xFFFFFFFF as u128))
+            return (Self::raw(self) >> 32 * 1usize & 0xFFFFFFFF as u128)
                 as u32;
         }
         #[must_use]
         #[inline(always)]
         pub const fn dword2(self) -> u32 {
-            return ((Self::raw(self) >> (32 * 2usize)) & (0xFFFFFFFF as u128))
+            return (Self::raw(self) >> 32 * 2usize & 0xFFFFFFFF as u128)
                 as u32;
         }
         #[must_use]
         #[inline(always)]
         pub const fn dword3(self) -> u32 {
-            return ((Self::raw(self) >> (32 * 3usize)) & (0xFFFFFFFF as u128))
+            return (Self::raw(self) >> 32 * 3usize & 0xFFFFFFFF as u128)
                 as u32;
         }
         #[must_use]
         #[inline(always)]
         pub const fn qword0(self) -> u64 {
-            return ((Self::raw(self) >> (64 * 0usize))
-                & (0xFFFFFFFFFFFFFFFF as u128)) as u64;
+            return (Self::raw(self) >> 64 * 0usize & 0xFFFFFFFFFFFFFFFF as u128)
+                as u64;
         }
         #[must_use]
         #[inline(always)]
         pub const fn qword1(self) -> u64 {
-            return ((Self::raw(self) >> (64 * 1usize))
-                & (0xFFFFFFFFFFFFFFFF as u128)) as u64;
+            return (Self::raw(self) >> 64 * 1usize & 0xFFFFFFFFFFFFFFFF as u128)
+                as u64;
         }
     }
     impl MyFlags {
@@ -2378,13 +2268,13 @@ const _: () = {
             *self = self.complemented();
         }
     }
-    impl ::core::convert::From<MyFlag> for MyFlags {
+    impl From<MyFlag> for MyFlags {
         #[inline(always)]
         fn from(flag: MyFlag) -> Self {
             return flag.into_value();
         }
     }
-    impl ::core::ops::Not for MyFlags {
+    impl core::ops::Not for MyFlags {
         type Output = Self;
         #[inline(always)]
         fn not(self) -> Self::Output {
@@ -2421,7 +2311,7 @@ const _: () = {
                 "A" => Some(MyFlag::A),
                 "B" => Some(MyFlag::B),
                 "C" => Some(MyFlag::C),
-                _ => ::core::option::Option::None,
+                _ => None,
             };
         }
         #[inline(always)]
@@ -2440,10 +2330,10 @@ const _: () = {
             #[allow(clippy::unnecessary_cast)]
             return MyFlags::from_bits_retain(
                 0 as u128
-                    | (MyFlag::Z as u128)
-                    | (MyFlag::A as u128)
-                    | (MyFlag::B as u128)
-                    | (MyFlag::C as u128),
+                    | MyFlag::Z as u128
+                    | MyFlag::A as u128
+                    | MyFlag::B as u128
+                    | MyFlag::C as u128,
             );
         }
         #[must_use]
@@ -2508,16 +2398,16 @@ const _: () = {
             return MyFlags::iter_defined_names();
         }
     }
-    impl ::core::fmt::Display for MyFlag {
+    impl core::fmt::Display for MyFlag {
         #[inline(always)]
         fn fmt(
             &self,
-            f: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
-            return ::core::fmt::Display::fmt(self.name(), f);
+            f: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
+            return core::fmt::Display::fmt(self.name(), f);
         }
     }
-    impl ::core::ops::Shr<usize> for MyFlag {
+    impl core::ops::Shr<usize> for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn shr(
@@ -2527,7 +2417,7 @@ const _: () = {
             return self.into_value() >> rhs;
         }
     }
-    impl ::core::ops::Shl<usize> for MyFlag {
+    impl core::ops::Shl<usize> for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn shl(
@@ -2537,7 +2427,7 @@ const _: () = {
             return self.into_value() << rhs;
         }
     }
-    impl<T> ::core::ops::BitAnd<T> for MyFlag
+    impl<T> core::ops::BitAnd<T> for MyFlag
     where
         T: FlagBit + FlagSeal,
     {
@@ -2553,7 +2443,7 @@ const _: () = {
                 .intersection(MyFlags::from_bits_retain(rhs));
         }
     }
-    impl<T> ::core::ops::BitOr<T> for MyFlag
+    impl<T> core::ops::BitOr<T> for MyFlag
     where
         T: FlagBit + FlagSeal,
     {
@@ -2567,7 +2457,7 @@ const _: () = {
             return self.into_value().union(MyFlags::from_bits_retain(rhs));
         }
     }
-    impl<T> ::core::ops::BitXor<T> for MyFlag
+    impl<T> core::ops::BitXor<T> for MyFlag
     where
         T: FlagBit + FlagSeal,
     {
@@ -2583,7 +2473,7 @@ const _: () = {
                 .symmetric_difference(MyFlags::from_bits_retain(rhs));
         }
     }
-    impl ::core::cmp::PartialEq<MyFlags> for MyFlag {
+    impl PartialEq<MyFlags> for MyFlag {
         #[inline(always)]
         fn eq(
             &self,
@@ -2592,16 +2482,16 @@ const _: () = {
             return self.raw() == rhs.raw();
         }
     }
-    impl ::core::cmp::PartialOrd<MyFlags> for MyFlag {
+    impl PartialOrd<MyFlags> for MyFlag {
         #[inline(always)]
         fn partial_cmp(
             &self,
             rhs: &MyFlags,
-        ) -> ::core::option::Option<::core::cmp::Ordering> {
+        ) -> Option<core::cmp::Ordering> {
             return self.raw().partial_cmp(&rhs.raw());
         }
     }
-    impl ::core::ops::Not for MyFlag {
+    impl core::ops::Not for MyFlag {
         type Output = MyFlags;
         #[inline(always)]
         fn not(self) -> Self::Output {
@@ -2611,7 +2501,7 @@ const _: () = {
     struct IterItems {
         index: usize,
     }
-    impl core::iter::Iterator for IterItems {
+    impl Iterator for IterItems {
         type Item = MyFlag;
         fn next(&mut self) -> Option<Self::Item> {
             let items = MyFlag::items();
@@ -2633,7 +2523,7 @@ const _: () = {
         value: MyFlags,
         index: usize,
     }
-    impl core::iter::Iterator for IterFlags {
+    impl Iterator for IterFlags {
         type Item = MyFlag;
         fn next(&mut self) -> Option<Self::Item> {
             let items = MyFlag::items();
@@ -2714,12 +2604,12 @@ const _: () = {
     }
     impl FlagBit for MyFlags {}
     impl FlagMake for MyFlags {}
-    impl ::core::fmt::Display for MyFlags {
+    impl core::fmt::Display for MyFlags {
         #[inline]
         fn fmt(
             &self,
-            formatter: &mut ::core::fmt::Formatter<'_>,
-        ) -> ::core::fmt::Result {
+            formatter: &mut core::fmt::Formatter<'_>,
+        ) -> core::fmt::Result {
             let mut remaining = self.bits();
             let mut first = true;
             let items = MyFlag::items();
@@ -2741,61 +2631,56 @@ const _: () = {
                 if !first {
                     formatter.write_str(" | ")?;
                 }
-                return ::core::fmt::Write::write_fmt(
+                return core::fmt::Write::write_fmt(
                     formatter,
-                    ::core::format_args!("0x{:x}", remaining as u128,),
+                    format_args!("0x{:x}", remaining as u128,),
                 );
             }
-            return ::core::result::Result::Ok(());
+            return Ok(());
         }
     }
-    impl ::core::str::FromStr for MyFlag {
+    impl core::str::FromStr for MyFlag {
         type Err = ();
         #[inline]
-        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
+        fn from_str(source: &str) -> Result<Self, Self::Err> {
             return Self::from_name(source.trim()).ok_or(());
         }
     }
-    impl ::core::str::FromStr for MyFlags {
+    impl core::str::FromStr for MyFlags {
         type Err = ();
         #[inline]
-        fn from_str(source: &str) -> ::core::result::Result<Self, Self::Err> {
+        fn from_str(source: &str) -> Result<Self, Self::Err> {
             let source = source.trim();
             let mut bits: u128 = 0;
             if !source.is_empty() {
                 for part in source.split('|') {
                     let part = part.trim();
                     if part.is_empty() {
-                        return ::core::result::Result::Err(());
+                        return Err(());
                     }
                     let value = if let Some(hex) = part.strip_prefix("0x") {
                         if hex.is_empty() {
-                            return ::core::result::Result::Err(());
+                            return Err(());
                         }
                         match <u128>::from_str_radix(hex, 16) {
-                            ::core::result::Result::Ok(value) => value as u128,
-                            ::core::result::Result::Err(_) => {
-                                return ::core::result::Result::Err(());
+                            Ok(value) => value as u128,
+                            Err(_) => {
+                                return Err(());
                             }
                         }
                     }
                     else {
                         match MyFlag::from_name(part) {
-                            ::core::option::Option::Some(flag) => flag.raw(),
-                            ::core::option::Option::None => {
-                                return ::core::result::Result::Err(());
+                            Some(flag) => flag.raw(),
+                            None => {
+                                return Err(());
                             }
                         }
                     };
                     bits |= value;
                 }
             }
-            return if true {
-                ::core::result::Result::Ok(Self(bits))
-            }
-            else {
-                ::core::result::Result::Err(())
-            };
+            return { Ok(Self(bits)) };
         }
     }
 };

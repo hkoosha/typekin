@@ -49,7 +49,7 @@ pub fn bitflag(
 /// - `maker`: Ident
 ///   Defaults: `of`
 ///   Name of generated constructor fn accepting friend instances for construction of Self..
-/// - `friends`: Path OR \[Path, ...]
+/// - `friend`: Path OR \[Path, ...]
 ///   Default: `[]`.
 ///   List of friends.
 /// - `mod`: `_` OR `self` OR Ident
@@ -71,7 +71,7 @@ pub fn text(
 ///   Value produced by friend conversions.
 ///
 /// Optional attributes:
-/// - `friends`: single `conversion(TySource) -> Capability` OR a list of.
+/// - `friend`: single `conversion(TySource) -> Capability` OR a list of.
 ///   Default: `[]`.
 ///   Declares friends, their conversion fn and their capabilities.
 /// - `scope`: `_` OR `self` OR Item.

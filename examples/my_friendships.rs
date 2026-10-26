@@ -13,7 +13,7 @@ fn convert_for_bit(it: Thing0) -> u128 {
 
 #[typekin::friends(
     relation = u128,
-    friends = [
+    friend = [
         convert_for_make(Thing0) -> [Make],
         convert_for_bit(Thing0) -> [Bit],
     ],

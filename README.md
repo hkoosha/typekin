@@ -73,9 +73,8 @@ to each other and how they interact. For example, if `PageId(u8)`,
 
 ```rust
 // The friend syntax is: CONVERSION_FN(FRIEND_TYPE) -> [CAPABILITY, ...].
-// Use _(FRIEND_TYPE) when no conversion callback is needed.
 // With no explicit capability, the default is assumed.
-#[typekin::integral(friends = [
+#[typekin::integral(friend = [
     id_to_header(PageId) -> [Math, Rel], 
     state_to_header(PageState),
     PageData::to_header(PageData),
@@ -122,7 +121,8 @@ fn main() {
 ### Example 2 - Friendship
 
 `friends` declares a conversion protocol. The conversion consumes its source,
-and `Target::of` passes the resulting relation to `Target::of_parts`:
+and `Target::of` passes the resulting relation to `Target::of_parts`. The
+`friend` argument accepts one conversion declaration or a bracketed list:
 
 ```rust
 
@@ -132,7 +132,7 @@ and `Target::of` passes the resulting relation to `Target::of_parts`:
     // `Source` is a friend of target`, it can participate in `Make` operations
     // That is, its value can be used to construct new Target instances.
     // The conversion happens by the function/method Source::into_relation
-    friends = Source::into_relation(Source) -> Make,
+    friend = Source::into_relation(Source) -> Make,
 )]
 struct Target(u8);
 
@@ -265,8 +265,8 @@ their attributes, bounds, defaults, and `where` clauses. The source must still
 have exactly one concrete primitive integer field, not a generic numeric field.
 For generic declarations that field must be private: Typekin appends one private
 `core::marker::PhantomData` tuple field per parameter, in declaration order, so
-direct tuple construction has a different arity. Use `make`, `try_make`, or
-`of` rather than the tuple constructor.
+direct tuple construction has a different arity. Use `make`, `try_make`, or `of`
+rather than the tuple constructor.
 
 Lifetime markers use `PhantomData<&'a ()>`, type markers use `PhantomData<T>`,
 and const parameters use private marker types with the declared const type.
@@ -282,8 +282,8 @@ selection still affects only field zero, and `raw()` returns the primitive even
 with `NonZero` or `Wrapping` storage. Friendship protocols and operator facets
 retain all generic arguments, so a friend of one instantiation is not implicitly
 a friend of another. Non-generic declarations acquire no marker fields. This
-generic support is specific to `integral`, not `text`, standalone `friends`,
-or `bitflag`.
+generic support is specific to `integral`, not `text`, standalone `friends`, or
+`bitflag`.
 
 ### Validation
 
@@ -424,10 +424,11 @@ Profiles select the ordinary arithmetic policy and default API surface:
 
 | Profile | Arithmetic | Ordering |
 | --- | --- | --- |
-| `int {}` | Primitive Rust arithmetic | Default `Ord` / `PartialOrd` behavior |
-| `sequential {}` | Checked; panics on overflow or underflow | Ordinary linear ordering |
-| `wrapping {}` | `Wrapping` arithmetic | Ordinary linear ordering |
-| `circular {}` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; optional `precedes` |
+| `int` | Primitive Rust arithmetic | Default `Ord` / `PartialOrd` behavior |
+| `sequential` | Checked; panics on overflow or underflow | Ordinary linear ordering |
+| `wrapping` | `Wrapping` arithmetic | Ordinary linear ordering |
+| `circular` | Primitive `wrapping_*` arithmetic | No `Ord` / `PartialOrd`; optional `precedes` |
+| `point` | Unchanged; primitive arithmetic when used alone | Unchanged |
 
 For `circular` and `sequential`, same-type `+`, `-`, and their assignments
 remain enabled. Primitive arithmetic, bitwise operators, shifts, `core_int`, and
@@ -435,6 +436,14 @@ bit access are disabled by default. `wrapping` retains the normal integral API
 surface. A profile body can use `with` and `without` to change its operation
 set; re-enabled arithmetic uses that profile's wrapping or checked policy.
 Bitwise operations retain ordinary bitwise semantics.
+
+`point` models positions rather than offsets. It uses the same restricted
+integer API as `circular` and `sequential`, additionally disables `+` and `+=`,
+and leaves subtraction enabled. Compose it with an arithmetic profile, such as
+`[circular, point]` or `[sequential, point]`. It preserves that profile's
+arithmetic, storage, ordering, and `precedes` setting. Configure `out_type` for
+point differences and explicit facets for point-plus-offset and
+point-minus-offset; the offset type and conversions are not inferred.
 
 `wrapping` stores its private field as `core::num::Wrapping<P>` and keeps
 ordinary `Ord` and `PartialOrd`. `circular` keeps primitive storage, removes
@@ -451,11 +460,18 @@ constructors are therefore unavailable when nonzero storage is selected.
 `profile` accepts one profile or an ordered list. Resolution starts from the
 default integral profile, then applies each profile's defaults and body in list
 order. Untouched settings carry forward, later settings win, and root-level
-`with` and `without` are applied last.
+`with` and `without` are applied last. The last arithmetic profile selects the
+arithmetic policy; a following `point` profile does not replace it.
 
-Facets select arithmetic and output conversion by the exact RHS type. Slots not
-claimed by an explicit facet use the root profile. A facet inherits root flags;
-use `with` to re-enable an operation disabled at the root:
+Empty bodies are optional for profiles and facets: `profile = circular`,
+`profile = [circular, point]`, and `facet = circular` use defaults. Keep braces
+for configuration, such as `circular { precedes = false }`.
+
+`facet` accepts one declaration directly or a bracketed list. Facets select
+arithmetic and output conversion by the exact RHS type. Slots not claimed by an
+explicit facet use the root profile. A facet inherits root flags; use `with` to
+re-enable an operation disabled at the root. A `point` facet also inherits root
+arithmetic because it does not select an arithmetic policy:
 
 ```rust
 mod sealed {
@@ -471,16 +487,14 @@ impl Direction for Out {}
 
 #[typekin::integral(
     konst = none,
-    profile = circular {},
+    profile = circular,
     without = math_add,
     out_type = Self::into_offset(_) -> SeqOffset<D>,
-    facets = [
-        circular {
-            with = math_add,
-            friends = Self::offset_raw(SeqOffset<D>) -> Math,
-            out_type = Self,
-        },
-    ],
+    facet = circular {
+        with = math_add,
+        friend = Self::offset_raw(SeqOffset<D>) -> Math,
+        out_type = Self,
+    },
 )]
 struct SeqPoint<D: Direction>(u32);
 
@@ -535,7 +549,7 @@ const fn is_valid(value: u32) -> bool { value != 0 }
 
 #[typekin::integral(
   konst = nightly,         // Enables all const flags.
-  friends = [
+  friend = [
     self(u16) -> Bit,      // Only bitwise operations, using `Into<u32>`
     Foo::to_u32(Foo),      // Omitted capabilities default to Math
   ],

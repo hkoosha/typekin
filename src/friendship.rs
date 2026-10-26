@@ -382,7 +382,7 @@ pub(crate) mod cfg {
                         }
                     }
                     "scope" => this.scope = Some(stream.parse()?),
-                    "friends" => {
+                    "friend" => {
                         for friend in one_or_list(stream)? {
                             if let Some(mut existing) =
                                 this.friends.take(&friend)

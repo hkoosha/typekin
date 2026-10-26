@@ -2,7 +2,7 @@ use crate::*;
 
 #[typekin::friends(
     relation = DocumentParts,
-    friends = [
+    friend = [
         document_parts(Self) -> [],
         reader_parts(Reader) -> [DocumentInspector],
         writer_parts(Writer) -> [DocumentInspector],
@@ -39,7 +39,7 @@ impl DocumentProtocol {
 #[typekin::friends(
     relation = DirectParts,
     scope = pub direct_friendship,
-    friends = [],
+    friend = [],
 )]
 pub struct Direct;
 
@@ -100,7 +100,7 @@ impl declared_document_protocol::DocumentDeclared for Reader {
 
 #[typekin::friends(
     relation = ::core::primitive::u128,
-    friends = [
+    friend = [
         make_parts(CapabilitySpecificSource) -> Make,
         bit_parts(CapabilitySpecificSource) -> Bit,
     ],
@@ -129,7 +129,7 @@ impl CapabilitySpecificTarget {
 #[typekin::friends(
     relation = ScopedDocumentParts,
     scope = pub scoped_document_protocol,
-    friends = scoped_document_parts(Self) -> [],
+    friend = scoped_document_parts(Self) -> [],
 )]
 pub struct ScopedDocument;
 
@@ -163,7 +163,7 @@ impl ConstDocument {
 #[typekin::friends(
     relation = String,
     mod = pub trusted_title_protocol,
-    friends = title_conversions::owned_title(OwnedTitle,) -> unsafe,
+    friend = title_conversions::owned_title(OwnedTitle,) -> unsafe,
 )]
 pub struct TrustDocument {
     title: String,
@@ -209,7 +209,7 @@ pub mod inspector_conversions {
     relation = String,
     mod = pub inspector_protocol,
     extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
-    friends = [
+    friend = [
         inspector_conversions::inspector_text(InspectorSource) -> [Inspect, unsafe],
     ],
 )]
@@ -285,7 +285,7 @@ where
         relation = SelfScopedParts,
         seal = SelfScopedSeal,
         scope = self,
-        friends = [],
+        friend = [],
 )]
 pub struct SelfScoped;
 
@@ -300,7 +300,7 @@ impl SelfScoped {
 // ==============================================================================
 
 #[cfg(test)]
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
 

@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 use crate::*;
 use core::marker::PhantomData;
 
@@ -6,18 +8,10 @@ struct NotTraits;
 #[typekin::integral(with = [display, serde, math_xor])]
 struct Tagged<T: ?Sized = NotTraits>(u32);
 
-#[typekin::integral(konst = none, with = [display, serde])]
-struct Mixed<
-    'de,
-    #[allow(unused)] T,
-    F,
-    H,
-    S,
-    D,
-    const SPACE: u8,
-    const FLAG: bool,
-    Meta = str,
->(u16)
+#[typekin::integral( with = [display, serde])]
+struct Mixed<'de, T, F, H, S, D, const SPACE: u8, const FLAG: bool, Meta = str>(
+    u16,
+)
 where
     T: ?Sized,
     Meta: ?Sized;
@@ -25,13 +19,13 @@ where
 type CollisionTagged<'a> =
     Mixed<'a, NotTraits, NotTraits, NotTraits, NotTraits, NotTraits, 7, true>;
 
-#[typekin::integral(konst = none)]
+#[typekin::integral]
 struct ConstTagged<const BYTE: u8 = 3, const SYMBOL: char = 'x'>(u32);
 
-#[typekin::integral(konst = none, domain = 1..)]
+#[typekin::integral( domain = 1..)]
 struct Positive<T>(u16);
 
-#[typekin::integral(konst = none, profile = wrapping {})]
+#[typekin::integral( profile = wrapping {})]
 struct Wrapped<T>(u8);
 
 #[typekin::integral(without = repr)]
@@ -48,7 +42,7 @@ const fn is_even(value: u32) -> bool {
     domain = 2..=100,
     valid = is_even,
     profile = wrapping {},
-    friends = [
+    friend = [
         Self::checked_raw(CheckedFriend<T>) -> Make,
         Self::trusted_raw(TrustedFriend<T>) -> [Make, unsafe],
         self(u32) -> [Math, Rel],
@@ -68,7 +62,6 @@ impl<T> Checked<T> {
 }
 
 #[typekin::integral(
-    konst = none,
     out_type = Self::into_tagged(_) -> Tagged<T>,
     with = math_xor,
 )]
@@ -84,11 +77,10 @@ trait OwnIdentity<T> {}
 struct OnlySelf;
 
 #[typekin::integral(
-    konst = none,
     profile = circular {},
-    facets = [
+    facet = [
         circular {
-            friends = Self::delta_raw(Tagged<T>) -> Math,
+            friend = Self::delta_raw(Tagged<T>) -> Math,
             out_type = Self,
         },
     ],
@@ -121,20 +113,17 @@ impl Direction for In {}
 impl Direction for Out {}
 
 #[typekin::integral(
-    konst = none,
-    profile = [int { without = math_add }, circular {}],
+    profile = [circular, point],
     out_type = Self::into_offset(_) -> Offset<'a, D, SPACE>,
-    facets = [
-        circular {
-            with = math_add,
-            friends = Self::offset_raw(Offset<'a, D, SPACE>) -> Math,
-            out_type = Self,
-        },
-    ],
+    facet = circular {
+        with = math_add,
+        friend = Self::offset_raw(Offset<'a, D, SPACE>) -> Math,
+        out_type = Self,
+    },
 )]
 struct Point<'a, D: Direction, const SPACE: u8>(u32);
 
-#[typekin::integral(konst = none, profile = circular { precedes = false })]
+#[typekin::integral( profile = circular { precedes = false })]
 struct Offset<'a, D: Direction, const SPACE: u8>(i32);
 
 impl<'a, D: Direction, const SPACE: u8> Point<'a, D, SPACE> {
@@ -163,22 +152,24 @@ const STABLE_CHECKED: Checked<NotTraits> = match Checked::try_make(4) {
 #[typekin::integral(
     konst = nightly,
     profile = circular {},
-    facets = [
+    facet = [
         circular {
-            friends = Tagged::raw(Tagged<T>) -> Math,
+            friend = Tagged::raw(Tagged<T>) -> Math,
         },
     ],
 )]
 struct ConstFacet<T>(u32);
 
-const CONST_FACET_RESULT: ConstFacet<NotTraits> =
-    ConstFacet::make(u32::MAX) + match Tagged::<NotTraits>::try_make(2) {
+const CONST_FACET_RESULT: ConstFacet<NotTraits> = ConstFacet::make(u32::MAX)
+    + match Tagged::<NotTraits>::try_make(2) {
         Ok(value) => value,
         Err(_) => panic!("valid generic value rejected"),
     };
 
-#[typekin::integral(konst = none)]
-struct ProtocolNames<Seal, Make, Math, Bit, Rel, UnsafeTrust, T, __TypekinT>(u8);
+#[typekin::integral]
+struct ProtocolNames<Seal, Make, Math, Bit, Rel, UnsafeTrust, T, __TypekinT>(
+    u8,
+);
 
 type CollisionProtocol = ProtocolNames<
     NotTraits,
@@ -191,12 +182,26 @@ type CollisionProtocol = ProtocolNames<
     NotTraits,
 >;
 
-#[cfg(feature = "fast_tests")]
+#[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
-    use core::mem::{align_of, align_of_val, size_of, size_of_val};
-    use serde_test::{Configure, Token, assert_de_tokens_error, assert_tokens};
-    use std::hash::{DefaultHasher, Hash, Hasher};
+    use core::mem::{
+        align_of,
+        align_of_val,
+        size_of,
+        size_of_val,
+    };
+    use serde_test::{
+        Configure,
+        Token,
+        assert_de_tokens_error,
+        assert_tokens,
+    };
+    use std::hash::{
+        DefaultHasher,
+        Hash,
+        Hasher,
+    };
 
     #[test]
     fn phantom_markers_do_not_require_copy_or_clone() {
@@ -305,8 +310,10 @@ mod tests {
         value.raw().hash(&mut expected);
         let _ = format!("{value:?}");
 
-        assert_eq!(format!("{value} {value:b} {value:o} {value:x} {value:X}"),
-            "42 101010 52 2a 2A");
+        assert_eq!(
+            format!("{value} {value:b} {value:o} {value:x} {value:X}"),
+            "42 101010 52 2a 2A"
+        );
         assert_eq!(actual.finish(), expected.finish());
         assert_eq!(value, equivalent);
         assert!(value < larger);
@@ -329,7 +336,8 @@ mod tests {
         let value = Checked::<NotTraits>::try_make(4).unwrap();
         assert_tokens(&value.readable(), &[Token::U32(4)]);
         assert_de_tokens_error::<Checked<NotTraits>>(
-            &[Token::U32(3)], "invalid value",
+            &[Token::U32(3)],
+            "invalid value",
         );
     }
 
@@ -348,7 +356,9 @@ mod tests {
         let invalid = CheckedFriend::<NotTraits>(3, PhantomData);
 
         assert_eq!(value.raw(), 4);
-        assert_panics(|| { let _ = Checked::<NotTraits>::of(invalid); });
+        assert_panics(|| {
+            let _ = Checked::<NotTraits>::of(invalid);
+        });
     }
 
     #[test]
@@ -395,8 +405,12 @@ mod tests {
         value >>= 1usize;
 
         assert_eq!(value.raw(), 4);
-        assert_panics(|| { let _ = two + 1u32; });
-        assert_panics(|| { let _ = two - two; });
+        assert_panics(|| {
+            let _ = two + 1u32;
+        });
+        assert_panics(|| {
+            let _ = two - two;
+        });
     }
 
     #[test]

@@ -54,7 +54,7 @@ mod sample {
 
     #[typekin::friends(
         relation = (u64, u8),
-        friends = [
+        friend = [
             Document::convert_me(Self) -> [],
             Reader::parts(Reader) -> [Make, Inspector],
             crate::folks::executor_parts(ExecXX) -> [],
