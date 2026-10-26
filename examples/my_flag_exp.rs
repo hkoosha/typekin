@@ -1504,7 +1504,7 @@ const _: () = {
             F: FnOnce(u128) -> u128,
         {
             let value = function(Self::raw(self));
-            return { Ok(Self(value)) };
+            return Ok(Self(value));
         }
         #[inline(always)]
         #[track_caller]
@@ -1749,7 +1749,7 @@ const _: () = {
         }
         #[inline(always)]
         pub(self) const fn _core_int_checked(value: u128) -> Option<Self> {
-            return { Some(Self(value)) };
+            return Some(Self(value));
         }
     }
     #[allow(clippy::unnecessary_cast)]
@@ -2680,7 +2680,7 @@ const _: () = {
                     bits |= value;
                 }
             }
-            return { Ok(Self(bits)) };
+            return Ok(Self(bits));
         }
     }
 };

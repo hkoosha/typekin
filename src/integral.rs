@@ -382,6 +382,31 @@ impl IntegralTarget {
 struct TargetSelf(TokenStream);
 
 impl syn::visit_mut::VisitMut for TargetSelf {
+    fn visit_expr_path_mut(
+        &mut self,
+        path: &mut syn::ExprPath,
+    ) {
+        syn::visit_mut::visit_expr_path_mut(self, path);
+        if path.qself.is_none()
+            && path.path.leading_colon.is_none()
+            && path
+                .path
+                .segments
+                .first()
+                .is_some_and(|it| it.ident == "Self")
+        {
+            if path.path.is_ident("Self") {
+                return;
+            }
+            let target = &self.0;
+            let tail = Path {
+                leading_colon: None,
+                segments: path.path.segments.iter().skip(1).cloned().collect(),
+            };
+            *path = parse_quote! { <#target>::#tail };
+        }
+    }
+
     fn visit_type_path_mut(
         &mut self,
         path: &mut syn::TypePath,
@@ -405,31 +430,6 @@ impl syn::visit_mut::VisitMut for TargetSelf {
                 let tail = &path.path;
                 parse_quote! { <#target>::#tail }
             };
-        }
-    }
-
-    fn visit_expr_path_mut(
-        &mut self,
-        path: &mut syn::ExprPath,
-    ) {
-        syn::visit_mut::visit_expr_path_mut(self, path);
-        if path.qself.is_none()
-            && path.path.leading_colon.is_none()
-            && path
-                .path
-                .segments
-                .first()
-                .is_some_and(|it| it.ident == "Self")
-        {
-            if path.path.is_ident("Self") {
-                return;
-            }
-            let target = &self.0;
-            let tail = Path {
-                leading_colon: None,
-                segments: path.path.segments.iter().skip(1).cloned().collect(),
-            };
-            *path = parse_quote! { <#target>::#tail };
         }
     }
 }
@@ -4895,9 +4895,10 @@ impl Cfg {
     }
 
     pub(crate) fn without_konst() -> Self {
-        let mut this = Self::default();
-        this.konst = Konst::None;
-        return this;
+        return Self {
+            konst: Konst::None,
+            ..Default::default()
+        };
     }
 }
 

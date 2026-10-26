@@ -212,12 +212,10 @@ const _: () = {
                     return Err(());
                 }
             };
-            return {
-                Ok({
-                    let () = <SeqPoint<D>>::__TYPEKIN_LAYOUT_ASSERT;
-                    Self(value, core::marker::PhantomData)
-                })
-            };
+            return Ok({
+                let () = <SeqPoint<D>>::__TYPEKIN_LAYOUT_ASSERT;
+                Self(value, core::marker::PhantomData)
+            });
         }
     }
     impl<D: Direction> Into<usize> for SeqPoint<D> {
@@ -451,12 +449,10 @@ const _: () = {
             F: FnOnce(u32) -> u32,
         {
             let value = function(Self::raw(self));
-            return {
-                Ok({
-                    let () = <SeqPoint<D>>::__TYPEKIN_LAYOUT_ASSERT;
-                    Self(value, core::marker::PhantomData)
-                })
-            };
+            return Ok({
+                let () = <SeqPoint<D>>::__TYPEKIN_LAYOUT_ASSERT;
+                Self(value, core::marker::PhantomData)
+            });
         }
         #[inline(always)]
         #[track_caller]
@@ -812,12 +808,10 @@ const _: () = {
                     return Err(());
                 }
             };
-            return {
-                Ok({
-                    let () = <SeqOffset<D>>::__TYPEKIN_LAYOUT_ASSERT;
-                    Self(value, core::marker::PhantomData)
-                })
-            };
+            return Ok({
+                let () = <SeqOffset<D>>::__TYPEKIN_LAYOUT_ASSERT;
+                Self(value, core::marker::PhantomData)
+            });
         }
     }
     impl<D: Direction> Into<isize> for SeqOffset<D> {
@@ -1093,12 +1087,10 @@ const _: () = {
             F: FnOnce(i32) -> i32,
         {
             let value = function(Self::raw(self));
-            return {
-                Ok({
-                    let () = <SeqOffset<D>>::__TYPEKIN_LAYOUT_ASSERT;
-                    Self(value, core::marker::PhantomData)
-                })
-            };
+            return Ok({
+                let () = <SeqOffset<D>>::__TYPEKIN_LAYOUT_ASSERT;
+                Self(value, core::marker::PhantomData)
+            });
         }
         #[inline(always)]
         #[track_caller]

@@ -163,7 +163,7 @@ const _: () = {
                     return Err(());
                 }
             };
-            return { Ok(Self(value)) };
+            return Ok(Self(value));
         }
     }
     impl PageHeader {
@@ -1556,7 +1556,7 @@ const _: () = {
             F: [const] FnOnce(u32) -> u32 + [const] core::marker::Destruct,
         {
             let value = function(Self::raw(self));
-            return { Ok(Self(value)) };
+            return Ok(Self(value));
         }
         #[inline(always)]
         #[track_caller]
@@ -1786,7 +1786,7 @@ const _: () = {
         }
         #[inline(always)]
         pub(self) const fn _core_int_checked(value: u32) -> Option<Self> {
-            return { Some(Self(value)) };
+            return Some(Self(value));
         }
     }
     #[allow(clippy::unnecessary_cast)]
