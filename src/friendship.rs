@@ -177,7 +177,7 @@ pub(crate) mod cfg {
 
         pub(crate) fn parse_with_valid(
             input: ParseStream,
-            valid: &Vec<Ident>,
+            valid: &[Ident],
             defaults: &BTreeSet<Ident>,
         ) -> syn::Result<BTreeSet<Friend>> {
             let mut friends = BTreeSet::new();

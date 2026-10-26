@@ -473,7 +473,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn without_removes_from_str() {
         const SRC: &str = r#"
