@@ -491,8 +491,8 @@ explicit facet use the root profile. A facet inherits root flags; use `with` to
 re-enable an operation disabled at the root. A `point` facet also inherits root
 arithmetic because it does not select an arithmetic policy.
 
-`marker_tree` keeps `MakerSeal` private, emits branch traits, and emits
-zero-sized leaves that implement every ancestor branch:
+`tree` keeps `MakerSeal` private, emits branch traits, and emits zero-sized
+leaves that implement every ancestor branch:
 
 ```rust
 #[typekin::marker_tree(

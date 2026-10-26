@@ -100,7 +100,7 @@ where
     }
 }
 
-#[typekin::marker_tree(
+#[typekin::tree(
     Direction {
         In,
         Out,
@@ -178,7 +178,7 @@ type CollisionProtocol = ProtocolNames<
     NotTraits,
 >;
 
-#[typekin::marker_tree(
+#[typekin::tree(
     pub Transport {
         pub DirectionBranch {
             pub Incoming,

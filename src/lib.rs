@@ -193,7 +193,7 @@ pub fn point(
 /// the tree, and every branch needs at least one child.
 ///
 /// ```text
-/// #[typekin::marker_tree(
+/// #[typekin::tree(
 ///     pub Direction {
 ///         pub In,
 ///         pub Out,
@@ -205,7 +205,7 @@ pub fn point(
 /// Keep the root trait private to seal public branches. The macro allows public
 /// branches with private root bounds and suppresses the corresponding lint.
 #[proc_macro_attribute]
-pub fn marker_tree(
+pub fn tree(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {

@@ -6,7 +6,7 @@ serde = { version = "1", default-features = false, features = ["alloc"] }
 "#;
 
 #[cfg(test)]
-#[cfg(feature = "test_slow")]
+#[cfg(feature = "test_slow_only")]
 mod tests {
     use super::*;
 

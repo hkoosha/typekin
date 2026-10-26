@@ -10,48 +10,39 @@
 #![feature(derive_const)]
 #![feature(negative_impls)]
 
-#[cfg(test)]
-pub mod alloc;
-#[cfg(test)]
-pub mod asm;
-#[cfg(test)]
-pub mod asserts;
-#[cfg(test)]
-pub mod dir;
-#[cfg(test)]
-pub mod ops;
-#[cfg(test)]
-pub mod proc;
-
-#[cfg(test)]
-mod test_bitflag;
-#[cfg(test)]
-mod test_compile_fail;
-#[cfg(test)]
-mod test_friendship;
-#[cfg(test)]
-mod test_integral;
-#[cfg(test)]
-mod test_integral_asm;
-#[cfg(test)]
-mod test_integral_generic;
-#[cfg(test)]
-mod test_integral_generic_compile;
-#[cfg(test)]
-mod test_no_std;
-#[cfg(test)]
-mod test_text;
-
-#[cfg(test)]
 pub use crate::{
     alloc::*,
-    asm::*,
     asserts::*,
     dir::*,
     ops::*,
+};
+
+#[cfg(feature = "test_slow_only")]
+pub use crate::{
+    asm::*,
     proc::*,
 };
 
-#[cfg(test)]
+#[cfg(feature = "test_slow_only")]
+pub mod asm;
+
+#[cfg(feature = "test_slow_only")]
+pub mod proc;
+
+pub mod alloc;
+pub mod asserts;
+pub mod dir;
+pub mod ops;
+
+mod test_bitflag;
+mod test_compile_fail;
+mod test_friendship;
+mod test_integral;
+mod test_integral_asm;
+mod test_integral_generic;
+mod test_integral_generic_compile;
+mod test_no_std;
+mod test_text;
+
 #[global_allocator]
 static ALLOCATOR: ObservedAllocator = ObservedAllocator;

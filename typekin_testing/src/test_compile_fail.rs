@@ -23,7 +23,7 @@ fn assert_rejected(
 }
 
 #[cfg(test)]
-#[cfg(feature = "test_slow")]
+#[cfg(feature = "test_slow_only")]
 mod tests {
     use super::*;
 

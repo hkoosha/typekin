@@ -1,4 +1,4 @@
-#[typekin::marker_tree(
+#[typekin::tree(
     Direction {
         In,
         Out,

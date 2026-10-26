@@ -941,8 +941,6 @@ mod tests {
         assert_eq!(zero.raw(), 0);
     }
 
-
-
     #[test]
     fn circular_profile_applies_wrapping_policy_to_reenabled_operations() {
         assert_eq!(

@@ -1,9 +1,7 @@
-#[typekin::marker_tree(
-    Direction {
-        In,
-        Out,
-    },
-)]
+#[typekin::tree(Direction {
+    In,
+    Out,
+})]
 trait MakerSeal {}
 
 #[typekin::circular(

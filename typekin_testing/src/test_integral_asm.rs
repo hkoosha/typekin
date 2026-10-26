@@ -1,35 +1,7 @@
 use crate::*;
 
-fn assert_ok(
-    name: &str,
-    bin_name: &str,
-    opt_level: usize,
-    must_match: bool,
-    operations: &[Operation],
-) {
-    let dir = make_dir(name);
-
-    let bin = dir.join("release").join(bin_name);
-    build(opt_level, &bin_name, &dir);
-    exe("bin", std::process::Command::new(&bin));
-
-    let (expected, unexpected) = match must_match {
-        true => assert_match(&bin, operations),
-        false => assert_diff(&bin, operations),
-    };
-
-    if !expected.is_empty() {
-        let it = format!("expected found:\n\n{}", expected.join("\n"));
-        eprintln!("{}", it);
-    }
-    if !unexpected.is_empty() {
-        let it = format!("unexpected:\n\n{}", unexpected.join("\n"));
-        panic!("{}", it);
-    }
-}
-
 #[cfg(test)]
-#[cfg(feature = "test_slow")]
+#[cfg(feature = "test_slow_only")]
 mod tests {
     use super::*;
 

@@ -12,8 +12,9 @@ publish = false
 
 [features]
 default = ["test_fast"]
-test_slow = ["test_fast"]
+test_slow = ["test_fast", "test_slow_only"]
 test_fast = []
+test_slow_only = []
 
 [lints.clippy]
 needless_return = "allow"
