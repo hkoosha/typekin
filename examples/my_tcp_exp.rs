@@ -1,18 +1,28 @@
-trait MakerSeal {}
-#[allow(private_bounds)]
-trait Direction: MakerSeal {}
-struct In;
-
-impl MakerSeal for In {}
-impl Direction for In {}
-struct Out;
-
-impl MakerSeal for Out {}
-impl Direction for Out {}
-
 #[repr(transparent)]
 struct SeqPoint<D: Direction>(u32, core::marker::PhantomData<D>);
 
+#[doc(hidden)]
+#[allow(dead_code)]
+#[allow(non_snake_case)]
+mod __typekin_marker_tree_for_SeqPoint {
+    trait MarkerTreeRoot {}
+    #[allow(private_bounds)]
+    pub trait Direction: MarkerTreeRoot {}
+    pub struct In;
+
+    impl MarkerTreeRoot for In {}
+    impl Direction for In {}
+    pub struct Out;
+
+    impl MarkerTreeRoot for Out {}
+    impl Direction for Out {}
+}
+#[allow(unused_imports)]
+use __typekin_marker_tree_for_SeqPoint::Direction;
+#[allow(unused_imports)]
+use __typekin_marker_tree_for_SeqPoint::In;
+#[allow(unused_imports)]
+use __typekin_marker_tree_for_SeqPoint::Out;
 impl<D: Direction> Copy for SeqPoint<D> {}
 impl<D: Direction> Clone for SeqPoint<D> {
     #[inline(always)]

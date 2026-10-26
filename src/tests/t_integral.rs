@@ -96,6 +96,27 @@ mod tests {
     }
 
     #[test]
+    fn accepts_bracketed_marker_tree() {
+        let input = "
+            tree = [
+                Direction {
+                    In,
+                    Out,
+                },
+                Mode {
+                    Active,
+                },
+            ],
+            konst = none
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.tree.is_some());
+    }
+
+    #[test]
     fn accepts_friend_with_single_capability() {
         let input = "
             friend = crate::convert(crate::source::Source) -> Make,

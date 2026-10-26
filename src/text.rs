@@ -30,7 +30,6 @@ use syn::{
 };
 
 use crate::friendship::cfg::Friend;
-use crate::zz;
 use crate::zz::{
     Konst,
     Konsts,
@@ -40,6 +39,10 @@ use crate::zz_runner::{
     MkErr,
     ToCollection,
     mk_flags,
+};
+use crate::{
+    marker_tree,
+    zz,
 };
 
 pub(crate) fn text(
@@ -57,7 +60,8 @@ pub(crate) fn text(
             #derive_clone
             #stream
         });
-    });
+    })
+    .into();
 }
 
 mk_flags! {
@@ -79,6 +83,7 @@ pub(crate) struct Cfg {
     konst_flags: BTreeMap<Konsts, bool>,
     seen_flags: BTreeMap<String, bool>,
     pub(crate) std: bool,
+    pub(crate) tree: Option<marker_tree::Cfg>,
     pub(crate) callbacks: Vec<Path>,
     pub(crate) values: Option<Vec<LitStr>>,
     pub(crate) friends: BTreeSet<Friend>,
@@ -208,6 +213,7 @@ impl Cfg {
             konst_flags: Default::default(),
             seen_flags: Default::default(),
             std,
+            tree: None,
             callbacks: vec![],
             values: None,
             friends: BTreeSet::new(),
@@ -238,6 +244,7 @@ impl Debug for Cfg {
             .field("konst", &self.konst)
             .field("std", &self.std)
             .field("callbacks", &self.callbacks.len())
+            .field("tree", &self.tree.is_some())
             .field("values", &self.values.as_ref().map(Vec::len))
             .field("friends", &self.friends)
             .field("flags", &self.flags)
@@ -276,6 +283,9 @@ impl Parse for Cfg {
                     rest.span().fail("`in` was renamed to `domain`")?;
                 }
                 "friend" => this.parse_friends(rest)?,
+                "tree" => {
+                    this.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
+                }
                 "with" => this.parse_flags(rest, true)?,
                 "without" => this.parse_flags(rest, false)?,
                 _ => return Ok(false),
@@ -440,6 +450,12 @@ impl TextMaker {
 
     fn ekran(self) -> syn::Result<TokenStream> {
         let item = &self.item;
+        let tree = self
+            .cfg
+            .tree
+            .as_ref()
+            .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
+            .transpose()?;
         let ty = &self.ty;
         let ty_string = match self.cfg.std {
             true => quote! { ::std::string::String },
@@ -811,6 +827,8 @@ impl TextMaker {
 
         return Ok(quote! {
             #item
+            #tree
+
 
             #[allow(dead_code)]
             #[allow(unused_qualifications)]

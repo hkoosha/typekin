@@ -44,8 +44,8 @@ The supported public attribute macros are:
 - `#[typekin::bitflag]`: over a non-generic unit enum with an integral `repr`.
 - `#[typekin::text]` over non-generic one-field tuple struct whose field is an
   unqualified `String`.
-- `#[typekin::marker_tree]`: over an empty, non-generic marker trait; it emits
-  branch traits and zero-sized marker leaves.
+- `#[typekin::tree]`: over an empty, non-generic marker trait; it emits branch
+  traits and zero-sized marker leaves.
 - `#[typekin::friends]`: over concrete, non-generic structs, enums, or unions.
   This is the underlying machinery of other macros.
 
@@ -491,11 +491,12 @@ explicit facet use the root profile. A facet inherits root flags; use `with` to
 re-enable an operation disabled at the root. A `point` facet also inherits root
 arithmetic because it does not select an arithmetic policy.
 
-`tree` keeps `MakerSeal` private, emits branch traits, and emits zero-sized
-leaves that implement every ancestor branch:
+`tree` uses its annotated trait as a seal rather than a marker node. It emits
+branch traits and zero-sized leaves that implement every ancestor branch. Each
+branch extends its semantic parent and the seal.
 
 ```rust
-#[typekin::marker_tree(
+#[typekin::tree(
     Direction {
         In,
         Out,
@@ -535,6 +536,31 @@ fn main() {
     assert_eq!(next.raw(), 0);
     assert_eq!(difference.raw(), 1);
 }
+```
+
+Omitted node visibility inherits its parent; a top-level node inherits the
+seal's visibility. Add a visibility only where it differs, such as
+`pub(crate) In`.
+
+### Embedded marker trees
+
+`integral`, `bitflag`, and `text` accept `tree = NODE` for one root node or
+`tree = [NODE, ...]` for several. `NODE` uses `tree`'s node grammar. An embedded
+tree creates a private `MarkerTreeRoot` seal in a hidden generated module and
+re-exports its nodes beside the annotated type, so the nodes can be used in the
+rest of the enclosing module while remaining sealed.
+
+Omitted root-node visibility inherits the annotated type's visibility; omitted
+descendants inherit their parent. Explicit visibility overrides that rule.
+
+```rust
+#[typekin::integral(
+    tree = Direction {
+        In,
+        pub(crate) Out,
+    },
+)]
+pub struct PacketNumber<D: Direction>(u32);
 ```
 
 `precedes` compares the backing bit patterns around the wrapping circle.

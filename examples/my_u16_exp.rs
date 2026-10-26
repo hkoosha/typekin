@@ -2,6 +2,28 @@
 #[derive(Copy, Clone)]
 pub struct MyU16(u16);
 
+#[doc(hidden)]
+#[allow(dead_code)]
+#[allow(non_snake_case)]
+mod __typekin_marker_tree_for_MyU16 {
+    trait MarkerTreeRoot {}
+    #[allow(private_bounds)]
+    pub trait Unit: MarkerTreeRoot {}
+    pub struct Byte;
+
+    impl MarkerTreeRoot for Byte {}
+    impl Unit for Byte {}
+    pub struct Word;
+
+    impl MarkerTreeRoot for Word {}
+    impl Unit for Word {}
+}
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyU16::Byte;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyU16::Unit;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyU16::Word;
 #[allow(dead_code)]
 #[allow(unused_qualifications)]
 #[allow(clippy::unnecessary_cast)]

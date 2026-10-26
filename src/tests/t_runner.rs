@@ -163,4 +163,37 @@ mod tests {
         let expected = "x509_certificate";
         assert_eq!(zz_runner::snake_case_of(input), expected);
     }
+
+    #[test]
+    fn catcher_converts_syn_errors_to_compile_errors() {
+        let this = zz_runner::catching(|| {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "runner error",
+            ));
+        });
+        let output = this.to_string();
+
+        assert!(output.contains("compile_error"));
+        assert!(output.contains("runner error"));
+    }
+
+    #[test]
+    fn catcher_follows_internal_panic_configuration() {
+        let this = std::panic::catch_unwind(|| {
+            return zz_runner::catching(|| {
+                panic!("runner panic");
+            });
+        });
+
+        if zz_runner::typekin_catch_panics() {
+            assert!(this.is_ok());
+            let output = this.unwrap().to_string();
+            assert!(output.contains("compile_error"));
+            assert!(output.contains("runner panic"));
+        }
+        else {
+            assert!(this.is_err());
+        }
+    }
 }

@@ -595,7 +595,8 @@ pub(crate) fn ekran(
         let scope = constructor.scope.clone();
 
         return expand(item, attr, Some(constructor), Some(scope));
-    });
+    })
+    .into();
 }
 
 pub(crate) fn expand_with_constructor(

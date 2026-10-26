@@ -11,7 +11,13 @@ impl CircularSequence {
 
 pub struct Out;
 
+#[inline]
+const fn is_valid_generic_point(_: u32) -> bool {
+    return true;
+}
+
 #[typekin::integral(
+    valid = is_valid_generic_point,
     profile = [circular {}, point {}],
     produce = Self::into_offset(_) -> GenericOffset<D>,
     facet = [
@@ -37,6 +43,13 @@ impl<D> GenericPoint<D> {
     fn offset_raw(offset: GenericOffset<D>) -> u32 {
         return offset.raw() as u32;
     }
+}
+
+fn generic_point<D>(raw: u32) -> GenericPoint<D> {
+    return match GenericPoint::try_make(raw) {
+        Ok(value) => value,
+        Err(_) => unreachable!(),
+    };
 }
 
 #[unsafe(no_mangle)]
@@ -156,15 +169,15 @@ fn main() {
     assert_eq!(raw_sub_generic_points(0, 1), -1);
     assert_eq!(
         wrapped_sub_generic_points(
-            GenericPoint::make(0),
-            GenericPoint::make(1),
+            generic_point::<Out>(0),
+            generic_point::<Out>(1),
         ),
         -1
     );
     assert_eq!(raw_add_generic_offset(u32::MAX, 1), 0);
     assert_eq!(
         wrapped_add_generic_offset(
-            GenericPoint::make(u32::MAX),
+            generic_point::<Out>(u32::MAX),
             GenericOffset::make(1),
         ),
         0
@@ -172,13 +185,13 @@ fn main() {
     assert_eq!(raw_sub_generic_offset(0, 1), u32::MAX);
     assert_eq!(
         wrapped_sub_generic_offset(
-            GenericPoint::make(0),
+            generic_point::<Out>(0),
             GenericOffset::make(1),
         ),
         u32::MAX
     );
     assert!(wrapped_precedes_generic_point(
-        GenericPoint::make(u32::MAX),
-        GenericPoint::make(0),
+        generic_point::<Out>(u32::MAX),
+        generic_point::<Out>(0),
     ));
 }

@@ -14,6 +14,22 @@ mod tests {
     }
 
     #[test]
+    fn accepts_marker_tree() {
+        let input = "
+            tree = Direction {
+                In,
+                Out,
+            },
+            konst = none
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_ok(), "{input}");
+        let config = this.unwrap();
+
+        assert!(config.tree.is_some());
+    }
+
+    #[test]
     fn accepts_friend_with_make_and_unsafe_capabilities() {
         let input = "
             konst = none,

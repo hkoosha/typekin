@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use syn::ItemTrait;
+    use quote::format_ident;
+    use syn::{
+        ItemTrait,
+        parse_quote,
+    };
 
     use crate::marker_tree::{
         Cfg,
@@ -33,7 +37,7 @@ mod tests {
         let output = this.unwrap().to_string();
 
         assert!(output.contains("trait Transport : MakerSeal"));
-        assert!(output.contains("trait Direction : Transport"));
+        assert!(output.contains("trait Direction : Transport + MakerSeal"));
         assert!(output.contains("struct In ;"));
         assert!(output.contains("impl MakerSeal for In"));
         assert!(output.contains("impl Transport for In"));
@@ -44,8 +48,8 @@ mod tests {
     }
 
     #[test]
-    fn tree_preserves_explicit_node_visibility() {
-        let configuration = "pub Direction { pub In, }";
+    fn tree_inherits_branch_visibility() {
+        let configuration = "pub Direction { In, }";
         let root = "trait MakerSeal {}";
         let this = expand_tree(configuration, root);
         assert!(this.is_ok(), "{configuration}");
@@ -53,6 +57,90 @@ mod tests {
 
         assert!(output.contains("pub trait Direction : MakerSeal"));
         assert!(output.contains("pub struct In ;"));
+    }
+
+    #[test]
+    fn tree_inherits_root_visibility() {
+        let configuration = "Direction { In, }";
+        let root = "pub trait MakerSeal {}";
+        let this = expand_tree(configuration, root);
+        assert!(this.is_ok(), "{configuration}");
+        let output = this.unwrap().to_string();
+
+        assert!(output.contains("pub trait Direction : MakerSeal"));
+        assert!(output.contains("pub struct In ;"));
+    }
+
+    #[test]
+    fn embedded_tree_uses_a_private_seal_and_exports_nodes() {
+        let configuration = "Direction { Transport { In, }, Out, }";
+        let this = syn::parse_str::<Cfg>(configuration);
+        assert!(this.is_ok(), "{configuration}");
+        let configuration = this.unwrap();
+        let owner = format_ident!("Packet");
+        let visibility = parse_quote!(pub);
+        let this = configuration.expand_embedded(&owner, &visibility);
+        assert!(this.is_ok(), "{configuration:?}");
+        let output = this.unwrap().to_string();
+
+        assert!(output.contains("mod __typekin_marker_tree_for_Packet"));
+        assert!(output.contains("trait MarkerTreeRoot"));
+        assert!(output.contains("pub trait Direction : MarkerTreeRoot"));
+        assert!(
+            output
+                .contains("pub trait Transport : Direction + MarkerTreeRoot",),
+        );
+        assert!(output.contains("pub struct In ;"));
+        assert!(
+            output.contains(
+                "pub use __typekin_marker_tree_for_Packet :: Direction"
+            )
+        );
+        assert!(
+            output.contains(
+                "pub use __typekin_marker_tree_for_Packet :: Transport"
+            )
+        );
+        assert!(
+            output.contains("pub use __typekin_marker_tree_for_Packet :: In")
+        );
+        assert!(
+            output.contains("pub use __typekin_marker_tree_for_Packet :: Out")
+        );
+    }
+
+    #[test]
+    fn embedded_tree_honors_explicit_root_visibility() {
+        let configuration = "pub(crate) Direction { In, }";
+        let this = syn::parse_str::<Cfg>(configuration);
+        assert!(this.is_ok(), "{configuration}");
+        let configuration = this.unwrap();
+        let owner = format_ident!("Packet");
+        let visibility = parse_quote!(pub);
+        let this = configuration.expand_embedded(&owner, &visibility);
+        assert!(this.is_ok(), "{configuration:?}");
+        let output = this.unwrap().to_string();
+
+        assert!(output.contains(
+            "pub (crate) use __typekin_marker_tree_for_Packet :: Direction",
+        ),);
+        assert!(output.contains(
+            "pub (crate) use __typekin_marker_tree_for_Packet :: In",
+        ),);
+    }
+
+    #[test]
+    fn embedded_tree_reserves_the_virtual_root_name() {
+        let configuration = "MarkerTreeRoot";
+        let this = syn::parse_str::<Cfg>(configuration);
+        assert!(this.is_ok(), "{configuration}");
+        let configuration = this.unwrap();
+        let owner = format_ident!("Packet");
+        let visibility = parse_quote!(pub);
+        let this = configuration.expand_embedded(&owner, &visibility);
+        let error = this.unwrap_err();
+
+        assert!(error.to_string().contains("duplicated marker tree node"));
     }
 
     #[test]

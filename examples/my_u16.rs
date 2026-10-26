@@ -1,5 +1,9 @@
 #[typekin::integral(
     konst = none,
+    tree = Unit {
+        Byte,
+        Word,
+    },
     friend = self(u16) -> Math,
 )]
 pub struct MyU16(u16);

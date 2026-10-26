@@ -18,6 +18,22 @@ mod tests {
     }
 
     #[test]
+    fn attrs_tree_and_konst() {
+        let it = "
+            tree = Direction {
+                In,
+                Out,
+            },
+            konst = none
+        ";
+        let this = syn::parse_str::<Cfg>(it);
+        assert!(this.is_ok(), "{it}");
+        let config = this.unwrap();
+
+        assert!(config.tree.is_some());
+    }
+
+    #[test]
     fn attrs_konst_and_friends_and_integral() {
         let it = "
             konst = stable,
@@ -197,6 +213,18 @@ mod tests {
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
+    }
+
+    #[test]
+    fn rejects_tree_in_nested_integral_configuration() {
+        let it = "integral = [tree = Direction { In }]";
+        let this = syn::parse_str::<Cfg>(it);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral configuration does not support tree",
+        );
     }
 
     #[test]

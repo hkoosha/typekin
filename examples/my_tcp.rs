@@ -1,10 +1,8 @@
-#[typekin::tree(Direction {
-    In,
-    Out,
-})]
-trait MakerSeal {}
-
 #[typekin::circular(
+    tree = Direction {
+        In,
+        Out,
+    },
     without = math_add,
     produce = Self::into_offset(_) -> SeqOffset<D>,
     facet = circular {

@@ -1,6 +1,10 @@
 #[typekin::text(
     std = true,
     domain = ["draft", "published", "published-new", "archive", "-"],
+    tree = TextState {
+        Valid,
+        Invalid,
+    },
     friend = into_my_tag(MyHeadline<'_>) -> Make,
 )]
 pub struct MyTag(String);

@@ -20,6 +20,28 @@ pub enum MyFlag {
     B,
     C = 40,
 }
+#[doc(hidden)]
+#[allow(dead_code)]
+#[allow(non_snake_case)]
+mod __typekin_marker_tree_for_MyFlag {
+    trait MarkerTreeRoot {}
+    #[allow(private_bounds)]
+    pub trait FlagState: MarkerTreeRoot {}
+    pub struct Enabled;
+
+    impl MarkerTreeRoot for Enabled {}
+    impl FlagState for Enabled {}
+    pub struct Disabled;
+
+    impl MarkerTreeRoot for Disabled {}
+    impl FlagState for Disabled {}
+}
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyFlag::Disabled;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyFlag::Enabled;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyFlag::FlagState;
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct MyFlags(u128);

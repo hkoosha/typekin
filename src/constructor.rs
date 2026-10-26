@@ -260,5 +260,6 @@ pub(crate) fn ekran(
         return crate::friendship::expand_with_constructor(
             item, friendship, attr,
         );
-    });
+    })
+    .into();
 }

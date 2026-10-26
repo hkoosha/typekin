@@ -14,6 +14,10 @@ use quote::quote;
 use syn::Error;
 use syn::spanned::Spanned;
 
+// Can be enabled on demand, but MUST NOT be ever checked into the code,
+// released, or published as enabled.
+const TYPEKIN_MACHINERY_DEBUG: bool = false;
+
 macro_rules! mk_flags {
     (
         #[flag_default(bool=$def_bool:literal, str=$def_str:literal)]
@@ -394,35 +398,47 @@ pub(crate) fn snake_case_of(it: &str) -> String {
     result
 }
 
+pub(crate) fn typekin_catch_panics() -> bool {
+    return TYPEKIN_MACHINERY_DEBUG;
+}
+
 pub(crate) fn catching(
     f: impl FnOnce() -> syn::Result<TokenStream> + UnwindSafe
-) -> proc_macro::TokenStream {
-    let err = Arc::new(Mutex::new(None));
+) -> TokenStream {
+    return match typekin_catch_panics() {
+        false => f().unwrap_or_else(|it| it.to_compile_error()),
 
-    let err0 = err.clone();
-    std::panic::set_hook(Box::new(move |it| {
-        let text =
-            format!("\n{}\n{}\n", it, std::backtrace::Backtrace::capture());
-        err0.lock().unwrap().replace(text);
-    }));
+        true => {
+            let err = Arc::new(Mutex::new(None));
 
-    let result = std::panic::catch_unwind(|| {
-        f().unwrap_or_else(|it| it.to_compile_error())
-    });
-    let _ = std::panic::take_hook();
+            let err0 = err.clone();
+            std::panic::set_hook(Box::new(move |it| {
+                let text = format!(
+                    "\n{}\n{}\n",
+                    it,
+                    std::backtrace::Backtrace::capture()
+                );
+                err0.lock().unwrap().replace(text);
+            }));
 
-    return result
-        .map_err(|_| err.lock().unwrap().take().unwrap())
-        .map_err(|mut it| {
-            let remove = "disabled backtrace\n";
-            if it.ends_with(remove) {
-                it.truncate(it.len() - remove.len());
-            }
-            return it;
-        })
-        .map_err(|it| quote::quote! { compile_error!(#it); })
-        .unwrap_or_else(|it| it)
-        .into();
+            let result = std::panic::catch_unwind(|| {
+                f().unwrap_or_else(|it| it.to_compile_error())
+            });
+            let _ = std::panic::take_hook();
+
+            result
+                .map_err(|_| err.lock().unwrap().take().unwrap())
+                .map_err(|mut it| {
+                    let remove = "disabled backtrace\n";
+                    if it.ends_with(remove) {
+                        it.truncate(it.len() - remove.len());
+                    }
+                    return it;
+                })
+                .map_err(|it| quote::quote! { compile_error!(#it); })
+                .unwrap_or_else(|it| it)
+        }
+    };
 }
 
 pub(crate) fn bonst(is_const: bool) -> Option<TokenStream> {

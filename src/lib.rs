@@ -44,11 +44,14 @@ mod tests;
 /// - `produce = CALLBACK(_) -> Type`
 /// - `profile = PROFILE | [PROFILE, ...]`
 /// - `facet = FACET | [FACET, ...]`
+/// - `tree = NODE | [NODE, ...]`
 ///
 /// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, or
 /// `point`. A profile body accepts `with` and `without`; only `circular` also
 /// accepts `precedes = bool`. `FACET` is one profile with an optional body that
-/// accepts `with`, `without`, `friend`, and `produce`.
+/// accepts `with`, `without`, `friend`, and `produce`. `TREE` uses the
+/// [`tree`] node grammar. Its private `MarkerTreeRoot` seal stays generated,
+/// while its nodes are re-exported beside the annotated item.
 ///
 /// `FLAG` is an integral generation, operation, friendship, storage, or
 /// `konst_*` flag. `Math` expands to `Make` and `Bit` for integral friends.
@@ -70,7 +73,8 @@ pub fn integral(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, and `facet`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
+///   `tree`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = int, ...)]`; it does
 /// not accept `profile`.
@@ -89,8 +93,8 @@ pub fn int(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
-///   `precedes = bool`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
+///   `tree`, and `precedes = bool`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = circular, ...)]`.
 /// `precedes` configures the selected circular profile directly; `profile` is
@@ -110,7 +114,8 @@ pub fn circular(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, and `facet`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
+///   `tree`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = delta, ...)]`; it does
 /// not accept `profile` or `precedes`.
@@ -129,7 +134,8 @@ pub fn delta(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, and `facet`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
+///   `tree`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = sequential, ...)]`; it
 /// does not accept `profile` or `precedes`.
@@ -148,7 +154,8 @@ pub fn sequential(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, and `facet`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
+///   `tree`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = wrapping, ...)]`; it
 /// does not accept `profile` or `precedes`.
@@ -167,7 +174,8 @@ pub fn wrapping(
 /// - **Required item:** the same primitive-integer tuple struct accepted by
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, and `facet`.
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`, and
+///   `tree`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = point, ...)]`; it does
 /// not accept `profile` or `precedes`.
@@ -188,9 +196,10 @@ pub fn point(
 /// - **Required attribute:** one or more marker nodes.
 ///
 /// A node is `[visibility] Name` for a leaf or `[visibility] Name { CHILDREN }`
-/// for a branch. Branches become traits extending their parent; leaves become
-/// unit structs implementing every ancestor trait. Names must be unique within
-/// the tree, and every branch needs at least one child.
+/// for a branch. Omitted visibility inherits from its parent; top-level nodes
+/// inherit the root seal's visibility. Branches extend their parent and the
+/// tree seal, while leaves implement every ancestor trait. Names must be unique
+/// within the tree, and every branch needs at least one child.
 ///
 /// ```text
 /// #[typekin::tree(
@@ -231,11 +240,12 @@ pub fn tree(
 /// - `friend = SPEC | [SPEC, ...]`
 /// - `with = FLAG | [FLAG, ...]` and `without = FLAG | [FLAG, ...]`
 /// - `integral = [INTEGRAL_CONFIGURATION]`
+/// - `tree = NODE | [NODE, ...]`
 ///
 /// `SPEC` uses the friend conversion grammar. The bracketed `integral`
 /// configuration accepts default-profile integral validation, friend, flag, and
-/// accessor settings; it rejects `profile`, `facet`, `produce`, and nonzero
-/// storage.
+/// accessor settings; it rejects `profile`, `facet`, `produce`, `tree`, and
+/// nonzero storage.
 #[proc_macro_attribute]
 pub fn bitflag(
     attr: proc_macro::TokenStream,
@@ -262,6 +272,7 @@ pub fn bitflag(
 /// - `error = ()`
 /// - `friend = SPEC | [SPEC, ...]`
 /// - `with = FLAG | [FLAG, ...]` and `without = FLAG | [FLAG, ...]`
+/// - `tree = NODE | [NODE, ...]`
 ///
 /// `valid` and `domain` are mutually exclusive. Text friends accept `Make`,
 /// `unsafe`, and self-only `Rel`; `Make` needs a conversion callback. Set

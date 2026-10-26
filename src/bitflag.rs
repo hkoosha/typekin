@@ -42,6 +42,7 @@ use crate::zz_runner::{
 use crate::zz_value_type::N;
 use crate::{
     integral,
+    marker_tree,
     zz,
 };
 
@@ -100,9 +101,16 @@ fn ekran(
             return bad.fail("only unit variants are supported");
         }
 
+        let tree = attr
+            .tree
+            .as_ref()
+            .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
+            .transpose()?;
+
         let stream = Maker::new(ty, repr, attr, items).ekran()?;
-        return Ok(quote! { #attributes #repr_attr #item #stream });
-    });
+        return Ok(quote! { #attributes #repr_attr #item #tree #stream });
+    })
+    .into();
 }
 
 pub(crate) fn resolve_repr(
@@ -1660,6 +1668,7 @@ pub(crate) struct Cfg {
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) bit: Box<BitFlags>,
     pub(crate) int: Box<integral::Cfg>,
+    pub(crate) tree: Option<marker_tree::Cfg>,
     repr: Option<N>,
     konst: Konst,
     konst_flags: BTreeMap<Konsts, bool>,
@@ -1672,6 +1681,7 @@ impl Parse for Cfg {
             friends: Default::default(),
             bit: Box::default(),
             int: Box::new(integral::Cfg::without_konst()),
+            tree: None,
             repr: None,
             konst: Konst::default(),
             konst_flags: Default::default(),
@@ -1812,6 +1822,9 @@ impl Cfg {
             "friend" => {
                 let friends = zz::one_or_list(rest)?.set();
                 self.friends = friends;
+            }
+            "tree" => {
+                self.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
             }
             "suffix" => {
                 let as_str: syn::LitStr = rest.parse()?;

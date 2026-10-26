@@ -72,6 +72,7 @@ use crate::zz_value_type::{
     Operator,
 };
 use crate::{
+    marker_tree,
     zz,
     zz_runner,
 };
@@ -583,7 +584,7 @@ pub(crate) fn integral(
     attr: Box<Cfg>,
     item: ItemStruct,
 ) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || ekran(attr, item));
+    return zz_runner::catching(move || ekran(attr, item)).into();
 }
 
 pub(crate) fn ekran(
@@ -707,6 +708,12 @@ pub(crate) fn ekran(
     let markers = &target.const_markers;
     let const_markers = quote! { #(#markers)* };
 
+    let tree = attr
+        .tree
+        .as_ref()
+        .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
+        .transpose()?;
+
     let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
 
     let stream = quote::quote! {
@@ -716,6 +723,8 @@ pub(crate) fn ekran(
         #derive_copy
         #derive_clone
         #item
+        #tree
+
 
         #manual_copy
         #manual_clone
@@ -4264,6 +4273,7 @@ pub(crate) struct Cfg {
     root_flags: BTreeMap<String, (bool, Span)>,
     root_seen_flags: BTreeMap<String, bool>,
     pub(crate) get_raw: Option<Path>,
+    pub(crate) tree: Option<marker_tree::Cfg>,
     pub(crate) validation: ValidationCfg,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) flags: Box<IntegralFlags>,
@@ -4858,6 +4868,7 @@ impl Cfg {
         input: ParseStream,
         allow_konst: bool,
         fixed_profile: bool,
+        allow_tree: bool,
     ) -> syn::Result<()> {
         return zz::parse_inner(input, |attr, rest| {
             if self.validation.parse_attr(attr, rest)? {
@@ -4874,6 +4885,14 @@ impl Cfg {
                 "with" => self.parse_flags(rest, true)?,
                 "without" => self.parse_flags(rest, false)?,
                 "friend" => self.friends = Self::parse_friends(rest)?,
+                "tree" if allow_tree => {
+                    self.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
+                }
+                "tree" => {
+                    return attr.fail(
+                        "bitflag integral configuration does not support tree",
+                    );
+                }
                 "facet" => {
                     self.facets = zz::one_or_list::<FacetCfg>(rest)?.collect();
                     self.facets_present = true;
@@ -4907,7 +4926,7 @@ impl Cfg {
             profile: Profiles::one(profile),
             ..Default::default()
         };
-        this.parse_attrs(input, true, true)?;
+        this.parse_attrs(input, true, true, true)?;
         this.resolve()?;
         return Ok(this);
     }
@@ -4916,7 +4935,7 @@ impl Cfg {
         input: ParseStream
     ) -> syn::Result<Self> {
         let mut this = Self::without_konst();
-        this.parse_attrs(input, false, false)?;
+        this.parse_attrs(input, false, false, false)?;
         return Ok(this);
     }
 
@@ -4942,6 +4961,7 @@ impl Debug for Cfg {
             .field("non_zero", &self.non_zero)
             .field("ty_out", &!self.ty_out.is_self())
             .field("profile", &self.profile.arithmetic())
+            .field("tree", &self.tree.is_some())
             .field("facet_slots", &self.facet_slots)
             .field("flags", &self.flags)
             .finish_non_exhaustive();
@@ -4951,7 +4971,7 @@ impl Debug for Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
-        this.parse_attrs(input, true, false)?;
+        this.parse_attrs(input, true, false, true)?;
         this.resolve()?;
         return Ok(this);
     }

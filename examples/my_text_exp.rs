@@ -2,6 +2,28 @@
 #[derive(Clone)]
 pub struct MyTag(String);
 
+#[doc(hidden)]
+#[allow(dead_code)]
+#[allow(non_snake_case)]
+mod __typekin_marker_tree_for_MyTag {
+    trait MarkerTreeRoot {}
+    #[allow(private_bounds)]
+    pub trait TextState: MarkerTreeRoot {}
+    pub struct Valid;
+
+    impl MarkerTreeRoot for Valid {}
+    impl TextState for Valid {}
+    pub struct Invalid;
+
+    impl MarkerTreeRoot for Invalid {}
+    impl TextState for Invalid {}
+}
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyTag::Invalid;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyTag::TextState;
+#[allow(unused_imports)]
+pub use __typekin_marker_tree_for_MyTag::Valid;
 #[allow(dead_code)]
 #[allow(unused_qualifications)]
 const _: () = {

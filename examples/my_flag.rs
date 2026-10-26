@@ -15,6 +15,10 @@
 #[typekin::bitflag(
     repr = u128,
     suffix = "s",
+    tree = FlagState {
+        Enabled,
+        Disabled,
+    },
     with = [display],
 )]
 pub enum MyFlag {
