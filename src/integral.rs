@@ -745,14 +745,6 @@ pub(crate) fn ekran(
     return Ok(stream);
 }
 
-pub(crate) struct Maker {
-    repr: N,
-    storage: StoragePlan,
-    el: Ident,
-    target: IntegralTarget,
-    ctx: Ctx,
-}
-
 struct Ctx {
     cfg: Box<Cfg>,
     ty: TokenStream,
@@ -872,6 +864,14 @@ impl Ctx {
             )
             .1;
     }
+}
+
+pub(crate) struct Maker {
+    repr: N,
+    storage: StoragePlan,
+    el: Ident,
+    target: IntegralTarget,
+    ctx: Ctx,
 }
 
 impl Maker {
