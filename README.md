@@ -337,6 +337,26 @@ fn main() {
 }
 ```
 
+`with = range` emits the nightly `core::iter::Step` implementation, allowing
+ordinary wrapper ranges to iterate values. It requires `#![feature(step_trait)]`;
+`konst = nightly` also makes that implementation const. `Step` cannot represent
+validation holes, so `range` is rejected with `domain`, `valid`, `non_zero`, or
+a circular profile.
+
+```rust
+#![feature(step_trait)]
+
+#[typekin::integral(konst = none, with = range)]
+struct Ordinal(u8);
+
+fn main() {
+    let values: Vec<_> = (Ordinal::make(2)..=Ordinal::make(4))
+        .map(Ordinal::raw)
+        .collect();
+    assert_eq!(values, [2, 3, 4]);
+}
+```
+
 `error = ()` is accepted by `integral`, `text`, and a bitflag's nested
 `integral` configuration. Unit is currently the only supported error type; the
 option reserves the configuration surface without changing existing constructor

@@ -9,6 +9,7 @@
 #![feature(const_trait_impl)]
 #![feature(derive_const)]
 #![feature(negative_impls)]
+#![feature(step_trait)]
 
 pub use crate::{
     alloc::*,

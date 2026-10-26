@@ -1189,6 +1189,13 @@ impl Maker {
         };
     }
 
+    fn bounds_for(&self, flags: &[Konsts]) -> TokenStream {
+        let is_konst = self.cfg.konst_for(flags);
+        let bonst = zz_runner::bonst(is_konst);
+        let destruct = zz_runner::destruct(is_konst);
+        return quote! { #bonst #trait_seal #destruct };
+    }
+
     fn ekran_friendship(&self) -> TokenStream {
         let faceted = self.cfg.facets_present();
         let target = self.target.ty();
@@ -1305,7 +1312,94 @@ impl Maker {
     }
 
     pub(crate) fn make_range(&self) -> TokenStream {
-        unimplemented!("range");
+        let ty = self.target.ty();
+        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
+        let el = &self.el;
+        let konst = zz_runner::konst(self.cfg.konst_for(&[Konsts::Iterator]));
+        let start_ref = self.storage.extract_ref(quote! { start.0 });
+        let end_ref = self.storage.extract_ref(quote! { end.0 });
+        let forward_start = self.storage.extract(quote! { start.0 });
+        let backward_start = self.storage.extract(quote! { start.0 });
+        let forward_overflow_start = self.storage.extract(quote! { start.0 });
+        let backward_overflow_start = self.storage.extract(quote! { start.0 });
+        let unchecked = &self.fp_unchecked;
+
+        return quote! {
+            #konst impl #impl_generics ::core::iter::Step for #ty #where_clause {
+                #[inline(always)]
+                fn steps_between(
+                    start: &Self,
+                    end: &Self,
+                ) -> (usize, ::core::option::Option<usize>) {
+                    return <#el as ::core::iter::Step>::steps_between(
+                        #start_ref,
+                        #end_ref,
+                    );
+                }
+
+                #[inline(always)]
+                fn forward_checked(
+                    start: Self,
+                    count: usize,
+                ) -> ::core::option::Option<Self> {
+                    return match <#el as ::core::iter::Step>::forward_checked(
+                        #forward_start,
+                        count,
+                    ) {
+                        ::core::option::Option::Some(value) => {
+                            ::core::option::Option::Some(#unchecked(value))
+                        }
+                        ::core::option::Option::None => {
+                            ::core::option::Option::None
+                        }
+                    };
+                }
+
+                #[inline(always)]
+                fn forward_overflowing(
+                    start: Self,
+                    count: usize,
+                ) -> (Self, bool) {
+                    let (value, overflowed) =
+                        <#el as ::core::iter::Step>::forward_overflowing(
+                            #forward_overflow_start,
+                            count,
+                        );
+                    return (#unchecked(value), overflowed);
+                }
+
+                #[inline(always)]
+                fn backward_checked(
+                    start: Self,
+                    count: usize,
+                ) -> ::core::option::Option<Self> {
+                    return match <#el as ::core::iter::Step>::backward_checked(
+                        #backward_start,
+                        count,
+                    ) {
+                        ::core::option::Option::Some(value) => {
+                            ::core::option::Option::Some(#unchecked(value))
+                        }
+                        ::core::option::Option::None => {
+                            ::core::option::Option::None
+                        }
+                    };
+                }
+
+                #[inline(always)]
+                fn backward_overflowing(
+                    start: Self,
+                    count: usize,
+                ) -> (Self, bool) {
+                    let (value, overflowed) =
+                        <#el as ::core::iter::Step>::backward_overflowing(
+                            #backward_overflow_start,
+                            count,
+                        );
+                    return (#unchecked(value), overflowed);
+                }
+            }
+        };
     }
 
     pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
@@ -1841,11 +1935,12 @@ impl Maker {
         let trait_friend_rel = quote! { #rel #arguments };
         let trait_seal = quote! { #seal #arguments };
 
-        let fn_conv = &self.fn_conv;
         let fp_friend_conv = if self.target.has_generics() {
+            let fn_conv = &self.fn_conv;
             quote! { <#rhs_ty as #trait_seal>::#fn_conv }
         }
         else {
+            let fn_conv = &self.fn_conv;
             quote! { #trait_seal::#fn_conv }
         };
         let fp_get_raw = &self.fp_get_raw;
@@ -1853,21 +1948,11 @@ impl Maker {
         let self_raw = self.storage.extract(quote! { self.0 });
         let self_raw_ref = self.storage.extract_ref(quote! { self.0 });
 
-        let global_operators = !self.cfg.facets_present();
-        let with_self_math = self.cfg.flags.self_math
-            && global_operators
-            && !self.target.has_generics();
-        let with_self_bit = self.cfg.flags.self_bit
-            && global_operators
-            && !self.target.has_generics();
+        let global_operators = self.cfg.with_global_operators();
+        let with_self_math =
+            self.cfg.with_self_math(self.target.has_generics());
+        let with_self_bit = self.cfg.with_self_bit(self.target.has_generics());
         let output = self.target.operator_output(&self.cfg.ty_out, false);
-
-        let bounds_for = |flags: &[Konsts]| {
-            let is_konst = self.cfg.konst_for(flags);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
-            return quote! { #bonst #trait_seal #destruct };
-        };
 
         let mut stream = TokenStream::new();
         stream.extend(self.ekran_friendship());
@@ -3093,7 +3178,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::BitAndAssign for #ty
@@ -3140,7 +3225,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::AddAssign for #ty
@@ -3187,7 +3272,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::SubAssign for #ty
@@ -3234,7 +3319,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::MulAssign for #ty
@@ -3281,7 +3366,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::DivAssign for #ty
@@ -3328,7 +3413,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::RemAssign for #ty
@@ -3372,7 +3457,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_bit {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::BitOrAssign for #ty
@@ -3504,7 +3589,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
@@ -3555,7 +3640,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
@@ -3606,7 +3691,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
@@ -3658,7 +3743,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
@@ -3710,7 +3795,7 @@ impl Maker {
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
@@ -3759,7 +3844,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitand(#rhs_raw) });
@@ -3807,7 +3892,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             if with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitor(#rhs_raw) });
@@ -3855,7 +3940,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             let assign_flags = [
                 Konsts::XorAssign,
                 Konsts::Xor,
@@ -3864,7 +3949,7 @@ impl Maker {
             ];
             let konst_assign =
                 zz_runner::konst(self.cfg.konst_for(&assign_flags));
-            let assign_bounds = bounds_for(&assign_flags);
+            let assign_bounds = self.bounds_for(&assign_flags);
             if with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitxor(#rhs_raw) });
@@ -4048,7 +4133,7 @@ impl Maker {
                 Konsts::Comparison,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             let rhs_where = rhs_where_clause(quote! {
                 #trait_friend_rel + #bounds + ::core::marker::Copy
             });
@@ -4076,7 +4161,7 @@ impl Maker {
                 Konsts::Comparison,
             ];
             let konst = zz_runner::konst(self.cfg.konst_for(&flags));
-            let bounds = bounds_for(&flags);
+            let bounds = self.bounds_for(&flags);
             let rhs_where = rhs_where_clause(quote! {
                 #trait_friend_rel + #bounds + ::core::marker::Copy
             });
@@ -4303,6 +4388,28 @@ impl Cfg {
 
     pub(crate) fn facets_present(&self) -> bool {
         return self.facets_present;
+    }
+
+    pub(crate) fn with_global_operators(&self) -> bool {
+        return !self.facets_present();
+    }
+
+    pub(crate) fn with_self_math(
+        &self,
+        has_generics: bool,
+    ) -> bool {
+        return self.flags.self_math
+            && self.with_global_operators()
+            && !has_generics;
+    }
+
+    pub(crate) fn with_self_bit(
+        &self,
+        has_generics: bool,
+    ) -> bool {
+        return self.flags.self_bit
+            && self.with_global_operators()
+            && !has_generics;
     }
 
     pub(crate) fn parse_flags_into(
@@ -4731,6 +4838,20 @@ impl Cfg {
             }
             self.flags.ord = false;
             self.flags.partial_ord = false;
+        }
+
+        if self.flags.range {
+            let span = self
+                .explicit_flag("range")
+                .map_or_else(Span::call_site, |(_, span)| span);
+            if self.validation.has_validation() {
+                return span
+                    .fail("range requires an unvalidated integral type");
+            }
+            if self.profile.is_circular() {
+                return span
+                    .fail("range is incompatible with circular profiles");
+            }
         }
 
         if !self.ty_out.is_self() {

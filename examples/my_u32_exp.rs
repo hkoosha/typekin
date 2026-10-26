@@ -5,6 +5,7 @@
 #![feature(const_clone)]
 #![feature(const_destruct)]
 #![feature(derive_const)]
+#![feature(step_trait)]
 
 #[repr(transparent)]
 #[derive(Copy)]
@@ -1115,6 +1116,57 @@ const _: () = {
             *self = self._bitor(it);
         }
     }
+    const impl core::iter::Step for MyU32 {
+        #[inline(always)]
+        fn steps_between(
+            start: &Self,
+            end: &Self,
+        ) -> (usize, Option<usize>) {
+            return <u32 as core::iter::Step>::steps_between(&start.0, &end.0);
+        }
+        #[inline(always)]
+        fn forward_checked(
+            start: Self,
+            count: usize,
+        ) -> Option<Self> {
+            return match <u32 as core::iter::Step>::forward_checked(
+                start.0, count,
+            ) {
+                Some(value) => Some(Self::_unchecked(value)),
+                None => None,
+            };
+        }
+        #[inline(always)]
+        fn forward_overflowing(
+            start: Self,
+            count: usize,
+        ) -> (Self, bool) {
+            let (value, overflowed) =
+                <u32 as core::iter::Step>::forward_overflowing(start.0, count);
+            return (Self::_unchecked(value), overflowed);
+        }
+        #[inline(always)]
+        fn backward_checked(
+            start: Self,
+            count: usize,
+        ) -> Option<Self> {
+            return match <u32 as core::iter::Step>::backward_checked(
+                start.0, count,
+            ) {
+                Some(value) => Some(Self::_unchecked(value)),
+                None => None,
+            };
+        }
+        #[inline(always)]
+        fn backward_overflowing(
+            start: Self,
+            count: usize,
+        ) -> (Self, bool) {
+            let (value, overflowed) =
+                <u32 as core::iter::Step>::backward_overflowing(start.0, count);
+            return (Self::_unchecked(value), overflowed);
+        }
+    }
     impl core::fmt::Debug for MyU32 {
         fn fmt(
             &self,
@@ -1807,6 +1859,16 @@ fn main() {
 
     let lhs = MyU32::of(lhs);
     let rhs = MyU32::of(rhs);
+
+    let range = (MyU32::make(1)..MyU32::make(4))
+        .map(MyU32::raw)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        range,
+        [
+            1, 2, 3
+        ]
+    );
 
     println!("{:?}", lhs + rhs);
 }

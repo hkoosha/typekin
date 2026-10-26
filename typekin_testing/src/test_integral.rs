@@ -29,6 +29,9 @@ struct PlainMapped(u8);
 #[typekin::integral]
 struct FullyGenerated(u8);
 
+#[typekin::integral(konst = none, with = range)]
+struct RangeValue(u8);
+
 #[typekin::integral(konst = nightly)]
 struct FullyGeneratedConst(u8);
 
@@ -465,6 +468,13 @@ struct WrappingSequence(u8);
 #[typekin::integral(
     konst = none,
     profile = wrapping {},
+    with = range,
+)]
+struct WrappingRangeValue(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = wrapping {},
     with = non_zero,
 )]
 struct WrappingNonZero(u8);
@@ -708,6 +718,30 @@ mod tests {
         assert_panics(|| {
             let _ = FacetPoint::make(u8::MAX) + FacetChecked(1);
         });
+    }
+
+    #[test]
+    fn range_flag_iterates_forward_and_backward() {
+        let range = RangeValue::make(2)..RangeValue::make(5);
+        assert_eq!(range.size_hint(), (3, Some(3)));
+        let forward = range.map(RangeValue::raw).collect::<Vec<_>>();
+        assert_eq!(forward, [2, 3, 4]);
+
+        let backward = (RangeValue::make(2)..=RangeValue::make(4))
+            .rev()
+            .map(RangeValue::raw)
+            .collect::<Vec<_>>();
+        assert_eq!(backward, [4, 3, 2]);
+    }
+
+    #[test]
+    fn range_flag_supports_wrapping_storage() {
+        let values = (WrappingRangeValue::make(253)
+            ..WrappingRangeValue::make(u8::MAX))
+            .map(WrappingRangeValue::raw)
+            .collect::<Vec<_>>();
+
+        assert_eq!(values, [253, 254]);
     }
 
     #[test]

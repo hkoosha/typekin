@@ -1891,6 +1891,38 @@ mod tests {
     }
 
     #[test]
+    fn rejects_range_for_validated_integrals() {
+        let input = "
+            valid = is_valid,
+            with = range
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "range requires an unvalidated integral type",
+        );
+    }
+
+    #[test]
+    fn rejects_range_for_circular_profiles() {
+        let input = "
+            profile = circular {},
+            with = range
+        ";
+        let this = syn::parse_str::<Cfg>(input);
+        assert!(this.is_err(), "{input}");
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "range is incompatible with circular profiles",
+        );
+    }
+
+    #[test]
     fn rejects_assignment_override_for_produce() {
         let input = "
             produce = Point::into_offset(_) -> Offset,

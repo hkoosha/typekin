@@ -5,9 +5,11 @@
 #![feature(const_clone)]
 #![feature(const_destruct)]
 #![feature(derive_const)]
+#![feature(step_trait)]
 
 #[typekin::integral(
     konst = nightly,
+    with = range,
     friend = MyFriend::my_conv(MyFriend) -> [],
 )]
 pub struct MyU32(u32);
@@ -28,6 +30,16 @@ fn main() {
 
     let lhs = MyU32::of(lhs);
     let rhs = MyU32::of(rhs);
+
+    let range = (MyU32::make(1)..MyU32::make(4))
+        .map(MyU32::raw)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        range,
+        [
+            1, 2, 3
+        ]
+    );
 
     println!("{:?}", lhs + rhs);
 }
