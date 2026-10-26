@@ -5,6 +5,7 @@ use syn::{
     Item,
     ItemEnum,
     ItemStruct,
+    ItemTrait,
     parse_macro_input,
 };
 
@@ -12,6 +13,7 @@ pub(crate) mod bitflag;
 pub(crate) mod constructor;
 pub(crate) mod friendship;
 pub(crate) mod integral;
+pub(crate) mod marker_tree;
 pub(crate) mod text;
 pub(crate) mod zz;
 pub(crate) mod zz_conv;
@@ -177,6 +179,42 @@ pub fn point(
     return profiled_integral("point", attr, item);
 }
 
+/// Generates a sealed hierarchy of marker traits and zero-sized leaf structs.
+///
+/// # Inputs
+///
+/// - **Required item:** a non-generic, safe, empty trait without supertraits.
+///   It is the root seal.
+/// - **Required attribute:** one or more marker nodes.
+///
+/// A node is `[visibility] Name` for a leaf or `[visibility] Name { CHILDREN }`
+/// for a branch. Branches become traits extending their parent; leaves become
+/// unit structs implementing every ancestor trait. Names must be unique within
+/// the tree, and every branch needs at least one child.
+///
+/// ```text
+/// #[typekin::marker_tree(
+///     pub Direction {
+///         pub In,
+///         pub Out,
+///     },
+/// )]
+/// trait MakerSeal {}
+/// ```
+///
+/// Keep the root trait private to seal public branches. The macro allows public
+/// branches with private root bounds and suppresses the corresponding lint.
+#[proc_macro_attribute]
+pub fn marker_tree(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let attr = parse_macro_input!(attr as marker_tree::Cfg);
+    let item = parse_macro_input!(item as ItemTrait);
+
+    return marker_tree::marker_tree(attr, item);
+}
+
 /// Generates a unit-variant bitflag enum and its `{Enum}Value` wrapper.
 ///
 /// # Inputs
@@ -289,6 +327,7 @@ pub fn friends(
 /// Each selected friend must be declared by the paired friendship attribute.
 /// `relationship` receives the generated relation and must construct `Self`.
 #[proc_macro_attribute]
+#[doc(hidden)] // Experimental AND unfinished!
 pub fn constructor(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,

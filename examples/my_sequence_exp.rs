@@ -1,15 +1,13 @@
-mod sealed {
-    pub trait Direction {}
-}
-
-trait Direction: sealed::Direction {}
-
+trait MakerSeal {}
+#[allow(private_bounds)]
+trait Direction: MakerSeal {}
 struct In;
+
+impl MakerSeal for In {}
+impl Direction for In {}
 struct Out;
 
-impl sealed::Direction for In {}
-impl sealed::Direction for Out {}
-impl Direction for In {}
+impl MakerSeal for Out {}
 impl Direction for Out {}
 
 #[repr(transparent)]

@@ -100,17 +100,13 @@ where
     }
 }
 
-mod sealed {
-    pub trait Direction {}
-}
-
-trait Direction: sealed::Direction {}
-struct In;
-struct Out;
-impl sealed::Direction for In {}
-impl sealed::Direction for Out {}
-impl Direction for In {}
-impl Direction for Out {}
+#[typekin::marker_tree(
+    Direction {
+        In,
+        Out,
+    },
+)]
+trait MakerSeal {}
 
 #[typekin::integral(
     profile = [circular, point],
@@ -181,6 +177,16 @@ type CollisionProtocol = ProtocolNames<
     NotTraits,
     NotTraits,
 >;
+
+#[typekin::marker_tree(
+    pub Transport {
+        pub DirectionBranch {
+            pub Incoming,
+            pub Outgoing,
+        },
+    },
+)]
+trait TreeSeal {}
 
 #[cfg(feature = "test_fast")]
 mod tests {
@@ -488,5 +494,19 @@ mod tests {
 
         assert_eq!(mapped.raw(), 11);
         assert!(mapped > source);
+    }
+
+    #[test]
+    fn marker_tree_leaves_implement_nested_branch_bounds() {
+        fn accepts_root<T: TreeSeal>() {}
+        fn accepts_transport<T: Transport>() {}
+        fn accepts_direction<T: DirectionBranch>() {}
+
+        accepts_root::<Incoming>();
+        accepts_transport::<Incoming>();
+        accepts_direction::<Incoming>();
+        accepts_root::<Outgoing>();
+        accepts_transport::<Outgoing>();
+        accepts_direction::<Outgoing>();
     }
 }

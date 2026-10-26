@@ -1,16 +1,10 @@
-mod sealed {
-    pub trait Direction {}
-}
-
-trait Direction: sealed::Direction {}
-
-struct In;
-struct Out;
-
-impl sealed::Direction for In {}
-impl sealed::Direction for Out {}
-impl Direction for In {}
-impl Direction for Out {}
+#[typekin::marker_tree(
+    Direction {
+        In,
+        Out,
+    },
+)]
+trait MakerSeal {}
 
 #[typekin::circular(
     without = math_add,

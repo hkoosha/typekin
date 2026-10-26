@@ -44,6 +44,8 @@ The supported public attribute macros are:
 - `#[typekin::bitflag]`: over a non-generic unit enum with an integral `repr`.
 - `#[typekin::text]` over non-generic one-field tuple struct whose field is an
   unqualified `String`.
+- `#[typekin::marker_tree]`: over an empty, non-generic marker trait; it emits
+  branch traits and zero-sized marker leaves.
 - `#[typekin::friends]`: over concrete, non-generic structs, enums, or unions.
   This is the underlying machinery of other macros.
 
@@ -487,19 +489,19 @@ defaults. Keep braces for configuration, such as `delta { with = math_mul }`.
 arithmetic and output conversion by the exact RHS type. Slots not claimed by an
 explicit facet use the root profile. A facet inherits root flags; use `with` to
 re-enable an operation disabled at the root. A `point` facet also inherits root
-arithmetic because it does not select an arithmetic policy:
+arithmetic because it does not select an arithmetic policy.
+
+`marker_tree` keeps `MakerSeal` private, emits branch traits, and emits
+zero-sized leaves that implement every ancestor branch:
 
 ```rust
-mod sealed {
-    pub trait Direction {}
-}
-trait Direction: sealed::Direction {}
-struct In;
-struct Out;
-impl sealed::Direction for In {}
-impl sealed::Direction for Out {}
-impl Direction for In {}
-impl Direction for Out {}
+#[typekin::marker_tree(
+    Direction {
+        In,
+        Out,
+    },
+)]
+trait MakerSeal {}
 
 #[typekin::circular(
     konst = none,
