@@ -1412,27 +1412,6 @@ impl Maker {
         };
     }
 
-    pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
-        let impls = self.ekran_impls()?;
-        let items = self.ekran_items();
-        let bit_access = self.ekran_bit_access_items();
-
-        let ty = self.target.ty();
-        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
-        return Ok(quote::quote! {
-            #impls
-
-            impl #impl_generics #ty #where_clause {
-                #items
-            }
-
-            #[allow(clippy::unnecessary_cast)]
-            impl #impl_generics #ty #where_clause {
-                #bit_access
-            }
-        });
-    }
-
     fn ekran_items(&self) -> TokenStream {
         let ctx = &self.ctx;
         let mut stream = TokenStream::new();
@@ -1467,7 +1446,7 @@ impl Maker {
 
     fn ekran_impls(&self) -> syn::Result<TokenStream> {
         let ctx = &self.ctx;
-        let mut stream = self.ekran_friendship();
+        let mut stream = TokenStream::new();
 
         stream.extend(self.make_as_ref(ctx));
         stream.extend(self.make_from_str(ctx));
@@ -1656,6 +1635,30 @@ impl Maker {
 
             #qwords
         };
+    }
+
+    pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
+        let friends = self.ekran_friendship();
+        let impls = self.ekran_impls()?;
+        let items = self.ekran_items();
+        let bit_access = self.ekran_bit_access_items();
+
+        let ty = self.target.ty();
+        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
+        return Ok(quote::quote! {
+            #friends
+
+            #impls
+
+            impl #impl_generics #ty #where_clause {
+                #items
+            }
+
+            #[allow(clippy::unnecessary_cast)]
+            impl #impl_generics #ty #where_clause {
+                #bit_access
+            }
+        });
     }
 }
 
