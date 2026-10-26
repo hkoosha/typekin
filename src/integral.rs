@@ -801,7 +801,7 @@ impl Ctx {
             .unwrap_or_else(|| parse_quote! { Self::raw });
         let fn_conv = format_ident!(
             "conv_{}",
-            zz_runner::snake_case_of(&&target.ident.to_string())
+            zz_runner::snake_case_of(&target.ident.to_string())
         );
         let rhs_ty = target.fresh_ident("T");
         let (rhs_impl_generics, _) =
@@ -1469,45 +1469,45 @@ impl Maker {
         let ctx = &self.ctx;
         let mut stream = self.ekran_friendship();
 
-        stream.extend(self.make_as_ref(&ctx));
-        stream.extend(self.make_from_str(&ctx));
-        stream.extend(self.make_serde(&ctx));
-        stream.extend(self.make_core_int(&ctx));
-        stream.extend(self.make_into(&ctx));
-        stream.extend(self.make_try_into(&ctx));
-        stream.extend(self.make_math_shr(&ctx));
-        stream.extend(self.make_math_shl(&ctx));
-        stream.extend(self.make_assign_shr(&ctx));
-        stream.extend(self.make_assign_shl(&ctx));
-        stream.extend(self.make_assign_and(&ctx));
-        stream.extend(self.make_assign_add(&ctx));
-        stream.extend(self.make_assign_sub(&ctx));
-        stream.extend(self.make_assign_mul(&ctx));
-        stream.extend(self.make_assign_div(&ctx));
-        stream.extend(self.make_assign_rem(&ctx));
-        stream.extend(self.make_assign_or(&ctx));
-        stream.extend(self.make_range(&ctx));
-        stream.extend(self.make_debug(&ctx));
-        stream.extend(self.make_hash(&ctx));
-        stream.extend(self.make_eq(&ctx));
-        stream.extend(self.make_ord(&ctx));
-        stream.extend(self.make_assertions(&ctx));
-        stream.extend(self.make_math_add(&ctx));
-        stream.extend(self.make_math_sub(&ctx));
-        stream.extend(self.make_math_mul(&ctx));
-        stream.extend(self.make_math_div(&ctx));
-        stream.extend(self.make_math_rem(&ctx));
-        stream.extend(self.make_math_and(&ctx));
-        stream.extend(self.make_math_or(&ctx));
-        stream.extend(self.make_math_xor(&ctx));
-        stream.extend(self.make_math_not(&ctx));
-        stream.extend(self.make_display(&ctx));
-        stream.extend(self.make_fmt_binary(&ctx));
-        stream.extend(self.make_fmt_octal(&ctx));
-        stream.extend(self.make_fmt_hex_lower(&ctx));
-        stream.extend(self.make_fmt_hex_upper(&ctx));
-        stream.extend(self.make_partial_eq(&ctx));
-        stream.extend(self.make_partial_ord(&ctx));
+        stream.extend(self.make_as_ref(ctx));
+        stream.extend(self.make_from_str(ctx));
+        stream.extend(self.make_serde(ctx));
+        stream.extend(self.make_core_int(ctx));
+        stream.extend(self.make_into(ctx));
+        stream.extend(self.make_try_into(ctx));
+        stream.extend(self.make_math_shr(ctx));
+        stream.extend(self.make_math_shl(ctx));
+        stream.extend(self.make_assign_shr(ctx));
+        stream.extend(self.make_assign_shl(ctx));
+        stream.extend(self.make_assign_and(ctx));
+        stream.extend(self.make_assign_add(ctx));
+        stream.extend(self.make_assign_sub(ctx));
+        stream.extend(self.make_assign_mul(ctx));
+        stream.extend(self.make_assign_div(ctx));
+        stream.extend(self.make_assign_rem(ctx));
+        stream.extend(self.make_assign_or(ctx));
+        stream.extend(self.make_range(ctx));
+        stream.extend(self.make_debug(ctx));
+        stream.extend(self.make_hash(ctx));
+        stream.extend(self.make_eq(ctx));
+        stream.extend(self.make_ord(ctx));
+        stream.extend(self.make_assertions(ctx));
+        stream.extend(self.make_math_add(ctx));
+        stream.extend(self.make_math_sub(ctx));
+        stream.extend(self.make_math_mul(ctx));
+        stream.extend(self.make_math_div(ctx));
+        stream.extend(self.make_math_rem(ctx));
+        stream.extend(self.make_math_and(ctx));
+        stream.extend(self.make_math_or(ctx));
+        stream.extend(self.make_math_xor(ctx));
+        stream.extend(self.make_math_not(ctx));
+        stream.extend(self.make_display(ctx));
+        stream.extend(self.make_fmt_binary(ctx));
+        stream.extend(self.make_fmt_octal(ctx));
+        stream.extend(self.make_fmt_hex_lower(ctx));
+        stream.extend(self.make_fmt_hex_upper(ctx));
+        stream.extend(self.make_partial_eq(ctx));
+        stream.extend(self.make_partial_ord(ctx));
 
         return Ok(stream);
     }
