@@ -768,6 +768,7 @@ struct Ctx {
     self_raw_ref: TokenStream,
     output: OperatorOutput,
     trait_seal: Ident,
+    trait_seal_with_arguments: TokenStream,
     trait_friend_make: Ident,
     trait_friend_math: Ident,
     trait_friend_bit: Ident,
@@ -819,6 +820,7 @@ impl Ctx {
             cfg.flags.self_math && with_global_operators && !has_generics;
         let with_self_bit =
             cfg.flags.self_bit && with_global_operators && !has_generics;
+        let trait_seal_with_arguments = quote! { #trait_seal #arguments };
 
         let fp_friend_conv = if has_generics {
             quote! { <#rhs_ty as #trait_seal_path>::#fn_conv }
@@ -842,6 +844,7 @@ impl Ctx {
             self_raw_ref,
             output,
             trait_seal,
+            trait_seal_with_arguments,
             trait_friend_make,
             trait_friend_math,
             trait_friend_bit,
@@ -1030,240 +1033,6 @@ impl Maker {
         };
     }
 
-    fn ekran_facet_dispatch(&self) -> TokenStream {
-        if !self.ctx.cfg.facets_present() {
-            return TokenStream::new();
-        }
-
-        let target = self.target.ty();
-        let generics = self.target.external_generics();
-        let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operators = self
-            .ctx
-            .cfg
-            .facet_slots
-            .keys()
-            .map(|slot| slot.operator)
-            .collect::<BTreeSet<_>>();
-        let traits = operators.iter().copied().map(|operator| {
-            let trait_name =
-                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
-            let method = format_ident!("{}", operator.method_name());
-            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = zz_runner::konst(is_konst);
-
-            return quote! {
-                #[doc(hidden)]
-                #[allow(private_interfaces)]
-                pub #konst trait #trait_name #parameters #where_clause {
-                    type Output;
-
-                    fn #method(
-                        lhs: #target,
-                        rhs: Self,
-                    ) -> Self::Output;
-                }
-            };
-        });
-        let implementations =
-            self.ctx.cfg.facet_slots.iter().map(|(key, slot)| {
-                let operator = key.operator;
-                let trait_name =
-                    self.target.fresh_ident(&format!("{}Rhs", operator.name()));
-                let method = format_ident!("{}", operator.method_name());
-                let rhs_ty = slot.rhs.as_ref().map_or_else(
-                    || target.clone(),
-                    |rhs| self.target.external_type(&parse_quote! { #rhs }),
-                );
-                let rhs = match &slot.rhs {
-                    Some(rhs) => self.friend_conversion_expression(
-                        rhs,
-                        slot.conversion.as_ref(),
-                        quote! { rhs },
-                    ),
-                    None => {
-                        let path = &self.ctx.fp_get_raw;
-                        let fp_get_raw = self.target.qualify_path(path);
-                        quote! { #fp_get_raw(rhs) }
-                    }
-                };
-                let path = &self.ctx.fp_get_raw;
-                let lhs = self.target.qualify_path(path);
-                let path = &self.ctx.fp_unchecked;
-                let unchecked = self.target.qualify_path(path);
-                let output = self.target.operator_output(&slot.ty_out, true);
-                let output_ty = output.ty();
-                let result = output.convert(quote! { value });
-                let is_konst =
-                    self.ctx.cfg.konst_for(&operator.is_konst_flags());
-                let operation =
-                    slot.arithmetic.make_operator_expr(operator, is_konst);
-                let konst = zz_runner::konst(is_konst);
-
-                return quote! {
-                    #konst impl #parameters #trait_name #arguments for #rhs_ty
-                    #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn #method(
-                            lhs: #target,
-                            rhs: #rhs_ty,
-                        ) -> Self::Output {
-                            let lhs = #lhs(lhs);
-                            let rhs = #rhs;
-                            let value = #operation;
-                            let value = #unchecked(value);
-                            return #result;
-                        }
-                    }
-                };
-            });
-        let operator_impls = operators.iter().copied().map(|operator| {
-            let trait_name = self
-                .target
-                .fresh_ident(&format!("{}Rhs", operator.name()));
-            let method = format_ident!("{}", operator.method_name());
-            let operation = format_ident!("{}", operator.name());
-            let rhs = self.target.fresh_ident("T");
-            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
-            let (impl_generics, where_clause) = self.target.impl_header(
-                &[parse_quote! { #rhs }],
-                &[parse_quote! {
-                    #rhs: #bonst #trait_name #arguments #destruct
-                }],
-            );
-
-            return quote! {
-                #[allow(private_bounds)]
-                #konst impl #impl_generics ::core::ops::#operation<#rhs>
-                    for #target
-                #where_clause {
-                    type Output = <#rhs as #trait_name #arguments>::Output;
-
-                    #[inline(always)]
-                    fn #method(
-                        self,
-                        rhs: #rhs,
-                    ) -> Self::Output {
-                        return <#rhs as #trait_name #arguments>::#method(self, rhs);
-                    }
-                }
-            };
-        });
-
-        return quote! {
-            #(#traits)*
-            #(#implementations)*
-            #(#operator_impls)*
-        };
-    }
-
-    fn fix_friendship(&mut self) -> syn::Result<()> {
-        let target: Path = syn::parse2(self.target.ty())
-            .expect("integral targets does not emit valid type paths");
-
-        let target_friend = self
-            .ctx
-            .cfg
-            .friends
-            .iter()
-            .find(|friend| self.target.is_target(&friend.ty))
-            .cloned()
-            .unwrap_or_else(|| Friend::from(&target));
-
-        if let Some(it) = self.ctx.cfg.friends.get(&target_friend) {
-            if it.capabilities.contains(&format_ident!("{}", MATH)) {
-                return it.ty.fail(
-                    "self math operations use `self_math`, not `friend`",
-                );
-            }
-            if it.capabilities.contains(&format_ident!("{}", BIT)) {
-                return it
-                    .ty
-                    .fail("self bit operations use `self_bit`, not `friend`");
-            }
-        }
-
-        for (f_def, conv, is_validated) in [
-            (target_friend, Some(parse_quote! { Self::raw }), false),
-            (
-                Friend::from(&self.el),
-                Some(parse_quote! { self }),
-                self.ctx.cfg.validation.has_validation(),
-            ),
-        ] {
-            let mut it = self
-                .ctx
-                .cfg
-                .friends
-                .take(&f_def)
-                .unwrap_or_else(|| f_def.clone());
-
-            if it.conv.is_none() {
-                it.conv = conv;
-            }
-
-            if !is_validated && self.ctx.cfg.flags.self_friend_make {
-                it.capabilities.insert(format_ident!("{}", MAKE));
-            }
-
-            if !self.target.is_target(&f_def.ty)
-                && self.ctx.cfg.flags.self_friend_math_ops
-            {
-                it.capabilities.insert(format_ident!("{}", MATH));
-            }
-
-            if self.target.is_target(&f_def.ty)
-                || self.ctx.cfg.flags.self_friend_rel
-            {
-                it.capabilities.insert(format_ident!("{}", REL));
-            }
-
-            if !self.target.is_target(&f_def.ty)
-                && self.ctx.cfg.flags.self_friend_math_bit
-            {
-                it.capabilities.insert(format_ident!("{}", BIT));
-            }
-
-            // Generic Self operations share the RHS protocol: separate Self
-            // impls would overlap when downstream parameters satisfy it.
-            if self.target.has_generics() && self.target.is_target(&f_def.ty) {
-                if self.ctx.cfg.flags.self_math {
-                    it.capabilities.insert(format_ident!("{}", MATH));
-                }
-                if self.ctx.cfg.flags.self_bit {
-                    it.capabilities.insert(format_ident!("{}", BIT));
-                }
-            }
-
-            assert!(self.ctx.cfg.friends.insert(it));
-        }
-
-        if !self.ctx.cfg.validation.has_validation()
-            && self.ctx.cfg.flags.self_friend_make
-        {
-            N::items()
-                .iter()
-                .filter(|it| {
-                    **it != self.repr && it.can_safe_cast_to(self.repr)
-                })
-                .map(|it| format_ident!("{}", it.rust_name()))
-                .map(|ty| Friend::from(&ty))
-                .for_each(|friend| {
-                    let mut friend =
-                        self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
-                    friend.capabilities.insert(format_ident!("{}", MAKE));
-                    assert!(self.ctx.cfg.friends.insert(friend));
-                });
-        }
-
-        return Ok(());
-    }
-
     fn trait_of(
         &self,
         capability: &Ident,
@@ -1281,135 +1050,11 @@ impl Maker {
         &self,
         flags: &[Konsts],
     ) -> TokenStream {
-        let arguments = self.target.arguments();
-        let seal = &self.ctx.trait_seal;
-        let trait_seal = quote! { #seal #arguments };
+        let trait_seal = &self.ctx.trait_seal_with_arguments;
         let is_konst = self.ctx.cfg.konst_for(flags);
         let bonst = zz_runner::bonst(is_konst);
         let destruct = zz_runner::destruct(is_konst);
         return quote! { #bonst #trait_seal #destruct };
-    }
-
-    fn ekran_friendship(&self) -> TokenStream {
-        let faceted = self.ctx.cfg.facets_present();
-        let target = self.target.ty();
-        let relation_ident = &self.el;
-        let relation: Type = parse_quote! { #relation_ident };
-        let seal = self.ctx.trait_seal.clone();
-        let conversion = self.ctx.fn_conv.clone();
-        let fp_get_raw = &self.ctx.fp_get_raw;
-        let target_conversion = self.ctx.cfg.flags.friend_seal.then(|| {
-            quote! {
-                return #fp_get_raw(self);
-            }
-        });
-        let capabilities = [
-            (
-                self.ctx.cfg.flags.friendzone_friend_make,
-                format_ident!("{}", MAKE),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_math_ops,
-                format_ident!("{}", MATH),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_math_bit,
-                format_ident!("{}", BIT),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_rel,
-                format_ident!("{}", REL),
-            ),
-            (true, crate::friendship::cfg::trust_capability()),
-        ]
-        .into_iter()
-        .filter_map(|(enabled, capability)| enabled.then_some(capability))
-        .filter(|capability| {
-            return !faceted || !Self::is_operator_capability(capability);
-        })
-        .map(|capability| self.trait_of(&capability))
-        .vec();
-        let friends = match self.ctx.cfg.flags.friend {
-            false => vec![],
-            true => self
-                .ctx
-                .cfg
-                .friends
-                .iter()
-                .filter_map(|friend| {
-                    let capabilities = friend
-                        .capabilities
-                        .iter()
-                        .filter(|capability| {
-                            return !faceted
-                                || !Self::is_operator_capability(capability);
-                        })
-                        .map(|capability| self.trait_of(capability))
-                        .collect::<BTreeSet<_>>();
-                    if capabilities.is_empty() {
-                        return None;
-                    }
-
-                    let conversion = if self.target.is_target(&friend.ty) {
-                        None
-                    }
-                    else {
-                        let value = self.friend_conversion_expression(
-                            &friend.ty,
-                            friend.conv.as_ref(),
-                            quote! { self },
-                        );
-                        Some(quote! { return #value; })
-                    };
-
-                    let friend_ty = &friend.ty;
-                    return Some(ProtocolFriend {
-                        ty: syn::parse2(
-                            self.target
-                                .external_type(&parse_quote! { #friend_ty }),
-                        )
-                        .expect(
-                            "friend types remain valid after target lowering",
-                        ),
-                        capabilities,
-                        conversion,
-                    });
-                })
-                .vec(),
-        };
-        let path = &self.ctx.fp_unchecked;
-        let checked = self.target.qualify_path(path);
-        let trusted = self.target.construct(
-            &self.storage,
-            self.target.constructor(),
-            quote! { raw },
-            self.ctx.cfg.flags.assertions,
-        );
-
-        let protocol = crate::friendship::emit_protocol(Protocol {
-            target,
-            generics: self.target.external_generics(),
-            relation,
-            seal,
-            conversion,
-            capabilities,
-            friends,
-            emit_seal: self.ctx.cfg.flags.friendzone_seal,
-            target_conversion,
-            construction: Some(Construction {
-                make: self.ctx.trait_friend_make.clone(),
-                trusted: self
-                    .trait_of(&crate::friendship::cfg::trust_capability()),
-                trusted_constructor: trusted,
-                checked: quote! { #checked },
-            }),
-            konst: self.ctx.cfg.konst_friendship(),
-        });
-        let dispatch = self.ekran_facet_dispatch();
-        return quote! {
-            #protocol
-            #dispatch
-        };
     }
 
     fn ekran_items(&self) -> TokenStream {
@@ -1643,8 +1288,9 @@ impl Maker {
         let items = self.ekran_items();
         let bit_access = self.ekran_bit_access_items();
 
-        let ty = self.target.ty();
+        let ty = &self.ctx.ty;
         let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
+
         return Ok(quote::quote! {
             #friends
 
@@ -1659,6 +1305,368 @@ impl Maker {
                 #bit_access
             }
         });
+    }
+}
+
+// Friendship
+impl Maker {
+    fn fix_friendship(&mut self) -> syn::Result<()> {
+        let target: Path = syn::parse2(self.target.ty())
+            .expect("integral targets does not emit valid type paths");
+
+        let target_friend = self
+            .ctx
+            .cfg
+            .friends
+            .iter()
+            .find(|friend| self.target.is_target(&friend.ty))
+            .cloned()
+            .unwrap_or_else(|| Friend::from(&target));
+
+        if let Some(it) = self.ctx.cfg.friends.get(&target_friend) {
+            if it.capabilities.contains(&format_ident!("{}", MATH)) {
+                return it.ty.fail(
+                    "self math operations use `self_math`, not `friend`",
+                );
+            }
+            if it.capabilities.contains(&format_ident!("{}", BIT)) {
+                return it
+                    .ty
+                    .fail("self bit operations use `self_bit`, not `friend`");
+            }
+        }
+
+        for (f_def, conv, is_validated) in [
+            (target_friend, Some(parse_quote! { Self::raw }), false),
+            (
+                Friend::from(&self.el),
+                Some(parse_quote! { self }),
+                self.ctx.cfg.validation.has_validation(),
+            ),
+        ] {
+            let mut it = self
+                .ctx
+                .cfg
+                .friends
+                .take(&f_def)
+                .unwrap_or_else(|| f_def.clone());
+
+            if it.conv.is_none() {
+                it.conv = conv;
+            }
+
+            if !is_validated && self.ctx.cfg.flags.self_friend_make {
+                it.capabilities.insert(format_ident!("{}", MAKE));
+            }
+
+            if !self.target.is_target(&f_def.ty)
+                && self.ctx.cfg.flags.self_friend_math_ops
+            {
+                it.capabilities.insert(format_ident!("{}", MATH));
+            }
+
+            if self.target.is_target(&f_def.ty)
+                || self.ctx.cfg.flags.self_friend_rel
+            {
+                it.capabilities.insert(format_ident!("{}", REL));
+            }
+
+            if !self.target.is_target(&f_def.ty)
+                && self.ctx.cfg.flags.self_friend_math_bit
+            {
+                it.capabilities.insert(format_ident!("{}", BIT));
+            }
+
+            // Generic Self operations share the RHS protocol: separate Self
+            // impls would overlap when downstream parameters satisfy it.
+            if self.target.has_generics() && self.target.is_target(&f_def.ty) {
+                if self.ctx.cfg.flags.self_math {
+                    it.capabilities.insert(format_ident!("{}", MATH));
+                }
+                if self.ctx.cfg.flags.self_bit {
+                    it.capabilities.insert(format_ident!("{}", BIT));
+                }
+            }
+
+            assert!(self.ctx.cfg.friends.insert(it));
+        }
+
+        if !self.ctx.cfg.validation.has_validation()
+            && self.ctx.cfg.flags.self_friend_make
+        {
+            N::items()
+                .iter()
+                .filter(|it| {
+                    **it != self.repr && it.can_safe_cast_to(self.repr)
+                })
+                .map(|it| format_ident!("{}", it.rust_name()))
+                .map(|ty| Friend::from(&ty))
+                .for_each(|friend| {
+                    let mut friend =
+                        self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
+                    friend.capabilities.insert(format_ident!("{}", MAKE));
+                    assert!(self.ctx.cfg.friends.insert(friend));
+                });
+        }
+
+        return Ok(());
+    }
+
+    fn make_facet_dispatch(&self) -> TokenStream {
+        if !self.ctx.cfg.facets_present() {
+            return TokenStream::new();
+        }
+
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
+        let (parameters, arguments, where_clause) = generics.split_for_impl();
+        let operators = self
+            .ctx
+            .cfg
+            .facet_slots
+            .keys()
+            .map(|slot| slot.operator)
+            .collect::<BTreeSet<_>>();
+        let traits = operators.iter().copied().map(|operator| {
+            let trait_name =
+                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
+            let method = format_ident!("{}", operator.method_name());
+            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
+            let konst = zz_runner::konst(is_konst);
+
+            return quote! {
+                #[doc(hidden)]
+                #[allow(private_interfaces)]
+                pub #konst trait #trait_name #parameters #where_clause {
+                    type Output;
+
+                    fn #method(
+                        lhs: #target,
+                        rhs: Self,
+                    ) -> Self::Output;
+                }
+            };
+        });
+        let implementations =
+            self.ctx.cfg.facet_slots.iter().map(|(key, slot)| {
+                let operator = key.operator;
+                let trait_name =
+                    self.target.fresh_ident(&format!("{}Rhs", operator.name()));
+                let method = format_ident!("{}", operator.method_name());
+                let rhs_ty = slot.rhs.as_ref().map_or_else(
+                    || target.clone(),
+                    |rhs| self.target.external_type(&parse_quote! { #rhs }),
+                );
+                let rhs = match &slot.rhs {
+                    Some(rhs) => self.friend_conversion_expression(
+                        rhs,
+                        slot.conversion.as_ref(),
+                        quote! { rhs },
+                    ),
+                    None => {
+                        let path = &self.ctx.fp_get_raw;
+                        let fp_get_raw = self.target.qualify_path(path);
+                        quote! { #fp_get_raw(rhs) }
+                    }
+                };
+                let path = &self.ctx.fp_get_raw;
+                let lhs = self.target.qualify_path(path);
+                let path = &self.ctx.fp_unchecked;
+                let unchecked = self.target.qualify_path(path);
+                let output = self.target.operator_output(&slot.ty_out, true);
+                let output_ty = output.ty();
+                let result = output.convert(quote! { value });
+                let is_konst =
+                    self.ctx.cfg.konst_for(&operator.is_konst_flags());
+                let operation =
+                    slot.arithmetic.make_operator_expr(operator, is_konst);
+                let konst = zz_runner::konst(is_konst);
+
+                return quote! {
+                    #konst impl #parameters #trait_name #arguments for #rhs_ty
+                    #where_clause {
+                        type Output = #output_ty;
+
+                        #[inline(always)]
+                        fn #method(
+                            lhs: #target,
+                            rhs: #rhs_ty,
+                        ) -> Self::Output {
+                            let lhs = #lhs(lhs);
+                            let rhs = #rhs;
+                            let value = #operation;
+                            let value = #unchecked(value);
+                            return #result;
+                        }
+                    }
+                };
+            });
+        let operator_impls = operators.iter().copied().map(|operator| {
+            let trait_name = self
+                .target
+                .fresh_ident(&format!("{}Rhs", operator.name()));
+            let method = format_ident!("{}", operator.method_name());
+            let operation = format_ident!("{}", operator.name());
+            let rhs = self.target.fresh_ident("T");
+            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
+            let (impl_generics, where_clause) = self.target.impl_header(
+                &[parse_quote! { #rhs }],
+                &[parse_quote! {
+                    #rhs: #bonst #trait_name #arguments #destruct
+                }],
+            );
+
+            return quote! {
+                #[allow(private_bounds)]
+                #konst impl #impl_generics ::core::ops::#operation<#rhs>
+                    for #target
+                #where_clause {
+                    type Output = <#rhs as #trait_name #arguments>::Output;
+
+                    #[inline(always)]
+                    fn #method(
+                        self,
+                        rhs: #rhs,
+                    ) -> Self::Output {
+                        return <#rhs as #trait_name #arguments>::#method(self, rhs);
+                    }
+                }
+            };
+        });
+
+        return quote! {
+            #(#traits)*
+            #(#implementations)*
+            #(#operator_impls)*
+        };
+    }
+
+    fn ekran_friendship(&self) -> TokenStream {
+        let target = self.ctx.ty.clone();
+        let el = &self.el;
+        let relation: Type = parse_quote! { #el };
+        let seal = self.ctx.trait_seal.clone();
+        let conversion = self.ctx.fn_conv.clone();
+        let fp_get_raw = &self.ctx.fp_get_raw;
+        let target_conversion = self.ctx.cfg.flags.friend_seal.then(|| {
+            quote! {
+                return #fp_get_raw(self);
+            }
+        });
+        let capabilities = [
+            (
+                self.ctx.cfg.flags.friendzone_friend_make,
+                format_ident!("{}", MAKE),
+            ),
+            (
+                self.ctx.cfg.flags.friendzone_friend_math_ops,
+                format_ident!("{}", MATH),
+            ),
+            (
+                self.ctx.cfg.flags.friendzone_friend_math_bit,
+                format_ident!("{}", BIT),
+            ),
+            (
+                self.ctx.cfg.flags.friendzone_friend_rel,
+                format_ident!("{}", REL),
+            ),
+            (true, crate::friendship::cfg::trust_capability()),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, capability)| enabled.then_some(capability))
+        .filter(|capability| {
+            return !self.ctx.cfg.facets_present()
+                || !Self::is_operator_capability(capability);
+        })
+        .map(|capability| self.trait_of(&capability))
+        .vec();
+        let friends = match self.ctx.cfg.flags.friend {
+            false => vec![],
+            true => self
+                .ctx
+                .cfg
+                .friends
+                .iter()
+                .filter_map(|friend| {
+                    let capabilities = friend
+                        .capabilities
+                        .iter()
+                        .filter(|capability| {
+                            return !self.ctx.cfg.facets_present()
+                                || !Self::is_operator_capability(capability);
+                        })
+                        .map(|capability| self.trait_of(capability))
+                        .collect::<BTreeSet<_>>();
+                    if capabilities.is_empty() {
+                        return None;
+                    }
+
+                    let conversion = if self.target.is_target(&friend.ty) {
+                        None
+                    }
+                    else {
+                        let value = self.friend_conversion_expression(
+                            &friend.ty,
+                            friend.conv.as_ref(),
+                            quote! { self },
+                        );
+                        Some(quote! { return #value; })
+                    };
+
+                    let friend_ty = &friend.ty;
+                    return Some(ProtocolFriend {
+                        ty: syn::parse2(
+                            self.target
+                                .external_type(&parse_quote! { #friend_ty }),
+                        )
+                        .expect(
+                            "friend types remain valid after target lowering",
+                        ),
+                        capabilities,
+                        conversion,
+                    });
+                })
+                .vec(),
+        };
+        let path = &self.ctx.fp_unchecked;
+        let checked = self.target.qualify_path(path);
+        let trusted = self.target.construct(
+            &self.storage,
+            self.target.constructor(),
+            quote! { raw },
+            self.ctx.cfg.flags.assertions,
+        );
+
+        let protocol = crate::friendship::emit_protocol(Protocol {
+            target,
+            generics: self.target.external_generics(),
+            relation,
+            seal,
+            conversion,
+            capabilities,
+            friends,
+            emit_seal: self.ctx.cfg.flags.friendzone_seal,
+            target_conversion,
+            construction: Some(Construction {
+                make: self.ctx.trait_friend_make.clone(),
+                trusted: self
+                    .trait_of(&crate::friendship::cfg::trust_capability()),
+                trusted_constructor: trusted,
+                checked: quote! { #checked },
+            }),
+            konst: self.ctx.cfg.konst_friendship(),
+        });
+
+        let dispatch = self.make_facet_dispatch();
+
+        return quote! {
+            #protocol
+
+            #dispatch
+        };
     }
 }
 
@@ -4684,6 +4692,7 @@ impl Maker {
     }
 }
 
+// Items
 impl Maker {
     fn make_fn_conv_of(
         &self,
