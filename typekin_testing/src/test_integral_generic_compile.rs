@@ -247,7 +247,7 @@ fn forbidden() {{
         ";
         let dependencies =
             "serde = { version = \"1\", default-features = false }";
-        let output = compile("generic-no-std", dependencies, source, false);
+        let output = compile("generic-no-std", dependencies, source, true);
         assert!(output.status.success(), "{output:?}");
     }
 

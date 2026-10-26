@@ -80,12 +80,12 @@ pub(crate) mod cfg {
     }
 
     pub(crate) fn trust_capability() -> Ident {
-        return format_ident!("UnsafeTrust");
+        return format_ident!("Unsafe");
     }
 
     pub(crate) fn is_trust_capability(capability: &Ident) -> bool {
         return capability == &trust_capability()
-            || capability == &format_ident!("FlagUnsafeTrust");
+            || capability == &format_ident!("FlagUnsafe");
     }
 
     struct Capability(Ident);

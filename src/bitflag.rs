@@ -1650,7 +1650,7 @@ impl Maker {
                 format_ident!("FlagMath"),
                 format_ident!("FlagBit"),
                 format_ident!("FlagCmp"),
-                format_ident!("FlagUnsafeTrust"),
+                format_ident!("FlagUnsafe"),
             ],
             friends,
             emit_seal: true,

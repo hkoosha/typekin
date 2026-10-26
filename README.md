@@ -338,10 +338,10 @@ fn main() {
 ```
 
 `with = range` emits the nightly `core::iter::Step` implementation, allowing
-ordinary wrapper ranges to iterate values. It requires `#![feature(step_trait)]`;
-`konst = nightly` also makes that implementation const. `Step` cannot represent
-validation holes, so `range` is rejected with `domain`, `valid`, `non_zero`, or
-a circular profile.
+ordinary wrapper ranges to iterate values. It requires
+`#![feature(step_trait)]`; `konst = nightly` also makes that implementation
+const. `Step` cannot represent validation holes, so `range` is rejected with
+`domain`, `valid`, `non_zero`, or a circular profile.
 
 ```rust
 #![feature(step_trait)]

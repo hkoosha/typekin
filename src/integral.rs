@@ -77,7 +77,12 @@ use crate::{
     zz_runner,
 };
 
-#[derive(Clone)]
+const MATH: &str = "Math";
+const BIT: &str = "Bit";
+const MAKE: &str = "Make";
+const REL: &str = "Rel";
+const UNSAFE: &str = "Unsafe";
+
 pub(crate) struct IntegralTarget {
     ident: Ident,
     generics: Generics,
@@ -87,7 +92,7 @@ pub(crate) struct IntegralTarget {
 }
 
 impl IntegralTarget {
-    fn new(
+    pub(crate) fn new(
         ident: Ident,
         generics: Generics,
     ) -> Self {
@@ -273,11 +278,11 @@ impl IntegralTarget {
         return quote! { #ty };
     }
 
-    fn operator_output<'a>(
+    fn operator_output(
         &self,
-        configuration: &'a SelfConverter,
+        configuration: &SelfConverter,
         external: bool,
-    ) -> OperatorOutput<'a> {
+    ) -> OperatorOutput {
         let ty = if configuration.is_self() {
             if external {
                 self.ty()
@@ -745,18 +750,125 @@ pub(crate) struct Maker {
     storage: StoragePlan,
     el: Ident,
     target: IntegralTarget,
+    ctx: Ctx,
+}
 
-    fn_conv: Ident,
-    fp_get_raw: Path,
-    fp_unchecked: Path,
-
+struct Ctx {
+    cfg: Box<Cfg>,
+    ty: TokenStream,
+    impl_generics: TokenStream,
+    where_clause: TokenStream,
+    arguments: TokenStream,
+    rhs_ty: Ident,
+    rhs_impl_generics: TokenStream,
+    validation: TokenStream,
+    fp_friend_conv: TokenStream,
+    rhs_raw: TokenStream,
+    self_raw: TokenStream,
+    self_raw_ref: TokenStream,
+    output: OperatorOutput,
     trait_seal: Ident,
     trait_friend_make: Ident,
     trait_friend_math: Ident,
     trait_friend_bit: Ident,
     trait_friend_rel: Ident,
+    fn_conv: Ident,
+    fp_get_raw: Path,
+    fp_unchecked: Path,
+    with_global_operators: bool,
+    with_self_math: bool,
+    with_self_bit: bool,
+}
 
-    cfg: Box<Cfg>,
+impl Ctx {
+    fn new(
+        target: &IntegralTarget,
+        cfg: Box<Cfg>,
+        storage: &StoragePlan,
+    ) -> syn::Result<Self> {
+        let ty = target.ty();
+        let (impl_generics, where_clause) = target.impl_header(&[], &[]);
+        let arguments = target.arguments();
+        let trait_seal = target.fresh_ident("Seal");
+        let trait_friend_bit = target.fresh_ident(BIT);
+        let trait_friend_make = target.fresh_ident(MAKE);
+        let trait_friend_math = target.fresh_ident(MATH);
+        let trait_friend_rel = target.fresh_ident(REL);
+        let fp_unchecked = syn::parse_str(&cfg.flags.fp_unchecked)?;
+        let fp_get_raw = cfg
+            .get_raw
+            .clone()
+            .unwrap_or_else(|| parse_quote! { Self::raw });
+        let fn_conv = format_ident!(
+            "conv_{}",
+            zz_runner::snake_case_of(&&target.ident.to_string())
+        );
+        let rhs_ty = target.fresh_ident("T");
+        let (rhs_impl_generics, _) =
+            target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
+        let has_generics = target.has_generics();
+        let value = quote! { value };
+        let validation = cfg.validation.emit(&value);
+        let trait_seal_path = quote! { #trait_seal #arguments };
+        let rhs_raw = storage.extract(quote! { rhs.0 });
+        let self_raw = storage.extract(quote! { self.0 });
+        let self_raw_ref = storage.extract_ref(quote! { self.0 });
+        let output = target.operator_output(&cfg.ty_out, false);
+        let with_global_operators = !cfg.facets_present();
+        let with_self_math =
+            cfg.flags.self_math && with_global_operators && !has_generics;
+        let with_self_bit =
+            cfg.flags.self_bit && with_global_operators && !has_generics;
+
+        let fp_friend_conv = if has_generics {
+            quote! { <#rhs_ty as #trait_seal_path>::#fn_conv }
+        }
+        else {
+            quote! { #trait_seal_path::#fn_conv }
+        };
+
+        return Ok(Self {
+            cfg,
+            ty,
+            impl_generics,
+            where_clause,
+            arguments,
+            rhs_ty,
+            rhs_impl_generics,
+            validation,
+            fp_friend_conv,
+            rhs_raw,
+            self_raw,
+            self_raw_ref,
+            output,
+            trait_seal,
+            trait_friend_make,
+            trait_friend_math,
+            trait_friend_bit,
+            trait_friend_rel,
+            fn_conv,
+            fp_get_raw,
+            fp_unchecked,
+            with_global_operators,
+            with_self_math,
+            with_self_bit,
+        });
+    }
+
+    fn rhs_where_clause(
+        &self,
+        maker: &Maker,
+        bounds: TokenStream,
+    ) -> TokenStream {
+        let rhs_ty = &self.rhs_ty;
+        return maker
+            .target
+            .impl_header(
+                &[parse_quote! { #rhs_ty }],
+                &[parse_quote! { #rhs_ty: #bounds }],
+            )
+            .1;
+    }
 }
 
 impl Maker {
@@ -774,74 +886,44 @@ impl Maker {
         );
     }
 
-    fn new_target(
+    pub(crate) fn new_target(
         target: IntegralTarget,
         el: Ident,
-        cfg: Box<Cfg>,
+        mut cfg: Box<Cfg>,
         storage: StoragePlan,
     ) -> syn::Result<Self> {
-        let ty = &target.ident;
-        let cfg = Self::preprocess_cfg(cfg);
+        if cfg.flags.auto_of_raw && cfg.validation.has_validation() {
+            cfg.flags.auto_of_raw = false;
+        }
+        let cfg = cfg;
+
         let (unchecked_flag, emits_unchecked) =
-            if cfg.validation.has_validation() {
-                ("fn_make_unchecked", cfg.flags.fn_make_unchecked)
-            }
-            else {
-                ("fn_make_checked", cfg.flags.fn_make_checked)
+            match cfg.validation.has_validation() {
+                true => ("fn_make_unchecked", cfg.flags.fn_make_unchecked),
+                false => ("fn_make_checked", cfg.flags.fn_make_checked),
             };
+
         if storage.non_zero && !emits_unchecked {
-            let span = cfg
+            return cfg
                 .explicit_flag(unchecked_flag)
-                .map_or_else(Span::call_site, |(_, span)| span);
-            return span.fail(
-                "nonzero storage does not support custom unchecked constructors",
-            );
+                .map_or_else(Span::call_site, |(_, span)| span)
+                .fail("nonzero storage does not support custom unchecked constructors");
         }
 
+        let ctx = Ctx::new(&target, cfg, &storage)?;
         let mut this = Self {
-            trait_seal: target.fresh_ident("Seal"),
-            trait_friend_bit: target.fresh_ident("Bit"),
-            trait_friend_make: target.fresh_ident("Make"),
-            trait_friend_math: target.fresh_ident("Math"),
-            trait_friend_rel: target.fresh_ident("Rel"),
-
-            fp_unchecked: syn::parse_str(&cfg.flags.fp_unchecked)?,
-            fp_get_raw: cfg
-                .get_raw
-                .clone()
-                .unwrap_or_else(|| parse_quote! { Self::raw }),
-            fn_conv: format_ident!(
-                "conv_{}",
-                zz_runner::snake_case_of(&ty.to_string())
-            ),
-
             repr: N::of(el.to_string()).ok_or_else(|| {
                 syn::Error::new(el.span(), "unknown integral type")
             })?,
             storage,
             el,
             target,
-            cfg,
+            ctx,
         };
 
         this.fix_friendship()?;
 
         return Ok(this);
-    }
-
-    fn preprocess_cfg(mut cfg: Box<Cfg>) -> Box<Cfg> {
-        if cfg.flags.auto_of_raw && cfg.validation.has_validation() {
-            cfg.flags.auto_of_raw = false;
-        }
-
-        return cfg;
-    }
-
-    fn target_qualified_path(
-        &self,
-        path: &Path,
-    ) -> TokenStream {
-        return self.target.qualify_path(path);
     }
 
     fn arithmetic_method_name(
@@ -851,7 +933,7 @@ impl Maker {
     ) -> Ident {
         let name = operation.name();
         return if !is_konst
-            && self.cfg.profile.arithmetic() == Arithmetic::WrapperWrapping
+            && self.ctx.cfg.profile.arithmetic() == Arithmetic::WrapperWrapping
         {
             format_ident!("_{}_wrapping", name)
         }
@@ -865,9 +947,9 @@ impl Maker {
         operation: ArithmeticOp,
         rhs_type: TokenStream,
     ) -> TokenStream {
-        let fp_get_raw = &self.fp_get_raw;
-        let fp_unchecked = &self.fp_unchecked;
-        let arithmetic = self.cfg.profile.arithmetic();
+        let fp_get_raw = &self.ctx.fp_get_raw;
+        let fp_unchecked = &self.ctx.fp_unchecked;
+        let arithmetic = self.ctx.cfg.profile.arithmetic();
         let method = self.arithmetic_method_name(operation, true);
         let expression = arithmetic.make_const_expr(operation);
         let wrapping = (arithmetic == Arithmetic::WrapperWrapping).then(|| {
@@ -902,7 +984,7 @@ impl Maker {
     }
 
     fn is_operator_capability(capability: &Ident) -> bool {
-        return matches!(capability.to_string().as_str(), "Math" | "Bit");
+        return matches!(capability.to_string().as_str(), MATH | BIT);
     }
 
     fn friend_conversion_expression(
@@ -912,7 +994,8 @@ impl Maker {
         value: TokenStream,
     ) -> TokenStream {
         if self.target.is_target(ty) {
-            let fp_get_raw = self.target_qualified_path(&self.fp_get_raw);
+            let path = &self.ctx.fp_get_raw;
+            let fp_get_raw = self.target.qualify_path(path);
             return quote! { #fp_get_raw(#value) };
         }
 
@@ -935,7 +1018,7 @@ impl Maker {
 
         return match conversion {
             Some(conversion) => {
-                let conversion = self.target_qualified_path(conversion);
+                let conversion = self.target.qualify_path(conversion);
                 quote! { #conversion(#value) }
             }
             None => quote! {
@@ -948,7 +1031,7 @@ impl Maker {
     }
 
     fn ekran_facet_dispatch(&self) -> TokenStream {
-        if !self.cfg.facets_present() {
+        if !self.ctx.cfg.facets_present() {
             return TokenStream::new();
         }
 
@@ -956,6 +1039,7 @@ impl Maker {
         let generics = self.target.external_generics();
         let (parameters, arguments, where_clause) = generics.split_for_impl();
         let operators = self
+            .ctx
             .cfg
             .facet_slots
             .keys()
@@ -965,7 +1049,7 @@ impl Maker {
             let trait_name =
                 self.target.fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
-            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
             let konst = zz_runner::konst(is_konst);
 
             return quote! {
@@ -981,56 +1065,60 @@ impl Maker {
                 }
             };
         });
-        let implementations = self.cfg.facet_slots.iter().map(|(key, slot)| {
-            let operator = key.operator;
-            let trait_name =
-                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
-            let method = format_ident!("{}", operator.method_name());
-            let rhs_ty = slot.rhs.as_ref().map_or_else(
-                || target.clone(),
-                |rhs| self.target.external_type(&parse_quote! { #rhs }),
-            );
-            let rhs = match &slot.rhs {
-                Some(rhs) => self.friend_conversion_expression(
-                    rhs,
-                    slot.conversion.as_ref(),
-                    quote! { rhs },
-                ),
-                None => {
-                    let fp_get_raw =
-                        self.target_qualified_path(&self.fp_get_raw);
-                    quote! { #fp_get_raw(rhs) }
-                }
-            };
-            let lhs = self.target_qualified_path(&self.fp_get_raw);
-            let unchecked = self.target_qualified_path(&self.fp_unchecked);
-            let output = self.target.operator_output(&slot.ty_out, true);
-            let output_ty = output.ty();
-            let result = output.convert(quote! { value });
-            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
-            let operation =
-                slot.arithmetic.make_operator_expr(operator, is_konst);
-            let konst = zz_runner::konst(is_konst);
-
-            return quote! {
-                #konst impl #parameters #trait_name #arguments for #rhs_ty
-                #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn #method(
-                        lhs: #target,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let lhs = #lhs(lhs);
-                        let rhs = #rhs;
-                        let value = #operation;
-                        let value = #unchecked(value);
-                        return #result;
+        let implementations =
+            self.ctx.cfg.facet_slots.iter().map(|(key, slot)| {
+                let operator = key.operator;
+                let trait_name =
+                    self.target.fresh_ident(&format!("{}Rhs", operator.name()));
+                let method = format_ident!("{}", operator.method_name());
+                let rhs_ty = slot.rhs.as_ref().map_or_else(
+                    || target.clone(),
+                    |rhs| self.target.external_type(&parse_quote! { #rhs }),
+                );
+                let rhs = match &slot.rhs {
+                    Some(rhs) => self.friend_conversion_expression(
+                        rhs,
+                        slot.conversion.as_ref(),
+                        quote! { rhs },
+                    ),
+                    None => {
+                        let path = &self.ctx.fp_get_raw;
+                        let fp_get_raw = self.target.qualify_path(path);
+                        quote! { #fp_get_raw(rhs) }
                     }
-                }
-            };
-        });
+                };
+                let path = &self.ctx.fp_get_raw;
+                let lhs = self.target.qualify_path(path);
+                let path = &self.ctx.fp_unchecked;
+                let unchecked = self.target.qualify_path(path);
+                let output = self.target.operator_output(&slot.ty_out, true);
+                let output_ty = output.ty();
+                let result = output.convert(quote! { value });
+                let is_konst =
+                    self.ctx.cfg.konst_for(&operator.is_konst_flags());
+                let operation =
+                    slot.arithmetic.make_operator_expr(operator, is_konst);
+                let konst = zz_runner::konst(is_konst);
+
+                return quote! {
+                    #konst impl #parameters #trait_name #arguments for #rhs_ty
+                    #where_clause {
+                        type Output = #output_ty;
+
+                        #[inline(always)]
+                        fn #method(
+                            lhs: #target,
+                            rhs: #rhs_ty,
+                        ) -> Self::Output {
+                            let lhs = #lhs(lhs);
+                            let rhs = #rhs;
+                            let value = #operation;
+                            let value = #unchecked(value);
+                            return #result;
+                        }
+                    }
+                };
+            });
         let operator_impls = operators.iter().copied().map(|operator| {
             let trait_name = self
                 .target
@@ -1038,7 +1126,7 @@ impl Maker {
             let method = format_ident!("{}", operator.method_name());
             let operation = format_ident!("{}", operator.name());
             let rhs = self.target.fresh_ident("T");
-            let is_konst = self.cfg.konst_for(&operator.is_konst_flags());
+            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
             let konst = zz_runner::konst(is_konst);
             let bonst = zz_runner::bonst(is_konst);
             let destruct = zz_runner::destruct(is_konst);
@@ -1076,12 +1164,10 @@ impl Maker {
 
     fn fix_friendship(&mut self) -> syn::Result<()> {
         let target: Path = syn::parse2(self.target.ty())
-            .expect("integral targets emit valid type paths");
-        let relation = &self.el;
-        let self1 = &self.cfg;
-        let validated = self1.validation.has_validation();
-        let has_make = self.cfg.flags.self_friend_make;
+            .expect("integral targets does not emit valid type paths");
+
         let target_friend = self
+            .ctx
             .cfg
             .friends
             .iter()
@@ -1089,14 +1175,13 @@ impl Maker {
             .cloned()
             .unwrap_or_else(|| Friend::from(&target));
 
-        if let Some(it) = self.cfg.friends.get(&target_friend) {
-            if it.capabilities.contains(&format_ident!("Math")) {
+        if let Some(it) = self.ctx.cfg.friends.get(&target_friend) {
+            if it.capabilities.contains(&format_ident!("{}", MATH)) {
                 return it.ty.fail(
                     "self math operations use `self_math`, not `friend`",
                 );
             }
-
-            if it.capabilities.contains(&format_ident!("Bit")) {
+            if it.capabilities.contains(&format_ident!("{}", BIT)) {
                 return it
                     .ty
                     .fail("self bit operations use `self_bit`, not `friend`");
@@ -1106,12 +1191,13 @@ impl Maker {
         for (f_def, conv, is_validated) in [
             (target_friend, Some(parse_quote! { Self::raw }), false),
             (
-                Friend::from(relation),
+                Friend::from(&self.el),
                 Some(parse_quote! { self }),
-                validated,
+                self.ctx.cfg.validation.has_validation(),
             ),
         ] {
             let mut it = self
+                .ctx
                 .cfg
                 .friends
                 .take(&f_def)
@@ -1121,43 +1207,45 @@ impl Maker {
                 it.conv = conv;
             }
 
-            if !is_validated && has_make {
-                it.capabilities.insert(format_ident!("Make"));
+            if !is_validated && self.ctx.cfg.flags.self_friend_make {
+                it.capabilities.insert(format_ident!("{}", MAKE));
             }
 
             if !self.target.is_target(&f_def.ty)
-                && self.cfg.flags.self_friend_math_ops
+                && self.ctx.cfg.flags.self_friend_math_ops
             {
-                it.capabilities.insert(format_ident!("Math"));
+                it.capabilities.insert(format_ident!("{}", MATH));
             }
 
             if self.target.is_target(&f_def.ty)
-                || self.cfg.flags.self_friend_rel
+                || self.ctx.cfg.flags.self_friend_rel
             {
-                it.capabilities.insert(format_ident!("Rel"));
+                it.capabilities.insert(format_ident!("{}", REL));
             }
 
             if !self.target.is_target(&f_def.ty)
-                && self.cfg.flags.self_friend_math_bit
+                && self.ctx.cfg.flags.self_friend_math_bit
             {
-                it.capabilities.insert(format_ident!("Bit"));
+                it.capabilities.insert(format_ident!("{}", BIT));
             }
 
             // Generic Self operations share the RHS protocol: separate Self
             // impls would overlap when downstream parameters satisfy it.
             if self.target.has_generics() && self.target.is_target(&f_def.ty) {
-                if self.cfg.flags.self_math {
-                    it.capabilities.insert(format_ident!("Math"));
+                if self.ctx.cfg.flags.self_math {
+                    it.capabilities.insert(format_ident!("{}", MATH));
                 }
-                if self.cfg.flags.self_bit {
-                    it.capabilities.insert(format_ident!("Bit"));
+                if self.ctx.cfg.flags.self_bit {
+                    it.capabilities.insert(format_ident!("{}", BIT));
                 }
             }
 
-            assert!(self.cfg.friends.insert(it));
+            assert!(self.ctx.cfg.friends.insert(it));
         }
 
-        if !validated && has_make {
+        if !self.ctx.cfg.validation.has_validation()
+            && self.ctx.cfg.flags.self_friend_make
+        {
             N::items()
                 .iter()
                 .filter(|it| {
@@ -1167,59 +1255,71 @@ impl Maker {
                 .map(|ty| Friend::from(&ty))
                 .for_each(|friend| {
                     let mut friend =
-                        self.cfg.friends.take(&friend).unwrap_or(friend);
-                    friend.capabilities.insert(format_ident!("Make"));
-                    assert!(self.cfg.friends.insert(friend));
+                        self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
+                    friend.capabilities.insert(format_ident!("{}", MAKE));
+                    assert!(self.ctx.cfg.friends.insert(friend));
                 });
         }
 
         return Ok(());
     }
 
-    fn protocol_capability(
+    fn trait_of(
         &self,
         capability: &Ident,
     ) -> Ident {
         return match capability.to_string().as_str() {
-            "Make" => self.trait_friend_make.clone(),
-            "Math" => self.trait_friend_math.clone(),
-            "Bit" => self.trait_friend_bit.clone(),
-            "Rel" => self.trait_friend_rel.clone(),
+            MAKE => self.ctx.trait_friend_make.clone(),
+            MATH => self.ctx.trait_friend_math.clone(),
+            BIT => self.ctx.trait_friend_bit.clone(),
+            REL => self.ctx.trait_friend_rel.clone(),
             _ => self.target.fresh_ident(&capability.to_string()),
         };
     }
 
-    fn bounds_for(&self, flags: &[Konsts]) -> TokenStream {
-        let is_konst = self.cfg.konst_for(flags);
+    fn bounds_for(
+        &self,
+        flags: &[Konsts],
+    ) -> TokenStream {
+        let arguments = self.target.arguments();
+        let seal = &self.ctx.trait_seal;
+        let trait_seal = quote! { #seal #arguments };
+        let is_konst = self.ctx.cfg.konst_for(flags);
         let bonst = zz_runner::bonst(is_konst);
         let destruct = zz_runner::destruct(is_konst);
         return quote! { #bonst #trait_seal #destruct };
     }
 
     fn ekran_friendship(&self) -> TokenStream {
-        let faceted = self.cfg.facets_present();
+        let faceted = self.ctx.cfg.facets_present();
         let target = self.target.ty();
         let relation_ident = &self.el;
         let relation: Type = parse_quote! { #relation_ident };
-        let seal = self.trait_seal.clone();
-        let conversion = self.fn_conv.clone();
-        let fp_get_raw = &self.fp_get_raw;
-        let target_conversion = self.cfg.flags.friend_seal.then(|| {
+        let seal = self.ctx.trait_seal.clone();
+        let conversion = self.ctx.fn_conv.clone();
+        let fp_get_raw = &self.ctx.fp_get_raw;
+        let target_conversion = self.ctx.cfg.flags.friend_seal.then(|| {
             quote! {
                 return #fp_get_raw(self);
             }
         });
         let capabilities = [
-            (self.cfg.flags.friendzone_friend_make, format_ident!("Make")),
             (
-                self.cfg.flags.friendzone_friend_math_ops,
-                format_ident!("Math"),
+                self.ctx.cfg.flags.friendzone_friend_make,
+                format_ident!("{}", MAKE),
             ),
             (
-                self.cfg.flags.friendzone_friend_math_bit,
-                format_ident!("Bit"),
+                self.ctx.cfg.flags.friendzone_friend_math_ops,
+                format_ident!("{}", MATH),
             ),
-            (self.cfg.flags.friendzone_friend_rel, format_ident!("Rel")),
+            (
+                self.ctx.cfg.flags.friendzone_friend_math_bit,
+                format_ident!("{}", BIT),
+            ),
+            (
+                self.ctx.cfg.flags.friendzone_friend_rel,
+                format_ident!("{}", REL),
+            ),
             (true, crate::friendship::cfg::trust_capability()),
         ]
         .into_iter()
@@ -1227,11 +1327,12 @@ impl Maker {
         .filter(|capability| {
             return !faceted || !Self::is_operator_capability(capability);
         })
-        .map(|capability| self.protocol_capability(&capability))
+        .map(|capability| self.trait_of(&capability))
         .vec();
-        let friends = match self.cfg.flags.friend {
+        let friends = match self.ctx.cfg.flags.friend {
             false => vec![],
             true => self
+                .ctx
                 .cfg
                 .friends
                 .iter()
@@ -1243,7 +1344,7 @@ impl Maker {
                             return !faceted
                                 || !Self::is_operator_capability(capability);
                         })
-                        .map(|capability| self.protocol_capability(capability))
+                        .map(|capability| self.trait_of(capability))
                         .collect::<BTreeSet<_>>();
                     if capabilities.is_empty() {
                         return None;
@@ -1276,12 +1377,13 @@ impl Maker {
                 })
                 .vec(),
         };
-        let checked = self.target_qualified_path(&self.fp_unchecked);
+        let path = &self.ctx.fp_unchecked;
+        let checked = self.target.qualify_path(path);
         let trusted = self.target.construct(
             &self.storage,
             self.target.constructor(),
             quote! { raw },
-            self.cfg.flags.assertions,
+            self.ctx.cfg.flags.assertions,
         );
 
         let protocol = crate::friendship::emit_protocol(Protocol {
@@ -1292,17 +1394,16 @@ impl Maker {
             conversion,
             capabilities,
             friends,
-            emit_seal: self.cfg.flags.friendzone_seal,
+            emit_seal: self.ctx.cfg.flags.friendzone_seal,
             target_conversion,
             construction: Some(Construction {
-                make: self.trait_friend_make.clone(),
-                trusted: self.protocol_capability(
-                    &crate::friendship::cfg::trust_capability(),
-                ),
+                make: self.ctx.trait_friend_make.clone(),
+                trusted: self
+                    .trait_of(&crate::friendship::cfg::trust_capability()),
                 trusted_constructor: trusted,
                 checked: quote! { #checked },
             }),
-            konst: self.cfg.konst_friendship(),
+            konst: self.ctx.cfg.konst_friendship(),
         });
         let dispatch = self.ekran_facet_dispatch();
         return quote! {
@@ -1311,18 +1412,276 @@ impl Maker {
         };
     }
 
-    pub(crate) fn make_range(&self) -> TokenStream {
+    pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
+        let impls = self.ekran_impls()?;
+        let items = self.ekran_items();
+        let bit_access = self.ekran_bit_access_items();
+
         let ty = self.target.ty();
         let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
+        return Ok(quote::quote! {
+            #impls
+
+            impl #impl_generics #ty #where_clause {
+                #items
+            }
+
+            #[allow(clippy::unnecessary_cast)]
+            impl #impl_generics #ty #where_clause {
+                #bit_access
+            }
+        });
+    }
+
+    fn ekran_items(&self) -> TokenStream {
+        let ctx = &self.ctx;
+        let mut stream = TokenStream::new();
+
+        stream.extend(self.make_fn_conv_of(ctx));
+        stream.extend(self.make_auto_of_raw(ctx));
+        stream.extend(self.make_fn_conv_raw(ctx));
+        stream.extend(self.make_fn_conv_into(ctx));
+        stream.extend(self.make_map(ctx));
+        stream.extend(self.make_fn_conv_try_into_unchecked(ctx));
+        stream.extend(self.make_fn_conv_try_into_checked(ctx));
+        stream.extend(self.make_fn_math_add(ctx));
+        stream.extend(self.make_fn_math_sub(ctx));
+        stream.extend(self.make_fn_math_mul(ctx));
+        stream.extend(self.make_fn_math_div(ctx));
+        stream.extend(self.make_fn_math_rem(ctx));
+        stream.extend(self.make_fn_math_xor(ctx));
+        stream.extend(self.make_fn_math_and(ctx));
+        stream.extend(self.make_fn_math_or(ctx));
+        stream.extend(self.make_fn_math_shr(ctx));
+        stream.extend(self.make_fn_math_shl(ctx));
+        stream.extend(self.make_fn_math_not(ctx));
+        stream.extend(self.make_precedes(ctx));
+        stream.extend(self.make_fn_op_eq(ctx));
+        stream.extend(self.make_fn_op_cmp(ctx));
+        stream.extend(self.make_fn_make_try(ctx));
+        stream.extend(self.make_fn_make(ctx));
+        stream.extend(self.make_items_core_int(ctx));
+
+        return stream;
+    }
+
+    fn ekran_impls(&self) -> syn::Result<TokenStream> {
+        let ctx = &self.ctx;
+        let mut stream = self.ekran_friendship();
+
+        stream.extend(self.make_as_ref(&ctx));
+        stream.extend(self.make_from_str(&ctx));
+        stream.extend(self.make_serde(&ctx));
+        stream.extend(self.make_core_int(&ctx));
+        stream.extend(self.make_into(&ctx));
+        stream.extend(self.make_try_into(&ctx));
+        stream.extend(self.make_math_shr(&ctx));
+        stream.extend(self.make_math_shl(&ctx));
+        stream.extend(self.make_assign_shr(&ctx));
+        stream.extend(self.make_assign_shl(&ctx));
+        stream.extend(self.make_assign_and(&ctx));
+        stream.extend(self.make_assign_add(&ctx));
+        stream.extend(self.make_assign_sub(&ctx));
+        stream.extend(self.make_assign_mul(&ctx));
+        stream.extend(self.make_assign_div(&ctx));
+        stream.extend(self.make_assign_rem(&ctx));
+        stream.extend(self.make_assign_or(&ctx));
+        stream.extend(self.make_range(&ctx));
+        stream.extend(self.make_debug(&ctx));
+        stream.extend(self.make_hash(&ctx));
+        stream.extend(self.make_eq(&ctx));
+        stream.extend(self.make_ord(&ctx));
+        stream.extend(self.make_assertions(&ctx));
+        stream.extend(self.make_math_add(&ctx));
+        stream.extend(self.make_math_sub(&ctx));
+        stream.extend(self.make_math_mul(&ctx));
+        stream.extend(self.make_math_div(&ctx));
+        stream.extend(self.make_math_rem(&ctx));
+        stream.extend(self.make_math_and(&ctx));
+        stream.extend(self.make_math_or(&ctx));
+        stream.extend(self.make_math_xor(&ctx));
+        stream.extend(self.make_math_not(&ctx));
+        stream.extend(self.make_display(&ctx));
+        stream.extend(self.make_fmt_binary(&ctx));
+        stream.extend(self.make_fmt_octal(&ctx));
+        stream.extend(self.make_fmt_hex_lower(&ctx));
+        stream.extend(self.make_fmt_hex_upper(&ctx));
+        stream.extend(self.make_partial_eq(&ctx));
+        stream.extend(self.make_partial_ord(&ctx));
+
+        return Ok(stream);
+    }
+
+    fn ekran_bit_access_items(&self) -> TokenStream {
+        let fp_get_raw = &self.ctx.fp_get_raw;
         let el = &self.el;
-        let konst = zz_runner::konst(self.cfg.konst_for(&[Konsts::Iterator]));
+
+        if !self.ctx.cfg.flags.bit_access || self.repr.is_signed() {
+            return TokenStream::new();
+        }
+
+        let bytes = (0..self.repr.bytes())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("byte{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u8 {
+                        return ((#fp_get_raw(self) >> (8 * #i)) & (0xFF as #el)) as u8;
+                    }
+                };
+            })
+            .merged();
+
+        let words = (0..self.repr.words())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("word{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u16 {
+                        return ((#fp_get_raw(self) >> (16 * #i)) & (0xFFFF as #el)) as u16;
+                    }
+                };
+            })
+            .merged();
+
+        let dwords = (0..self.repr.dwords())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("dword{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u32 {
+                        return ((#fp_get_raw(self) >> (32 * #i)) & (0xFFFFFFFF as #el)) as u32;
+                    }
+                };
+            })
+            .merged();
+
+        let qwords = (0..self.repr.qwords())
+            .into_iter()
+            .map(|i| {
+                let name = format_ident!("qword{}", i);
+                return quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn #name(self) -> u64 {
+                        return ((#fp_get_raw(self) >> (64 * #i)) & (0xFFFFFFFFFFFFFFFF as #el)) as u64;
+                    }
+                };
+            })
+            .merged();
+
+        let halved = match self.repr {
+            N::U016 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo8(self) -> u8 {
+                        return self.byte0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi8(self) -> u8 {
+                        return self.byte1();
+                    }
+                }
+            }
+
+            N::U032 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo16(self) -> u16 {
+                        return self.word0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi16(self) -> u16 {
+                        return self.word1();
+                    }
+                }
+            }
+
+            N::U064 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo32(self) -> u32 {
+                        return self.dword0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi32(self) -> u32 {
+                        return self.dword1();
+                    }
+                }
+            }
+
+            N::U128 => {
+                quote! {
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn lo64(self) -> u64 {
+                        return self.qword0();
+                    }
+
+                    #[must_use]
+                    #[inline(always)]
+                    pub const fn hi64(self) -> u64 {
+                        return self.qword1();
+                    }
+                }
+            }
+
+            // N::USIZ => {}
+            _ => TokenStream::new(),
+        };
+
+        return quote! {
+            #halved
+
+            #bytes
+
+            #words
+
+            #dwords
+
+            #qwords
+        };
+    }
+}
+
+// Impls
+impl Maker {
+    fn make_range(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        if !self.ctx.cfg.flags.range {
+            return TokenStream::new();
+        }
+
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let el = &self.el;
+        let konst =
+            zz_runner::konst(self.ctx.cfg.konst_for(&[Konsts::Iterator]));
         let start_ref = self.storage.extract_ref(quote! { start.0 });
         let end_ref = self.storage.extract_ref(quote! { end.0 });
         let forward_start = self.storage.extract(quote! { start.0 });
         let backward_start = self.storage.extract(quote! { start.0 });
         let forward_overflow_start = self.storage.extract(quote! { start.0 });
         let backward_overflow_start = self.storage.extract(quote! { start.0 });
-        let unchecked = &self.fp_unchecked;
+        let unchecked = &ctx.fp_unchecked;
 
         return quote! {
             #konst impl #impl_generics ::core::iter::Step for #ty #where_clause {
@@ -1402,562 +1761,19 @@ impl Maker {
         };
     }
 
-    pub(crate) fn ekran(&self) -> syn::Result<TokenStream> {
-        let impls = self.ekran_impls()?;
-        let items = self.ekran_items();
-        let bit_access = self.ekran_bit_access_items();
-
-        let ty = self.target.ty();
-        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
-        return Ok(quote::quote! {
-            #impls
-
-            impl #impl_generics #ty #where_clause {
-                #items
-            }
-
-            #[allow(clippy::unnecessary_cast)]
-            impl #impl_generics #ty #where_clause {
-                #bit_access
-            }
-        });
-    }
-
-    pub(crate) fn ekran_items(&self) -> TokenStream {
-        let ty = self.target.ty();
+    fn make_as_ref(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
         let el = &self.el;
-        let fp_unchecked = &self.fp_unchecked;
-        let fp_get_raw = &self.fp_get_raw;
-        let raw = self.storage.extract(quote! { self.0 });
-        let arguments = self.target.arguments();
+        let self_raw_ref = &ctx.self_raw_ref;
 
         let mut stream = TokenStream::new();
 
-        if self.cfg.flags.fn_conv_of {
-            let is_konst = self.cfg.konst_for(&[
-                Konsts::Of,
-                Konsts::Conversion,
-            ]);
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
-            let what = &self.trait_friend_make;
-            let parameter = self.target.fresh_ident("T");
-
-            let fn_of = format_ident!("of");
-
-            let it = quote! {
-                #[inline(always)]
-                #[allow(private_bounds)]
-                pub #konst fn #fn_of<#parameter>(
-                    it: #parameter,
-                ) -> #ty
-                where
-                    #parameter: #bonst #what #arguments #destruct,
-                {
-                    return <#parameter as #what #arguments>::make(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.auto_of_raw {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
-                Konsts::Of,
-                Konsts::Conversion,
-            ]));
-            let fn_make = format_ident!("{}", self.cfg.flags.fn_make);
-            let fn_of = self.target_qualified_path(&parse_quote! { Self::of });
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn #fn_make(it: #el) -> #ty {
-                    return #fn_of(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_conv_raw {
-            let get_raw = &fp_get_raw.segments.last().unwrap().ident;
-
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub const fn #get_raw(self) -> #el {
-                    return #raw;
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_conv_into {
-            let it = N::items()
-                .iter()
-                .filter(|it| self.repr.can_safe_cast_to(**it))
-                .map(|it| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("into_{}", it.rust_name());
-                    return quote! {
-                        #[must_use]
-                        #[inline(always)]
-                        #[allow(clippy::unnecessary_cast)]
-                        pub const fn #conv(self) -> #target {
-                            let it = #fp_get_raw(self);
-                            return it as #target;
-                        }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.map {
-            let is_konst = self.cfg.konst_for(&[Konsts::Map])
-                || self.cfg.flags.with_const_map_fn;
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
-            let callback = self.target.fresh_ident("F");
-            let value = quote! { value };
-            let validation = self.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                self.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn try_map<#callback>(
-                    self,
-                    function: #callback,
-                ) -> ::core::result::Result<Self, #el>
-                where
-                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
-                {
-                    let value = function(#fp_get_raw(self));
-                    return if #validation {
-                        ::core::result::Result::Ok(#constructed)
-                    }
-                    else {
-                        ::core::result::Result::Err(value)
-                    };
-                }
-
-                #[inline(always)]
-                #[track_caller]
-                pub #konst fn map<#callback>(
-                    self,
-                    function: #callback,
-                ) -> Self
-                where
-                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
-                {
-                    return match self.try_map(function) {
-                        ::core::result::Result::Ok(value) => value,
-                        ::core::result::Result::Err(_) => {
-                            ::core::panic!(
-                                "mapping operation produced an invalid value"
-                            )
-                        }
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_conv_try_into_unchecked {
-            let it = N::items()
-                .iter()
-                .filter(|it| self.repr.can_safe_cast_to(**it))
-                .map(|it| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("try_into_{}", it.rust_name());
-                    return quote! {
-                        #[inline(always)]
-                        #[allow(clippy::unnecessary_cast)]
-                        pub const fn #conv(self) -> ::core::result::Result<#target, ()> {
-                            return ::core::result::Result::Ok(
-                                #fp_get_raw(self) as #target
-                            );
-                        }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_conv_try_into_checked {
-            let source = format_ident!("{}", self.repr.rust_name());
-            let it = N::items()
-                .iter()
-                .filter(|it| !self.repr.can_safe_cast_to(**it))
-                .map(|it| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let name = format_ident!("try_into_{}", it.rust_name());
-                    let sign_check = match (self.repr.is_signed(), it.is_signed()) {
-                        (false, true) => quote! { t >= 0 },
-                        (true, false) => quote! { r >= 0 },
-                        _ => quote! { true },
-                    };
-                    return quote! {
-                    #[inline(always)]
-                    #[allow(clippy::unnecessary_cast)]
-                    pub const fn #name(self) -> ::core::result::Result<#target, ()> {
-                        let r = #fp_get_raw(self);
-                        let t = r as #target;
-                        let s = t as #source;
-
-                        return if s == r && #sign_check {
-                            ::core::result::Result::Ok(t)
-                        }
-                        else {
-                            ::core::result::Result::Err(())
-                        };
-                    }
-                };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_math_add {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Add, quote! { #el }),
-            );
-        }
-
-        if self.cfg.flags.fn_math_sub {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Sub, quote! { #el }),
-            );
-        }
-
-        if self.cfg.flags.fn_math_mul {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Mul, quote! { #el }),
-            );
-        }
-
-        if self.cfg.flags.fn_math_div {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Div, quote! { #el }),
-            );
-        }
-
-        if self.cfg.flags.fn_math_rem {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Rem, quote! { #el }),
-            );
-        }
-
-        if self.cfg.flags.fn_math_xor {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitxor(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs ^ rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_math_and {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitand(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs & rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_math_or {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitor(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs | rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_math_shr {
-            stream.extend(
-                self.ekran_arithmetic_helper(
-                    ArithmeticOp::Shr,
-                    quote! { usize },
-                ),
-            );
-        }
-
-        if self.cfg.flags.fn_math_shl {
-            stream.extend(
-                self.ekran_arithmetic_helper(
-                    ArithmeticOp::Shl,
-                    quote! { usize },
-                ),
-            );
-        }
-
-        if self.cfg.flags.fn_math_not {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _not(
-                    &self,
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = !lhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.profile.emits_precedes() {
-            let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
-            let konst = zz_runner::konst(self.cfg.konst_for(&[Konsts::Value]));
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub #konst fn precedes(self, other: Self) -> bool {
-                    let lhs = #fp_get_raw(self) as #unsigned;
-                    let rhs = #fp_get_raw(other) as #unsigned;
-                    let difference = rhs.wrapping_sub(lhs);
-                    let half = (1 as #unsigned) << (#unsigned::BITS - 1);
-                    return difference != 0 && difference < half;
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_op_eq {
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                #[doc(hidden)]
-                pub(self) const fn _eq(
-                    self,
-                    rhs: #el,
-                ) -> bool {
-                    let lhs = #fp_get_raw(self);
-                    return lhs == rhs;
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.fn_op_cmp {
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                #[doc(hidden)]
-                pub(self) fn _cmp(
-                    self,
-                    rhs: #el,
-                ) -> ::core::cmp::Ordering {
-                    let lhs = #fp_get_raw(self);
-                    return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs)
-                        .unwrap();
-                }
-            };
-            stream.extend(it);
-        }
-
-        let self1 = &self.cfg;
-        let self2 = &self.cfg;
-        if self.cfg.flags.fn_make_unchecked_try
-            && self2.validation.has_validation()
-        {
-            let konst =
-                zz_runner::konst(self.cfg.konst_for(&[Konsts::TryMake]));
-            let value = quote! { it };
-            let validation = self.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                self.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn try_make(it: #el) -> Result<Self, #el> {
-                    return if #validation {
-                        return ::core::result::Result::Ok(#constructed);
-                    }
-                    else {
-                        ::core::result::Result::Err(it)
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-        else if self.cfg.flags.fn_make_checked_try
-            && !self1.validation.has_validation()
-        {
-            let it = quote! {
-                #[inline(always)]
-                pub const fn try_make(it: #el) -> Result<Self, #el> {
-                    return Ok(#fp_unchecked(it));
-                }
-            };
-            stream.extend(it);
-        }
-
-        let self1 = &self.cfg;
-        let self2 = &self.cfg;
-        if self.cfg.flags.fn_make_unchecked && self2.validation.has_validation()
-        {
-            let value = quote! { it };
-            let validation = self.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                self.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub(self) const fn _unchecked(it: #el) -> Self {
-                    if #validation {
-                        return #constructed;
-                    }
-                    else {
-                        ::core::panic!("invalid value");
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-        else if self.cfg.flags.fn_make_checked
-            && !self1.validation.has_validation()
-        {
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                quote! { it },
-                self.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub(self) const fn _unchecked(it: #el) -> Self {
-                    return #constructed;
-                }
-            };
-            stream.extend(it);
-        }
-
-        if self.cfg.flags.core_int {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
-                Konsts::CoreInt,
-                Konsts::Value,
-            ]));
-            let value = quote! { value };
-            let validation = self.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                self.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                #[track_caller]
-                pub(self) #konst fn _core_int(value: #el) -> Self {
-                    if #validation {
-                        return #constructed;
-                    }
-                    else {
-                        ::core::panic!("operation produced an invalid value");
-                    }
-                }
-
-                #[inline(always)]
-                pub(self) #konst fn _core_int_checked(
-                    value: #el,
-                ) -> ::core::option::Option<Self> {
-                    return if #validation {
-                        ::core::option::Option::Some(#constructed)
-                    }
-                    else {
-                        ::core::option::Option::None
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    pub(crate) fn ekran_impls(&self) -> syn::Result<TokenStream> {
-        let ty = self.target.ty();
-        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
-        let arguments = self.target.arguments();
-        let rhs_ty = self.target.fresh_ident("T");
-        let (rhs_impl_generics, _) =
-            self.target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
-        let rhs_where_clause = |bounds: TokenStream| {
-            return self
-                .target
-                .impl_header(
-                    &[parse_quote! { #rhs_ty }],
-                    &[parse_quote! { #rhs_ty: #bounds }],
-                )
-                .1;
-        };
-        let el = &self.el;
-        let value = quote! { value };
-        let validation = self.cfg.validation.emit(&value);
-
-        let bit = &self.trait_friend_bit;
-        let math = &self.trait_friend_math;
-        let rel = &self.trait_friend_rel;
-        let seal = &self.trait_seal;
-        let trait_friend_bit = quote! { #bit #arguments };
-        let trait_friend_math = quote! { #math #arguments };
-        let trait_friend_rel = quote! { #rel #arguments };
-        let trait_seal = quote! { #seal #arguments };
-
-        let fp_friend_conv = if self.target.has_generics() {
-            let fn_conv = &self.fn_conv;
-            quote! { <#rhs_ty as #trait_seal>::#fn_conv }
-        }
-        else {
-            let fn_conv = &self.fn_conv;
-            quote! { #trait_seal::#fn_conv }
-        };
-        let fp_get_raw = &self.fp_get_raw;
-        let rhs_raw = self.storage.extract(quote! { rhs.0 });
-        let self_raw = self.storage.extract(quote! { self.0 });
-        let self_raw_ref = self.storage.extract_ref(quote! { self.0 });
-
-        let global_operators = self.cfg.with_global_operators();
-        let with_self_math =
-            self.cfg.with_self_math(self.target.has_generics());
-        let with_self_bit = self.cfg.with_self_bit(self.target.has_generics());
-        let output = self.target.operator_output(&self.cfg.ty_out, false);
-
-        let mut stream = TokenStream::new();
-        stream.extend(self.ekran_friendship());
-
-        if self.cfg.flags.as_ref_ {
+        if self.ctx.cfg.flags.as_ref_ {
             let it = quote! {
                 impl #impl_generics ::core::convert::AsRef<#el> for #ty
                 #where_clause {
@@ -1970,12 +1786,27 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.from_str {
+        return stream;
+    }
+
+    fn make_from_str(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let el = &self.el;
+        let validation = &ctx.validation;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.from_str {
             let constructed = self.target.construct(
                 &self.storage,
                 quote! { Self },
                 quote! { value },
-                self.cfg.flags.assertions,
+                self.ctx.cfg.flags.assertions,
             );
             stream.extend(quote! {
                 impl #impl_generics ::core::str::FromStr for #ty
@@ -2005,12 +1836,28 @@ impl Maker {
             });
         }
 
-        if self.cfg.flags.serde {
+        return stream;
+    }
+
+    fn make_serde(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let el = &self.el;
+        let validation = &ctx.validation;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.serde {
             let constructed = self.target.construct(
                 &self.storage,
                 quote! { Self },
                 quote! { value },
-                self.cfg.flags.assertions,
+                self.ctx.cfg.flags.assertions,
             );
             let serializer = self.target.fresh_ident("S");
             let deserializer = self.target.fresh_ident("D");
@@ -2065,7 +1912,22 @@ impl Maker {
             });
         }
 
-        if self.cfg.flags.core_int {
+        return stream;
+    }
+
+    fn make_core_int(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.core_int {
             let it = quote! {
                 impl #impl_generics #ty #where_clause {
                     /// The number of bits in the wrapped primitive integer.
@@ -2168,7 +2030,7 @@ impl Maker {
             };
             stream.extend(it);
 
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::CoreInt,
                 Konsts::Value,
             ]));
@@ -2832,7 +2694,7 @@ impl Maker {
                     }
                 );
                 let funnel =
-                    matches!(self.cfg.konst, Konst::Nightly).then(|| {
+                    matches!(self.ctx.cfg.konst, Konst::Nightly).then(|| {
                         quote! {
                             #[inline(always)]
                             pub #konst fn funnel_shl(
@@ -3010,8 +2872,21 @@ impl Maker {
             }
         }
 
-        if self.cfg.flags.into {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_into(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.into {
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Into,
                 Konsts::Conversion,
             ]));
@@ -3035,8 +2910,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.try_into {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_try_into(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.try_into {
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::TryInto,
                 Konsts::Conversion,
             ]));
@@ -3063,8 +2951,22 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_shr {
-            let is_konst = self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_math_shr(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let output = &ctx.output;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_shr {
+            let is_konst = self.ctx.cfg.konst_for(&[
                 Konsts::Shr,
                 Konsts::Math,
             ]);
@@ -3090,8 +2992,22 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_shl {
-            let is_konst = self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_math_shl(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let output = &ctx.output;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_shl {
+            let is_konst = self.ctx.cfg.konst_for(&[
                 Konsts::Shl,
                 Konsts::Math,
             ]);
@@ -3118,8 +3034,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_shr {
-            let is_konst = self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_assign_shr(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_shr {
+            let is_konst = self.ctx.cfg.konst_for(&[
                 Konsts::ShrAssign,
                 Konsts::Shr,
                 Konsts::Assign,
@@ -3144,8 +3073,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_shl {
-            let is_konst = self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_assign_shl(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_shl {
+            let is_konst = self.ctx.cfg.konst_for(&[
                 Konsts::ShlAssign,
                 Konsts::Shl,
                 Konsts::Assign,
@@ -3170,16 +3112,38 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_and && global_operators {
+        return stream;
+    }
+
+    fn make_assign_and(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_bit = {
+            let bit = &ctx.trait_friend_bit;
+            let arguments = &ctx.arguments;
+            quote! { #bit #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_and && ctx.with_global_operators {
             let flags = [
                 Konsts::AndAssign,
                 Konsts::And,
                 Konsts::Assign,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            if with_self_bit {
+            if ctx.with_self_bit {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::BitAndAssign for #ty
                     #where_clause {
@@ -3194,8 +3158,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where = ctx
+                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitAndAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3214,19 +3178,41 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_add && global_operators {
+        return stream;
+    }
+
+    fn make_assign_add(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_add && ctx.with_global_operators {
             let flags = [
                 Konsts::AddAssign,
                 Konsts::Add,
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::AddAssign for #ty
                     #where_clause {
@@ -3241,8 +3227,10 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::AddAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3261,19 +3249,41 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_sub && global_operators {
+        return stream;
+    }
+
+    fn make_assign_sub(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_sub && ctx.with_global_operators {
             let flags = [
                 Konsts::SubAssign,
                 Konsts::Sub,
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::SubAssign for #ty
                     #where_clause {
@@ -3288,8 +3298,10 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::SubAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3308,19 +3320,41 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_mul && global_operators {
+        return stream;
+    }
+
+    fn make_assign_mul(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_mul && ctx.with_global_operators {
             let flags = [
                 Konsts::MulAssign,
                 Konsts::Mul,
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::MulAssign for #ty
                     #where_clause {
@@ -3335,8 +3369,10 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::MulAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3355,19 +3391,41 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_div && global_operators {
+        return stream;
+    }
+
+    fn make_assign_div(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_div && ctx.with_global_operators {
             let flags = [
                 Konsts::DivAssign,
                 Konsts::Div,
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::DivAssign for #ty
                     #where_clause {
@@ -3382,8 +3440,10 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::DivAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3402,19 +3462,41 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_rem && global_operators {
+        return stream;
+    }
+
+    fn make_assign_rem(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_rem && ctx.with_global_operators {
             let flags = [
                 Konsts::RemAssign,
                 Konsts::Rem,
                 Konsts::Assign,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::RemAssign for #ty
                     #where_clause {
@@ -3429,8 +3511,10 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::RemAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3449,16 +3533,38 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assign_or && global_operators {
+        return stream;
+    }
+
+    fn make_assign_or(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let trait_friend_bit = {
+            let bit = &ctx.trait_friend_bit;
+            let arguments = &ctx.arguments;
+            quote! { #bit #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assign_or && ctx.with_global_operators {
             let flags = [
                 Konsts::OrAssign,
                 Konsts::Or,
                 Konsts::Assign,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            if with_self_bit {
+            if ctx.with_self_bit {
                 stream.extend(quote! {
                     #konst impl #impl_generics ::core::ops::BitOrAssign for #ty
                     #where_clause {
@@ -3473,8 +3579,8 @@ impl Maker {
                 });
             }
 
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where = ctx
+                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitOrAssign<#rhs_ty> for #ty
                 #rhs_where
@@ -3493,11 +3599,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.range {
-            stream.extend(self.make_range());
-        }
+        return stream;
+    }
 
-        if self.cfg.flags.debug {
+    fn make_debug(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let self_raw = &ctx.self_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.debug {
             let name = self.target.ident.to_string();
             let it = quote! {
                 impl #impl_generics ::core::fmt::Debug for #ty #where_clause {
@@ -3515,7 +3631,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.hash {
+        return stream;
+    }
+
+    fn make_hash(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let self_raw = &ctx.self_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.hash {
             let hasher = self.target.fresh_ident("H");
             let it = quote! {
                 impl #impl_generics ::core::hash::Hash for #ty #where_clause {
@@ -3534,8 +3664,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.eq {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_eq(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.eq {
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Eq,
                 Konsts::Comparison,
             ]));
@@ -3546,8 +3689,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.ord {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_ord(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.ord {
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Ord,
                 Konsts::Comparison,
             ]));
@@ -3563,7 +3719,20 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.assertions {
+        return stream;
+    }
+
+    fn make_assertions(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.assertions {
             let assertions = self.storage.layout_assertions(quote! { #ty });
             if self.target.has_generics() {
                 let name = self.target.layout_assertion();
@@ -3580,17 +3749,40 @@ impl Maker {
             }
         }
 
-        if self.cfg.flags.math_add && global_operators {
+        return stream;
+    }
+
+    fn make_math_add(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_add && ctx.with_global_operators {
             let flags = [
                 Konsts::Add,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
@@ -3610,8 +3802,10 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Add<#rhs_ty> for #ty
                 #rhs_where
@@ -3631,17 +3825,40 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_sub && global_operators {
+        return stream;
+    }
+
+    fn make_math_sub(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_sub && ctx.with_global_operators {
             let flags = [
                 Konsts::Sub,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
@@ -3661,8 +3878,10 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Sub<#rhs_ty> for #ty
                 #rhs_where
@@ -3682,17 +3901,40 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_mul && global_operators {
+        return stream;
+    }
+
+    fn make_math_mul(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_mul && ctx.with_global_operators {
             let flags = [
                 Konsts::Mul,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
@@ -3712,8 +3954,10 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Mul<#rhs_ty> for #ty
                 #rhs_where
@@ -3734,17 +3978,40 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_div && global_operators {
+        return stream;
+    }
+
+    fn make_math_div(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_div && ctx.with_global_operators {
             let flags = [
                 Konsts::Div,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
@@ -3764,8 +4031,10 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Div<#rhs_ty> for #ty
                 #rhs_where
@@ -3786,17 +4055,40 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_rem && global_operators {
+        return stream;
+    }
+
+    fn make_math_rem(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_math = {
+            let math = &ctx.trait_friend_math;
+            let arguments = &ctx.arguments;
+            quote! { #math #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_rem && ctx.with_global_operators {
             let flags = [
                 Konsts::Rem,
                 Konsts::Math,
             ];
-            let is_konst = self.cfg.konst_for(&flags);
+            let is_konst = self.ctx.cfg.konst_for(&flags);
             let konst = zz_runner::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = self.bounds_for(&flags);
-            if with_self_math {
+            if ctx.with_self_math {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self.#method(#rhs_raw) });
                 stream.extend(quote! {
@@ -3816,8 +4108,10 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self.#method(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_math + #bounds });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! { #trait_friend_math + #bounds },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::Rem<#rhs_ty> for #ty
                 #rhs_where
@@ -3838,14 +4132,37 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_and && global_operators {
+        return stream;
+    }
+
+    fn make_math_and(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_bit = {
+            let bit = &ctx.trait_friend_bit;
+            let arguments = &ctx.arguments;
+            quote! { #bit #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_and && ctx.with_global_operators {
             let flags = [
                 Konsts::And,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            if with_self_bit {
+            if ctx.with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitand(#rhs_raw) });
                 stream.extend(quote! {
@@ -3865,8 +4182,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitand(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where = ctx
+                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitAnd<#rhs_ty> for #ty
                 #rhs_where
@@ -3886,14 +4203,37 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_or && global_operators {
+        return stream;
+    }
+
+    fn make_math_or(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_bit = {
+            let bit = &ctx.trait_friend_bit;
+            let arguments = &ctx.arguments;
+            quote! { #bit #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_or && ctx.with_global_operators {
             let flags = [
                 Konsts::Or,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            if with_self_bit {
+            if ctx.with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitor(#rhs_raw) });
                 stream.extend(quote! {
@@ -3913,8 +4253,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitor(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where = ctx
+                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitOr<#rhs_ty> for #ty
                 #rhs_where
@@ -3934,12 +4274,35 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.math_xor && global_operators {
+        return stream;
+    }
+
+    fn make_math_xor(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let rhs_raw = &ctx.rhs_raw;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let output = &ctx.output;
+        let trait_friend_bit = {
+            let bit = &ctx.trait_friend_bit;
+            let arguments = &ctx.arguments;
+            quote! { #bit #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_xor && ctx.with_global_operators {
             let flags = [
                 Konsts::Xor,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             let assign_flags = [
                 Konsts::XorAssign,
@@ -3948,9 +4311,9 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst_assign =
-                zz_runner::konst(self.cfg.konst_for(&assign_flags));
+                zz_runner::konst(self.ctx.cfg.konst_for(&assign_flags));
             let assign_bounds = self.bounds_for(&assign_flags);
-            if with_self_bit {
+            if ctx.with_self_bit {
                 let output_ty = output.ty();
                 let result = output.convert(quote! { self._bitxor(#rhs_raw) });
                 stream.extend(quote! {
@@ -3967,7 +4330,7 @@ impl Maker {
                     }
                 });
 
-                if self.cfg.ty_out.is_self() {
+                if self.ctx.cfg.ty_out.is_self() {
                     stream.extend(quote! {
                         #konst_assign impl #impl_generics ::core::ops::BitXorAssign for #ty
                         #where_clause {
@@ -3985,8 +4348,8 @@ impl Maker {
 
             let output_ty = output.ty();
             let result = output.convert(quote! { self._bitxor(it) });
-            let rhs_where =
-                rhs_where_clause(quote! { #trait_friend_bit + #bounds });
+            let rhs_where = ctx
+                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::ops::BitXor<#rhs_ty> for #ty
                 #rhs_where
@@ -4006,8 +4369,9 @@ impl Maker {
             };
             stream.extend(it);
 
-            if self.cfg.ty_out.is_self() {
-                let rhs_where = rhs_where_clause(
+            if self.ctx.cfg.ty_out.is_self() {
+                let rhs_where = ctx.rhs_where_clause(
+                    self,
                     quote! { #trait_friend_bit + #assign_bounds },
                 );
                 let it = quote! {
@@ -4028,8 +4392,22 @@ impl Maker {
             }
         }
 
-        if self.cfg.flags.math_not {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+        return stream;
+    }
+
+    fn make_math_not(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let output = &ctx.output;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.math_not {
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Not,
                 Konsts::Bit,
             ]));
@@ -4048,7 +4426,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.display {
+        return stream;
+    }
+
+    fn make_display(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.display {
             stream.extend(quote! {
                 impl #impl_generics ::core::fmt::Display for #ty #where_clause {
                     #[inline(always)]
@@ -4063,7 +4455,21 @@ impl Maker {
             });
         }
 
-        if self.cfg.flags.fmt_binary {
+        return stream;
+    }
+
+    fn make_fmt_binary(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.fmt_binary {
             let it = quote! {
                 impl #impl_generics ::core::fmt::Binary for #ty #where_clause {
                     #[inline(always)]
@@ -4079,7 +4485,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fmt_octal {
+        return stream;
+    }
+
+    fn make_fmt_octal(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.fmt_octal {
             let it = quote! {
                 impl #impl_generics ::core::fmt::Octal for #ty #where_clause {
                     #[inline(always)]
@@ -4095,7 +4515,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fmt_hex_lower {
+        return stream;
+    }
+
+    fn make_fmt_hex_lower(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.fmt_hex_lower {
             let it = quote! {
                 impl #impl_generics ::core::fmt::LowerHex for #ty #where_clause {
                     #[inline(always)]
@@ -4111,7 +4545,21 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.fmt_hex_upper {
+        return stream;
+    }
+
+    fn make_fmt_hex_upper(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let impl_generics = &ctx.impl_generics;
+        let where_clause = &ctx.where_clause;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.fmt_hex_upper {
             let it = quote! {
                 impl #impl_generics ::core::fmt::UpperHex for #ty #where_clause {
                     #[inline(always)]
@@ -4127,16 +4575,39 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.partial_eq {
+        return stream;
+    }
+
+    fn make_partial_eq(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let trait_friend_rel = {
+            let rel = &ctx.trait_friend_rel;
+            let arguments = &ctx.arguments;
+            quote! { #rel #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.partial_eq {
             let flags = [
                 Konsts::PartialEq,
                 Konsts::Comparison,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            let rhs_where = rhs_where_clause(quote! {
-                #trait_friend_rel + #bounds + ::core::marker::Copy
-            });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! {
+                    #trait_friend_rel + #bounds + ::core::marker::Copy
+                },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::cmp::PartialEq<#rhs_ty> for #ty
                 #rhs_where
@@ -4155,16 +4626,39 @@ impl Maker {
             stream.extend(it);
         }
 
-        if self.cfg.flags.partial_ord {
+        return stream;
+    }
+
+    fn make_partial_ord(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let rhs_ty = &ctx.rhs_ty;
+        let rhs_impl_generics = &ctx.rhs_impl_generics;
+        let fp_friend_conv = &ctx.fp_friend_conv;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let trait_friend_rel = {
+            let rel = &ctx.trait_friend_rel;
+            let arguments = &ctx.arguments;
+            quote! { #rel #arguments }
+        };
+
+        let mut stream = TokenStream::new();
+
+        if self.ctx.cfg.flags.partial_ord {
             let flags = [
                 Konsts::PartialOrd,
                 Konsts::Comparison,
             ];
-            let konst = zz_runner::konst(self.cfg.konst_for(&flags));
+            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
-            let rhs_where = rhs_where_clause(quote! {
-                #trait_friend_rel + #bounds + ::core::marker::Copy
-            });
+            let rhs_where = ctx.rhs_where_clause(
+                self,
+                quote! {
+                    #trait_friend_rel + #bounds + ::core::marker::Copy
+                },
+            );
             let it = quote! {
                 #konst impl #rhs_impl_generics ::core::cmp::PartialOrd<#rhs_ty> for #ty
                 #rhs_where
@@ -4183,153 +4677,751 @@ impl Maker {
             stream.extend(it);
         }
 
-        return Ok(stream);
+        return stream;
     }
+}
 
-    pub(crate) fn ekran_bit_access_items(&self) -> TokenStream {
-        let fp_get_raw = &self.fp_get_raw;
-        let el = &self.el;
+impl Maker {
+    fn make_fn_conv_of(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let arguments = &ctx.arguments;
 
-        if !self.cfg.flags.bit_access || self.repr.is_signed() {
-            return TokenStream::new();
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_conv_of {
+            let is_konst = ctx.cfg.konst_for(&[
+                Konsts::Of,
+                Konsts::Conversion,
+            ]);
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
+            let what = &ctx.trait_friend_make;
+            let parameter = self.target.fresh_ident("T");
+
+            let fn_of = format_ident!("of");
+
+            let it = quote! {
+                #[inline(always)]
+                #[allow(private_bounds)]
+                pub #konst fn #fn_of<#parameter>(
+                    it: #parameter,
+                ) -> #ty
+                where
+                    #parameter: #bonst #what #arguments #destruct,
+                {
+                    return <#parameter as #what #arguments>::make(it);
+                }
+            };
+            stream.extend(it);
         }
 
-        let bytes = (0..self.repr.bytes())
-            .into_iter()
-            .map(|i| {
-                let name = format_ident!("byte{}", i);
-                return quote! {
-                    #[must_use]
+        return stream;
+    }
+
+    fn make_auto_of_raw(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let ty = &ctx.ty;
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.auto_of_raw {
+            let konst = zz_runner::konst(ctx.cfg.konst_for(&[
+                Konsts::Of,
+                Konsts::Conversion,
+            ]));
+            let fn_make = format_ident!("{}", ctx.cfg.flags.fn_make);
+            let path = &parse_quote! { Self::of };
+            let fn_of = self.target.qualify_path(path);
+            let it = quote! {
+                #[inline(always)]
+                pub #konst fn #fn_make(it: #el) -> #ty {
+                    return #fn_of(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_conv_raw(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let raw = &ctx.self_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_conv_raw {
+            let get_raw = &fp_get_raw.segments.last().unwrap().ident;
+
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                pub const fn #get_raw(self) -> #el {
+                    return #raw;
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_conv_into(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_conv_into {
+            let it = N::items()
+                .iter()
+                .filter(|it| self.repr.can_safe_cast_to(**it))
+                .map(|it| {
+                    let target = format_ident!("{}", it.rust_name());
+                    let conv = format_ident!("into_{}", it.rust_name());
+                    return quote! {
+                        #[must_use]
+                        #[inline(always)]
+                        #[allow(clippy::unnecessary_cast)]
+                        pub const fn #conv(self) -> #target {
+                            let it = #fp_get_raw(self);
+                            return it as #target;
+                        }
+                    };
+                })
+                .merged();
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_map(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.map {
+            let is_konst = ctx.cfg.konst_for(&[Konsts::Map])
+                || ctx.cfg.flags.with_const_map_fn;
+            let konst = zz_runner::konst(is_konst);
+            let bonst = zz_runner::bonst(is_konst);
+            let destruct = zz_runner::destruct(is_konst);
+            let callback = self.target.fresh_ident("F");
+            let value = quote! { value };
+            let validation = ctx.cfg.validation.emit(&value);
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                ctx.cfg.flags.assertions,
+            );
+            let it = quote! {
+                #[inline(always)]
+                pub #konst fn try_map<#callback>(
+                    self,
+                    function: #callback,
+                ) -> ::core::result::Result<Self, #el>
+                where
+                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                {
+                    let value = function(#fp_get_raw(self));
+                    return if #validation {
+                        ::core::result::Result::Ok(#constructed)
+                    }
+                    else {
+                        ::core::result::Result::Err(value)
+                    };
+                }
+
+                #[inline(always)]
+                #[track_caller]
+                pub #konst fn map<#callback>(
+                    self,
+                    function: #callback,
+                ) -> Self
+                where
+                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
+                {
+                    return match self.try_map(function) {
+                        ::core::result::Result::Ok(value) => value,
+                        ::core::result::Result::Err(_) => {
+                            ::core::panic!(
+                                "mapping operation produced an invalid value"
+                            )
+                        }
+                    };
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_conv_try_into_unchecked(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_conv_try_into_unchecked {
+            let it = N::items()
+                .iter()
+                .filter(|it| self.repr.can_safe_cast_to(**it))
+                .map(|it| {
+                    let target = format_ident!("{}", it.rust_name());
+                    let conv = format_ident!("try_into_{}", it.rust_name());
+                    return quote! {
+                        #[inline(always)]
+                        #[allow(clippy::unnecessary_cast)]
+                        pub const fn #conv(self) -> ::core::result::Result<#target, ()> {
+                            return ::core::result::Result::Ok(
+                                #fp_get_raw(self) as #target
+                            );
+                        }
+                    };
+                })
+                .merged();
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_conv_try_into_checked(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_conv_try_into_checked {
+            let source = format_ident!("{}", self.repr.rust_name());
+            let it = N::items()
+                .iter()
+                .filter(|it| !self.repr.can_safe_cast_to(**it))
+                .map(|it| {
+                    let target = format_ident!("{}", it.rust_name());
+                    let name = format_ident!("try_into_{}", it.rust_name());
+                    let sign_check = match (self.repr.is_signed(), it.is_signed()) {
+                        (false, true) => quote! { t >= 0 },
+                        (true, false) => quote! { r >= 0 },
+                        _ => quote! { true },
+                    };
+                    return quote! {
                     #[inline(always)]
-                    pub const fn #name(self) -> u8 {
-                        return ((#fp_get_raw(self) >> (8 * #i)) & (0xFF as #el)) as u8;
+                    #[allow(clippy::unnecessary_cast)]
+                    pub const fn #name(self) -> ::core::result::Result<#target, ()> {
+                        let r = #fp_get_raw(self);
+                        let t = r as #target;
+                        let s = t as #source;
+
+                        return if s == r && #sign_check {
+                            ::core::result::Result::Ok(t)
+                        }
+                        else {
+                            ::core::result::Result::Err(())
+                        };
                     }
                 };
-            })
-            .merged();
+                })
+                .merged();
+            stream.extend(it);
+        }
 
-        let words = (0..self.repr.words())
-            .into_iter()
-            .map(|i| {
-                let name = format_ident!("word{}", i);
-                return quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u16 {
-                        return ((#fp_get_raw(self) >> (16 * #i)) & (0xFFFF as #el)) as u16;
+        return stream;
+    }
+
+    fn make_fn_math_add(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_add {
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Add, quote! { #el }),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_sub(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_sub {
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Sub, quote! { #el }),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_mul(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_mul {
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Mul, quote! { #el }),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_div(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_div {
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Div, quote! { #el }),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_rem(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_rem {
+            stream.extend(
+                self.ekran_arithmetic_helper(ArithmeticOp::Rem, quote! { #el }),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_xor(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let fp_unchecked = &ctx.fp_unchecked;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_xor {
+            let it = quote! {
+                #[inline(always)]
+                pub(self) const fn _bitxor(
+                    &self,
+                    rhs: #el
+                ) -> Self {
+                    let lhs = #fp_get_raw(*self);
+                    let it = lhs ^ rhs;
+                    return #fp_unchecked(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_and(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let fp_unchecked = &ctx.fp_unchecked;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_and {
+            let it = quote! {
+                #[inline(always)]
+                pub(self) const fn _bitand(
+                    &self,
+                    rhs: #el
+                ) -> Self {
+                    let lhs = #fp_get_raw(*self);
+                    let it = lhs & rhs;
+                    return #fp_unchecked(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_or(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+        let fp_unchecked = &ctx.fp_unchecked;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_or {
+            let it = quote! {
+                #[inline(always)]
+                pub(self) const fn _bitor(
+                    &self,
+                    rhs: #el
+                ) -> Self {
+                    let lhs = #fp_get_raw(*self);
+                    let it = lhs | rhs;
+                    return #fp_unchecked(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_shr(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_shr {
+            stream.extend(
+                self.ekran_arithmetic_helper(
+                    ArithmeticOp::Shr,
+                    quote! { usize },
+                ),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_shl(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_shl {
+            stream.extend(
+                self.ekran_arithmetic_helper(
+                    ArithmeticOp::Shl,
+                    quote! { usize },
+                ),
+            );
+        }
+
+        return stream;
+    }
+
+    fn make_fn_math_not(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let fp_get_raw = &ctx.fp_get_raw;
+        let fp_unchecked = &ctx.fp_unchecked;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_math_not {
+            let it = quote! {
+                #[inline(always)]
+                pub(self) const fn _not(
+                    &self,
+                ) -> Self {
+                    let lhs = #fp_get_raw(*self);
+                    let it = !lhs;
+                    return #fp_unchecked(it);
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_precedes(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.profile.emits_precedes() {
+            let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
+            let konst = zz_runner::konst(ctx.cfg.konst_for(&[Konsts::Value]));
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                pub #konst fn precedes(self, other: Self) -> bool {
+                    let lhs = #fp_get_raw(self) as #unsigned;
+                    let rhs = #fp_get_raw(other) as #unsigned;
+                    let difference = rhs.wrapping_sub(lhs);
+                    let half = (1 as #unsigned) << (#unsigned::BITS - 1);
+                    return difference != 0 && difference < half;
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_op_eq(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_op_eq {
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                #[doc(hidden)]
+                pub(self) const fn _eq(
+                    self,
+                    rhs: #el,
+                ) -> bool {
+                    let lhs = #fp_get_raw(self);
+                    return lhs == rhs;
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_op_cmp(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_get_raw = &ctx.fp_get_raw;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_op_cmp {
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                #[doc(hidden)]
+                pub(self) fn _cmp(
+                    self,
+                    rhs: #el,
+                ) -> ::core::cmp::Ordering {
+                    let lhs = #fp_get_raw(self);
+                    return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs)
+                        .unwrap();
+                }
+            };
+            stream.extend(it);
+        }
+
+        return stream;
+    }
+
+    fn make_fn_make_try(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+        let fp_unchecked = &ctx.fp_unchecked;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_make_unchecked_try
+            && ctx.cfg.validation.has_validation()
+        {
+            let konst = zz_runner::konst(ctx.cfg.konst_for(&[Konsts::TryMake]));
+            let value = quote! { it };
+            let validation = ctx.cfg.validation.emit(&value);
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                ctx.cfg.flags.assertions,
+            );
+            let it = quote! {
+                #[inline(always)]
+                pub #konst fn try_make(it: #el) -> Result<Self, #el> {
+                    return if #validation {
+                        return ::core::result::Result::Ok(#constructed);
                     }
-                };
-            })
-            .merged();
+                    else {
+                        ::core::result::Result::Err(it)
+                    };
+                }
+            };
+            stream.extend(it);
+        }
+        else if ctx.cfg.flags.fn_make_checked_try
+            && !ctx.cfg.validation.has_validation()
+        {
+            let it = quote! {
+                #[inline(always)]
+                pub const fn try_make(it: #el) -> Result<Self, #el> {
+                    return Ok(#fp_unchecked(it));
+                }
+            };
+            stream.extend(it);
+        }
 
-        let dwords = (0..self.repr.dwords())
-            .into_iter()
-            .map(|i| {
-                let name = format_ident!("dword{}", i);
-                return quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u32 {
-                        return ((#fp_get_raw(self) >> (32 * #i)) & (0xFFFFFFFF as #el)) as u32;
+        return stream;
+    }
+
+    fn make_fn_make(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.fn_make_unchecked
+            && ctx.cfg.validation.has_validation()
+        {
+            let value = quote! { it };
+            let validation = ctx.cfg.validation.emit(&value);
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                ctx.cfg.flags.assertions,
+            );
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                pub(self) const fn _unchecked(it: #el) -> Self {
+                    if #validation {
+                        return #constructed;
                     }
-                };
-            })
-            .merged();
+                    else {
+                        ::core::panic!("invalid value");
+                    };
+                }
+            };
+            stream.extend(it);
+        }
+        else if ctx.cfg.flags.fn_make_checked
+            && !ctx.cfg.validation.has_validation()
+        {
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                quote! { it },
+                ctx.cfg.flags.assertions,
+            );
+            let it = quote! {
+                #[must_use]
+                #[inline(always)]
+                pub(self) const fn _unchecked(it: #el) -> Self {
+                    return #constructed;
+                }
+            };
+            stream.extend(it);
+        }
 
-        let qwords = (0..self.repr.qwords())
-            .into_iter()
-            .map(|i| {
-                let name = format_ident!("qword{}", i);
-                return quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u64 {
-                        return ((#fp_get_raw(self) >> (64 * #i)) & (0xFFFFFFFFFFFFFFFF as #el)) as u64;
+        return stream;
+    }
+
+    fn make_items_core_int(
+        &self,
+        ctx: &Ctx,
+    ) -> TokenStream {
+        let el = &self.el;
+
+        let mut stream = TokenStream::new();
+
+        if ctx.cfg.flags.core_int {
+            let konst = zz_runner::konst(ctx.cfg.konst_for(&[
+                Konsts::CoreInt,
+                Konsts::Value,
+            ]));
+            let value = quote! { value };
+            let validation = ctx.cfg.validation.emit(&value);
+            let constructed = self.target.construct(
+                &self.storage,
+                quote! { Self },
+                value.clone(),
+                ctx.cfg.flags.assertions,
+            );
+            let it = quote! {
+                #[inline(always)]
+                #[track_caller]
+                pub(self) #konst fn _core_int(value: #el) -> Self {
+                    if #validation {
+                        return #constructed;
                     }
-                };
-            })
-            .merged();
-
-        let halved = match self.repr {
-            N::U016 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo8(self) -> u8 {
-                        return self.byte0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi8(self) -> u8 {
-                        return self.byte1();
+                    else {
+                        ::core::panic!("operation produced an invalid value");
                     }
                 }
-            }
 
-            N::U032 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo16(self) -> u16 {
-                        return self.word0();
+                #[inline(always)]
+                pub(self) #konst fn _core_int_checked(
+                    value: #el,
+                ) -> ::core::option::Option<Self> {
+                    return if #validation {
+                        ::core::option::Option::Some(#constructed)
                     }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi16(self) -> u16 {
-                        return self.word1();
-                    }
+                    else {
+                        ::core::option::Option::None
+                    };
                 }
-            }
+            };
+            stream.extend(it);
+        }
 
-            N::U064 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo32(self) -> u32 {
-                        return self.dword0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi32(self) -> u32 {
-                        return self.dword1();
-                    }
-                }
-            }
-
-            N::U128 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo64(self) -> u64 {
-                        return self.qword0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi64(self) -> u64 {
-                        return self.qword1();
-                    }
-                }
-            }
-
-            // N::USIZ => {}
-            _ => TokenStream::new(),
-        };
-
-        return quote! {
-            #halved
-
-            #bytes
-
-            #words
-
-            #dwords
-
-            #qwords
-        };
+        return stream;
     }
 }
 
@@ -4388,28 +5480,6 @@ impl Cfg {
 
     pub(crate) fn facets_present(&self) -> bool {
         return self.facets_present;
-    }
-
-    pub(crate) fn with_global_operators(&self) -> bool {
-        return !self.facets_present();
-    }
-
-    pub(crate) fn with_self_math(
-        &self,
-        has_generics: bool,
-    ) -> bool {
-        return self.flags.self_math
-            && self.with_global_operators()
-            && !has_generics;
-    }
-
-    pub(crate) fn with_self_bit(
-        &self,
-        has_generics: bool,
-    ) -> bool {
-        return self.flags.self_bit
-            && self.with_global_operators()
-            && !has_generics;
     }
 
     pub(crate) fn parse_flags_into(
@@ -4547,7 +5617,7 @@ impl Cfg {
 
         for friend in &it.friends {
             for capability in &friend.capabilities {
-                if !matches!(capability.to_string().as_str(), "Math" | "Bit") {
+                if !matches!(capability.to_string().as_str(), MATH | BIT) {
                     return capability.fail(
                         "facet friends only support `Math` and `Bit` capabilities",
                     );
@@ -4659,7 +5729,7 @@ impl Cfg {
 
             for friend in &facet.friends {
                 let span = friend.ty.span();
-                if friend.capabilities.contains(&format_ident!("Math")) {
+                if friend.capabilities.contains(&format_ident!("{}", MATH)) {
                     Self::insert_slots(
                         &mut slots,
                         Operator::math_items(),
@@ -4672,7 +5742,7 @@ impl Cfg {
                         span,
                     )?;
                 }
-                if friend.capabilities.contains(&format_ident!("Bit")) {
+                if friend.capabilities.contains(&format_ident!("{}", BIT)) {
                     Self::insert_slots(
                         &mut slots,
                         Operator::bit_items(),
@@ -4721,7 +5791,7 @@ impl Cfg {
         let arithmetic = default.profile.arithmetic();
         for friend in &default.friends {
             let span = friend.ty.span();
-            if friend.capabilities.contains(&format_ident!("Math")) {
+            if friend.capabilities.contains(&format_ident!("{}", MATH)) {
                 Self::insert_slots(
                     &mut slots,
                     Operator::math_items(),
@@ -4734,7 +5804,7 @@ impl Cfg {
                     span,
                 )?;
             }
-            if friend.capabilities.contains(&format_ident!("Bit")) {
+            if friend.capabilities.contains(&format_ident!("{}", BIT)) {
                 Self::insert_slots(
                     &mut slots,
                     Operator::bit_items(),
@@ -4931,38 +6001,38 @@ impl Cfg {
     pub(crate) fn parse_friends_unexpanded(
         input: ParseStream
     ) -> syn::Result<BTreeSet<Friend>> {
-        let defaults = [format_ident!("Math")].into_iter().collect();
+        let defaults = [format_ident!("{}", MATH)].into_iter().collect();
         return Friend::parse_with_valid(
             input,
             &[
-                format_ident!("Make"),
-                format_ident!("Math"),
-                format_ident!("Bit"),
-                format_ident!("Rel"),
-                format_ident!("UnsafeTrust"),
+                format_ident!("{}", MAKE),
+                format_ident!("{}", MATH),
+                format_ident!("{}", BIT),
+                format_ident!("{}", REL),
+                format_ident!("{}", UNSAFE),
             ],
             &defaults,
         );
     }
 
     fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
-        let defaults = [format_ident!("Math")].into_iter().collect();
+        let defaults = [format_ident!("{}", MATH)].into_iter().collect();
         return Friend::parse_with_expansion(
             input,
             &[
-                format_ident!("Make"),
-                format_ident!("Math"),
-                format_ident!("Bit"),
-                format_ident!("Rel"),
-                format_ident!("UnsafeTrust"),
+                format_ident!("{}", MAKE),
+                format_ident!("{}", MATH),
+                format_ident!("{}", BIT),
+                format_ident!("{}", REL),
+                format_ident!("{}", UNSAFE),
             ],
             &defaults,
             &([
                 (
-                    format_ident!("Math"),
+                    format_ident!("{}", MATH),
                     vec![
-                        format_ident!("Make"),
-                        format_ident!("Bit"),
+                        format_ident!("{}", MAKE),
+                        format_ident!("{}", BIT),
                     ],
                 ),
             ]

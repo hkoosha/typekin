@@ -78,20 +78,20 @@ impl SelfConverter {
 }
 
 #[derive(Clone)]
-pub(crate) struct OperatorOutput<'a> {
-    configuration: &'a SelfConverter,
+pub(crate) struct OperatorOutput {
+    cfg: SelfConverter,
     ty: TokenStream,
     conversion: TokenStream,
 }
 
-impl<'a> OperatorOutput<'a> {
+impl OperatorOutput {
     pub(crate) fn of(
-        configuration: &'a SelfConverter,
+        configuration: &SelfConverter,
         ty: TokenStream,
         conversion: TokenStream,
     ) -> Self {
         return Self {
-            configuration,
+            cfg: configuration.clone(),
             ty,
             conversion,
         };
@@ -105,7 +105,7 @@ impl<'a> OperatorOutput<'a> {
         &self,
         value: TokenStream,
     ) -> TokenStream {
-        if self.configuration.is_self() {
+        if self.cfg.is_self() {
             return value;
         }
 
@@ -114,8 +114,8 @@ impl<'a> OperatorOutput<'a> {
     }
 }
 
-impl MySpanned for OperatorOutput<'_> {
+impl MySpanned for OperatorOutput {
     fn my_span(&self) -> Span {
-        return self.configuration.my_span();
+        return self.cfg.my_span();
     }
 }

@@ -34,7 +34,7 @@ mod tests {
             format_ident!("Point"),
             format_ident!("u32"),
             Box::new(config.unwrap()),
-            StoragePlan::primitive(crate::zz_value_type::N::U032),
+            StoragePlan::primitive(N::U032),
         );
         assert!(maker.is_ok(), "{input}");
         let expansion = maker.unwrap().ekran();
@@ -2506,11 +2506,7 @@ mod tests {
             ]
         );
         assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
-        assert!(
-            friend
-                .capabilities
-                .contains(&syn::parse_quote!(UnsafeTrust))
-        );
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Unsafe)));
     }
 
     #[test]
@@ -2523,8 +2519,7 @@ mod tests {
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
             [
-                "Make",
-                "UnsafeTrust"
+                "Make", "Unsafe"
             ],
             "{input}"
         );
@@ -2540,8 +2535,7 @@ mod tests {
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
             [
-                "Make",
-                "UnsafeTrust"
+                "Make", "Unsafe"
             ],
             "{input}"
         );
@@ -2552,8 +2546,7 @@ mod tests {
         let (capabilities, expected) = (
             "[Make, unsafe]",
             vec![
-                "Make",
-                "UnsafeTrust",
+                "Make", "Unsafe",
             ],
         );
         let input = format!("convert(Source) -> {capabilities}");
@@ -2573,8 +2566,7 @@ mod tests {
         let (capabilities, expected) = (
             "[Make, unsafe,]",
             vec![
-                "Make",
-                "UnsafeTrust",
+                "Make", "Unsafe",
             ],
         );
         let input = format!("convert(Source) -> {capabilities}");
@@ -2611,11 +2603,7 @@ mod tests {
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
         assert!(friend.ty.is_ident("Source"), "{input}");
-        assert!(
-            friend
-                .capabilities
-                .contains(&syn::parse_quote!(UnsafeTrust))
-        );
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Unsafe)));
     }
 
     #[test]
@@ -2625,11 +2613,7 @@ mod tests {
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
         assert!(friend.ty.is_ident("Source"), "{input}");
-        assert!(
-            friend
-                .capabilities
-                .contains(&syn::parse_quote!(UnsafeTrust))
-        );
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Unsafe)));
     }
 
     #[test]

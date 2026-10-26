@@ -188,7 +188,7 @@ impl TrustDocument {
 
 fn construct_trusted_title<T>(source: T) -> TrustDocument
 where
-    T: trusted_title_protocol::Make + trusted_title_protocol::UnsafeTrust,
+    T: trusted_title_protocol::Make + trusted_title_protocol::Unsafe,
 {
     TrustDocument::of(source)
 }
@@ -262,7 +262,7 @@ impl inspector_protocol::ReservedSecond for InspectorSource {
 fn inspect<T>(source: T) -> String
 where
     T: inspector_protocol::Inspect
-        + inspector_protocol::UnsafeTrust
+        + inspector_protocol::Unsafe
         + inspector_protocol::ReservedScalar
         + inspector_protocol::ReservedFirst
         + inspector_protocol::ReservedSecond,

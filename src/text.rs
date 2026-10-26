@@ -174,7 +174,7 @@ impl Cfg {
             for capability in &friend.capabilities {
                 match capability.to_string().as_str() {
                     "Make" => has_make = true,
-                    "UnsafeTrust" => {}
+                    "Unsafe" => {}
                     "Rel" => {
                         if !friend.ty.is_ident("Self") {
                             return capability
