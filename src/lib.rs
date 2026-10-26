@@ -61,26 +61,6 @@ pub fn integral(
     return integral::integral(attr, item);
 }
 
-fn profiled_integral(
-    profile: &'static str,
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    let parser = |input: syn::parse::ParseStream| {
-        return integral::Cfg::parse_with_profile(input, profile);
-    };
-    let attr = match parser.parse(attr) {
-        Ok(attr) => Box::new(attr),
-        Err(error) => return error.into_compile_error().into(),
-    };
-    let item = match syn::parse::<ItemStruct>(item) {
-        Ok(item) => item,
-        Err(error) => return error.into_compile_error().into(),
-    };
-
-    return integral::integral(attr, item);
-}
-
 /// Generates an integral newtype with the fixed `int` profile.
 ///
 /// # Inputs
@@ -316,4 +296,24 @@ pub fn constructor(
     let attr = parse_macro_input!(attr as constructor::Cfg);
     let item = parse_macro_input!(item as Item);
     return constructor::ekran(attr, item);
+}
+
+fn profiled_integral(
+    profile: &'static str,
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let parser = |input: syn::parse::ParseStream| {
+        return integral::Cfg::parse_with_profile(input, profile);
+    };
+    let attr = match parser.parse(attr) {
+        Ok(attr) => Box::new(attr),
+        Err(error) => return error.into_compile_error().into(),
+    };
+    let item = match syn::parse::<ItemStruct>(item) {
+        Ok(item) => item,
+        Err(error) => return error.into_compile_error().into(),
+    };
+
+    return integral::integral(attr, item);
 }
