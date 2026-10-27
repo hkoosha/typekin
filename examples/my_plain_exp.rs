@@ -45,6 +45,19 @@ const _: () = {
         }
     }
     const impl Rel for MyPlain {}
+    const impl Seal for i16 {
+        #[inline(always)]
+        fn conv_my_plain(self) -> i64 {
+            return self as i64;
+        }
+    }
+    const impl Make for i16 {
+        #[inline(always)]
+        fn make(self) -> MyPlain {
+            let raw = <Self as Seal>::conv_my_plain(self);
+            return MyPlain::_unchecked(raw);
+        }
+    }
     const impl Seal for i32 {
         #[inline(always)]
         fn conv_my_plain(self) -> i64 {
@@ -133,6 +146,21 @@ const _: () = {
         }
     }
     const impl Make for u8 {
+        #[inline(always)]
+        fn make(self) -> MyPlain {
+            let raw = <Self as Seal>::conv_my_plain(self);
+            return MyPlain::_unchecked(raw);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    const impl Seal for usize {
+        #[inline(always)]
+        fn conv_my_plain(self) -> i64 {
+            return self as i64;
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    const impl Make for usize {
         #[inline(always)]
         fn make(self) -> MyPlain {
             let raw = <Self as Seal>::conv_my_plain(self);
@@ -822,6 +850,7 @@ const _: () = {
             return Self::raw(self).is_negative();
         }
     }
+    #[cfg(target_pointer_width = "64")]
     const impl Into<isize> for MyPlain {
         #[inline(always)]
         fn into(self) -> isize {
@@ -845,6 +874,14 @@ const _: () = {
         #[inline(always)]
         fn try_into(self) -> Result<usize, Self::Error> {
             return Self::try_into_usize(self);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    const impl TryInto<isize> for MyPlain {
+        type Error = ();
+        #[inline(always)]
+        fn try_into(self) -> Result<isize, Self::Error> {
+            return Self::try_into_isize(self);
         }
     }
     const impl TryInto<u8> for MyPlain {
@@ -1437,6 +1474,7 @@ const _: () = {
         pub const fn raw(self) -> i64 {
             return self.0;
         }
+        #[cfg(target_pointer_width = "64")]
         #[must_use]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -1485,6 +1523,7 @@ const _: () = {
                 }
             };
         }
+        #[cfg(target_pointer_width = "64")]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_isize(self) -> Result<isize, ()> {
@@ -1507,6 +1546,15 @@ const _: () = {
             let t = r as usize;
             let s = t as i64;
             return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+        }
+        #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
+            let r = Self::raw(self);
+            let t = r as isize;
+            let s = t as i64;
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]

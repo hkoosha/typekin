@@ -61,6 +61,19 @@ const _: () = {
     }
     const impl Math for i128 {}
     const impl Rel for i128 {}
+    const impl Seal for i16 {
+        #[inline(always)]
+        fn conv_my_u128(self) -> i128 {
+            return self as i128;
+        }
+    }
+    const impl Make for i16 {
+        #[inline(always)]
+        fn make(self) -> MyU128 {
+            let raw = <Self as Seal>::conv_my_u128(self);
+            return MyU128::_unchecked(raw);
+        }
+    }
     const impl Seal for i32 {
         #[inline(always)]
         fn conv_my_u128(self) -> i128 {

@@ -19,6 +19,11 @@ fn main() {
 
     let lhs = MyU32::of(lhs);
     let rhs = MyU32::of(rhs);
+    let largest = MyU32::of(u32::MAX);
+    #[cfg(target_pointer_width = "64")]
+    assert_eq!(largest.into_isize(), u32::MAX as isize);
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    assert_eq!(largest.try_into_isize(), Err(()));
 
     println!("{:?}", lhs + rhs);
 }

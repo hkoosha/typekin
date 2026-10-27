@@ -71,6 +71,7 @@ use crate::zz_value_type::{
     ArithmeticOp,
     N,
     Operator,
+    POINTER_WIDTHS,
 };
 use crate::{
     marker_tree,
@@ -83,6 +84,26 @@ const BIT: &str = "Bit";
 const MAKE: &str = "Make";
 const REL: &str = "Rel";
 const UNSAFE: &str = "Unsafe";
+
+// An empty token stream means the item is valid on every supported target.
+fn pointer_width_cfg(
+    mut enabled: impl FnMut(u32) -> bool
+) -> Option<TokenStream> {
+    let widths = POINTER_WIDTHS
+        .into_iter()
+        .filter(|&width| enabled(width))
+        .map(|width| width.to_string())
+        .collect::<Vec<_>>();
+    return match widths.len() {
+        0 => None,
+        1 => {
+            let width = &widths[0];
+            Some(quote! { #[cfg(target_pointer_width = #width)] })
+        }
+        3 => Some(TokenStream::new()),
+        _ => Some(quote! { #[cfg(any(#(target_pointer_width = #widths),*))] }),
+    };
+}
 
 pub(crate) fn integral(
     attr: Box<Cfg>,
@@ -888,6 +909,7 @@ struct Maker {
     el: Ident,
     target: IntegralTarget,
     ctx: Ctx,
+    conditional_make: BTreeMap<String, TokenStream>,
     empty_friend_checks: TokenStream,
 }
 
@@ -925,6 +947,7 @@ impl Maker {
             el,
             target,
             ctx,
+            conditional_make: BTreeMap::new(),
             empty_friend_checks: TokenStream::new(),
         };
 
@@ -933,6 +956,18 @@ impl Maker {
         this.fix_friendship()?;
 
         return Ok(this);
+    }
+
+    fn cast_targets(
+        &self,
+        safe: bool,
+    ) -> impl Iterator<Item = (N, TokenStream)> + '_ {
+        return N::items().iter().copied().filter_map(move |target| {
+            let cfg = pointer_width_cfg(|width| {
+                self.repr.can_safe_cast_to(target, width) == safe
+            })?;
+            Some((target, cfg))
+        });
     }
 
     fn arithmetic_method_name(
@@ -1146,59 +1181,71 @@ impl Maker {
             return TokenStream::new();
         }
 
-        let bytes = (0..self.repr.bytes())
-            .into_iter()
-            .map(|i| {
+        let bytes = (0..self.repr.bits_for_pointer_width(64) / 8)
+            .filter_map(|i| {
+                let cfg = pointer_width_cfg(|width| {
+                    self.repr.bits_for_pointer_width(width) >= 8 * (i + 1)
+                })?;
                 let name = format_ident!("byte{}", i);
-                return quote! {
+                Some(quote! {
+                    #cfg
                     #[must_use]
                     #[inline(always)]
                     pub const fn #name(self) -> u8 {
                         return ((#fp_get_raw(self) >> (8 * #i)) & (0xFF as #el)) as u8;
                     }
-                };
+                })
             })
             .merged();
 
-        let words = (0..self.repr.words())
-            .into_iter()
-            .map(|i| {
+        let words = (0..self.repr.bits_for_pointer_width(64) / 16)
+            .filter_map(|i| {
+                let cfg = pointer_width_cfg(|width| {
+                    self.repr.bits_for_pointer_width(width) >= 16 * (i + 1)
+                })?;
                 let name = format_ident!("word{}", i);
-                return quote! {
+                Some(quote! {
+                    #cfg
                     #[must_use]
                     #[inline(always)]
                     pub const fn #name(self) -> u16 {
                         return ((#fp_get_raw(self) >> (16 * #i)) & (0xFFFF as #el)) as u16;
                     }
-                };
+                })
             })
             .merged();
 
-        let dwords = (0..self.repr.dwords())
-            .into_iter()
-            .map(|i| {
+        let dwords = (0..self.repr.bits_for_pointer_width(64) / 32)
+            .filter_map(|i| {
+                let cfg = pointer_width_cfg(|width| {
+                    self.repr.bits_for_pointer_width(width) >= 32 * (i + 1)
+                })?;
                 let name = format_ident!("dword{}", i);
-                return quote! {
+                Some(quote! {
+                    #cfg
                     #[must_use]
                     #[inline(always)]
                     pub const fn #name(self) -> u32 {
                         return ((#fp_get_raw(self) >> (32 * #i)) & (0xFFFFFFFF as #el)) as u32;
                     }
-                };
+                })
             })
             .merged();
 
-        let qwords = (0..self.repr.qwords())
-            .into_iter()
-            .map(|i| {
+        let qwords = (0..self.repr.bits_for_pointer_width(64) / 64)
+            .filter_map(|i| {
+                let cfg = pointer_width_cfg(|width| {
+                    self.repr.bits_for_pointer_width(width) >= 64 * (i + 1)
+                })?;
                 let name = format_ident!("qword{}", i);
-                return quote! {
+                Some(quote! {
+                    #cfg
                     #[must_use]
                     #[inline(always)]
                     pub const fn #name(self) -> u64 {
                         return ((#fp_get_raw(self) >> (64 * #i)) & (0xFFFFFFFFFFFFFFFF as #el)) as u64;
                     }
-                };
+                })
             })
             .merged();
 
@@ -1508,19 +1555,28 @@ impl Maker {
         if !self.ctx.cfg.validation.has_validation()
             && self.ctx.cfg.flags.self_friend_make
         {
-            N::items()
-                .iter()
-                .filter(|it| {
-                    **it != self.repr && it.can_safe_cast_to(self.repr)
+            for source in N::items().iter().copied() {
+                if source == self.repr {
+                    continue;
+                }
+                let Some(cfg) = pointer_width_cfg(|width| {
+                    source.can_safe_cast_to(self.repr, width)
                 })
-                .map(|it| format_ident!("{}", it.rust_name()))
-                .map(|ty| Friend::from(&ty))
-                .for_each(|friend| {
-                    let mut friend =
-                        self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
+                else {
+                    continue;
+                };
+                let ty = format_ident!("{}", source.rust_name());
+                let friend = Friend::from(&ty);
+                let mut friend =
+                    self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
+                let newly_added =
                     friend.capabilities.insert(format_ident!("{}", MAKE));
-                    assert!(self.ctx.cfg.friends.insert(friend));
-                });
+                if newly_added && !cfg.is_empty() {
+                    self.conditional_make
+                        .insert(source.rust_name().to_owned(), cfg);
+                }
+                assert!(self.ctx.cfg.friends.insert(friend));
+            }
         }
 
         return Ok(());
@@ -1718,6 +1774,24 @@ impl Maker {
                         return None;
                     }
 
+                    let make_cfg =
+                        friend.ty.path().get_ident().and_then(|ident| {
+                            self.conditional_make.get(&ident.to_string())
+                        });
+                    let seal_cfg = if capabilities.len() == 1 {
+                        make_cfg.cloned().unwrap_or_default()
+                    }
+                    else {
+                        TokenStream::new()
+                    };
+                    let mut capability_cfgs = BTreeMap::new();
+                    if let Some(cfg) = make_cfg {
+                        capability_cfgs.insert(
+                            self.ctx.trait_friend_make.clone(),
+                            cfg.clone(),
+                        );
+                    }
+
                     let conversion = if self.target.is_target(friend.ty.path())
                     {
                         None
@@ -1742,6 +1816,8 @@ impl Maker {
                         ),
                         capabilities,
                         conversion,
+                        seal_cfg,
+                        capability_cfgs,
                     });
                 })
                 .vec(),
@@ -3015,11 +3091,12 @@ impl Maker {
                 Konsts::Into,
                 Konsts::Conversion,
             ]));
-            let it = self.repr.safe_targets()
-                .map(|it| {
+            let it = self.cast_targets(true)
+                .map(|(it, cfg)| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("into_{}", it.rust_name());
                     return quote! {
+                       #cfg
                        #konst impl #impl_generics ::core::convert::Into<#target> for #ty
                        #where_clause {
                            #[inline(always)]
@@ -3051,11 +3128,12 @@ impl Maker {
                 Konsts::TryInto,
                 Konsts::Conversion,
             ]));
-            let it = self.repr.checked_targets()
-                .map(|it| {
+            let it = self.cast_targets(false)
+                .map(|(it, cfg)| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("try_into_{}", it.rust_name());
                     return quote! {
+                       #cfg
                        #konst impl #impl_generics ::core::convert::TryInto<#target> for #ty
                        #where_clause {
                            type Error = ();
@@ -4144,12 +4222,12 @@ impl Maker {
 
         if ctx.cfg.flags.fn_conv_into {
             let it = self
-                .repr
-                .safe_targets()
-                .map(|it| {
+                .cast_targets(true)
+                .map(|(it, cfg)| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("into_{}", it.rust_name());
                     return quote! {
+                        #cfg
                         #[must_use]
                         #[inline(always)]
                         #[allow(clippy::unnecessary_cast)]
@@ -4242,11 +4320,12 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if ctx.cfg.flags.fn_conv_try_into_unchecked {
-            let it = self.repr.safe_targets()
-                .map(|it| {
+            let it = self.cast_targets(true)
+                .map(|(it, cfg)| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("try_into_{}", it.rust_name());
                     return quote! {
+                        #cfg
                         #[inline(always)]
                         #[allow(clippy::unnecessary_cast)]
                         pub const fn #conv(self) -> ::core::result::Result<#target, ()> {
@@ -4273,8 +4352,8 @@ impl Maker {
 
         if ctx.cfg.flags.fn_conv_try_into_checked {
             let source = format_ident!("{}", self.repr.rust_name());
-            let it = self.repr.checked_targets()
-                .map(|it| {
+            let it = self.cast_targets(false)
+                .map(|(it, cfg)| {
                     let target = format_ident!("{}", it.rust_name());
                     let name = format_ident!("try_into_{}", it.rust_name());
                     let sign_check = match (self.repr.is_signed(), it.is_signed()) {
@@ -4283,6 +4362,7 @@ impl Maker {
                         _ => quote! { true },
                     };
                     return quote! {
+                    #cfg
                     #[inline(always)]
                     #[allow(clippy::unnecessary_cast)]
                     pub const fn #name(self) -> ::core::result::Result<#target, ()> {

@@ -64,19 +64,6 @@ const _: () = {
         }
     }
     impl<D: Direction> Rel<D> for SeqPoint<D> {}
-    impl<D: Direction> Seal<D> for i16 {
-        #[inline(always)]
-        fn conv_seq_point(self) -> u32 {
-            return self as u32;
-        }
-    }
-    impl<D: Direction> Make<D> for i16 {
-        #[inline(always)]
-        fn make(self) -> SeqPoint<D> {
-            let raw = <Self as Seal<D>>::conv_seq_point(self);
-            return <SeqPoint<D>>::_unchecked(raw);
-        }
-    }
     impl<D: Direction> Seal<D> for u16 {
         #[inline(always)]
         fn conv_seq_point(self) -> u32 {
@@ -110,6 +97,21 @@ const _: () = {
         }
     }
     impl<D: Direction> Make<D> for u8 {
+        #[inline(always)]
+        fn make(self) -> SeqPoint<D> {
+            let raw = <Self as Seal<D>>::conv_seq_point(self);
+            return <SeqPoint<D>>::_unchecked(raw);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl<D: Direction> Seal<D> for usize {
+        #[inline(always)]
+        fn conv_seq_point(self) -> u32 {
+            return self as u32;
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl<D: Direction> Make<D> for usize {
         #[inline(always)]
         fn make(self) -> SeqPoint<D> {
             let raw = <Self as Seal<D>>::conv_seq_point(self);
@@ -226,10 +228,18 @@ const _: () = {
             });
         }
     }
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     impl<D: Direction> Into<usize> for SeqPoint<D> {
         #[inline(always)]
         fn into(self) -> usize {
             return Self::into_usize(self);
+        }
+    }
+    #[cfg(target_pointer_width = "64")]
+    impl<D: Direction> Into<isize> for SeqPoint<D> {
+        #[inline(always)]
+        fn into(self) -> isize {
+            return Self::into_isize(self);
         }
     }
     impl<D: Direction> Into<u32> for SeqPoint<D> {
@@ -262,6 +272,15 @@ const _: () = {
             return Self::into_i128(self);
         }
     }
+    #[cfg(target_pointer_width = "16")]
+    impl<D: Direction> TryInto<usize> for SeqPoint<D> {
+        type Error = ();
+        #[inline(always)]
+        fn try_into(self) -> Result<usize, Self::Error> {
+            return Self::try_into_usize(self);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     impl<D: Direction> TryInto<isize> for SeqPoint<D> {
         type Error = ();
         #[inline(always)]
@@ -406,12 +425,21 @@ const _: () = {
         pub const fn raw(self) -> u32 {
             return self.0;
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[must_use]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn into_usize(self) -> usize {
             let it = Self::raw(self);
             return it as usize;
+        }
+        #[cfg(target_pointer_width = "64")]
+        #[must_use]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn into_isize(self) -> isize {
+            let it = Self::raw(self);
+            return it as isize;
         }
         #[must_use]
         #[inline(always)]
@@ -478,10 +506,17 @@ const _: () = {
                 }
             };
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_usize(self) -> Result<usize, ()> {
             return Ok(Self::raw(self) as usize);
+        }
+        #[cfg(target_pointer_width = "64")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
+            return Ok(Self::raw(self) as isize);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -508,6 +543,16 @@ const _: () = {
         pub const fn try_into_i128(self) -> Result<i128, ()> {
             return Ok(Self::raw(self) as i128);
         }
+        #[cfg(target_pointer_width = "16")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_usize(self) -> Result<usize, ()> {
+            let r = Self::raw(self);
+            let t = r as usize;
+            let s = t as u32;
+            return if s == r && true { Ok(t) } else { Err(()) };
+        }
+        #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_isize(self) -> Result<isize, ()> {
@@ -748,6 +793,19 @@ const _: () = {
     }
     impl<D: Direction> Math<D> for SeqOffset<D> {}
     impl<D: Direction> Rel<D> for SeqOffset<D> {}
+    impl<D: Direction> Seal<D> for i16 {
+        #[inline(always)]
+        fn conv_seq_offset(self) -> i32 {
+            return self as i32;
+        }
+    }
+    impl<D: Direction> Make<D> for i16 {
+        #[inline(always)]
+        fn make(self) -> SeqOffset<D> {
+            let raw = <Self as Seal<D>>::conv_seq_offset(self);
+            return <SeqOffset<D>>::_unchecked(raw);
+        }
+    }
     impl<D: Direction> Seal<D> for i32 {
         #[inline(always)]
         fn conv_seq_offset(self) -> i32 {
@@ -768,6 +826,21 @@ const _: () = {
         }
     }
     impl<D: Direction> Make<D> for i8 {
+        #[inline(always)]
+        fn make(self) -> SeqOffset<D> {
+            let raw = <Self as Seal<D>>::conv_seq_offset(self);
+            return <SeqOffset<D>>::_unchecked(raw);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl<D: Direction> Seal<D> for isize {
+        #[inline(always)]
+        fn conv_seq_offset(self) -> i32 {
+            return self as i32;
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl<D: Direction> Make<D> for isize {
         #[inline(always)]
         fn make(self) -> SeqOffset<D> {
             let raw = <Self as Seal<D>>::conv_seq_offset(self);
@@ -800,6 +873,21 @@ const _: () = {
             return <SeqOffset<D>>::_unchecked(raw);
         }
     }
+    #[cfg(target_pointer_width = "16")]
+    impl<D: Direction> Seal<D> for usize {
+        #[inline(always)]
+        fn conv_seq_offset(self) -> i32 {
+            return self as i32;
+        }
+    }
+    #[cfg(target_pointer_width = "16")]
+    impl<D: Direction> Make<D> for usize {
+        #[inline(always)]
+        fn make(self) -> SeqOffset<D> {
+            let raw = <Self as Seal<D>>::conv_seq_offset(self);
+            return <SeqOffset<D>>::_unchecked(raw);
+        }
+    }
     impl<D: Direction> AsRef<i32> for SeqOffset<D> {
         #[inline(always)]
         fn as_ref(&self) -> &i32 {
@@ -822,6 +910,7 @@ const _: () = {
             });
         }
     }
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     impl<D: Direction> Into<isize> for SeqOffset<D> {
         #[inline(always)]
         fn into(self) -> isize {
@@ -851,6 +940,14 @@ const _: () = {
         #[inline(always)]
         fn try_into(self) -> Result<usize, Self::Error> {
             return Self::try_into_usize(self);
+        }
+    }
+    #[cfg(target_pointer_width = "16")]
+    impl<D: Direction> TryInto<isize> for SeqOffset<D> {
+        type Error = ();
+        #[inline(always)]
+        fn try_into(self) -> Result<isize, Self::Error> {
+            return Self::try_into_isize(self);
         }
     }
     impl<D: Direction> TryInto<u8> for SeqOffset<D> {
@@ -1058,6 +1155,7 @@ const _: () = {
         pub const fn raw(self) -> i32 {
             return self.0;
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[must_use]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -1116,6 +1214,7 @@ const _: () = {
                 }
             };
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_isize(self) -> Result<isize, ()> {
@@ -1143,6 +1242,15 @@ const _: () = {
             let t = r as usize;
             let s = t as i32;
             return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+        }
+        #[cfg(target_pointer_width = "16")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
+            let r = Self::raw(self);
+            let t = r as isize;
+            let s = t as i32;
+            return if s == r && true { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]

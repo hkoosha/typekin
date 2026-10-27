@@ -6,6 +6,35 @@ struct My32(u32);
 #[typekin::integral(konst = nightly)]
 struct MyAuto64(u64);
 
+#[typekin::integral(konst = none)]
+struct PointerUnsigned(usize);
+
+#[typekin::integral(konst = none)]
+struct PointerSigned(isize);
+
+#[typekin::integral(konst = none)]
+struct SignedNarrow(i16);
+
+#[typekin::integral(
+    konst = none,
+    friend = _(u64) -> Make,
+)]
+struct ExplicitPointerFriend(usize);
+
+#[cfg(target_pointer_width = "64")]
+#[typekin::integral(
+    konst = none,
+    domain = [isize::MIN..-2_147_483_648, -isize::MAX..],
+)]
+struct PointerDomainIncludesMinimum(isize);
+
+#[cfg(target_pointer_width = "64")]
+#[typekin::integral(
+    konst = none,
+    domain = [-isize::MAX.., -2_147_483_648..=-2_147_483_648],
+)]
+struct PointerDomainExcludesMinimum(isize);
+
 #[typekin::integral(konst = none, with = konst_add)]
 struct ConstAddOnly(u8);
 
@@ -2352,7 +2381,115 @@ mod tests {
         assert_eq!(value.raw(), 1);
     }
 
+    #[cfg(target_pointer_width = "64")]
     #[test]
+    fn usize_exposes_upper_bytes_on_64_bit_targets() {
+        let raw = 0x0123_4567_89ab_cdefusize;
+        let value = PointerUnsigned::make(raw);
+        let upper_byte = value.byte4();
+        let highest_byte = value.byte7();
+
+        assert_eq!(upper_byte, 0x67, "{raw}");
+        assert_eq!(highest_byte, 0x01, "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn u64_to_usize_is_infallible_on_64_bit_targets() {
+        let raw = u64::MAX;
+        let value = MyAuto64::make(raw);
+        let converted = value.into_usize();
+        let via_trait: usize = value.into();
+        let checked = value.try_into_usize();
+
+        assert_eq!(converted, usize::MAX, "{raw}");
+        assert_eq!(via_trait, usize::MAX, "{raw}");
+        assert_eq!(checked, Ok(usize::MAX), "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn u64_is_an_automatic_usize_make_friend_on_64_bit_targets() {
+        let raw = u64::MAX;
+        let value = PointerUnsigned::of(raw);
+        let result = value.raw();
+
+        assert_eq!(result, usize::MAX, "{raw}");
+    }
+
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    #[test]
+    fn explicitly_declared_u64_make_friend_is_available() {
+        let raw = 23u64;
+        let value = ExplicitPointerFriend::of(raw);
+        let result = value.raw();
+
+        assert_eq!(result, 23, "{raw}");
+    }
+
+    #[test]
+    fn negative_isize_to_u128_is_rejected() {
+        let raw = -1isize;
+        let value = PointerSigned::make(raw);
+        let result = value.try_into_u128();
+        let via_trait: Result<u128, ()> = value.try_into();
+
+        assert_eq!(result, Err(()), "{raw}");
+        assert_eq!(via_trait, Err(()), "{raw}");
+    }
+
+    #[test]
+    fn negative_i16_to_u16_is_rejected() {
+        let raw = -1i16;
+        let value = SignedNarrow::make(raw);
+        let result = value.try_into_u16();
+        let via_trait: Result<u16, ()> = value.try_into();
+
+        assert_eq!(result, Err(()), "{raw}");
+        assert_eq!(via_trait, Err(()), "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn usize_to_u64_is_infallible() {
+        let raw = usize::MAX;
+        let value = PointerUnsigned::make(raw);
+        let result: u64 = value.into();
+
+        assert_eq!(result, u64::MAX, "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn isize_to_i64_is_infallible() {
+        let raw = isize::MIN;
+        let value = PointerSigned::make(raw);
+        let result: i64 = value.into();
+
+        assert_eq!(result, i64::MIN, "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn isize_domain_includes_native_minimum_when_first_range_is_nonempty() {
+        let raw = isize::MIN;
+        let result = PointerDomainIncludesMinimum::try_make(raw)
+            .map(PointerDomainIncludesMinimum::raw);
+
+        assert_eq!(result, Ok(raw), "{raw}");
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn isize_domain_excludes_native_minimum_when_singleton_is_above_it() {
+        let raw = isize::MIN;
+        let result = PointerDomainExcludesMinimum::try_make(raw);
+
+        assert_eq!(result, Err(raw), "{raw}");
+    }
+
+    #[test]
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     fn converts_into_usize() {
         let it = My32::make(23);
         let value: usize = it.into_usize();
@@ -2477,10 +2614,16 @@ mod tests {
 
     #[test]
     fn checked_conversion_from_signed_to_unsigned_rejects_negative() {
-        assert_eq!(MyI32::of(-1).try_into_u32(), Err(()));
+        let value = MyI32::make(-1);
+        let result = value.try_into_u32();
+        let via_trait: Result<u32, ()> = value.try_into();
+
+        assert_eq!(result, Err(()));
+        assert_eq!(via_trait, Err(()));
     }
 
     #[test]
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     fn implements_into_usize() {
         let it = My32::make(23);
         let value: usize = it.into();
@@ -2531,11 +2674,31 @@ mod tests {
         assert_eq!(value, 23);
     }
 
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     #[test]
     fn implements_try_into_isize() {
         let it = My32::make(23);
         let value: Result<isize, ()> = it.try_into();
         assert_eq!(value, Ok(23));
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn implements_into_isize_when_u32_fits() {
+        let raw = u32::MAX;
+        let it = My32::make(raw);
+        let value: isize = it.into();
+        assert_eq!(value, i64::from(raw) as isize);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn blanket_try_into_isize_is_infallible_when_u32_fits() {
+        let raw = u32::MAX;
+        let value = My32::make(raw);
+        let result: Result<isize, core::convert::Infallible> = value.try_into();
+
+        assert_eq!(result, Ok(i64::from(raw) as isize));
     }
 
     #[test]

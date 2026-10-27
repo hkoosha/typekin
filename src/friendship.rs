@@ -433,6 +433,8 @@ pub(crate) struct ProtocolFriend {
     pub(crate) ty: Type,
     pub(crate) capabilities: std::collections::BTreeSet<Ident>,
     pub(crate) conversion: Option<TokenStream>,
+    pub(crate) seal_cfg: TokenStream,
+    pub(crate) capability_cfgs: std::collections::BTreeMap<Ident, TokenStream>,
 }
 
 pub(crate) struct Construction {
@@ -518,8 +520,10 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
 
     let friend_impls = protocol.friends.iter().map(|friend| {
         let ty = &friend.ty;
+        let seal_cfg = &friend.seal_cfg;
         let seal_impl = friend.conversion.as_ref().map(|body| {
             quote! {
+                #seal_cfg
                 #konst impl #parameters #seal #arguments for #ty
                 #where_clause {
                     #[inline(always)]
@@ -530,6 +534,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
             }
         });
         let capability_impls = friend.capabilities.iter().map(|capability| {
+            let capability_cfg = friend.capability_cfgs.get(capability);
             let unsafe_ =
                 cfg::is_trust_capability(capability).then(|| quote! { unsafe });
             let method =
@@ -559,6 +564,7 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
                 });
 
             quote! {
+                #capability_cfg
                 #konst #unsafe_ impl #parameters #capability #arguments for #ty
                 #where_clause {
                     #method

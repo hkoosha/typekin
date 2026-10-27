@@ -93,19 +93,6 @@ const _: () = {
         }
     }
     impl Rel for MyFlags {}
-    impl Seal for i16 {
-        #[inline(always)]
-        fn conv_my_flags(self) -> u128 {
-            return self as u128;
-        }
-    }
-    impl Make for i16 {
-        #[inline(always)]
-        fn make(self) -> MyFlags {
-            let raw = <Self as Seal>::conv_my_flags(self);
-            return MyFlags::_unchecked(raw);
-        }
-    }
     impl Seal for u128 {
         #[inline(always)]
         fn conv_my_flags(self) -> u128 {

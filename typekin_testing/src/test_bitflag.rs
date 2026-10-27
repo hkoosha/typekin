@@ -79,6 +79,13 @@ enum FullyGeneratedFlag {
     Write = 0b0010,
 }
 
+#[cfg(target_pointer_width = "64")]
+#[typekin::bitflag(konst = none)]
+#[repr(usize)]
+enum PointerFlag {
+    One = 1,
+}
+
 #[repr(u8)]
 #[typekin::bitflag(konst = nightly)]
 enum FullyGeneratedConstFlag {
@@ -264,6 +271,30 @@ mod tests {
     fn value_empty() {
         let it = Thingy::empty();
         assert_eq!(it.raw(), 0b0);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn pointer_bitflag_value_exposes_upper_bytes_on_64_bit_targets() {
+        let value = PointerFlagValue::of(0x0123_4567_89ab_cdefu64);
+        let upper_byte = value.byte4();
+        let highest_byte = value.byte7();
+        let raw: u64 = value.into();
+
+        assert_eq!(upper_byte, 0x67);
+        assert_eq!(highest_byte, 0x01);
+        assert_eq!(raw, 0x0123_4567_89ab_cdef);
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn pointer_bitflag_value_checks_u32_narrowing_on_64_bit_targets() {
+        let value = PointerFlagValue::of(1u64 << 32);
+        let result = value.try_into_u32();
+        let via_trait: Result<u32, ()> = value.try_into();
+
+        assert_eq!(result, Err(()));
+        assert_eq!(via_trait, Err(()));
     }
 
     #[test]

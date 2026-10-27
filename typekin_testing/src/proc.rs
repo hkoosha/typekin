@@ -96,6 +96,16 @@ pub fn compile(
     source: &str,
     nightly: bool,
 ) -> Output {
+    return compile_for_target(name, dependencies, source, nightly, None);
+}
+
+pub fn compile_for_target(
+    name: &str,
+    dependencies: &str,
+    source: &str,
+    nightly: bool,
+    target: Option<&str>,
+) -> Output {
     let fixture = FixtureDir::mkdir_suffixed(name);
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -125,7 +135,8 @@ typekin = {{ path = "{}" }}
     let lib_rs = fixture.path.join("src/lib.rs");
     fs::write(&lib_rs, source).expect("cannot write source");
 
-    let output = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .args([
             match nightly {
                 true => "+nightly",
@@ -138,9 +149,11 @@ typekin = {{ path = "{}" }}
         .arg("--manifest-path")
         .arg(&manifest)
         .arg("--target-dir")
-        .arg(fixture.path.join("target"))
-        .output()
-        .unwrap();
+        .arg(fixture.path.join("target"));
+    if let Some(target) = target {
+        command.arg("--target").arg(target);
+    }
+    let output = command.output().unwrap();
 
     return Output {
         status: output.status,

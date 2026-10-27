@@ -1627,6 +1627,8 @@ impl Maker {
                     ty: syn::parse_quote! { #ty },
                     capabilities,
                     conversion: Some(conversion),
+                    seal_cfg: TokenStream::new(),
+                    capability_cfgs: Default::default(),
                 }));
             })
             .collect::<syn::Result<Vec<_>>>()?

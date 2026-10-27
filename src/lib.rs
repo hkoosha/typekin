@@ -56,6 +56,20 @@ mod tests;
 /// `FLAG` is an integral generation, operation, friendship, storage, or
 /// `konst_*` flag. `Math` expands to `Make` and `Bit` for integral friends.
 ///
+/// Pointer-sized conversions and implicit friends follow the consumer target's
+/// pointer width, including when cross-compiling:
+///
+/// ```
+/// #[typekin::integral(konst = none)]
+/// struct Wide(u64);
+///
+/// let value = Wide::make(1u64 << 32);
+/// #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+/// assert_eq!(value.try_into_usize(), Err(()));
+/// #[cfg(target_pointer_width = "64")]
+/// assert_eq!(value.into_usize(), (1u64 << 32) as usize);
+/// ```
+///
 /// An explicit empty capability list adds no capabilities. Any supplied
 /// callback is still checked as `fn(Source) -> Primitive` without being called.
 /// Const friendship and const facet operators also require a const callback.
@@ -280,6 +294,7 @@ pub fn tree(
 /// configuration accepts default-profile integral validation, friend, flag, and
 /// accessor settings; it rejects `profile`, `facet`, `produce`, `tree`, and
 /// nonzero storage.
+/// Pointer-sized conversions follow the target width, as with [`integral`].
 #[proc_macro_attribute]
 pub fn bitflag(
     attr: proc_macro::TokenStream,

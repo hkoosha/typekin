@@ -36,19 +36,6 @@ const _: () = {
         }
     }
     impl Rel for MyU32 {}
-    impl Seal for i16 {
-        #[inline(always)]
-        fn conv_my_u32(self) -> u32 {
-            return self as u32;
-        }
-    }
-    impl Make for i16 {
-        #[inline(always)]
-        fn make(self) -> MyU32 {
-            let raw = <Self as Seal>::conv_my_u32(self);
-            return MyU32::_unchecked(raw);
-        }
-    }
     impl Seal for u16 {
         #[inline(always)]
         fn conv_my_u32(self) -> u32 {
@@ -85,6 +72,21 @@ const _: () = {
         }
     }
     impl Make for u8 {
+        #[inline(always)]
+        fn make(self) -> MyU32 {
+            let raw = <Self as Seal>::conv_my_u32(self);
+            return MyU32::_unchecked(raw);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl Seal for usize {
+        #[inline(always)]
+        fn conv_my_u32(self) -> u32 {
+            return self as u32;
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    impl Make for usize {
         #[inline(always)]
         fn make(self) -> MyU32 {
             let raw = <Self as Seal>::conv_my_u32(self);
@@ -817,10 +819,18 @@ const _: () = {
             return (Self::_core_int(low), Self::_core_int(high));
         }
     }
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     impl Into<usize> for MyU32 {
         #[inline(always)]
         fn into(self) -> usize {
             return Self::into_usize(self);
+        }
+    }
+    #[cfg(target_pointer_width = "64")]
+    impl Into<isize> for MyU32 {
+        #[inline(always)]
+        fn into(self) -> isize {
+            return Self::into_isize(self);
         }
     }
     impl Into<u32> for MyU32 {
@@ -853,6 +863,15 @@ const _: () = {
             return Self::into_i128(self);
         }
     }
+    #[cfg(target_pointer_width = "16")]
+    impl TryInto<usize> for MyU32 {
+        type Error = ();
+        #[inline(always)]
+        fn try_into(self) -> Result<usize, Self::Error> {
+            return Self::try_into_usize(self);
+        }
+    }
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     impl TryInto<isize> for MyU32 {
         type Error = ();
         #[inline(always)]
@@ -1429,12 +1448,21 @@ const _: () = {
         pub const fn raw(self) -> u32 {
             return self.0;
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[must_use]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn into_usize(self) -> usize {
             let it = Self::raw(self);
             return it as usize;
+        }
+        #[cfg(target_pointer_width = "64")]
+        #[must_use]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn into_isize(self) -> isize {
+            let it = Self::raw(self);
+            return it as isize;
         }
         #[must_use]
         #[inline(always)]
@@ -1498,10 +1526,17 @@ const _: () = {
                 }
             };
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_usize(self) -> Result<usize, ()> {
             return Ok(Self::raw(self) as usize);
+        }
+        #[cfg(target_pointer_width = "64")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
+            return Ok(Self::raw(self) as isize);
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -1528,6 +1563,16 @@ const _: () = {
         pub const fn try_into_i128(self) -> Result<i128, ()> {
             return Ok(Self::raw(self) as i128);
         }
+        #[cfg(target_pointer_width = "16")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_usize(self) -> Result<usize, ()> {
+            let r = Self::raw(self);
+            let t = r as usize;
+            let s = t as u32;
+            return if s == r && true { Ok(t) } else { Err(()) };
+        }
+        #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_isize(self) -> Result<isize, ()> {
@@ -1778,6 +1823,11 @@ fn main() {
 
     let lhs = MyU32::of(lhs);
     let rhs = MyU32::of(rhs);
+    let largest = MyU32::of(u32::MAX);
+    #[cfg(target_pointer_width = "64")]
+    assert_eq!(largest.into_isize(), u32::MAX as isize);
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+    assert_eq!(largest.try_into_isize(), Err(()));
 
     println!("{:?}", lhs + rhs);
 }

@@ -57,19 +57,6 @@ const _: () = {
         }
     }
     impl Rel for MyU16 {}
-    impl Seal for i16 {
-        #[inline(always)]
-        fn conv_my_u16(self) -> u16 {
-            return self as u16;
-        }
-    }
-    impl Make for i16 {
-        #[inline(always)]
-        fn make(self) -> MyU16 {
-            let raw = <Self as Seal>::conv_my_u16(self);
-            return MyU16::_unchecked(raw);
-        }
-    }
     impl Seal for u16 {
         #[inline(always)]
         fn conv_my_u16(self) -> u16 {
@@ -93,6 +80,21 @@ const _: () = {
         }
     }
     impl Make for u8 {
+        #[inline(always)]
+        fn make(self) -> MyU16 {
+            let raw = <Self as Seal>::conv_my_u16(self);
+            return MyU16::_unchecked(raw);
+        }
+    }
+    #[cfg(target_pointer_width = "16")]
+    impl Seal for usize {
+        #[inline(always)]
+        fn conv_my_u16(self) -> u16 {
+            return self as u16;
+        }
+    }
+    #[cfg(target_pointer_width = "16")]
+    impl Make for usize {
         #[inline(always)]
         fn make(self) -> MyU16 {
             let raw = <Self as Seal>::conv_my_u16(self);
@@ -831,6 +833,7 @@ const _: () = {
             return Self::into_usize(self);
         }
     }
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     impl Into<isize> for MyU16 {
         #[inline(always)]
         fn into(self) -> isize {
@@ -877,6 +880,14 @@ const _: () = {
         #[inline(always)]
         fn into(self) -> i128 {
             return Self::into_i128(self);
+        }
+    }
+    #[cfg(target_pointer_width = "16")]
+    impl TryInto<isize> for MyU16 {
+        type Error = ();
+        #[inline(always)]
+        fn try_into(self) -> Result<isize, Self::Error> {
+            return Self::try_into_isize(self);
         }
     }
     impl TryInto<u8> for MyU16 {
@@ -1441,6 +1452,7 @@ const _: () = {
             let it = Self::raw(self);
             return it as usize;
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[must_use]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
@@ -1529,6 +1541,7 @@ const _: () = {
         pub const fn try_into_usize(self) -> Result<usize, ()> {
             return Ok(Self::raw(self) as usize);
         }
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_isize(self) -> Result<isize, ()> {
@@ -1568,6 +1581,15 @@ const _: () = {
         #[allow(clippy::unnecessary_cast)]
         pub const fn try_into_i128(self) -> Result<i128, ()> {
             return Ok(Self::raw(self) as i128);
+        }
+        #[cfg(target_pointer_width = "16")]
+        #[inline(always)]
+        #[allow(clippy::unnecessary_cast)]
+        pub const fn try_into_isize(self) -> Result<isize, ()> {
+            let r = Self::raw(self);
+            let t = r as isize;
+            let s = t as u16;
+            return if s == r && t >= 0 { Ok(t) } else { Err(()) };
         }
         #[inline(always)]
         #[allow(clippy::unnecessary_cast)]

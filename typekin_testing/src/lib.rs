@@ -44,6 +44,7 @@ mod test_integral_generic;
 mod test_integral_generic_compile;
 mod test_marker_tree;
 mod test_no_std;
+mod test_pointer_width_compile;
 mod test_text;
 
 #[global_allocator]

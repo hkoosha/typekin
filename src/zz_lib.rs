@@ -49,6 +49,7 @@ use crate::zz_runner::{
 use crate::zz_value_type::{
     Int,
     N,
+    POINTER_WIDTHS,
     RangeEnding,
 };
 
@@ -331,34 +332,54 @@ impl Konst {
 }
 
 #[derive(Clone)]
-pub(crate) struct DomainRange {
-    range: ExprRange,
-    lower: Option<Int>,
-    upper: RangeEnding,
+enum DomainRanges {
+    Shared(Vec<ExprRange>),
+    PerWidth([Vec<ExprRange>; POINTER_WIDTHS.len()]),
 }
 
-#[derive(Clone, Default)]
+impl DomainRanges {
+    fn at_width(
+        &self,
+        index: usize,
+    ) -> &[ExprRange] {
+        return match self {
+            Self::Shared(ranges) => ranges,
+            Self::PerWidth(ranges) => &ranges[index],
+        };
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct IntegralDomain {
-    ranges: Vec<DomainRange>,
+    ranges: DomainRanges,
+    zero_included: [bool; POINTER_WIDTHS.len()],
 }
 
 impl IntegralDomain {
     #[cfg(test)]
     pub(crate) fn ranges(&self) -> impl ExactSizeIterator<Item = &ExprRange> {
-        return self.ranges.iter().map(|it| &it.range);
+        return self.ranges.at_width(0).iter();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains_at_pointer_width(
+        &self,
+        value: Int,
+        pointer_width: u32,
+    ) -> bool {
+        let index = POINTER_WIDTHS
+            .iter()
+            .position(|width| *width == pointer_width)
+            .expect("supported pointer width");
+        return self.ranges.at_width(index).iter().any(|range| {
+            ComparableRange::of(range.clone())
+                .expect("domain bounds were validated")
+                .contains(value, index)
+        });
     }
 
     pub(crate) fn contains_zero(&self) -> bool {
-        let zero = Int::NonNegative(0);
-        return self.ranges.iter().any(|it| {
-            let above_lower = it.lower.is_none_or(|lower| lower <= zero);
-            let below_upper = match it.upper {
-                RangeEnding::Empty => false,
-                RangeEnding::Value(upper) => zero <= upper,
-                RangeEnding::Unbounded => true,
-            };
-            return above_lower && below_upper;
-        });
+        return self.zero_included.iter().any(|included| *included);
     }
 
     pub(crate) fn excludes_zero(&self) -> bool {
@@ -369,10 +390,36 @@ impl IntegralDomain {
         &self,
         value: &TokenStream,
     ) -> TokenStream {
-        return self
-            .ranges
+        return match &self.ranges {
+            DomainRanges::Shared(ranges) => Self::range_union(ranges, value),
+            DomainRanges::PerWidth(ranges) => {
+                let variants = POINTER_WIDTHS.into_iter().zip(ranges).map(
+                    |(width, ranges)| {
+                        let width = width.to_string();
+                        let condition = Self::range_union(ranges, value);
+                        return quote! {
+                            #[cfg(target_pointer_width = #width)]
+                            let __typekin_domain_valid = #condition;
+                        };
+                    },
+                );
+                quote! {
+                    {
+                        #(#variants)*
+                        __typekin_domain_valid
+                    }
+                }
+            }
+        };
+    }
+
+    fn range_union(
+        ranges: &[ExprRange],
+        value: &TokenStream,
+    ) -> TokenStream {
+        return ranges
             .iter()
-            .map(|it| Self::range_condition(&it.range, value))
+            .map(|it| Self::range_condition(it, value))
             .reduce(|left, right| quote! { (#left) || (#right) })
             .unwrap_or_else(|| quote! { false });
     }
@@ -455,7 +502,10 @@ impl Debug for ValidationCfg {
             .field("callbacks_count", &self.callbacks.len())
             .field(
                 "ranges_count",
-                &self.domain.as_ref().map_or(0, |it| it.ranges.len()),
+                &self
+                    .domain
+                    .as_ref()
+                    .map_or(0, |it| it.ranges.at_width(0).len()),
             )
             .field("non_zero", &self.non_zero)
             .finish();
@@ -498,34 +548,56 @@ impl ValidationCfg {
     }
 }
 
+#[derive(Clone)]
 struct ComparableRange {
     range: ExprRange,
-    lower: Option<Int>,
-    upper: RangeEnding,
+    lower: [Option<Int>; POINTER_WIDTHS.len()],
+    upper: [RangeEnding; POINTER_WIDTHS.len()],
 }
 
 impl ComparableRange {
-    fn of(it: ExprRange) -> Self {
-        return Self {
-            lower: it.start.as_ref().map(|it| {
-                parse_int_const(it)
-                    .expect("ranges were validated before merging")
-            }),
-            upper: match &it.end {
-                None => RangeEnding::Unbounded,
-                Some(end) => {
-                    let end = parse_int_const(end)
-                        .expect("ranges were validated before merging");
-                    match &it.limits {
-                        RangeLimits::HalfOpen(_) => end
-                            .predecessor()
-                            .map_or(RangeEnding::Empty, RangeEnding::Value),
-                        RangeLimits::Closed(_) => RangeEnding::Value(end),
-                    }
-                }
-            },
-            range: it,
+    fn of(it: ExprRange) -> syn::Result<Self> {
+        let lower = match &it.start {
+            None => [None; POINTER_WIDTHS.len()],
+            Some(start) => parse_int_const(start)?.map(Some),
         };
+        let upper = match &it.end {
+            None => [RangeEnding::Unbounded; POINTER_WIDTHS.len()],
+            Some(end) => parse_int_const(end)?.map(|end| {
+                return match &it.limits {
+                    RangeLimits::HalfOpen(_) => end
+                        .predecessor()
+                        .map_or(RangeEnding::Empty, RangeEnding::Value),
+                    RangeLimits::Closed(_) => RangeEnding::Value(end),
+                };
+            }),
+        };
+
+        return Ok(Self {
+            range: it,
+            lower,
+            upper,
+        });
+    }
+
+    fn contains(
+        &self,
+        value: Int,
+        width_index: usize,
+    ) -> bool {
+        let above_lower =
+            self.lower[width_index].is_none_or(|lower| lower <= value);
+        let below_upper = match self.upper[width_index] {
+            RangeEnding::Empty => false,
+            RangeEnding::Value(upper) => value <= upper,
+            RangeEnding::Unbounded => true,
+        };
+        return above_lower && below_upper;
+    }
+
+    fn is_width_independent(&self) -> bool {
+        return self.lower.iter().all(|lower| *lower == self.lower[0])
+            && self.upper.iter().all(|upper| *upper == self.upper[0]);
     }
 }
 
@@ -537,10 +609,10 @@ mod ranges {
 
     use crate::zz_lib::{
         ComparableRange,
-        DomainRange,
+        DomainRanges,
+        Int,
         IntegralDomain,
         one_or_list,
-        parse_int_const,
     };
     use crate::zz_runner::{
         MkErr,
@@ -551,7 +623,7 @@ mod ranges {
     pub(crate) fn parse_domain(
         input: ParseStream
     ) -> syn::Result<IntegralDomain> {
-        let mut ranges = one_or_list(input)?
+        let ranges = one_or_list(input)?
             .map(|it| {
                 let Expr::Range(range) = it
                 else {
@@ -562,25 +634,49 @@ mod ranges {
                     return range.fail("invalid range definition");
                 }
 
-                if let Some(start) = &range.start {
-                    parse_int_const(start)?;
-                }
-                if let Some(end) = &range.end {
-                    parse_int_const(end)?;
-                }
-
-                return Ok(range);
+                return ComparableRange::of(range);
             })
-            .collect::<syn::Result<Vec<_>>>()?
-            .into_iter()
-            .map(ComparableRange::of)
-            .vec();
+            .collect::<syn::Result<Vec<_>>>()?;
 
-        ranges.sort_by(|l, r| match (l.lower, r.lower) {
-            (None, None) => Ordering::Equal,
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-            (Some(left), Some(right)) => left.cmp(&right),
+        // Analyze the original union before any range endpoints are merged.
+        let zero_included = std::array::from_fn(|index| {
+            ranges
+                .iter()
+                .any(|range| range.contains(Int::NonNegative(0), index))
+        });
+
+        let ranges = if ranges.iter().all(ComparableRange::is_width_independent)
+        {
+            DomainRanges::Shared(merge_ranges(ranges, 0))
+        }
+        else {
+            // Merging on the host's width can change the target's union.
+            // Normalize separately and emit only the target's expression.
+            let variants = [
+                merge_ranges(ranges.clone(), 0),
+                merge_ranges(ranges.clone(), 1),
+                merge_ranges(ranges, 2),
+            ];
+            DomainRanges::PerWidth(variants)
+        };
+
+        return Ok(IntegralDomain {
+            ranges,
+            zero_included,
+        });
+    }
+
+    fn merge_ranges(
+        mut ranges: Vec<ComparableRange>,
+        width_index: usize,
+    ) -> Vec<syn::ExprRange> {
+        ranges.sort_by(|l, r| {
+            return match (l.lower[width_index], r.lower[width_index]) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (Some(left), Some(right)) => left.cmp(&right),
+            };
         });
 
         let mut merged = Vec::<ComparableRange>::with_capacity(ranges.len());
@@ -591,35 +687,29 @@ mod ranges {
                 continue;
             };
 
-            let connected = match (&curr.upper, next.lower) {
-                (RangeEnding::Empty, _) => false,
-                (RangeEnding::Unbounded, _) | (_, None) => true,
-                (RangeEnding::Value(hi), Some(lo)) => {
-                    lo <= *hi || hi.successor().is_some_and(|it| it == lo)
-                }
-            };
+            let connected =
+                match (&curr.upper[width_index], next.lower[width_index]) {
+                    (RangeEnding::Empty, _) => false,
+                    (RangeEnding::Unbounded, _) | (_, None) => true,
+                    (RangeEnding::Value(hi), Some(lo)) => {
+                        lo <= *hi || hi.successor().is_some_and(|it| it == lo)
+                    }
+                };
             if !connected {
                 merged.push(next);
                 continue;
             }
 
-            if next.upper.cmp(&curr.upper) == Ordering::Greater {
+            if next.upper[width_index].cmp(&curr.upper[width_index])
+                == Ordering::Greater
+            {
                 curr.range.end = next.range.end.take();
                 curr.range.limits = next.range.limits;
                 curr.upper = next.upper;
             }
         }
 
-        return Ok(IntegralDomain {
-            ranges: merged
-                .into_iter()
-                .map(|it| DomainRange {
-                    range: it.range,
-                    lower: it.lower,
-                    upper: it.upper,
-                })
-                .vec(),
-        });
+        return merged.into_iter().map(|it| it.range).vec();
     }
 }
 
@@ -627,7 +717,7 @@ pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
     return Ok(one_or_list::<Path>(input)?.collect());
 }
 
-fn parse_int_const(expr: &Expr) -> syn::Result<Int> {
+fn parse_int_const(expr: &Expr) -> syn::Result<[Int; POINTER_WIDTHS.len()]> {
     return match expr {
         Expr::Lit(expr) if expr.attrs.is_empty() => {
             let Lit::Int(literal) = &expr.lit
@@ -636,13 +726,14 @@ fn parse_int_const(expr: &Expr) -> syn::Result<Int> {
             };
 
             Int::parse_non_negative(literal.base10_digits(), literal.suffix())
+                .map(|value| [value; POINTER_WIDTHS.len()])
                 .map_err(|_| expr.errorful("invalid number"))
         }
 
         Expr::Unary(expr)
             if expr.attrs.is_empty() && matches!(&expr.op, UnOp::Neg(_)) =>
         {
-            Ok(parse_int_const(&expr.expr)?.negate())
+            Ok(parse_int_const(&expr.expr)?.map(Int::negate))
         }
 
         Expr::Path(expr) if expr.attrs.is_empty() && expr.qself.is_none() => {
@@ -663,13 +754,17 @@ fn parse_int_const(expr: &Expr) -> syn::Result<Int> {
                 return expr.fail("need an integer constant");
             }
 
-            let (min, max) = N::of(ty.ident.to_string())
-                .map(|it| it.bounds())
+            let bounds = N::of(ty.ident.to_string())
+                .map(|it| {
+                    POINTER_WIDTHS.map(|width| {
+                        return it.bounds_for_pointer_width(width);
+                    })
+                })
                 .ok_or_else(|| expr.errorful("need an integer constant"))?;
 
             match bound.ident.to_string().as_str() {
-                "MIN" => Ok(min),
-                "MAX" => Ok(max),
+                "MIN" => Ok(bounds.map(|(min, _)| min)),
+                "MAX" => Ok(bounds.map(|(_, max)| max)),
                 _ => expr.fail("need an integer constant"),
             }
         }

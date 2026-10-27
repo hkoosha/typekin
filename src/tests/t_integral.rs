@@ -23,6 +23,7 @@ mod tests {
     };
     use crate::zz_runner::ToCollection;
     use crate::zz_value_type::{
+        Int,
         N,
         Operator,
     };
@@ -49,6 +50,12 @@ mod tests {
         };
 
         return parser.parse_str(input);
+    }
+
+    fn parse_test_config(input: &str) -> Cfg {
+        let result = syn::parse_str::<Cfg>(input);
+        assert!(result.is_ok(), "{input}");
+        return result.unwrap();
     }
 
     #[test]
@@ -2111,49 +2118,102 @@ mod tests {
 
     #[test]
     fn accepts_root_validation_lists() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = none, valid = [is_even, is_not_fifty], domain = [1..=4, 8..10, ..=0]",
-        )
-            .expect("root validation lists should parse");
-
-        assert_eq!(config.validation.callbacks.len(), 2);
-        assert_eq!(
-            config.validation.domain.as_ref().unwrap().ranges().len(),
-            2,
-        );
-    }
-
-    #[test]
-    fn merges_overlapping_and_adjacent_ranges() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = none, domain = [10..=12, 1..3, 3..=5, 6..10]",
-        )
-        .expect("constant ranges should parse");
-
+        let input = "konst = none, valid = [is_even, is_not_fifty], domain = [1..=4, 8..10, ..=0]";
+        let config = parse_test_config(input);
         let domain = config.validation.domain.as_ref().unwrap();
-        assert_eq!(domain.ranges().len(), 1);
-        let range = domain.ranges().next().unwrap();
-        assert_eq!(
-            range.start.as_ref().unwrap().to_token_stream().to_string(),
-            "1",
-        );
-        assert_eq!(
-            range.end.as_ref().unwrap().to_token_stream().to_string(),
-            "12",
-        );
-        assert!(matches!(range.limits, syn::RangeLimits::Closed(_)));
+        let included =
+            domain.contains_at_pointer_width(Int::NonNegative(0), 16);
+        let excluded =
+            domain.contains_at_pointer_width(Int::NonNegative(5), 16);
+
+        assert_eq!(config.validation.callbacks.len(), 2, "{input}");
+        assert!(included, "{input}");
+        assert!(!excluded, "{input}");
     }
 
     #[test]
-    fn accepts_primitive_integer_constants_in_ranges() {
-        let config = syn::parse_str::<Cfg>(
-            "konst = none, domain = [1..=u32::MAX, u32::MAX..]",
-        )
-        .expect("primitive integer constants should parse");
-        assert_eq!(
-            config.validation.domain.as_ref().unwrap().ranges().len(),
-            1,
-        );
+    fn primitive_integer_constant_domain_preserves_boundaries() {
+        let input = "konst = none, domain = [1..=u32::MAX, u32::MAX..]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let zero = domain.contains_at_pointer_width(Int::NonNegative(0), 16);
+        let maximum = domain
+            .contains_at_pointer_width(Int::NonNegative(u32::MAX as u128), 16);
+
+        assert!(!zero, "{input}");
+        assert!(maximum, "{input}");
+    }
+
+    #[test]
+    fn pointer_domain_excludes_16_bit_minimum() {
+        let input =
+            "konst = none, domain = [isize::MIN..-32_768, -isize::MAX..]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let minimum = Int::Negative(32_768);
+        let contains_minimum = domain.contains_at_pointer_width(minimum, 16);
+
+        assert!(!contains_minimum, "{input}");
+    }
+
+    #[test]
+    fn pointer_domain_excludes_32_bit_minimum() {
+        let input = "konst = none, domain = [isize::MIN..-2_147_483_648, -isize::MAX..]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let minimum = Int::Negative(2_147_483_648);
+        let contains_minimum = domain.contains_at_pointer_width(minimum, 32);
+
+        assert!(!contains_minimum, "{input}");
+    }
+
+    #[test]
+    fn pointer_domain_includes_64_bit_minimum() {
+        let input = "konst = none, domain = [isize::MIN..-2_147_483_648, -isize::MAX..]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let minimum = Int::Negative(9_223_372_036_854_775_808);
+        let contains_minimum = domain.contains_at_pointer_width(minimum, 64);
+
+        assert!(contains_minimum, "{input}");
+    }
+
+    #[test]
+    fn pointer_domain_includes_32_bit_minimum() {
+        let input = "konst = none, domain = [-isize::MAX.., -2_147_483_648..=-2_147_483_648]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let minimum = Int::Negative(2_147_483_648);
+        let contains_minimum = domain.contains_at_pointer_width(minimum, 32);
+
+        assert!(contains_minimum, "{input}");
+    }
+
+    #[test]
+    fn singleton_domain_excludes_64_bit_minimum() {
+        let input = "konst = none, domain = [-isize::MAX.., -2_147_483_648..=-2_147_483_648]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let minimum = Int::Negative(9_223_372_036_854_775_808);
+        let contains_minimum = domain.contains_at_pointer_width(minimum, 64);
+
+        assert!(!contains_minimum, "{input}");
+    }
+
+    #[test]
+    fn fixed_domain_preserves_boundary_membership() {
+        let input = "konst = none, domain = [10..=12, 1..3, 3..=5, 6..10]";
+        let config = parse_test_config(input);
+        let domain = config.validation.domain.as_ref().unwrap();
+        let below = domain.contains_at_pointer_width(Int::NonNegative(0), 16);
+        let lower = domain.contains_at_pointer_width(Int::NonNegative(1), 16);
+        let upper = domain.contains_at_pointer_width(Int::NonNegative(12), 16);
+        let above = domain.contains_at_pointer_width(Int::NonNegative(13), 16);
+
+        assert!(!below, "{input}");
+        assert!(lower, "{input}");
+        assert!(upper, "{input}");
+        assert!(!above, "{input}");
     }
 
     #[test]
@@ -2212,7 +2272,7 @@ mod tests {
         expected: bool,
     ) {
         let input = format!("konst = none, domain = {source}");
-        let config = syn::parse_str::<Cfg>(&input).unwrap();
+        let config = parse_test_config(&input);
         let domain = config.validation.domain.as_ref().unwrap();
         assert_eq!(domain.contains_zero(), expected, "{input}");
         assert_eq!(domain.excludes_zero(), !expected, "{input}");
@@ -2271,6 +2331,42 @@ mod tests {
     #[test]
     fn signed_min_constant_is_negative() {
         assert_domain_zero_membership("i32::MIN..0", false);
+    }
+
+    #[test]
+    fn pointer_domain_excluding_zero_infers_non_zero_storage() {
+        let input = "konst = none, domain = [isize::MIN..0, 1..=isize::MAX]";
+        let config = parse_test_config(input);
+        let contains_zero =
+            config.validation.domain.as_ref().unwrap().contains_zero();
+        let requires_non_zero = config.requires_non_zero_storage();
+
+        assert!(!contains_zero, "{input}");
+        assert!(requires_non_zero, "{input}");
+    }
+
+    #[test]
+    fn pointer_domain_including_zero_uses_ordinary_storage() {
+        let input = "konst = none, domain = isize::MIN..=isize::MAX";
+        let config = parse_test_config(input);
+        let contains_zero =
+            config.validation.domain.as_ref().unwrap().contains_zero();
+        let requires_non_zero = config.requires_non_zero_storage();
+
+        assert!(contains_zero, "{input}");
+        assert!(!requires_non_zero, "{input}");
+    }
+
+    #[test]
+    fn unsigned_pointer_minimum_domain_includes_zero() {
+        let input = "konst = none, domain = usize::MIN..=usize::MIN";
+        let config = parse_test_config(input);
+        let contains_zero =
+            config.validation.domain.as_ref().unwrap().contains_zero();
+        let requires_non_zero = config.requires_non_zero_storage();
+
+        assert!(contains_zero, "{input}");
+        assert!(!requires_non_zero, "{input}");
     }
 
     #[test]
