@@ -11,6 +11,33 @@ struct ConstAddOnly(u8);
 
 const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
 
+#[typekin::integral(
+    konst = none,
+    with = [konst_add_assign, konst_or_assign],
+    without = [konst_add, konst_or],
+)]
+struct ConstAssignmentOverride(u8);
+
+const CONST_ADD_ASSIGN_ONLY: ConstAssignmentOverride = {
+    let mut lhs = ConstAssignmentOverride(20);
+    let rhs = ConstAssignmentOverride(3);
+    lhs += rhs;
+    lhs
+};
+
+const CONST_OR_ASSIGN_ONLY: ConstAssignmentOverride = {
+    let mut lhs = ConstAssignmentOverride(0b1000);
+    let rhs = ConstAssignmentOverride(0b0011);
+    lhs |= rhs;
+    lhs
+};
+
+#[typekin::integral(
+    konst = none,
+    without = [math_add, math_or],
+)]
+struct AssignmentWithoutBinary(u8);
+
 #[typekin::integral(konst = nightly)]
 struct ConstMap(u8);
 
@@ -1176,6 +1203,18 @@ mod tests {
     #[test]
     fn selectively_enabled_add_is_const() {
         assert_eq!(CONST_ADD_ONLY.raw(), 23);
+    }
+
+    #[test]
+    fn add_assignment_const_override_takes_precedence() {
+        let result = CONST_ADD_ASSIGN_ONLY;
+        assert_eq!(result.raw(), 23);
+    }
+
+    #[test]
+    fn or_assignment_const_override_takes_precedence() {
+        let result = CONST_OR_ASSIGN_ONLY;
+        assert_eq!(result.raw(), 0b1011);
     }
 
     #[test]
@@ -2430,6 +2469,16 @@ mod tests {
     }
 
     #[test]
+    fn add_assignment_does_not_require_binary_add() {
+        let lhs = AssignmentWithoutBinary::make(4);
+        let rhs = 2u8;
+        let mut result = lhs;
+        result += rhs;
+
+        assert_eq!(result.raw(), 6);
+    }
+
+    #[test]
     fn subtracts_assign() {
         let it = My32::make(26);
         let mut value = it;
@@ -2481,6 +2530,16 @@ mod tests {
         let it = My32::make(0b00110);
         value |= it;
         assert_eq!(value.raw(), 0b10111);
+    }
+
+    #[test]
+    fn or_assignment_does_not_require_binary_or() {
+        let lhs = AssignmentWithoutBinary::make(0b1000);
+        let rhs = 0b0011u8;
+        let mut result = lhs;
+        result |= rhs;
+
+        assert_eq!(result.raw(), 0b1011);
     }
 
     #[test]

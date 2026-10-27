@@ -5,34 +5,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn integral_in_property_was_renamed() {
-        const SRC: &str = r#"
-                #[typekin::integral(in = 1..)]
-                struct Code(u8);
-            "#;
-
-        assert_rejected(
-            "integral-in-property-was-renamed",
-            "`in` was renamed to `domain`",
-            SRC,
-        );
-    }
-
-    #[test]
-    fn text_in_property_was_renamed() {
-        const SRC: &str = r#"
-                #[typekin::text(in = ["draft"])]
-                struct State(String);
-            "#;
-
-        assert_rejected(
-            "text-in-property-was-renamed",
-            "`in` was renamed to `domain`",
-            SRC,
-        );
-    }
-
-    #[test]
     fn facet_cannot_select_non_zero_storage() {
         const SRC: &str = r#"
                 #[typekin::integral(

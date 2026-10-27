@@ -1105,26 +1105,22 @@ impl Maker {
         stream.extend(self.make_math_shl(ctx));
         stream.extend(self.make_assign_shr(ctx));
         stream.extend(self.make_assign_shl(ctx));
-        stream.extend(self.make_assign_and(ctx));
-        stream.extend(self.make_assign_add(ctx));
-        stream.extend(self.make_assign_sub(ctx));
-        stream.extend(self.make_assign_mul(ctx));
-        stream.extend(self.make_assign_div(ctx));
-        stream.extend(self.make_assign_rem(ctx));
-        stream.extend(self.make_assign_or(ctx));
+        stream.extend(self.make_assign(ctx, Operator::BitAnd));
+        for &operator in Operator::math_items() {
+            stream.extend(self.make_assign(ctx, operator));
+        }
+        stream.extend(self.make_assign(ctx, Operator::BitOr));
         stream.extend(self.make_range(ctx));
         stream.extend(self.make_debug(ctx));
         stream.extend(self.make_hash(ctx));
         stream.extend(self.make_eq(ctx));
         stream.extend(self.make_ord(ctx));
         stream.extend(self.make_assertions(ctx));
-        stream.extend(self.make_math_add(ctx));
-        stream.extend(self.make_math_sub(ctx));
-        stream.extend(self.make_math_mul(ctx));
-        stream.extend(self.make_math_div(ctx));
-        stream.extend(self.make_math_rem(ctx));
-        stream.extend(self.make_math_and(ctx));
-        stream.extend(self.make_math_or(ctx));
+        for &operator in Operator::math_items() {
+            stream.extend(self.make_math_arithmetic(ctx, operator));
+        }
+        stream.extend(self.make_math_bitwise(ctx, Operator::BitAnd));
+        stream.extend(self.make_math_bitwise(ctx, Operator::BitOr));
         stream.extend(self.make_math_xor(ctx));
         stream.extend(self.make_math_not(ctx));
         stream.extend(self.make_display(ctx));
@@ -3127,10 +3123,58 @@ impl Maker {
         return stream;
     }
 
-    fn make_assign_and(
+    fn make_assign(
         &self,
         ctx: &Ctx,
+        operator: Operator,
     ) -> TokenStream {
+        let configured = &self.ctx.cfg.flags;
+        let (enabled, assign_flag) = match operator {
+            Operator::Add => (configured.assign_add, Konsts::AddAssign),
+            Operator::Sub => (configured.assign_sub, Konsts::SubAssign),
+            Operator::Mul => (configured.assign_mul, Konsts::MulAssign),
+            Operator::Div => (configured.assign_div, Konsts::DivAssign),
+            Operator::Rem => (configured.assign_rem, Konsts::RemAssign),
+            Operator::BitAnd => (configured.assign_and, Konsts::AndAssign),
+            Operator::BitOr => (configured.assign_or, Konsts::OrAssign),
+            Operator::BitXor => {
+                unreachable!("XOR assignment is emitted together with XOR")
+            }
+        };
+        if !enabled || !ctx.with_global_operators {
+            return TokenStream::new();
+        }
+
+        let [
+            operator_flag,
+            family_flag,
+        ] = operator.is_konst_flags();
+        let flags = [
+            assign_flag,
+            operator_flag,
+            Konsts::Assign,
+            family_flag,
+        ];
+        let is_konst = self.ctx.cfg.konst_for(&flags);
+        let konst = Konst::konst(is_konst);
+        let bounds = self.bounds_for(&flags);
+        let (with_self, capability, method) = match operator.arithmetic_op() {
+            Some(arithmetic) => (
+                ctx.with_self_math,
+                &ctx.trait_friend_math,
+                self.arithmetic_method_name(arithmetic, is_konst),
+            ),
+            None => (
+                ctx.with_self_bit,
+                &ctx.trait_friend_bit,
+                format_ident!("_{}", operator.method_name()),
+            ),
+        };
+        let arguments = &ctx.arguments;
+        let trait_friend = quote! { #capability #arguments };
+        let operator_trait = format_ident!("{}Assign", operator.name());
+        let operator_method =
+            format_ident!("{}_assign", operator.method_name());
         let ty = &ctx.ty;
         let impl_generics = &ctx.impl_generics;
         let where_clause = &ctx.where_clause;
@@ -3138,478 +3182,39 @@ impl Maker {
         let rhs_impl_generics = &ctx.rhs_impl_generics;
         let rhs_raw = &ctx.rhs_raw;
         let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_bit = {
-            let bit = &ctx.trait_friend_bit;
-            let arguments = &ctx.arguments;
-            quote! { #bit #arguments }
-        };
-
         let mut stream = TokenStream::new();
 
-        if self.ctx.cfg.flags.assign_and && ctx.with_global_operators {
-            let flags = [
-                Konsts::AndAssign,
-                Konsts::And,
-                Konsts::Assign,
-                Konsts::Bit,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_bit {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::BitAndAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn bitand_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self._bitand(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx
-                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::BitAndAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
+        if with_self {
+            stream.extend(quote! {
+                #konst impl #impl_generics ::core::ops::#operator_trait for #ty
+                #where_clause {
                     #[inline(always)]
-                    fn bitand_assign(
+                    fn #operator_method(
                         &mut self,
-                        rhs: #rhs_ty,
+                        rhs: Self,
                     ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self._bitand(it);
+                        *self = self.#method(#rhs_raw);
                     }
                 }
-            };
-
-            stream.extend(it);
+            });
         }
 
-        return stream;
-    }
-
-    fn make_assign_add(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_add && ctx.with_global_operators {
-            let flags = [
-                Konsts::AddAssign,
-                Konsts::Add,
-                Konsts::Assign,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::AddAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn add_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self.#method(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::AddAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn add_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self.#method(it);
-                    }
+        let rhs_where =
+            ctx.rhs_where_clause(self, quote! { #trait_friend + #bounds });
+        stream.extend(quote! {
+            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
+            #rhs_where
+            {
+                #[inline(always)]
+                fn #operator_method(
+                    &mut self,
+                    rhs: #rhs_ty,
+                ) {
+                    let it = #fp_friend_conv(rhs);
+                    *self = self.#method(it);
                 }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_sub(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_sub && ctx.with_global_operators {
-            let flags = [
-                Konsts::SubAssign,
-                Konsts::Sub,
-                Konsts::Assign,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::SubAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn sub_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self.#method(#rhs_raw);
-                        }
-                    }
-                });
             }
-
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::SubAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn sub_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self.#method(it);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_mul(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_mul && ctx.with_global_operators {
-            let flags = [
-                Konsts::MulAssign,
-                Konsts::Mul,
-                Konsts::Assign,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::MulAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn mul_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self.#method(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::MulAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn mul_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self.#method(it);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_div(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_div && ctx.with_global_operators {
-            let flags = [
-                Konsts::DivAssign,
-                Konsts::Div,
-                Konsts::Assign,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::DivAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn div_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self.#method(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::DivAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn div_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self.#method(it);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_rem(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_rem && ctx.with_global_operators {
-            let flags = [
-                Konsts::RemAssign,
-                Konsts::Rem,
-                Konsts::Assign,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::RemAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn rem_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self.#method(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::RemAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn rem_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self.#method(it);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_or(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let trait_friend_bit = {
-            let bit = &ctx.trait_friend_bit;
-            let arguments = &ctx.arguments;
-            quote! { #bit #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_or && ctx.with_global_operators {
-            let flags = [
-                Konsts::OrAssign,
-                Konsts::Or,
-                Konsts::Assign,
-                Konsts::Bit,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_bit {
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::BitOrAssign for #ty
-                    #where_clause {
-                        #[inline(always)]
-                        fn bitor_assign(
-                            &mut self,
-                            rhs: Self,
-                        ) {
-                            *self = self._bitor(#rhs_raw);
-                        }
-                    }
-                });
-            }
-
-            let rhs_where = ctx
-                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::BitOrAssign<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn bitor_assign(
-                        &mut self,
-                        rhs: #rhs_ty,
-                    ) {
-                        let it = #fp_friend_conv(rhs);
-                        *self = self._bitor(it);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
+        });
 
         return stream;
     }
@@ -3764,10 +3369,25 @@ impl Maker {
         return stream;
     }
 
-    fn make_math_add(
+    fn make_math_arithmetic(
         &self,
         ctx: &Ctx,
+        operator: Operator,
     ) -> TokenStream {
+        if !self.ctx.cfg.flags.enabled(operator) || !ctx.with_global_operators {
+            return TokenStream::new();
+        }
+
+        let arithmetic = operator
+            .arithmetic_op()
+            .expect("expected an arithmetic operator");
+        let flags = operator.is_konst_flags();
+        let is_konst = self.ctx.cfg.konst_for(&flags);
+        let konst = Konst::konst(is_konst);
+        let method = self.arithmetic_method_name(arithmetic, is_konst);
+        let bounds = self.bounds_for(&flags);
+        let operator_trait = format_ident!("{}", operator.name());
+        let operator_method = format_ident!("{}", operator.method_name());
         let ty = &ctx.ty;
         let impl_generics = &ctx.impl_generics;
         let where_clause = &ctx.where_clause;
@@ -3781,376 +3401,68 @@ impl Maker {
             let arguments = &ctx.arguments;
             quote! { #math #arguments }
         };
-
         let mut stream = TokenStream::new();
 
-        if self.ctx.cfg.flags.math_add && ctx.with_global_operators {
-            let flags = [
-                Konsts::Add,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self.#method(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::Add for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn add(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
+        if ctx.with_self_math {
             let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::Add<#rhs_ty> for #ty
-                #rhs_where
-                {
+            let result = output.convert(quote! { self.#method(#rhs_raw) });
+            stream.extend(quote! {
+                #konst impl #impl_generics ::core::ops::#operator_trait for #ty #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
-                    fn add(
+                    fn #operator_method(
                         self,
-                        rhs: #rhs_ty,
+                        rhs: Self,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
                         return #result;
                     }
                 }
-            };
-            stream.extend(it);
+            });
         }
+
+        let output_ty = output.ty();
+        let result = output.convert(quote! { self.#method(it) });
+        let rhs_where =
+            ctx.rhs_where_clause(self, quote! { #trait_friend_math + #bounds });
+        stream.extend(quote! {
+            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
+            #rhs_where
+            {
+                type Output = #output_ty;
+
+                #[inline(always)]
+                fn #operator_method(
+                    self,
+                    rhs: #rhs_ty,
+                ) -> Self::Output {
+                    let it = #fp_friend_conv(rhs);
+                    return #result;
+                }
+            }
+        });
 
         return stream;
     }
 
-    fn make_math_sub(
+    fn make_math_bitwise(
         &self,
         ctx: &Ctx,
+        operator: Operator,
     ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_sub && ctx.with_global_operators {
-            let flags = [
-                Konsts::Sub,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self.#method(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::Sub for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn sub(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::Sub<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn sub(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-            };
-            stream.extend(it);
+        if !matches!(operator, Operator::BitAnd | Operator::BitOr) {
+            unreachable!("only BitAnd and BitOr use this emitter");
+        }
+        if !self.ctx.cfg.flags.enabled(operator) || !ctx.with_global_operators {
+            return TokenStream::new();
         }
 
-        return stream;
-    }
-
-    fn make_math_mul(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_mul && ctx.with_global_operators {
-            let flags = [
-                Konsts::Mul,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self.#method(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::Mul for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn mul(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::Mul<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn mul(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_math_div(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_div && ctx.with_global_operators {
-            let flags = [
-                Konsts::Div,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self.#method(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::Div for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn div(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::Div<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn div(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_math_rem(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_rem && ctx.with_global_operators {
-            let flags = [
-                Konsts::Rem,
-                Konsts::Math,
-            ];
-            let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_math {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self.#method(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::Rem for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn rem(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(it) });
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! { #trait_friend_math + #bounds },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::Rem<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn rem(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_math_and(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
+        let flags = operator.is_konst_flags();
+        let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
+        let bounds = self.bounds_for(&flags);
+        let method = format_ident!("_{}", operator.method_name());
+        let operator_trait = format_ident!("{}", operator.name());
+        let operator_method = format_ident!("{}", operator.method_name());
         let ty = &ctx.ty;
         let impl_generics = &ctx.impl_generics;
         let where_clause = &ctx.where_clause;
@@ -4164,127 +3476,46 @@ impl Maker {
             let arguments = &ctx.arguments;
             quote! { #bit #arguments }
         };
-
         let mut stream = TokenStream::new();
 
-        if self.ctx.cfg.flags.math_and && ctx.with_global_operators {
-            let flags = [
-                Konsts::And,
-                Konsts::Bit,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_bit {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitand(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::BitAnd for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn bitand(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-            }
-
+        if ctx.with_self_bit {
             let output_ty = output.ty();
-            let result = output.convert(quote! { self._bitand(it) });
-            let rhs_where = ctx
-                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::BitAnd<#rhs_ty> for #ty
-                #rhs_where
-                {
+            let result = output.convert(quote! { self.#method(#rhs_raw) });
+            stream.extend(quote! {
+                #konst impl #impl_generics ::core::ops::#operator_trait for #ty #where_clause {
                     type Output = #output_ty;
 
                     #[inline(always)]
-                    fn bitand(
+                    fn #operator_method(
                         self,
-                        rhs: #rhs_ty,
+                        rhs: Self,
                     ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
                         return #result;
                     }
                 }
-            };
-            stream.extend(it);
+            });
         }
 
-        return stream;
-    }
+        let output_ty = output.ty();
+        let result = output.convert(quote! { self.#method(it) });
+        let rhs_where =
+            ctx.rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
+        stream.extend(quote! {
+            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
+            #rhs_where
+            {
+                type Output = #output_ty;
 
-    fn make_math_or(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_bit = {
-            let bit = &ctx.trait_friend_bit;
-            let arguments = &ctx.arguments;
-            quote! { #bit #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_or && ctx.with_global_operators {
-            let flags = [
-                Konsts::Or,
-                Konsts::Bit,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            if ctx.with_self_bit {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitor(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::BitOr for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn bitor(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
+                #[inline(always)]
+                fn #operator_method(
+                    self,
+                    rhs: #rhs_ty,
+                ) -> Self::Output {
+                    let it = #fp_friend_conv(rhs);
+                    return #result;
+                }
             }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self._bitor(it) });
-            let rhs_where = ctx
-                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::BitOr<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn bitor(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-            };
-            stream.extend(it);
-        }
+        });
 
         return stream;
     }

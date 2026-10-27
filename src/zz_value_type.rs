@@ -513,6 +513,17 @@ impl Operator {
         };
     }
 
+    pub(crate) fn arithmetic_op(self) -> Option<ArithmeticOp> {
+        return match self {
+            Self::Add => Some(ArithmeticOp::Add),
+            Self::Sub => Some(ArithmeticOp::Sub),
+            Self::Mul => Some(ArithmeticOp::Mul),
+            Self::Div => Some(ArithmeticOp::Div),
+            Self::Rem => Some(ArithmeticOp::Rem),
+            Self::BitAnd | Self::BitOr | Self::BitXor => None,
+        };
+    }
+
     pub(crate) fn items() -> &'static [Self] {
         return &Self::ITEMS;
     }
