@@ -14,11 +14,12 @@ use syn::{
 
 pub(crate) use self::cfg::Cfg;
 use crate::friendship::cfg::Friend;
+use crate::zz_lib::Konst;
 use crate::zz_runner::MkErr;
 use crate::zz_value_type::N;
 use crate::{
     constructor,
-    zz,
+    zz_lib as zz,
     zz_runner,
 };
 
@@ -50,7 +51,7 @@ pub(crate) mod cfg {
         bracketed,
     };
 
-    use crate::zz::{
+    use crate::zz_lib::{
         arg_or_list,
         one_or_list,
     };
@@ -60,7 +61,7 @@ pub(crate) mod cfg {
     };
     use crate::{
         constructor,
-        zz,
+        zz_lib as zz,
     };
 
     #[derive(Clone)]
@@ -466,8 +467,8 @@ pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
     let relation = &protocol.relation;
     let seal = &protocol.seal;
     let conversion = &protocol.conversion;
-    let konst = zz_runner::konst(protocol.konst);
-    let bonst = zz_runner::bonst(protocol.konst);
+    let konst = Konst::konst(protocol.konst);
+    let bonst = Konst::bonst(protocol.konst);
     let (parameters, arguments, where_clause) =
         protocol.generics.split_for_impl();
 

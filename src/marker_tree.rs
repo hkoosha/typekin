@@ -23,7 +23,7 @@ use syn::{
 };
 
 use crate::{
-    zz,
+    zz_lib as zz,
     zz_runner,
 };
 

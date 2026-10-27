@@ -26,8 +26,8 @@ constness, and runtime cost as API behavior.
 - `src/zz_value_type.rs`: primitive integral metadata used by generators.
 - `src/{integral,bitflag,text,friendship,constructor}.rs`: parsing and emission
   for each macro family.
-- `src/zz.rs`: shared validation grammar, list parsing, item-shape checks, and
-  `repr` helpers.
+- `src/zz_lib.rs`: shared validation grammar, list parsing, item-shape checks,
+  and `repr` helpers.
 - `src/tests/`: parser and token-generation unit tests.
 - `tests/`: downstream-style behavioral tests against expanded macros.
 - `examples/`: small source examples and checked-in `_exp.rs` expansions. Do not

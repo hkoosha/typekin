@@ -39,7 +39,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust<D: Direction>: Seal<D> {}
+    unsafe trait Unsafe<D: Direction>: Seal<D> {}
     impl<D: Direction> Seal<D> for SeqPoint<D> {
         #[inline(always)]
         fn conv_seq_point(self) -> u32 {
@@ -722,7 +722,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust<D: Direction>: Seal<D> {}
+    unsafe trait Unsafe<D: Direction>: Seal<D> {}
     impl<D: Direction> Seal<D> for SeqOffset<D> {
         #[inline(always)]
         fn conv_seq_offset(self) -> i32 {
@@ -1345,7 +1345,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust: Seal {}
+    unsafe trait Unsafe: Seal {}
     impl Seal for WrappingCounter {
         #[inline(always)]
         fn conv_wrapping_counter(self) -> u32 {
@@ -3172,7 +3172,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust: Seal {}
+    unsafe trait Unsafe: Seal {}
     impl Seal for NonZeroSerial {
         #[inline(always)]
         fn conv_non_zero_serial(self) -> u32 {

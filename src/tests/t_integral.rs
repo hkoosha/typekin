@@ -12,7 +12,7 @@ mod tests {
         StoragePlan,
         ekran_with,
     };
-    use crate::zz::{
+    use crate::zz_lib::{
         Konst,
         Konsts,
     };
@@ -507,6 +507,88 @@ mod tests {
         let error = result.unwrap_err();
 
         assert_eq!(error.to_string(), "unknown flag");
+    }
+
+    #[test]
+    fn duplicate_flags_report_the_repeated_identifier() {
+        let input = "with = [display, display, not_a_flag]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicated flags", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("display").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn unknown_flag_precedes_a_later_duplicate() {
+        let input = "with = [not_a_flag, display, display]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("not_a_flag").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn conflicting_profile_const_flags_report_the_second_setting() {
+        let input = "profile = int { with = konst_add, without = konst_add }";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "flag specified in both `with` and `without`",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("konst_add").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn const_overrides_follow_profile_and_root_precedence() {
+        let input = "
+            konst = none,
+            profile = [
+                int { with = [konst_add, konst_sub] },
+                int { without = [konst_add, konst_sub] },
+            ],
+            with = konst_add
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
+
+        assert!(config.konst_for(&[Konsts::Add]), "{input}");
+        assert!(!config.konst_for(&[Konsts::Sub]), "{input}");
+    }
+
+    #[test]
+    fn facet_const_flag_reports_its_identifier() {
+        let input = "facet = int { with = konst_add }";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "constness is wrapper-wide and cannot be configured inside a facet",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.find("konst_add").unwrap(),
+            "{input}",
+        );
     }
 
     #[test]
@@ -2030,9 +2112,9 @@ mod tests {
             konst = none,
             domain = [MAX..4]
         ";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("range bounds must be integer constants");
-        assert_eq!(error.to_string(), "range bounds must be integer constants");
+        let error =
+            syn::parse_str::<Cfg>(input).expect_err("need an integer constant");
+        assert_eq!(error.to_string(), "need an integer constant");
     }
 
     #[test]
@@ -2041,9 +2123,9 @@ mod tests {
             konst = none,
             domain = [1 + 1..4]
         ";
-        let error = syn::parse_str::<Cfg>(input)
-            .expect_err("range bounds must be integer constants");
-        assert_eq!(error.to_string(), "range bounds must be integer constants");
+        let error =
+            syn::parse_str::<Cfg>(input).expect_err("need an integer constant");
+        assert_eq!(error.to_string(), "need an integer constant");
     }
 
     #[test]
@@ -2073,27 +2155,6 @@ mod tests {
     fn rejects_plus_separated_ranges() {
         syn::parse_str::<Cfg>("konst = none, domain = [1..2 + 3..4]")
             .expect_err("multiple ranges use comma separators");
-    }
-
-    #[test]
-    fn rejects_legacy_validation_attributes() {
-        let callback =
-            syn::parse_str::<Cfg>("konst = none, callback = is_valid")
-                .expect_err("valid is the validation callback key");
-        assert_eq!(callback.to_string(), "unknown attribute");
-
-        let range = syn::parse_str::<Cfg>("konst = none, range = 1..2")
-            .expect_err("in is the range constraint key");
-        assert_eq!(range.to_string(), "unknown attribute");
-
-        let renamed = syn::parse_str::<Cfg>("konst = none, in = 1..2")
-            .expect_err("the removed `in` spelling must be rejected");
-        assert_eq!(renamed.to_string(), "`in` was renamed to `domain`",);
-
-        let validator =
-            syn::parse_str::<Cfg>("konst = none, validator = is_valid")
-                .expect_err("valid is the validation callback key");
-        assert_eq!(validator.to_string(), "unknown attribute");
     }
 
     fn assert_domain_zero_membership(
@@ -2298,12 +2359,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_legacy_friend_levels() {
-        syn::parse_str::<Cfg>("konst = none, friend = [u8(level = [Full])]")
-            .expect_err("levels were replaced by capabilities");
-    }
-
-    #[test]
     fn rejects_custom_friendship_trait_names() {
         let trait_name =
             syn::parse_str::<Cfg>("konst = none, trait_seal = OtherSeal")
@@ -2365,19 +2420,6 @@ mod tests {
         );
         let this = syn::parse_str::<Cfg>(&input);
         assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn rejects_legacy_trusted_argument_true() {
-        let trusted = "true";
-        let input = format!(
-            "
-                konst = none,
-                friend = [Source(cap = Make, trusted = {trusted})]
-            "
-        );
-        let this = syn::parse_str::<Cfg>(&input);
-        assert!(this.is_err(), "{input}");
     }
 
     #[test]

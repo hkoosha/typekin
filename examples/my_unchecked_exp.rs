@@ -20,7 +20,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust: Seal {}
+    unsafe trait Unsafe: Seal {}
     impl Seal for MyUnchecked {
         #[inline(always)]
         fn conv_my_unchecked(self) -> u32 {
@@ -40,7 +40,7 @@ const _: () = {
             return MyUnchecked(raw);
         }
     }
-    unsafe impl UnsafeTrust for MyFriend {}
+    unsafe impl Unsafe for MyFriend {}
     impl Make for MyUnchecked {
         #[inline(always)]
         fn make(self) -> MyUnchecked {

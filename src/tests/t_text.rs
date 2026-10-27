@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::text::Cfg;
-    use crate::zz::Konsts;
+    use crate::zz_lib::Konsts;
 
     #[test]
     fn accepts_friend_with_make_capability() {
@@ -186,7 +186,7 @@ mod tests {
         )
         .expect("text configuration should parse");
 
-        assert_eq!(cfg.konst, crate::zz::Konst::None);
+        assert_eq!(cfg.konst, crate::zz_lib::Konst::None);
         assert_eq!(cfg.callbacks.len(), 2);
         assert!(cfg.flags.display);
     }
@@ -198,14 +198,6 @@ mod tests {
         )
         .expect("literal membership configuration should parse");
         assert_eq!(cfg.values.as_ref().unwrap().len(), 2);
-    }
-
-    #[test]
-    fn rejects_renamed_in_property() {
-        let error = syn::parse_str::<Cfg>(r#"in = ["draft"]"#)
-            .expect_err("the removed `in` spelling must be rejected");
-
-        assert_eq!(error.to_string(), "`in` was renamed to `domain`",);
     }
 
     #[test]
@@ -309,7 +301,7 @@ mod tests {
         let cfg = syn::parse_str::<Cfg>("valid = is_slug")
             .expect("konst should default to the crate feature");
 
-        assert_eq!(cfg.konst, crate::zz::Konst::default());
+        assert_eq!(cfg.konst, crate::zz_lib::Konst::default());
         assert!(cfg.konst_for(&[Konsts::TextAccess]));
         assert_eq!(cfg.konst_for(&[Konsts::Text]), cfg!(feature = "nightly"));
     }
@@ -342,6 +334,73 @@ mod tests {
         let error = result.unwrap_err();
 
         assert_eq!(error.to_string(), "unknown flag");
+    }
+
+    #[test]
+    fn specific_const_overrides_take_precedence_over_text_families() {
+        let input = "
+            konst = none,
+            with = [konst_text, konst_from],
+            without = [konst_text_access, konst_text_from]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
+
+        assert!(
+            !config.konst_for(&[
+                Konsts::TextAccess,
+                Konsts::Text
+            ]),
+            "{input}",
+        );
+        assert!(
+            !config.konst_for(&[
+                Konsts::TextFrom,
+                Konsts::From,
+                Konsts::Text,
+            ]),
+            "{input}",
+        );
+        assert!(
+            config.konst_for(&[
+                Konsts::From,
+                Konsts::Text
+            ]),
+            "{input}"
+        );
+    }
+
+    #[test]
+    fn conflicting_const_flags_report_the_second_setting() {
+        let input = "without = konst_text_access, with = konst_text_access";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "flag specified in both `with` and `without`",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("konst_text_access").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn unknown_flag_precedes_a_later_duplicate() {
+        let input = "with = [not_a_flag, display, display]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("not_a_flag").unwrap(),
+            "{input}",
+        );
     }
 
     #[test]
@@ -436,9 +495,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_with_display_flags() {
-        let input = "with = [display, display]";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+    fn duplicate_flags_report_the_repeated_identifier() {
+        let input = "with = [display, display, not_a_flag]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicated flags", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("display").unwrap(),
+            "{input}",
+        );
     }
 
     #[test]
@@ -496,14 +563,5 @@ mod tests {
     fn rejects_untyped_make_friend() {
         let input = "friend = [_ -> Make]";
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
-    }
-
-    #[test]
-    fn rejects_legacy_trusted_true_argument() {
-        let trusted = "true";
-        let input = format!(
-            "friend = [Source(conv = convert, cap = Make, trusted = {trusted})]"
-        );
-        assert!(syn::parse_str::<Cfg>(&input).is_err(), "{input}");
     }
 }

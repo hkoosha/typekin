@@ -10,7 +10,6 @@ use proc_macro2::{
     Span,
     TokenStream,
 };
-use quote::quote;
 use syn::Error;
 use syn::spanned::Spanned;
 
@@ -370,34 +369,6 @@ macro_rules! mk_flags {
 
 pub(crate) use mk_flags;
 
-pub(crate) fn snake_case_of(it: &str) -> String {
-    // AI generated, whatever.
-    let mut result = String::with_capacity(it.len());
-    let chars = it.chars().vec();
-
-    for (i, &c) in chars.iter().enumerate() {
-        if c.is_uppercase() {
-            if i > 0 && !chars[i - 1].is_uppercase() {
-                result.push('_');
-            }
-            else if i > 0
-                && chars[i - 1].is_uppercase()
-                && let Some(&next) = chars.get(i + 1)
-                && next.is_lowercase()
-            {
-                result.push('_');
-            }
-
-            result.push(c.to_lowercase().next().unwrap());
-        }
-        else {
-            result.push(c);
-        }
-    }
-
-    result
-}
-
 pub(crate) fn typekin_catch_panics() -> bool {
     return TYPEKIN_MACHINERY_DEBUG;
 }
@@ -441,25 +412,34 @@ pub(crate) fn catching(
     };
 }
 
-pub(crate) fn bonst(is_const: bool) -> Option<TokenStream> {
-    return match is_const {
-        true => Some(quote! { [const] }),
-        false => None,
-    };
-}
+// ============================================================================
 
-pub(crate) fn konst(is_const: bool) -> Option<TokenStream> {
-    return match is_const {
-        true => Some(quote! { const }),
-        false => None,
-    };
-}
+pub(crate) fn snake_case_of(it: &str) -> String {
+    // AI generated, whatever.
+    let mut result = String::with_capacity(it.len());
+    let chars = it.chars().vec();
 
-pub(crate) fn destruct(is_const: bool) -> Option<TokenStream> {
-    return match is_const {
-        true => Some(quote! { + [const] ::core::marker::Destruct }),
-        false => None,
-    };
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 && !chars[i - 1].is_uppercase() {
+                result.push('_');
+            }
+            else if i > 0
+                && chars[i - 1].is_uppercase()
+                && let Some(&next) = chars.get(i + 1)
+                && next.is_lowercase()
+            {
+                result.push('_');
+            }
+
+            result.push(c.to_lowercase().next().unwrap());
+        }
+        else {
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 // ============================================================================

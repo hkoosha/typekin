@@ -30,7 +30,8 @@ use syn::{
 };
 
 use crate::friendship::cfg::Friend;
-use crate::zz::{
+use crate::zz_lib::{
+    DuplicateFlagPolicy,
     Konst,
     Konsts,
 };
@@ -42,8 +43,12 @@ use crate::zz_runner::{
 };
 use crate::{
     marker_tree,
-    zz,
+    zz_lib as zz,
 };
+
+const MAKE: &str = "Make";
+const REL: &str = "Rel";
+const UNSAFE: &str = "Unsafe";
 
 pub(crate) fn text(
     attr: Cfg,
@@ -96,57 +101,37 @@ impl Cfg {
         input: ParseStream,
         value_if_seen: bool,
     ) -> syn::Result<()> {
-        let attrs = zz::one_or_list::<Ident>(input)?;
-        let mut duplicated = BTreeMap::new();
+        return zz::parse_explicit_flags(
+            input,
+            value_if_seen,
+            &mut self.seen_flags,
+            DuplicateFlagPolicy::WithinList,
+            |flg| {
+                if flg.name.starts_with("konst_") {
+                    let Some(flag) = Self::parse_konst_flags(&flg.name)
+                    else {
+                        return flg.span.fail("unknown flag");
+                    };
+                    self.konst_flags.insert(flag, flg.value);
+                }
+                else if self.flags.set_bool(&flg.name, flg.value).is_err() {
+                    return flg.span.fail("unknown flag");
+                }
 
-        for attr in attrs {
-            let name = attr.to_string();
-            let span = attr.span();
-
-            if duplicated.insert(name.clone(), span).is_some() {
-                return Err(syn::Error::new(span, "duplicated flags"));
-            }
-
-            if self
-                .seen_flags
-                .get(&name)
-                .is_some_and(|value| *value != value_if_seen)
-            {
-                return Err(syn::Error::new(
-                    span,
-                    "flag specified in both `with` and `without`",
-                ));
-            }
-
-            if name.starts_with("konst_") {
-                let Some(flag) = Self::parse_konst_flags(&name)
-                else {
-                    return Err(syn::Error::new(span, "unknown flag"));
-                };
-
-                self.konst_flags.insert(flag, value_if_seen);
-            }
-            else if self.flags.set_bool(&name, value_if_seen).is_err() {
-                return Err(syn::Error::new(span, "unknown flag"));
-            }
-
-            self.seen_flags.insert(name, value_if_seen);
-        }
-
-        return Ok(());
+                return Ok(());
+            },
+        );
     }
 
     pub(crate) fn konst_for(
         &self,
         flags: &[Konsts],
     ) -> bool {
-        for flag in flags {
-            if let Some(value) = self.konst_flags.get(flag) {
-                return *value;
-            }
-        }
-
-        return self.konst.enables(flags);
+        return zz::resolve_konst(
+            flags,
+            |flg| self.konst_flags.get(flg).copied(),
+            || self.konst.enables(flags),
+        );
     }
 
     fn parse_values(input: ParseStream) -> syn::Result<Vec<LitStr>> {
@@ -173,9 +158,9 @@ impl Cfg {
 
             for capability in &friend.capabilities {
                 match capability.to_string().as_str() {
-                    "Make" => has_make = true,
-                    "Unsafe" => {}
-                    "Rel" => {
+                    MAKE => has_make = true,
+                    UNSAFE => {}
+                    REL => {
                         if !friend.ty.is_ident("Self") {
                             return capability
                                 .fail("text `Rel` is only available for Self");
@@ -279,9 +264,6 @@ impl Parse for Cfg {
                     }
                     this.values = Some(Self::parse_values(rest)?);
                 }
-                "in" => {
-                    rest.span().fail("`in` was renamed to `domain`")?;
-                }
                 "friend" => this.parse_friends(rest)?,
                 "tree" => {
                     this.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
@@ -373,10 +355,10 @@ impl TextMaker {
             Konsts::Friendship,
             Konsts::Text,
         ]);
-        let konst = zz_runner::konst(is_konst);
-        let bonst = zz_runner::bonst(is_konst);
-        let destruct = zz_runner::destruct(is_konst);
-        let make = format_ident!("Make");
+        let konst = Konst::konst(is_konst);
+        let bonst = Konst::bonst(is_konst);
+        let destruct = Konst::destruct(is_konst);
+        let make = format_ident!("{}", MAKE);
         let trusted = crate::friendship::cfg::trust_capability();
         let seal = format_ident!("TextMake");
         let friends = self
@@ -466,10 +448,10 @@ impl TextMaker {
             false => quote! { ::alloc::vec::Vec },
         };
         let is_konst = self.cfg.konst_for(&[Konsts::Text]);
-        let konst = zz_runner::konst(is_konst);
+        let konst = Konst::konst(is_konst);
         let bonst = TokenStream::new();
         let destruct = TokenStream::new();
-        let access_konst = zz_runner::konst(self.cfg.konst_for(&[
+        let access_konst = Konst::konst(self.cfg.konst_for(&[
             Konsts::TextAccess,
             Konsts::Text,
         ]));
@@ -524,7 +506,7 @@ impl TextMaker {
             }
         });
         let infallible_from = (!self.cfg.has_validation()).then(|| {
-            let konst = zz_runner::konst(self.cfg.konst_for(&[
+            let konst = Konst::konst(self.cfg.konst_for(&[
                 Konsts::TextFrom,
                 Konsts::From,
                 Konsts::Text,

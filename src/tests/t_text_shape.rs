@@ -13,7 +13,7 @@ mod tests {
         assert!(this.is_ok(), "{source}");
         let item = this.unwrap();
         let error =
-            TextMaker::new(item, Cfg::new(crate::zz::Konst::None, false))
+            TextMaker::new(item, Cfg::new(crate::zz_lib::Konst::None, false))
                 .err()
                 .expect("unsupported text shape accepted");
         let prefix = &source[..source.find(marker).expect("diagnostic marker")];

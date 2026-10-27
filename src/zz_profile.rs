@@ -30,8 +30,8 @@ use crate::integral::{
     IntSettings,
     IntegralFlags,
 };
-use crate::zz;
 use crate::zz_conv::SelfConverter;
+use crate::zz_lib as zz;
 use crate::zz_runner::{
     MkErr,
     MySpanned,
@@ -487,8 +487,6 @@ fn profile_apply_restricted_math(it: &mut IntegralFlags) {
 }
 
 // =============================================================================
-
-mod stuff {}
 
 #[derive(Clone)]
 pub(crate) struct FacetCfg {

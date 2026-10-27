@@ -42,7 +42,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    unsafe trait UnsafeTrust: Seal {}
+    unsafe trait Unsafe: Seal {}
     impl Seal for MyU16 {
         #[inline(always)]
         fn conv_my_u16(self) -> u16 {

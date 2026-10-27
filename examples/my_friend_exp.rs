@@ -29,7 +29,7 @@ const _: () = {
     #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    const unsafe trait UnsafeTrust: [const] Seal {}
+    const unsafe trait Unsafe: [const] Seal {}
     const impl Seal for PageHeader {
         #[inline(always)]
         fn conv_page_header(self) -> u32 {

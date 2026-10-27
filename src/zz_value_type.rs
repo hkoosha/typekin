@@ -7,7 +7,7 @@ use std::fmt::{
 };
 use std::str::FromStr;
 
-use crate::zz::Konsts;
+use crate::zz_lib::Konsts;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::upper_case_acronyms)]

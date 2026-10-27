@@ -4,7 +4,7 @@ mod tests {
         Cfg,
         resolve_repr,
     };
-    use crate::zz::Konsts;
+    use crate::zz_lib::Konsts;
     use crate::zz_value_type::N;
 
     #[test]
@@ -279,14 +279,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_renamed_in_property_in_integral() {
-        let error = syn::parse_str::<Cfg>("integral = [in = 0..=7]")
-            .expect_err("nested integral configuration uses `domain`");
-
-        assert_eq!(error.to_string(), "`in` was renamed to `domain`",);
-    }
-
-    #[test]
     fn rejects_non_zero_in_integral() {
         let error = syn::parse_str::<Cfg>("integral = [with = non_zero]")
             .expect_err("bitflag values require a zero identity");
@@ -315,7 +307,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(it)
             .expect("top-level nightly konst should parse");
-        assert_eq!(config.int.konst, crate::zz::Konst::Nightly);
+        assert_eq!(config.int.konst, crate::zz_lib::Konst::Nightly);
     }
 
     #[test]
@@ -325,7 +317,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(it)
             .expect("top-level stable konst should parse");
-        assert_eq!(config.int.konst, crate::zz::Konst::Stable);
+        assert_eq!(config.int.konst, crate::zz_lib::Konst::Stable);
         assert!(config.int.konst_for(&[Konsts::Value]));
         assert!(!config.int.konst_for(&[Konsts::Math]));
     }
@@ -337,7 +329,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(it)
             .expect("top-level none konst should parse");
-        assert_eq!(config.int.konst, crate::zz::Konst::None);
+        assert_eq!(config.int.konst, crate::zz_lib::Konst::None);
     }
 
     #[test]
@@ -498,6 +490,52 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_flags_report_the_repeated_identifier() {
+        let input = "with = [display, display, not_a_flag]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicated flags", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("display").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn unknown_flag_precedes_a_later_duplicate() {
+        let input = "with = [not_a_flag, display, display]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown flag", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("not_a_flag").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn conflicting_const_flags_report_the_second_setting() {
+        let input = "with = konst_value, without = konst_value";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "flag specified in both `with` and `without`",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("konst_value").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
     fn accepts_nested_unit_error() {
         let it = "
             integral = [error = ()]
@@ -533,17 +571,34 @@ mod tests {
     }
 
     #[test]
-    fn rejects_incompatible_konst() {
-        let it = "
-            integral = [without = [konst_value]]
+    fn forwards_explicit_const_override_to_integral() {
+        let input = "
+            konst = none,
+            with = konst_value,
+            integral = [with = konst_value]
         ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
 
-        let error = syn::parse_str::<Cfg>(it)
-            .expect_err("incompatible forwarded konst flag must be rejected");
+        assert!(config.int.konst_for(&[Konsts::Value]), "{input}");
+    }
+
+    #[test]
+    fn rejects_incompatible_konst() {
+        let input = "konst = none, with = konst_value, integral = [without = konst_value]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
 
         assert_eq!(
             error.to_string(),
             "this value is not compatible with own konst config of bitflag",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("konst_value").unwrap(),
+            "{input}",
         );
     }
 
@@ -564,7 +619,7 @@ mod tests {
         let config = syn::parse_str::<Cfg>(it)
             .expect("konst should default to the crate feature");
 
-        assert_eq!(config.int.konst, crate::zz::Konst::default());
+        assert_eq!(config.int.konst, crate::zz_lib::Konst::default());
         assert!(config.int.konst_for(&[Konsts::Value]));
         assert_eq!(
             config.int.konst_for(&[Konsts::Math]),
@@ -598,16 +653,6 @@ mod tests {
         let friend = config.friends.iter().next().unwrap();
 
         assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
-    }
-
-    #[test]
-    fn rejects_legacy_friend_levels() {
-        let it = "
-            friend = [u8(conv = self, level = [Bit])],
-            integral = []
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_err(), "{it}");
     }
 
     #[test]

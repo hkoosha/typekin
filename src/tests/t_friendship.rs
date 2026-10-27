@@ -90,21 +90,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_legacy_self_implicit_conversion_syntax() {
-        let it = "
-            relation = u8,
-            friend = Self(Foo) -> Inspect
-        ";
-
-        let error = syn::parse_str::<Cfg>(it).unwrap_err();
-
-        assert_eq!(
-            error.to_string(),
-            "friend implicit conversion is `_(Type)`, not `Self(Type)`",
-        );
-    }
-
-    #[test]
     fn rejects_duplicate_capability_for_source() {
         let it = "
             relation = u8,

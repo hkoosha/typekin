@@ -21,7 +21,7 @@ use syn::{
 
 use crate::zz_runner::ToCollection;
 use crate::{
-    zz,
+    zz_lib as zz,
     zz_runner,
 };
 

@@ -41,14 +41,15 @@ use crate::friendship::{
     Protocol,
     ProtocolFriend,
 };
-use crate::zz::{
-    Konst,
-    Konsts,
-    ValidationCfg,
-};
 use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
+};
+use crate::zz_lib::{
+    DuplicateFlagPolicy,
+    Konst,
+    Konsts,
+    ValidationCfg,
 };
 use crate::zz_profile::{
     Arithmetic,
@@ -73,7 +74,7 @@ use crate::zz_value_type::{
 };
 use crate::{
     marker_tree,
-    zz,
+    zz_lib as zz,
     zz_runner,
 };
 
@@ -191,7 +192,7 @@ pub(crate) fn ekran(
         }
     });
     let manual_clone = (attr.flags.clone && target.has_generics()).then(|| {
-        let konst = zz_runner::konst(matches!(attr.konst, Konst::Nightly));
+        let konst = Konst::konst(matches!(attr.konst, Konst::Nightly));
         let value = target.construct_storage(
             quote! { Self },
             quote! { self.0 },
@@ -1053,8 +1054,8 @@ impl Maker {
     ) -> TokenStream {
         let trait_seal = &self.ctx.trait_seal_with_arguments;
         let is_konst = self.ctx.cfg.konst_for(flags);
-        let bonst = zz_runner::bonst(is_konst);
-        let destruct = zz_runner::destruct(is_konst);
+        let bonst = Konst::bonst(is_konst);
+        let destruct = Konst::destruct(is_konst);
         return quote! { #bonst #trait_seal #destruct };
     }
 
@@ -1433,7 +1434,7 @@ impl Maker {
                 self.target.fresh_ident(&format!("{}Rhs", operator.name()));
             let method = format_ident!("{}", operator.method_name());
             let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
 
             return quote! {
                 #[doc(hidden)]
@@ -1481,7 +1482,7 @@ impl Maker {
                     self.ctx.cfg.konst_for(&operator.is_konst_flags());
                 let operation =
                     slot.arithmetic.make_operator_expr(operator, is_konst);
-                let konst = zz_runner::konst(is_konst);
+                let konst = Konst::konst(is_konst);
 
                 return quote! {
                     #konst impl #parameters #trait_name #arguments for #rhs_ty
@@ -1510,9 +1511,9 @@ impl Maker {
             let operation = format_ident!("{}", operator.name());
             let rhs = self.target.fresh_ident("T");
             let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
+            let konst = Konst::konst(is_konst);
+            let bonst = Konst::bonst(is_konst);
+            let destruct = Konst::destruct(is_konst);
             let (impl_generics, where_clause) = self.target.impl_header(
                 &[parse_quote! { #rhs }],
                 &[parse_quote! {
@@ -1685,8 +1686,7 @@ impl Maker {
         let impl_generics = &ctx.impl_generics;
         let where_clause = &ctx.where_clause;
         let el = &self.el;
-        let konst =
-            zz_runner::konst(self.ctx.cfg.konst_for(&[Konsts::Iterator]));
+        let konst = Konst::konst(self.ctx.cfg.konst_for(&[Konsts::Iterator]));
         let start_ref = self.storage.extract_ref(quote! { start.0 });
         let end_ref = self.storage.extract_ref(quote! { end.0 });
         let forward_start = self.storage.extract(quote! { start.0 });
@@ -2042,7 +2042,7 @@ impl Maker {
             };
             stream.extend(it);
 
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::CoreInt,
                 Konsts::Value,
             ]));
@@ -2898,7 +2898,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.ctx.cfg.flags.into {
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Into,
                 Konsts::Conversion,
             ]));
@@ -2936,7 +2936,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.ctx.cfg.flags.try_into {
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::TryInto,
                 Konsts::Conversion,
             ]));
@@ -2982,7 +2982,7 @@ impl Maker {
                 Konsts::Shr,
                 Konsts::Math,
             ]);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
             let output_ty = output.ty();
@@ -3023,7 +3023,7 @@ impl Maker {
                 Konsts::Shl,
                 Konsts::Math,
             ]);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
             let output_ty = output.ty();
@@ -3066,7 +3066,7 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ]);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
             let it = quote! {
@@ -3105,7 +3105,7 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Math,
             ]);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
             let it = quote! {
@@ -3153,7 +3153,7 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             if ctx.with_self_bit {
                 stream.extend(quote! {
@@ -3220,7 +3220,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3291,7 +3291,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3362,7 +3362,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3433,7 +3433,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3504,7 +3504,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3574,7 +3574,7 @@ impl Maker {
                 Konsts::Assign,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             if ctx.with_self_bit {
                 stream.extend(quote! {
@@ -3690,7 +3690,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.ctx.cfg.flags.eq {
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Eq,
                 Konsts::Comparison,
             ]));
@@ -3715,7 +3715,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.ctx.cfg.flags.ord {
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Ord,
                 Konsts::Comparison,
             ]));
@@ -3790,7 +3790,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Add, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3866,7 +3866,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Sub, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -3942,7 +3942,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Mul, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -4019,7 +4019,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Div, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -4096,7 +4096,7 @@ impl Maker {
                 Konsts::Math,
             ];
             let is_konst = self.ctx.cfg.konst_for(&flags);
-            let konst = zz_runner::konst(is_konst);
+            let konst = Konst::konst(is_konst);
             let method =
                 self.arithmetic_method_name(ArithmeticOp::Rem, is_konst);
             let bounds = self.bounds_for(&flags);
@@ -4172,7 +4172,7 @@ impl Maker {
                 Konsts::And,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             if ctx.with_self_bit {
                 let output_ty = output.ty();
@@ -4243,7 +4243,7 @@ impl Maker {
                 Konsts::Or,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             if ctx.with_self_bit {
                 let output_ty = output.ty();
@@ -4314,7 +4314,7 @@ impl Maker {
                 Konsts::Xor,
                 Konsts::Bit,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             let assign_flags = [
                 Konsts::XorAssign,
@@ -4323,7 +4323,7 @@ impl Maker {
                 Konsts::Bit,
             ];
             let konst_assign =
-                zz_runner::konst(self.ctx.cfg.konst_for(&assign_flags));
+                Konst::konst(self.ctx.cfg.konst_for(&assign_flags));
             let assign_bounds = self.bounds_for(&assign_flags);
             if ctx.with_self_bit {
                 let output_ty = output.ty();
@@ -4419,7 +4419,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if self.ctx.cfg.flags.math_not {
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&[
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
                 Konsts::Not,
                 Konsts::Bit,
             ]));
@@ -4612,7 +4612,7 @@ impl Maker {
                 Konsts::PartialEq,
                 Konsts::Comparison,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             let rhs_where = ctx.rhs_where_clause(
                 self,
@@ -4663,7 +4663,7 @@ impl Maker {
                 Konsts::PartialOrd,
                 Konsts::Comparison,
             ];
-            let konst = zz_runner::konst(self.ctx.cfg.konst_for(&flags));
+            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
             let bounds = self.bounds_for(&flags);
             let rhs_where = ctx.rhs_where_clause(
                 self,
@@ -4709,9 +4709,9 @@ impl Maker {
                 Konsts::Of,
                 Konsts::Conversion,
             ]);
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
+            let konst = Konst::konst(is_konst);
+            let bonst = Konst::bonst(is_konst);
+            let destruct = Konst::destruct(is_konst);
             let what = &ctx.trait_friend_make;
             let parameter = self.target.fresh_ident("T");
 
@@ -4745,7 +4745,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if ctx.cfg.flags.auto_of_raw {
-            let konst = zz_runner::konst(ctx.cfg.konst_for(&[
+            let konst = Konst::konst(ctx.cfg.konst_for(&[
                 Konsts::Of,
                 Konsts::Conversion,
             ]));
@@ -4834,9 +4834,9 @@ impl Maker {
         if ctx.cfg.flags.map {
             let is_konst = ctx.cfg.konst_for(&[Konsts::Map])
                 || ctx.cfg.flags.with_const_map_fn;
-            let konst = zz_runner::konst(is_konst);
-            let bonst = zz_runner::bonst(is_konst);
-            let destruct = zz_runner::destruct(is_konst);
+            let konst = Konst::konst(is_konst);
+            let bonst = Konst::bonst(is_konst);
+            let destruct = Konst::destruct(is_konst);
             let callback = self.target.fresh_ident("F");
             let value = quote! { value };
             let validation = ctx.cfg.validation.emit(&value);
@@ -5207,7 +5207,7 @@ impl Maker {
 
         if ctx.cfg.profile.emits_precedes() {
             let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
-            let konst = zz_runner::konst(ctx.cfg.konst_for(&[Konsts::Value]));
+            let konst = Konst::konst(ctx.cfg.konst_for(&[Konsts::Value]));
             let it = quote! {
                 #[must_use]
                 #[inline(always)]
@@ -5294,7 +5294,7 @@ impl Maker {
         if ctx.cfg.flags.fn_make_unchecked_try
             && ctx.cfg.validation.has_validation()
         {
-            let konst = zz_runner::konst(ctx.cfg.konst_for(&[Konsts::TryMake]));
+            let konst = Konst::konst(ctx.cfg.konst_for(&[Konsts::TryMake]));
             let value = quote! { it };
             let validation = ctx.cfg.validation.emit(&value);
             let constructed = self.target.construct(
@@ -5395,7 +5395,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if ctx.cfg.flags.core_int {
-            let konst = zz_runner::konst(ctx.cfg.konst_for(&[
+            let konst = Konst::konst(ctx.cfg.konst_for(&[
                 Konsts::CoreInt,
                 Konsts::Value,
             ]));
@@ -5499,48 +5499,36 @@ impl Cfg {
         value_if_seen: bool,
         settings: &mut IntSettings,
     ) -> syn::Result<()> {
-        let attrs = zz::one_or_list::<Ident>(input)?;
-        let mut duplicated = BTreeMap::new();
+        return zz::parse_explicit_flags(
+            input,
+            value_if_seen,
+            &mut settings.seen,
+            DuplicateFlagPolicy::WithinList,
+            |setting| {
+                let name = &setting.name;
+                let value = setting.value;
+                let span = setting.span;
 
-        for attr in attrs {
-            let name = attr.to_string();
-            let span = attr.span();
-
-            if duplicated.insert(name.clone(), span).is_some() {
-                return span.fail("duplicated flags");
-            }
-
-            if settings
-                .seen
-                .get(&name)
-                .is_some_and(|value| *value != value_if_seen)
-            {
-                return span
-                    .fail("flag specified in both `with` and `without`");
-            }
-
-            if name.starts_with("konst_") {
-                let Some(flag) = Konsts::from_str(&name).ok()
-                else {
+                if name.starts_with("konst_") {
+                    let Some(flag) = Konsts::from_str(name).ok()
+                    else {
+                        return span.fail("unknown flag");
+                    };
+                    settings.konst_flags.insert(flag, (value, span));
+                }
+                else if IntegralFlags::default()
+                    .set_bool(name, value)
+                    .is_err()
+                {
                     return span.fail("unknown flag");
-                };
+                }
+                else {
+                    settings.flags.insert(name.clone(), (value, span));
+                }
 
-                settings.konst_flags.insert(flag, (value_if_seen, span));
-            }
-            else if IntegralFlags::default()
-                .set_bool(&name, value_if_seen)
-                .is_err()
-            {
-                return span.fail("unknown flag");
-            }
-            else {
-                settings.flags.insert(name.clone(), (value_if_seen, span));
-            }
-
-            settings.seen.insert(name.clone(), value_if_seen);
-        }
-
-        return Ok(());
+                return Ok(());
+            },
+        );
     }
 
     fn parse_flags(
@@ -5901,11 +5889,20 @@ impl Cfg {
                 &mut self.flags,
                 &profile.int_settings().flags,
             );
-            self.konst_flags
-                .extend(profile.int_settings().konst_flags.clone());
+            self.konst_flags.extend(
+                profile
+                    .int_settings()
+                    .konst_flags
+                    .iter()
+                    .map(|(flag, value)| (*flag, *value)),
+            );
         }
         Self::apply_flag_settings(&mut self.flags, &self.root_flags);
-        self.konst_flags.extend(self.root_konst_flags.clone());
+        self.konst_flags.extend(
+            self.root_konst_flags
+                .iter()
+                .map(|(flag, value)| (*flag, *value)),
+        );
 
         if self.profile.is_circular() {
             for name in [
@@ -5975,13 +5972,11 @@ impl Cfg {
         &self,
         flags: &[Konsts],
     ) -> bool {
-        for it in flags {
-            if let Some((value, _)) = self.konst_flags.get(it) {
-                return *value;
-            }
-        }
-
-        return self.konst.enables(flags);
+        return zz::resolve_konst(
+            flags,
+            |flag| self.konst_flags.get(flag).map(|(value, _)| *value),
+            || self.konst.enables(flags),
+        );
     }
 
     pub(crate) fn explicit_konst_flag(

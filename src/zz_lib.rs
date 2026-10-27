@@ -1,4 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashSet,
+};
 use std::fmt::{
     Debug,
     Formatter,
@@ -7,11 +11,11 @@ use std::str::FromStr;
 
 use proc_macro2::{
     Ident,
+    Span,
     TokenStream,
 };
 use quote::quote;
 pub(crate) use ranges::parse_domain;
-use syn::meta::ParseNestedMeta;
 use syn::parse::{
     Parse,
     ParseStream,
@@ -20,10 +24,14 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     Attribute,
+    Expr,
     ExprRange,
+    Lit,
     Path,
+    RangeLimits,
     Token,
     Type,
+    UnOp,
     Visibility,
     bracketed,
     parenthesized,
@@ -31,6 +39,7 @@ use syn::{
 
 use crate::zz_runner::{
     MkErr,
+    MySpanned,
     ToCollection,
 };
 use crate::zz_value_type::{
@@ -208,19 +217,6 @@ impl Default for Konst {
     }
 }
 
-impl Konst {
-    pub(crate) fn enables(
-        self,
-        flags: &[Konsts],
-    ) -> bool {
-        return match self {
-            Self::None => false,
-            Self::Stable => flags.iter().any(|flag| flag.is_stable()),
-            Self::Nightly => true,
-        };
-    }
-}
-
 impl Parse for Konst {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if !input.peek(syn::Ident) {
@@ -244,6 +240,40 @@ impl Parse for Konst {
     }
 }
 
+impl Konst {
+    pub(crate) fn enables(
+        self,
+        flags: &[Konsts],
+    ) -> bool {
+        return match self {
+            Self::None => false,
+            Self::Stable => flags.iter().any(|flag| flag.is_stable()),
+            Self::Nightly => true,
+        };
+    }
+
+    pub(crate) fn bonst(is_const: bool) -> Option<TokenStream> {
+        return match is_const {
+            true => Some(quote! { [const] }),
+            false => None,
+        };
+    }
+
+    pub(crate) fn konst(is_const: bool) -> Option<TokenStream> {
+        return match is_const {
+            true => Some(quote! { const }),
+            false => None,
+        };
+    }
+
+    pub(crate) fn destruct(is_const: bool) -> Option<TokenStream> {
+        return match is_const {
+            true => Some(quote! { + [const] ::core::marker::Destruct }),
+            false => None,
+        };
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct DomainRange {
     range: ExprRange,
@@ -259,14 +289,14 @@ pub(crate) struct IntegralDomain {
 impl IntegralDomain {
     #[cfg(test)]
     pub(crate) fn ranges(&self) -> impl ExactSizeIterator<Item = &ExprRange> {
-        return self.ranges.iter().map(|range| &range.range);
+        return self.ranges.iter().map(|it| &it.range);
     }
 
     pub(crate) fn contains_zero(&self) -> bool {
         let zero = Int::NonNegative(0);
-        return self.ranges.iter().any(|range| {
-            let above_lower = range.lower.is_none_or(|lower| lower <= zero);
-            let below_upper = match range.upper {
+        return self.ranges.iter().any(|it| {
+            let above_lower = it.lower.is_none_or(|lower| lower <= zero);
+            let below_upper = match it.upper {
                 RangeEnding::Empty => false,
                 RangeEnding::Value(upper) => zero <= upper,
                 RangeEnding::Unbounded => true,
@@ -286,24 +316,24 @@ impl IntegralDomain {
         return self
             .ranges
             .iter()
-            .map(|range| Self::range_condition(&range.range, value))
+            .map(|it| Self::range_condition(&it.range, value))
             .reduce(|left, right| quote! { (#left) || (#right) })
             .unwrap_or_else(|| quote! { false });
     }
 
     fn range_condition(
-        range: &ExprRange,
+        it: &ExprRange,
         value: &TokenStream,
     ) -> TokenStream {
-        let lower = range.start.as_ref().map(|start| {
+        let lower = it.start.as_ref().map(|start| {
             return quote! { #value >= (#start) };
         });
-        let upper = range.end.as_ref().map(|end| {
-            return match &range.limits {
-                syn::RangeLimits::HalfOpen(_) => {
+        let upper = it.end.as_ref().map(|end| {
+            return match &it.limits {
+                RangeLimits::HalfOpen(_) => {
                     quote! { #value < (#end) }
                 }
-                syn::RangeLimits::Closed(_) => {
+                RangeLimits::Closed(_) => {
                     quote! { #value <= (#end) }
                 }
             };
@@ -399,9 +429,6 @@ impl ValidationCfg {
         match attr {
             "valid" => self.callbacks = parse_callbacks(input)?,
             "domain" => self.domain = Some(parse_domain(input)?),
-            "in" => {
-                return input.span().fail("`in` was renamed to `domain`");
-            }
             _ => return Ok(false),
         };
 
@@ -409,42 +436,55 @@ impl ValidationCfg {
     }
 }
 
-pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
-    let error: Type = input.parse()?;
+struct ComparableRange {
+    range: ExprRange,
+    lower: Option<Int>,
+    upper: RangeEnding,
+}
 
-    if matches!(&error, Type::Tuple(tuple) if tuple.elems.is_empty()) {
-        return Ok(());
+impl ComparableRange {
+    fn of(it: ExprRange) -> Self {
+        return Self {
+            lower: it.start.as_ref().map(|it| {
+                parse_int_const(it)
+                    .expect("ranges were validated before merging")
+            }),
+            upper: match &it.end {
+                None => RangeEnding::Unbounded,
+                Some(end) => {
+                    let end = parse_int_const(end)
+                        .expect("ranges were validated before merging");
+                    match &it.limits {
+                        RangeLimits::HalfOpen(_) => end
+                            .predecessor()
+                            .map_or(RangeEnding::Empty, RangeEnding::Value),
+                        RangeLimits::Closed(_) => RangeEnding::Value(end),
+                    }
+                }
+            },
+            range: it,
+        };
     }
-
-    return error.fail("only `()` is currently supported for `error`");
 }
 
 mod ranges {
     use std::cmp::Ordering;
 
+    use syn::Expr;
     use syn::parse::ParseStream;
-    use syn::{
-        Expr,
-        ExprRange,
-        Lit,
-        RangeLimits,
-        UnOp,
-    };
 
-    use crate::zz::{
+    use crate::zz_lib::{
+        ComparableRange,
         DomainRange,
         IntegralDomain,
         one_or_list,
+        parse_int_const,
     };
     use crate::zz_runner::{
         MkErr,
         ToCollection,
     };
-    use crate::zz_value_type::{
-        Int,
-        N,
-        RangeEnding,
-    };
+    use crate::zz_value_type::RangeEnding;
 
     pub(crate) fn parse_domain(
         input: ParseStream
@@ -461,10 +501,10 @@ mod ranges {
                 }
 
                 if let Some(start) = &range.start {
-                    integer_constant(start)?;
+                    parse_int_const(start)?;
                 }
                 if let Some(end) = &range.end {
-                    integer_constant(end)?;
+                    parse_int_const(end)?;
                 }
 
                 return Ok(range);
@@ -519,99 +559,6 @@ mod ranges {
                 .vec(),
         });
     }
-
-    fn integer_constant(expr: &Expr) -> syn::Result<Int> {
-        return match expr {
-            Expr::Lit(expr) if expr.attrs.is_empty() => {
-                let Lit::Int(literal) = &expr.lit
-                else {
-                    return expr.fail("range bounds must be integer constants");
-                };
-                Int::parse_non_negative(
-                    literal.base10_digits(),
-                    literal.suffix(),
-                )
-                .map_err(|_| expr.errorful("invalid number"))
-            }
-
-            Expr::Unary(expr)
-                if expr.attrs.is_empty()
-                    && matches!(&expr.op, UnOp::Neg(_)) =>
-            {
-                Ok(integer_constant(&expr.expr)?.negate())
-            }
-
-            Expr::Path(expr)
-                if expr.attrs.is_empty() && expr.qself.is_none() =>
-            {
-                let Some(ty) = expr.path.segments.first()
-                else {
-                    return expr.fail("range bounds must be integer constants");
-                };
-
-                let Some(bound) = expr.path.segments.last()
-                else {
-                    return expr.fail("range bounds must be integer constants");
-                };
-
-                if expr.path.segments.len() != 2
-                    || !matches!(ty.arguments, syn::PathArguments::None)
-                    || !matches!(bound.arguments, syn::PathArguments::None)
-                {
-                    return expr.fail("range bounds must be integer constants");
-                }
-
-                let (min, max) = N::of(ty.ident.to_string())
-                    .map(|it| it.bounds())
-                    .ok_or_else(|| {
-                        expr.errorful("range bounds must be integer constants")
-                    })?;
-
-                match bound.ident.to_string().as_str() {
-                    "MIN" => Ok(min),
-                    "MAX" => Ok(max),
-                    _ => expr.fail("range bounds must be integer constants"),
-                }
-            }
-
-            Expr::Paren(expr) if expr.attrs.is_empty() => {
-                integer_constant(&expr.expr)
-            }
-
-            _ => expr.fail("range bounds must be integer constants"),
-        };
-    }
-
-    struct ComparableRange {
-        range: ExprRange,
-        lower: Option<Int>,
-        upper: RangeEnding,
-    }
-
-    impl ComparableRange {
-        fn of(it: ExprRange) -> Self {
-            return Self {
-                lower: it.start.as_ref().map(|it| {
-                    integer_constant(it)
-                        .expect("ranges were validated before merging")
-                }),
-                upper: match &it.end {
-                    None => RangeEnding::Unbounded,
-                    Some(end) => {
-                        let end = integer_constant(end)
-                            .expect("ranges were validated before merging");
-                        match &it.limits {
-                            RangeLimits::HalfOpen(_) => end
-                                .predecessor()
-                                .map_or(RangeEnding::Empty, RangeEnding::Value),
-                            RangeLimits::Closed(_) => RangeEnding::Value(end),
-                        }
-                    }
-                },
-                range: it,
-            };
-        }
-    }
 }
 
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
@@ -620,6 +567,61 @@ pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
     }
 
     return Ok(vec![input.parse()?]);
+}
+
+fn parse_int_const(expr: &Expr) -> syn::Result<Int> {
+    return match expr {
+        Expr::Lit(expr) if expr.attrs.is_empty() => {
+            let Lit::Int(literal) = &expr.lit
+            else {
+                return expr.fail("need an integer constant");
+            };
+
+            Int::parse_non_negative(literal.base10_digits(), literal.suffix())
+                .map_err(|_| expr.errorful("invalid number"))
+        }
+
+        Expr::Unary(expr)
+            if expr.attrs.is_empty() && matches!(&expr.op, UnOp::Neg(_)) =>
+        {
+            Ok(parse_int_const(&expr.expr)?.negate())
+        }
+
+        Expr::Path(expr) if expr.attrs.is_empty() && expr.qself.is_none() => {
+            let Some(ty) = expr.path.segments.first()
+            else {
+                return expr.fail("need an integer constant");
+            };
+
+            let Some(bound) = expr.path.segments.last()
+            else {
+                return expr.fail("need an integer constant");
+            };
+
+            if expr.path.segments.len() != 2
+                || !matches!(ty.arguments, syn::PathArguments::None)
+                || !matches!(bound.arguments, syn::PathArguments::None)
+            {
+                return expr.fail("need an integer constant");
+            }
+
+            let (min, max) = N::of(ty.ident.to_string())
+                .map(|it| it.bounds())
+                .ok_or_else(|| expr.errorful("need an integer constant"))?;
+
+            match bound.ident.to_string().as_str() {
+                "MIN" => Ok(min),
+                "MAX" => Ok(max),
+                _ => expr.fail("need an integer constant"),
+            }
+        }
+
+        Expr::Paren(expr) if expr.attrs.is_empty() => {
+            parse_int_const(&expr.expr)
+        }
+
+        _ => expr.fail("need an integer constant"),
+    };
 }
 
 pub(crate) fn get_concrete_type(
@@ -671,7 +673,7 @@ pub(crate) fn pop_attr(
     };
 
     if let Some(duplicate) = indexes.get(1) {
-        return attrs[*duplicate].span().fail("duplicated attribute");
+        return attrs[*duplicate].fail("duplicated attribute");
     }
 
     return Ok(Some(attrs.remove(index)));
@@ -724,50 +726,91 @@ pub(crate) fn tuple<T: Parse>(
     return Ok(many);
 }
 
-pub(crate) fn find_repr_n_optional(
+#[derive(Clone, Copy)]
+pub(crate) enum DuplicateFlagPolicy {
+    WithinList,
+    AnyList,
+}
+
+pub(crate) struct ExplicitFlag {
+    pub(crate) name: String,
+    pub(crate) value: bool,
+    pub(crate) span: Span,
+}
+
+impl MySpanned for ExplicitFlag {
+    fn my_span(&self) -> Span {
+        return self.span;
+    }
+}
+
+pub(crate) fn parse_explicit_flags(
+    input: ParseStream,
+    value: bool,
+    seen: &mut BTreeMap<String, bool>,
+    duplicates: DuplicateFlagPolicy,
+    mut on_flag: impl FnMut(&ExplicitFlag) -> syn::Result<()>,
+) -> syn::Result<()> {
+    let attrs = one_or_list::<Ident>(input)?;
+    let mut list_seen = BTreeSet::new();
+
+    for attr in attrs {
+        let flag = ExplicitFlag {
+            name: attr.to_string(),
+            value,
+            span: attr.span(),
+        };
+
+        if matches!(duplicates, DuplicateFlagPolicy::WithinList)
+            && !list_seen.insert(flag.name.clone())
+        {
+            return flag.fail("duplicated flags");
+        }
+
+        if let Some(previous) = seen.get(&flag.name) {
+            if *previous != value {
+                return flag
+                    .fail("flag specified in both `with` and `without`");
+            }
+            if matches!(duplicates, DuplicateFlagPolicy::AnyList) {
+                return flag.fail("duplicated flags");
+            }
+        }
+
+        on_flag(&flag)?;
+        seen.insert(flag.name, flag.value);
+    }
+
+    return Ok(());
+}
+
+pub(crate) fn find_repr_n(
     attrs: &[Attribute],
     span: &impl Spanned,
 ) -> syn::Result<Option<N>> {
     let mut repr = None::<N>;
 
-    for_repr(attrs, |it| {
-        for n in N::items() {
-            if it.path.is_ident(n.rust_name()) {
-                if repr.is_some() {
-                    return span.fail("multiple repr matched");
-                }
-                else {
-                    repr = Some(*n);
-                }
-            }
-        }
-        return Ok(());
-    })?;
-
-    return Ok(repr);
-}
-
-#[cfg(test)]
-pub(crate) fn find_repr_n(
-    attrs: &[Attribute],
-    span: impl Spanned,
-) -> syn::Result<N> {
-    return match find_repr_n_optional(attrs, &span)? {
-        None => return span.fail("missing numeric repr"),
-        Some(it) => Ok(it),
-    };
-}
-
-fn for_repr(
-    attrs: &[Attribute],
-    mut exe: impl FnMut(ParseNestedMeta) -> syn::Result<()>,
-) -> syn::Result<()> {
     attrs
         .iter()
         .filter(|it| it.path().is_ident("repr"))
-        .try_for_each(|it| it.parse_nested_meta(&mut exe))?;
+        .try_for_each(|it| {
+            it.parse_nested_meta(|it| {
+                for n in N::items() {
+                    if it.path.is_ident(n.rust_name()) {
+                        if repr.is_some() {
+                            return span.fail("multiple repr matched");
+                        }
+                        else {
+                            repr = Some(*n);
+                        }
+                    }
+                }
 
-    return Ok(());
+                return Ok(());
+            })
+        })?;
+
+    return Ok(repr);
 }
 
 // TODO cleanup the mess...
@@ -823,6 +866,23 @@ pub(crate) fn parse_inner(
             stream.parse::<Token![,]>()?;
         }
     }
-
     return Ok(());
+}
+
+pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
+    let error: Type = input.parse()?;
+
+    if matches!(&error, Type::Tuple(tuple) if tuple.elems.is_empty()) {
+        return Ok(());
+    }
+
+    return error.fail("only `()` is currently supported for `error`");
+}
+
+pub(crate) fn resolve_konst(
+    flags: &[Konsts],
+    value: impl FnMut(&Konsts) -> Option<bool>,
+    fallback: impl FnOnce() -> bool,
+) -> bool {
+    return flags.iter().find_map(value).unwrap_or_else(fallback);
 }

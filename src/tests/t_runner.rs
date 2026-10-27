@@ -1,23 +1,41 @@
+use syn::spanned::Spanned;
+
+use crate::zz_runner::MkErr;
+
 #[cfg(test)]
 mod tests {
     use syn::parse::{
         Parse,
         ParseStream,
     };
+    use syn::spanned::Spanned;
     use syn::{
+        Attribute,
         Ident,
         ItemStruct,
     };
+    use zz_lib as zz;
 
     use crate::zz_runner::{
+        MkErr,
         ToCollection,
         mk_flags,
     };
     use crate::zz_value_type::N;
     use crate::{
-        zz,
+        zz_lib,
         zz_runner,
     };
+
+    fn find_repr_n(
+        attrs: &[Attribute],
+        span: impl Spanned + quote::ToTokens,
+    ) -> syn::Result<N> {
+        return match zz::find_repr_n(attrs, &span)? {
+            None => return span.fail("missing numeric repr"),
+            Some(it) => Ok(it),
+        };
+    }
 
     struct OneOrList(Vec<Ident>);
 
@@ -30,7 +48,7 @@ mod tests {
 
     impl Parse for OneOrList {
         fn parse(input: ParseStream) -> syn::Result<Self> {
-            return Ok(Self(zz::one_or_list(input)?.vec()));
+            return Ok(Self(zz_lib::one_or_list(input)?.vec()));
         }
     }
 
@@ -126,7 +144,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let item = this.unwrap();
         let attrs = &item.attrs;
-        assert_eq!(zz::find_repr_n(attrs, &item).unwrap(), N::U008);
+        assert_eq!(find_repr_n(attrs, &item).unwrap(), N::U008);
     }
 
     #[test]
@@ -139,7 +157,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         let item = this.unwrap();
         let attrs = &item.attrs;
-        let error = zz::find_repr_n(attrs, &item).unwrap_err();
+        let error = find_repr_n(attrs, &item).unwrap_err();
         assert_eq!(error.to_string(), "missing numeric repr");
     }
 
