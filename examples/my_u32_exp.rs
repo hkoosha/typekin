@@ -1848,9 +1848,9 @@ const _: () = {
 pub struct MyFriend(u32);
 
 impl MyFriend {
-    const fn my_conv(self) -> u32 {
-        return self.0 * 2;
-    }
+    // const fn my_conv(self) -> u32 {
+    //     return self.0 * 2;
+    // }
 }
 
 fn main() {

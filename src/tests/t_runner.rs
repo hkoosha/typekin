@@ -1,7 +1,3 @@
-use syn::spanned::Spanned;
-
-use crate::zz_runner::MkErr;
-
 #[cfg(test)]
 mod tests {
     use syn::parse::{

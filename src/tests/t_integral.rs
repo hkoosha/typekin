@@ -431,6 +431,39 @@ mod tests {
     }
 
     #[test]
+    fn unknown_root_friend_capability_reports_its_span() {
+        let input = "konst = none, friend = convert(Source) -> Unknown";
+        let result = syn::parse_str::<Cfg>(input);
+        assert!(result.is_err(), "{input}");
+        let error = result.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown capability", "{input}");
+        assert_eq!(error.span().start().line, 1, "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("Unknown").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn unknown_facet_friend_capability_reports_its_span() {
+        let input =
+            "konst = none, facet = int { friend = convert(Source) -> Unknown }";
+        let result = syn::parse_str::<Cfg>(input);
+        assert!(result.is_err(), "{input}");
+        let error = result.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown capability", "{input}");
+        assert_eq!(error.span().start().line, 1, "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("Unknown").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
     fn rejects_unknown_attribute_after_implicit_friend() {
         let input = "
             konst = none,
@@ -1418,6 +1451,23 @@ mod tests {
         assert!(root_friend.capabilities.contains(&format_ident!("Math")));
         assert!(root_friend.capabilities.contains(&format_ident!("Make")));
         assert!(root_friend.capabilities.contains(&format_ident!("Bit")));
+    }
+
+    #[test]
+    fn facet_friend_defaults_to_unexpanded_math() {
+        let input = "
+            konst = none,
+            facet = int {
+                friend = convert(Source)
+            }
+        ";
+        let result = syn::parse_str::<Cfg>(input);
+        assert!(result.is_ok(), "{input}");
+        let config = result.unwrap();
+        let friend = config.facets[0].friends.iter().next().unwrap();
+        let expected = [format_ident!("Math")].set();
+
+        assert_eq!(friend.capabilities, expected, "{input}");
     }
 
     #[test]

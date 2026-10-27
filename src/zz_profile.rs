@@ -535,10 +535,8 @@ impl Parse for FacetCfg {
 
                 match attr {
                     "friend" => {
-                        // TODO unify friend config of int & flag,
-                        // and then unify friendship for everything
-                        // and finally unify this for everything:
-                        friends = Cfg::parse_friends_unexpanded(rest)?;
+                        // Facets select Math and Bit operations independently.
+                        friends = Cfg::parse_friends(rest, false)?;
                     }
                     "produce" => ty_out = Some(rest.parse()?),
                     _ => return Ok(false),

@@ -5236,34 +5236,25 @@ impl Cfg {
             .any(|flag| self.konst_for(&[*flag]));
     }
 
-    pub(crate) fn parse_friends_unexpanded(
-        input: ParseStream
+    pub(crate) fn parse_friends(
+        input: ParseStream,
+        expand_math: bool,
     ) -> syn::Result<BTreeSet<Friend>> {
-        let defaults = [format_ident!("{}", MATH)].into_iter().collect();
-        return Friend::parse_with_valid(
-            input,
-            &[
-                format_ident!("{}", MAKE),
-                format_ident!("{}", MATH),
-                format_ident!("{}", BIT),
-                format_ident!("{}", REL),
-                format_ident!("{}", UNSAFE),
-            ],
-            &defaults,
-        );
-    }
+        let defaults = [format_ident!("{}", MATH)].set();
+        let valid = [
+            format_ident!("{}", MAKE),
+            format_ident!("{}", MATH),
+            format_ident!("{}", BIT),
+            format_ident!("{}", REL),
+            format_ident!("{}", UNSAFE),
+        ];
+        if !expand_math {
+            return Friend::parse_with_valid(input, &valid, &defaults);
+        }
 
-    fn parse_friends(input: ParseStream) -> syn::Result<BTreeSet<Friend>> {
-        let defaults = [format_ident!("{}", MATH)].into_iter().collect();
         return Friend::parse_with_expansion(
             input,
-            &[
-                format_ident!("{}", MAKE),
-                format_ident!("{}", MATH),
-                format_ident!("{}", BIT),
-                format_ident!("{}", REL),
-                format_ident!("{}", UNSAFE),
-            ],
+            &valid,
             &defaults,
             &([
                 (
@@ -5313,7 +5304,7 @@ impl Cfg {
                 "error" => zz::parse_unit_error(rest)?,
                 "with" => self.parse_flags(rest, true)?,
                 "without" => self.parse_flags(rest, false)?,
-                "friend" => self.friends = Self::parse_friends(rest)?,
+                "friend" => self.friends = Self::parse_friends(rest, true)?,
                 "tree" if allow_tree => {
                     self.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
                 }
