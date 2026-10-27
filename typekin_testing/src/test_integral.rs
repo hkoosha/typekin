@@ -2449,6 +2449,15 @@ mod tests {
     }
 
     #[test]
+    fn checked_conversion_to_u16_accepts_maximum() {
+        let raw = u32::from(u16::MAX);
+        let value = My32::make(raw);
+        let result = value.try_into_u16();
+
+        assert_eq!(result, Ok(u16::MAX), "{raw}");
+    }
+
+    #[test]
     fn checked_conversion_to_i8_rejects_overflow() {
         let it = My32::make(128);
         assert_eq!(it.try_into_i8(), Err(()));
@@ -2504,6 +2513,15 @@ mod tests {
         let it = My32::make(23);
         let value: i64 = it.into();
         assert_eq!(value, 23);
+    }
+
+    #[test]
+    fn widening_into_i64_preserves_u32_maximum() {
+        let raw = u32::MAX;
+        let value = My32::make(raw);
+        let result: i64 = value.into();
+
+        assert_eq!(result, i64::from(raw), "{raw}");
     }
 
     #[test]

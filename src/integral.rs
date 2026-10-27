@@ -3015,9 +3015,7 @@ impl Maker {
                 Konsts::Into,
                 Konsts::Conversion,
             ]));
-            let it = N::items()
-                .iter()
-                .filter(|it| self.repr.can_safe_cast_to(**it))
+            let it = self.repr.safe_targets()
                 .map(|it| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("into_{}", it.rust_name());
@@ -3053,9 +3051,7 @@ impl Maker {
                 Konsts::TryInto,
                 Konsts::Conversion,
             ]));
-            let it = N::items()
-                .iter()
-                .filter(|it| !self.repr.can_safe_cast_to(**it))
+            let it = self.repr.checked_targets()
                 .map(|it| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("try_into_{}", it.rust_name());
@@ -4147,9 +4143,9 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if ctx.cfg.flags.fn_conv_into {
-            let it = N::items()
-                .iter()
-                .filter(|it| self.repr.can_safe_cast_to(**it))
+            let it = self
+                .repr
+                .safe_targets()
                 .map(|it| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("into_{}", it.rust_name());
@@ -4246,9 +4242,7 @@ impl Maker {
         let mut stream = TokenStream::new();
 
         if ctx.cfg.flags.fn_conv_try_into_unchecked {
-            let it = N::items()
-                .iter()
-                .filter(|it| self.repr.can_safe_cast_to(**it))
+            let it = self.repr.safe_targets()
                 .map(|it| {
                     let target = format_ident!("{}", it.rust_name());
                     let conv = format_ident!("try_into_{}", it.rust_name());
@@ -4279,9 +4273,7 @@ impl Maker {
 
         if ctx.cfg.flags.fn_conv_try_into_checked {
             let source = format_ident!("{}", self.repr.rust_name());
-            let it = N::items()
-                .iter()
-                .filter(|it| !self.repr.can_safe_cast_to(**it))
+            let it = self.repr.checked_targets()
                 .map(|it| {
                     let target = format_ident!("{}", it.rust_name());
                     let name = format_ident!("try_into_{}", it.rust_name());

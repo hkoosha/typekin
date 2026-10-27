@@ -245,6 +245,19 @@ impl N {
     ) -> bool {
         return self.safe_casts().contains(&to);
     }
+
+    pub(crate) fn safe_targets(&self) -> impl Iterator<Item = &Self> + '_ {
+        // Safe tables follow N::items() order on every supported pointer width.
+        return self.safe_casts().iter();
+    }
+
+    pub(crate) fn checked_targets(&self) -> impl Iterator<Item = &Self> + '_ {
+        // The checked tables do not always complement the safe tables.
+        let safe = self.safe_casts();
+        return Self::items()
+            .iter()
+            .filter(move |target| !safe.contains(*target));
+    }
 }
 
 impl N {
