@@ -1622,7 +1622,7 @@ impl Maker {
                     },
                 };
 
-                let ty = &friend.ty;
+                let ty = friend.ty.path();
                 return Ok(Some(ProtocolFriend {
                     ty: syn::parse_quote! { #ty },
                     capabilities,

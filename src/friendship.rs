@@ -36,10 +36,7 @@ pub(crate) mod cfg {
     };
 
     use proc_macro2::Ident;
-    use quote::{
-        ToTokens,
-        format_ident,
-    };
+    use quote::format_ident;
     use syn::parse::{
         Parse,
         ParseStream,
@@ -52,6 +49,7 @@ pub(crate) mod cfg {
     };
 
     use crate::zz_lib::{
+        PathIdentity,
         arg_or_list,
         one_or_list,
     };
@@ -66,8 +64,7 @@ pub(crate) mod cfg {
 
     #[derive(Clone)]
     pub(crate) struct Friend {
-        pub(crate) identity: String,
-        pub(crate) ty: Path,
+        pub(crate) ty: PathIdentity,
         pub(crate) capabilities: BTreeSet<Ident>,
         pub(crate) conv: Option<Path>,
         pub(crate) make_conv: Option<Path>,
@@ -164,7 +161,6 @@ pub(crate) mod cfg {
                 .collect();
 
             return Ok(Self {
-                identity: ty.to_token_stream().to_string(),
                 conv: conv.clone().filter(|conv| !conv.is_ident("self")),
                 make_conv: capabilities
                     .contains(&format_ident!("Make"))
@@ -172,7 +168,7 @@ pub(crate) mod cfg {
                     .flatten(),
                 capability_conversions,
                 capabilities,
-                ty,
+                ty: PathIdentity::new(ty),
             });
         }
 
@@ -247,7 +243,7 @@ pub(crate) mod cfg {
             &self,
             other: &Self,
         ) -> bool {
-            return self.identity == other.identity;
+            return self.ty == other.ty;
         }
     }
 
@@ -256,15 +252,14 @@ pub(crate) mod cfg {
             &self,
             other: &Self,
         ) -> Ordering {
-            return self.identity.cmp(&other.identity);
+            return self.ty.cmp(&other.ty);
         }
     }
 
     impl From<&Path> for Friend {
         fn from(it: &Path) -> Self {
             return Self {
-                identity: it.to_token_stream().to_string(),
-                ty: it.clone(),
+                ty: PathIdentity::new(it.clone()),
                 conv: None,
                 make_conv: None,
                 capability_conversions: BTreeMap::new(),
@@ -280,7 +275,7 @@ pub(crate) mod cfg {
         ) -> std::fmt::Result {
             return f
                 .debug_struct("Friend")
-                .field("identity", &self.identity)
+                .field("identity", &self.ty.identity())
                 .field("capabilities", &self.capabilities)
                 .finish();
         }
@@ -322,7 +317,6 @@ pub(crate) mod cfg {
                 .iter()
                 .map(|friend| {
                     return constructor::Friend {
-                        identity: friend.identity.clone(),
                         ty: friend.ty.clone(),
                     };
                 })
@@ -732,17 +726,17 @@ fn grant_constructor(
     target: &Ident,
 ) -> syn::Result<()> {
     for requested in &constructor.friends {
-        let identity = match requested.ty.is_ident("Self") {
-            true => target.to_string(),
-            false => requested.identity.clone(),
-        };
+        let is_self = requested.ty.path().is_ident("Self");
+        let target_identity = is_self.then(|| target.to_string());
+        let identity = target_identity
+            .as_deref()
+            .unwrap_or(requested.ty.identity());
         let friend = cfg
             .friends
             .iter()
             .find(|friend| {
-                return friend.identity == identity
-                    || requested.ty.is_ident("Self")
-                        && friend.ty.is_ident("Self");
+                return friend.ty.identity() == identity
+                    || is_self && friend.ty.path().is_ident("Self");
             })
             .cloned()
             .ok_or_else(|| {
@@ -869,9 +863,9 @@ fn emit_friend(
     target: &TokenStream,
     in_module: bool,
 ) -> TokenStream {
-    let ty = match cfg.ty.is_ident("Self") {
+    let ty = match cfg.ty.path().is_ident("Self") {
         true => target.clone(),
-        false => parent_path(&cfg.ty, in_module),
+        false => parent_path(cfg.ty.path(), in_module),
     };
 
     let capabilities = &cfg.capabilities;

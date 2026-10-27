@@ -6,6 +6,7 @@ pub struct MyU32(u32);
 #[allow(unused_qualifications)]
 #[allow(clippy::unnecessary_cast)]
 const _: () = {
+    let _: fn(MyFriend) -> u32 = MyFriend::my_conv;
     trait Seal {
         fn conv_my_u32(self) -> u32;
     }

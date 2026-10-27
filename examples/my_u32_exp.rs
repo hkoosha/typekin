@@ -16,6 +16,17 @@ pub struct MyU32(u32);
 #[allow(unused_qualifications)]
 #[allow(clippy::unnecessary_cast)]
 const _: () = {
+    {
+        let __typekin_callback = MyFriend::my_conv;
+        {
+            const fn __typekin_assert_const_fn<I, O, F>(_: F)
+            where
+                F: [const] FnOnce(I) -> O + Copy,
+            {
+            }
+            __typekin_assert_const_fn::<MyFriend, u32, _>(__typekin_callback);
+        }
+    }
     const trait Seal {
         fn conv_my_u32(self) -> u32;
     }
@@ -1848,9 +1859,9 @@ const _: () = {
 pub struct MyFriend(u32);
 
 impl MyFriend {
-    // const fn my_conv(self) -> u32 {
-    //     return self.0 * 2;
-    // }
+    const fn my_conv(self) -> u32 {
+        return self.0 * 2;
+    }
 }
 
 fn main() {

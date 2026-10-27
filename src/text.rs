@@ -161,7 +161,7 @@ impl Cfg {
                     MAKE => has_make = true,
                     UNSAFE => {}
                     REL => {
-                        if !friend.ty.is_ident("Self") {
+                        if !friend.ty.path().is_ident("Self") {
                             return capability
                                 .fail("text `Rel` is only available for Self");
                         }
@@ -175,7 +175,7 @@ impl Cfg {
                     "text Make friend requires `conversion(Type) -> Make`",
                 );
             }
-            let span = friend.ty.span();
+            let span = friend.ty.path().span();
             if !friends.insert(friend) {
                 return span.fail("duplicated text friend");
             }
@@ -324,12 +324,15 @@ impl TextMaker {
     }
 
     fn validation_condition(&self) -> TokenStream {
-        let callbacks = self
-            .cfg
-            .callbacks
-            .iter()
-            .map(|callback| quote! { #callback(value.as_str()) })
-            .reduce(|left, right| quote! { (#left) && (#right) });
+        let callbacks = if self.cfg.callbacks.is_empty() {
+            None
+        }
+        else {
+            zz::callback_condition(
+                &self.cfg.callbacks,
+                &quote! { value.as_str() },
+            )
+        };
         let values = self.cfg.values.as_ref().map(|values| {
             return values
                 .iter()
@@ -369,8 +372,8 @@ impl TextMaker {
                 friend.capabilities.contains(&make)
             })
             .map(|friend| {
-                let friend_ty = &friend.ty;
-                let friend_ty = match friend.ty.is_ident("Self") {
+                let friend_ty = friend.ty.path();
+                let friend_ty = match friend.ty.path().is_ident("Self") {
                     true => quote! { #ty },
                     false => quote! { #friend_ty },
                 };

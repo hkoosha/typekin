@@ -888,6 +888,7 @@ struct Maker {
     el: Ident,
     target: IntegralTarget,
     ctx: Ctx,
+    empty_friend_checks: TokenStream,
 }
 
 impl Maker {
@@ -924,8 +925,11 @@ impl Maker {
             el,
             target,
             ctx,
+            empty_friend_checks: TokenStream::new(),
         };
 
+        // Built-in friendships may add capabilities to an explicit empty list.
+        this.empty_friend_checks = this.make_empty_friend_checks();
         this.fix_friendship()?;
 
         return Ok(this);
@@ -1281,6 +1285,7 @@ impl Maker {
     }
 
     fn ekran(&self) -> syn::Result<TokenStream> {
+        let empty_friend_checks = &self.empty_friend_checks;
         let friends = self.ekran_friendship();
         let impls = self.ekran_impls()?;
         let items = self.ekran_items();
@@ -1290,6 +1295,8 @@ impl Maker {
         let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
 
         return Ok(quote::quote! {
+            #empty_friend_checks
+
             #friends
 
             #impls
@@ -1308,6 +1315,112 @@ impl Maker {
 
 // Friendship
 impl Maker {
+    fn make_empty_friend_checks(&self) -> TokenStream {
+        let cfg = &self.ctx.cfg;
+        let mut friends = cfg
+            .friends
+            .iter()
+            .filter(|friend| {
+                friend.capabilities.is_empty() && friend.conv.is_some()
+            })
+            .map(|friend| (friend, cfg.konst_friendship()))
+            .collect::<Vec<_>>();
+
+        for facet in &cfg.facets {
+            let mut facet_friends = facet
+                .friends
+                .iter()
+                .filter(|friend| {
+                    friend.capabilities.is_empty() && friend.conv.is_some()
+                })
+                .peekable();
+            if facet_friends.peek().is_none() {
+                continue;
+            }
+
+            let default = cfg
+                .default_facet
+                .as_ref()
+                .expect("facets require a resolved default facet");
+            let flags = Cfg::resolved_facet_flags(&default.flags, facet);
+            let konst = Operator::items().iter().any(|operator| {
+                flags.enabled(*operator)
+                    && cfg.konst_for(&operator.is_konst_flags())
+            });
+            friends.extend(facet_friends.map(|friend| (friend, konst)));
+        }
+
+        if friends.is_empty() {
+            return TokenStream::new();
+        }
+
+        let has_const_check = friends.iter().any(|(_, konst)| *konst);
+        let callback_name = self.target.fresh_ident("__typekin_callback");
+        let relation = &self.el;
+        let checks = friends
+            .iter()
+            .map(|(friend, konst)| {
+                let conversion = self.target.qualify_path(
+                    friend.conv.as_ref().expect("explicit callback missing"),
+                );
+                let source = friend.ty.path();
+                let source =
+                    self.target.external_type(&parse_quote! { #source });
+                if !konst {
+                    return quote! {
+                        let _: fn(#source) -> #relation = #conversion;
+                    };
+                }
+
+                // A const FnOnce bound checks const-callability without calling it.
+                return quote! {
+                    {
+                        let #callback_name = #conversion;
+                        {
+                            const fn __typekin_assert_const_fn<I, O, F>(_: F)
+                            where
+                                F: [const] ::core::ops::FnOnce(I) -> O
+                                    + ::core::marker::Copy,
+                            {}
+                            __typekin_assert_const_fn::<#source, #relation, _>(
+                                #callback_name,
+                            );
+                        }
+                    }
+                };
+            })
+            .merged();
+
+        if !self.target.has_generics() {
+            return checks;
+        }
+
+        let mut name = "__typekin_check_empty_friends".to_owned();
+        let check_name = loop {
+            let candidate = self.target.fresh_ident(&name);
+            let conflicts = friends.iter().any(|(friend, _)| {
+                friend
+                    .conv
+                    .as_ref()
+                    .and_then(|path| path.segments.first())
+                    .is_some_and(|segment| segment.ident == candidate)
+            });
+            if !conflicts {
+                break candidate;
+            }
+            name.push('_');
+        };
+        let generics = self.target.external_generics();
+        let (parameters, _, where_clause) = generics.split_for_impl();
+        let konst = Konst::konst(has_const_check);
+
+        return quote! {
+            #konst fn #check_name #parameters() #where_clause {
+                #checks
+            }
+        };
+    }
+
     fn fix_friendship(&mut self) -> syn::Result<()> {
         let target: Path = syn::parse2(self.target.ty())
             .expect("integral targets does not emit valid type paths");
@@ -1317,19 +1430,20 @@ impl Maker {
             .cfg
             .friends
             .iter()
-            .find(|friend| self.target.is_target(&friend.ty))
+            .find(|friend| self.target.is_target(friend.ty.path()))
             .cloned()
             .unwrap_or_else(|| Friend::from(&target));
 
         if let Some(it) = self.ctx.cfg.friends.get(&target_friend) {
             if it.capabilities.contains(&format_ident!("{}", MATH)) {
-                return it.ty.fail(
+                return it.ty.path().fail(
                     "self math operations use `self_math`, not `friend`",
                 );
             }
             if it.capabilities.contains(&format_ident!("{}", BIT)) {
                 return it
                     .ty
+                    .path()
                     .fail("self bit operations use `self_bit`, not `friend`");
             }
         }
@@ -1357,19 +1471,19 @@ impl Maker {
                 it.capabilities.insert(format_ident!("{}", MAKE));
             }
 
-            if !self.target.is_target(&f_def.ty)
+            if !self.target.is_target(f_def.ty.path())
                 && self.ctx.cfg.flags.self_friend_math_ops
             {
                 it.capabilities.insert(format_ident!("{}", MATH));
             }
 
-            if self.target.is_target(&f_def.ty)
+            if self.target.is_target(f_def.ty.path())
                 || self.ctx.cfg.flags.self_friend_rel
             {
                 it.capabilities.insert(format_ident!("{}", REL));
             }
 
-            if !self.target.is_target(&f_def.ty)
+            if !self.target.is_target(f_def.ty.path())
                 && self.ctx.cfg.flags.self_friend_math_bit
             {
                 it.capabilities.insert(format_ident!("{}", BIT));
@@ -1377,7 +1491,9 @@ impl Maker {
 
             // Generic Self operations share the RHS protocol: separate Self
             // impls would overlap when downstream parameters satisfy it.
-            if self.target.has_generics() && self.target.is_target(&f_def.ty) {
+            if self.target.has_generics()
+                && self.target.is_target(f_def.ty.path())
+            {
                 if self.ctx.cfg.flags.self_math {
                     it.capabilities.insert(format_ident!("{}", MATH));
                 }
@@ -1602,19 +1718,20 @@ impl Maker {
                         return None;
                     }
 
-                    let conversion = if self.target.is_target(&friend.ty) {
+                    let conversion = if self.target.is_target(friend.ty.path())
+                    {
                         None
                     }
                     else {
                         let value = self.friend_conversion_expression(
-                            &friend.ty,
+                            friend.ty.path(),
                             friend.conv.as_ref(),
                             quote! { self },
                         );
                         Some(quote! { return #value; })
                     };
 
-                    let friend_ty = &friend.ty;
+                    let friend_ty = friend.ty.path();
                     return Some(ProtocolFriend {
                         ty: syn::parse2(
                             self.target
@@ -4959,13 +5076,13 @@ impl Cfg {
             let owner = FacetOwner::Explicit(index);
 
             for friend in &facet.friends {
-                let span = friend.ty.span();
+                let span = friend.ty.path().span();
                 if friend.capabilities.contains(&format_ident!("{}", MATH)) {
                     Self::insert_slots(
                         &mut slots,
                         Operator::math_items(),
                         &flags,
-                        Some(&friend.ty),
+                        Some(friend.ty.path()),
                         friend.conv.as_ref(),
                         arithmetic,
                         ty_out,
@@ -4978,7 +5095,7 @@ impl Cfg {
                         &mut slots,
                         Operator::bit_items(),
                         &flags,
-                        Some(&friend.ty),
+                        Some(friend.ty.path()),
                         friend.conv.as_ref(),
                         arithmetic,
                         ty_out,
@@ -5021,13 +5138,13 @@ impl Cfg {
 
         let arithmetic = default.profile.arithmetic();
         for friend in &default.friends {
-            let span = friend.ty.span();
+            let span = friend.ty.path().span();
             if friend.capabilities.contains(&format_ident!("{}", MATH)) {
                 Self::insert_slots(
                     &mut slots,
                     Operator::math_items(),
                     &default.flags,
-                    Some(&friend.ty),
+                    Some(friend.ty.path()),
                     friend.conv.as_ref(),
                     arithmetic,
                     &default.ty_out,
@@ -5040,7 +5157,7 @@ impl Cfg {
                     &mut slots,
                     Operator::bit_items(),
                     &default.flags,
-                    Some(&friend.ty),
+                    Some(friend.ty.path()),
                     friend.conv.as_ref(),
                     arithmetic,
                     &default.ty_out,

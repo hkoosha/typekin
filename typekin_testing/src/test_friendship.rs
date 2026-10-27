@@ -124,6 +124,34 @@ impl CapabilitySpecificTarget {
     }
 }
 
+mod qualified_sources {
+    pub(super) struct Source(pub(super) u8);
+}
+
+fn qualified_make(source: qualified_sources::Source) -> u8 {
+    return source.0 + 1;
+}
+
+fn qualified_bit(source: qualified_sources::Source) -> u8 {
+    return source.0 + 2;
+}
+
+#[typekin::friends(
+    relation = u8,
+    friend = [
+        qualified_make(qualified_sources::Source) -> Make,
+        qualified_bit(qualified_sources::Source) -> Bit,
+    ],
+    scope = qualified_friend_protocol,
+)]
+pub struct QualifiedTarget(u8);
+
+impl QualifiedTarget {
+    fn of_parts(value: u8) -> Self {
+        return Self(value);
+    }
+}
+
 // ==============================================================================
 
 #[typekin::friends(
@@ -365,6 +393,18 @@ mod tests {
             CapabilitySpecificTarget::of(CapabilitySpecificSource(12)).0,
             3,
         );
+    }
+
+    #[test]
+    fn qualified_friend_capabilities_share_source_identity() {
+        let value = 4;
+        let source = qualified_sources::Source(value);
+        let constructed = QualifiedTarget::of(source);
+        assert_eq!(constructed.0, value + 1);
+
+        let source = qualified_sources::Source(value);
+        let converted = qualified_friend_protocol::Bit::to_u8(source);
+        assert_eq!(converted, value + 2);
     }
 
     #[test]

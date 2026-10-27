@@ -268,6 +268,29 @@ mod tests {
     }
 
     #[test]
+    fn constructor_friends_are_ordered_and_deduplicated_by_path() {
+        let input = "
+            relationship = Self::new,
+            scope = self,
+            friend = [
+                crate::z::Source,
+                crate::a::Source,
+                crate::z::Source,
+            ]
+        ";
+        let parsed = syn::parse_str::<MakeCfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
+        let mut friends = config.friends.iter();
+        let first = friends.next().unwrap();
+        let second = friends.next().unwrap();
+
+        assert_eq!(first.ty.path().segments[1].ident, "a", "{input}");
+        assert_eq!(second.ty.path().segments[1].ident, "z", "{input}");
+        assert!(friends.next().is_none(), "{input}");
+    }
+
+    #[test]
     fn accepts_empty_constructor_friends() {
         let it = "
             relationship = Self::new,

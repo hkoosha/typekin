@@ -4,10 +4,7 @@ use proc_macro2::{
     Ident,
     TokenStream,
 };
-use quote::{
-    ToTokens,
-    quote,
-};
+use quote::quote;
 use syn::parse::{
     Parse,
     ParseStream,
@@ -19,6 +16,7 @@ use syn::{
     Token,
 };
 
+use crate::zz_lib::PathIdentity;
 use crate::zz_runner::ToCollection;
 use crate::{
     zz_lib as zz,
@@ -33,49 +31,17 @@ pub(crate) struct Cfg {
     pub(crate) scope: Scope,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct Friend {
-    pub(crate) identity: String,
-    pub(crate) ty: Path,
+    pub(crate) ty: PathIdentity,
 }
 
 impl Parse for Friend {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let ty: Path = input.parse()?;
-
+        let ty = input.parse::<Path>()?;
         return Ok(Self {
-            identity: ty.to_token_stream().to_string(),
-            ty,
+            ty: PathIdentity::new(ty),
         });
-    }
-}
-
-impl Eq for Friend {}
-
-impl PartialOrd for Friend {
-    fn partial_cmp(
-        &self,
-        other: &Self,
-    ) -> Option<std::cmp::Ordering> {
-        return Some(self.cmp(other));
-    }
-}
-
-impl PartialEq for Friend {
-    fn eq(
-        &self,
-        other: &Self,
-    ) -> bool {
-        return self.identity == other.identity;
-    }
-}
-
-impl Ord for Friend {
-    fn cmp(
-        &self,
-        other: &Self,
-    ) -> std::cmp::Ordering {
-        return self.identity.cmp(&other.identity);
     }
 }
 

@@ -726,6 +726,137 @@ mod tests {
     };
 
     #[test]
+    fn empty_friend_capabilities_do_not_call_conversion() {
+        struct Source;
+
+        impl Source {
+            #[deny(dead_code)]
+            fn convert(self) -> u32 {
+                panic!("an empty friend must not be converted");
+            }
+        }
+
+        #[typekin::integral(konst = none, friend = Source::convert(Source) -> [])]
+        struct Value(u32);
+
+        let raw = 7u32;
+        let value = Value::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_const_generic_friend_uses_its_conversion_in_scope() {
+        struct Source<T>(core::marker::PhantomData<T>);
+
+        #[typekin::integral(konst = nightly, friend = Self::convert(Source<T>) -> [])]
+        struct Value<T: Copy>(u32);
+
+        impl<T: Copy> Value<T> {
+            #[deny(dead_code)]
+            const fn convert(_: Source<T>) -> u32 {
+                panic!("an empty friend must not be converted");
+            }
+        }
+
+        #[derive(Clone, Copy)]
+        struct CopyMarker;
+        let raw = 7u32;
+        let value = Value::<CopyMarker>::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_facet_friend_capabilities_do_not_call_conversion() {
+        struct Source;
+
+        #[deny(dead_code)]
+        fn convert(_: Source) -> u32 {
+            panic!("an empty facet friend must not be converted");
+        }
+
+        #[typekin::integral(
+            konst = none,
+            with = konst_friendship,
+            facet = int { friend = convert(Source) -> [] },
+        )]
+        struct Value(u32);
+
+        let raw = 7u32;
+        let value = Value::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_const_facet_friend_does_not_call_conversion() {
+        struct Source;
+
+        #[deny(dead_code)]
+        const fn convert(_: Source) -> u32 {
+            panic!("an empty facet friend must not be converted");
+        }
+
+        #[typekin::integral(
+            konst = none,
+            with = konst_add,
+            facet = int { friend = convert(Source) -> [] },
+        )]
+        struct Value(u32);
+
+        let raw = 7u32;
+        let value = Value::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_generic_friend_does_not_shadow_its_callback() {
+        struct Source<T>(core::marker::PhantomData<T>);
+
+        #[deny(dead_code)]
+        fn __typekin_check_empty_friends<T>(_: Source<T>) -> u32 {
+            panic!("an empty friend must not be converted");
+        }
+
+        #[typekin::integral(
+            konst = none,
+            friend = __typekin_check_empty_friends(Source<T>) -> [],
+        )]
+        struct Value<T>(u32);
+
+        let raw = 7u32;
+        let value = Value::<()>::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_self_friend_capabilities_reference_the_declared_conversion() {
+        #[typekin::integral(konst = none, friend = Self::convert(Self) -> [])]
+        struct Value(u32);
+
+        impl Value {
+            #[deny(dead_code)]
+            fn convert(_: Self) -> u32 {
+                panic!("an empty friend must not be converted");
+            }
+        }
+
+        let raw = 7u32;
+        let value = Value::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
+    fn empty_implicit_friend_does_not_require_a_conversion() {
+        struct Source;
+
+        #[typekin::integral(konst = none, friend = _(Source) -> [])]
+        struct Value(u32);
+
+        let raw = 7u32;
+        let value = Value::make(raw);
+        assert_eq!(value.raw(), raw);
+    }
+
+    #[test]
     fn facets_dispatch_by_rhs_with_independent_policies_and_outputs() {
         let storage: core::num::Wrapping<u8> = FacetPoint::make(1).0;
         assert_eq!(storage.0, 1);

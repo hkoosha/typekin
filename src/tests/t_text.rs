@@ -510,13 +510,17 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_make_friends_for_source() {
-        let input = "
-            friend = [
-                first(Source) -> [Make],
-                second(Source) -> [Make, unsafe],
-            ]
-        ";
-        assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
+        let input = "friend = [first(Source) -> [Make], second(Source) -> [Make, unsafe]]";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_err(), "{input}");
+        let error = parsed.unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicated text friend", "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.rfind("Source").unwrap(),
+            "{input}",
+        );
     }
 
     #[test]
@@ -537,7 +541,7 @@ mod tests {
         let config = syn::parse_str::<Cfg>(input).expect(input);
         let friend = config.friends.iter().next().unwrap();
 
-        assert!(friend.ty.is_ident("Self"));
+        assert!(friend.ty.path().is_ident("Self"));
         assert!(friend.conv.is_none());
         assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
     }
@@ -553,7 +557,7 @@ mod tests {
         let config = parsed.unwrap();
         let friend = config.friends.iter().next().unwrap();
 
-        assert!(friend.ty.is_ident("Self"));
+        assert!(friend.ty.path().is_ident("Self"));
         assert!(friend.conv.as_ref().unwrap().is_ident("into_string"));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
         assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));

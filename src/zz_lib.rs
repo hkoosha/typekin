@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{
     BTreeMap,
     BTreeSet,
@@ -14,7 +15,10 @@ use proc_macro2::{
     Span,
     TokenStream,
 };
-use quote::quote;
+use quote::{
+    ToTokens,
+    quote,
+};
 pub(crate) use ranges::parse_domain;
 use syn::parse::{
     Parse,
@@ -47,6 +51,58 @@ use crate::zz_value_type::{
     N,
     RangeEnding,
 };
+
+#[derive(Clone)]
+pub(crate) struct PathIdentity {
+    path: Path,
+    identity: String,
+}
+
+impl PathIdentity {
+    pub(crate) fn new(path: Path) -> Self {
+        return Self {
+            identity: path.to_token_stream().to_string(),
+            path,
+        };
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        return &self.path;
+    }
+
+    pub(crate) fn identity(&self) -> &str {
+        return &self.identity;
+    }
+}
+
+impl Eq for PathIdentity {}
+
+impl PartialEq for PathIdentity {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        return self.identity == other.identity;
+    }
+}
+
+impl PartialOrd for PathIdentity {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
+        return Some(self.cmp(other));
+    }
+}
+
+impl Ord for PathIdentity {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
+        return self.identity.cmp(&other.identity);
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Konsts {
@@ -350,6 +406,16 @@ impl IntegralDomain {
     }
 }
 
+pub(crate) fn callback_condition(
+    callbacks: &[Path],
+    value: &TokenStream,
+) -> Option<TokenStream> {
+    return callbacks
+        .iter()
+        .map(|callback| quote! { #callback(#value) })
+        .reduce(|left, right| quote! { (#left) && (#right) });
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct ValidationCfg {
     pub(crate) callbacks: Vec<Path>,
@@ -362,11 +428,7 @@ impl ValidationCfg {
         &self,
         value: &TokenStream,
     ) -> TokenStream {
-        let callbacks = self
-            .callbacks
-            .iter()
-            .map(|callback| quote! { #callback(#value) })
-            .reduce(|left, right| quote! { (#left) && (#right) });
+        let callbacks = callback_condition(&self.callbacks, value);
 
         let domain = self
             .domain
@@ -562,11 +624,7 @@ mod ranges {
 }
 
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
-    if input.peek(syn::token::Bracket) {
-        return Ok(list(input)?.vec());
-    }
-
-    return Ok(vec![input.parse()?]);
+    return Ok(one_or_list::<Path>(input)?.collect());
 }
 
 fn parse_int_const(expr: &Expr) -> syn::Result<Int> {

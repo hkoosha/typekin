@@ -55,6 +55,40 @@ mod tests;
 ///
 /// `FLAG` is an integral generation, operation, friendship, storage, or
 /// `konst_*` flag. `Math` expands to `Make` and `Bit` for integral friends.
+///
+/// An explicit empty capability list adds no capabilities. Any supplied
+/// callback is still checked as `fn(Source) -> Primitive` without being called.
+/// Const friendship and const facet operators also require a const callback.
+///
+/// Incorrect input and output types are rejected:
+///
+/// ```compile_fail
+/// struct Source;
+/// fn convert(_: u16) -> u32 { 0 }
+/// #[typekin::integral(konst = none, friend = convert(Source) -> [])]
+/// struct Value(u32);
+/// ```
+///
+/// ```compile_fail
+/// struct Source;
+/// fn convert(_: Source) -> u16 { 0 }
+/// #[typekin::integral(konst = none, friend = convert(Source) -> [])]
+/// struct Value(u32);
+/// ```
+///
+/// Const friendship also rejects a non-const callback:
+///
+/// ```compile_fail
+/// #![feature(const_trait_impl)]
+/// struct Source;
+/// fn convert(_: Source) -> u32 { 0 }
+/// #[typekin::integral(
+///     konst = none,
+///     with = konst_friendship,
+///     friend = convert(Source) -> [],
+/// )]
+/// struct Value(u32);
+/// ```
 #[proc_macro_attribute]
 pub fn integral(
     attr: proc_macro::TokenStream,

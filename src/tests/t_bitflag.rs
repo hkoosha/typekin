@@ -710,7 +710,7 @@ mod tests {
 
         assert!(friend.capabilities.contains(&syn::parse_quote!(Inspector)));
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+        assert!(friend.ty.path().is_ident("Source"));
     }
 
     #[test]

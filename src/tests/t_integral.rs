@@ -2587,6 +2587,7 @@ mod tests {
         assert_eq!(
             friend
                 .ty
+                .path()
                 .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
@@ -2643,7 +2644,7 @@ mod tests {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
             .expect(&input);
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+        assert!(friend.ty.path().is_ident("Source"));
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
             expected,
@@ -2663,7 +2664,7 @@ mod tests {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
             .expect(&input);
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+        assert!(friend.ty.path().is_ident("Source"));
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
             expected,
@@ -2678,7 +2679,7 @@ mod tests {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(&input)
             .expect(&input);
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
-        assert!(friend.ty.is_ident("Source"));
+        assert!(friend.ty.path().is_ident("Source"));
         assert_eq!(
             friend.capabilities.iter().map(ToString::to_string).vec(),
             expected,
@@ -2692,7 +2693,7 @@ mod tests {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
-        assert!(friend.ty.is_ident("Source"), "{input}");
+        assert!(friend.ty.path().is_ident("Source"), "{input}");
         assert!(friend.capabilities.contains(&syn::parse_quote!(Unsafe)));
     }
 
@@ -2702,7 +2703,7 @@ mod tests {
         let friend = syn::parse_str::<crate::friendship::cfg::Friend>(input)
             .expect(input);
         assert!(friend.conv.is_none(), "{input}");
-        assert!(friend.ty.is_ident("Source"), "{input}");
+        assert!(friend.ty.path().is_ident("Source"), "{input}");
         assert!(friend.capabilities.contains(&syn::parse_quote!(Unsafe)));
     }
 
@@ -2717,9 +2718,9 @@ mod tests {
         assert!(conversion.leading_colon.is_some());
         assert_eq!(conversion.segments.first().unwrap().ident, "conversions");
         assert_eq!(conversion.segments.last().unwrap().ident, "own");
-        assert!(friend.ty.leading_colon.is_some());
-        assert_eq!(friend.ty.segments.first().unwrap().ident, "sources");
-        assert_eq!(friend.ty.segments.last().unwrap().ident, "Source");
+        assert!(friend.ty.path().leading_colon.is_some());
+        assert_eq!(friend.ty.path().segments.first().unwrap().ident, "sources");
+        assert_eq!(friend.ty.path().segments.last().unwrap().ident, "Source");
     }
 
     #[test]
