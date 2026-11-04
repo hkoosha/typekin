@@ -12,13 +12,38 @@ publish = false
 
 [features]
 default = ["test_fast"]
-test_slow = ["test_fast", "test_slow_only"]
 test_fast = []
 test_slow_only = []
+test_slow = [
+    "test_fast",
+    "test_slow_only",
+    "test_slow_z",
+]
+
+# Each target feature needs that nightly rustup target installed, so none is
+# part of `test_slow`.
+test_slow_wasm32 = ["test_slow"]
+
+# Cross-compiled asm checks; also need LLVM's `llvm-nm`/`llvm-objdump`.
+test_slow_aarch64 = ["test_slow"]
+test_slow_armv7 = ["test_slow"]
+test_slow_i686 = ["test_slow"]
+test_slow_cross = [
+    "test_slow_aarch64",
+    "test_slow_armv7",
+    "test_slow_i686",
+]
+
+# Asm checks at opt-level z. Size optimizations such as the AArch64 machine
+# outliner move instruction sequences repeated anywhere in a crate, handwritten
+# code included, into shared functions, which has nothing to do with typekin.
+test_slow_z = ["test_slow"]
+
+[lib]
+doctest = false
 
 [lints.clippy]
 needless_return = "allow"
-
 [lints.cargo]
 unused_dependencies = "allow"
 
@@ -26,21 +51,3 @@ unused_dependencies = "allow"
 typekin = { path = ".." }
 serde = { version = "1", default-features = false, features = ["alloc"] }
 serde_test = "1"
-
-[[bin]]
-name = "my_u32"
-path = "src/fixture_my_u32.rs"
-test = false
-bench = false
-
-[[bin]]
-name = "my_u32_const"
-path = "src/fixture_my_u32_const.rs"
-test = false
-bench = false
-
-[[bin]]
-name = "my_sequence"
-path = "src/fixture_my_sequence.rs"
-test = false
-bench = false

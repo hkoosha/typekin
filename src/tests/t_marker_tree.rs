@@ -22,57 +22,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_tree_implements_every_ancestor_for_leaves() {
-        let configuration = "
-            Transport {
-                Direction {
-                    In,
-                    Out,
-                },
-            },
-        ";
-        let root = "trait MakerSeal {}";
-        let this = expand_tree(configuration, root);
-        assert!(this.is_ok(), "{configuration}");
-        let output = this.unwrap().to_string();
-
-        assert!(output.contains("trait Transport : MakerSeal"));
-        assert!(output.contains("trait Direction : Transport + MakerSeal"));
-        assert!(output.contains("struct In ;"));
-        assert!(output.contains("impl MakerSeal for In"));
-        assert!(output.contains("impl Transport for In"));
-        assert!(output.contains("impl Direction for In"));
-        assert!(output.contains("impl MakerSeal for Out"));
-        assert!(output.contains("impl Transport for Out"));
-        assert!(output.contains("impl Direction for Out"));
-    }
-
-    #[test]
-    fn tree_inherits_branch_visibility() {
-        let configuration = "pub Direction { In, }";
-        let root = "trait MakerSeal {}";
-        let this = expand_tree(configuration, root);
-        assert!(this.is_ok(), "{configuration}");
-        let output = this.unwrap().to_string();
-
-        assert!(output.contains("pub trait Direction : MakerSeal"));
-        assert!(output.contains("pub struct In ;"));
-    }
-
-    #[test]
-    fn tree_inherits_root_visibility() {
-        let configuration = "Direction { In, }";
-        let root = "pub trait MakerSeal {}";
-        let this = expand_tree(configuration, root);
-        assert!(this.is_ok(), "{configuration}");
-        let output = this.unwrap().to_string();
-
-        assert!(output.contains("pub trait Direction : MakerSeal"));
-        assert!(output.contains("pub struct In ;"));
-    }
-
-    #[test]
-    fn embedded_tree_uses_a_private_seal_and_exports_nodes() {
+    fn embedded_tree_uses_a_private_seal() {
         let configuration = "Direction { Transport { In, }, Out, }";
         let this = syn::parse_str::<Cfg>(configuration);
         assert!(this.is_ok(), "{configuration}");
@@ -90,43 +40,6 @@ mod tests {
             output
                 .contains("pub trait Transport : Direction + MarkerTreeRoot",),
         );
-        assert!(output.contains("pub struct In ;"));
-        assert!(
-            output.contains(
-                "pub use __typekin_marker_tree_for_Packet :: Direction"
-            )
-        );
-        assert!(
-            output.contains(
-                "pub use __typekin_marker_tree_for_Packet :: Transport"
-            )
-        );
-        assert!(
-            output.contains("pub use __typekin_marker_tree_for_Packet :: In")
-        );
-        assert!(
-            output.contains("pub use __typekin_marker_tree_for_Packet :: Out")
-        );
-    }
-
-    #[test]
-    fn embedded_tree_honors_explicit_root_visibility() {
-        let configuration = "pub(crate) Direction { In, }";
-        let this = syn::parse_str::<Cfg>(configuration);
-        assert!(this.is_ok(), "{configuration}");
-        let configuration = this.unwrap();
-        let owner = format_ident!("Packet");
-        let visibility = parse_quote!(pub);
-        let this = configuration.expand_embedded(&owner, &visibility);
-        assert!(this.is_ok(), "{configuration:?}");
-        let output = this.unwrap().to_string();
-
-        assert!(output.contains(
-            "pub (crate) use __typekin_marker_tree_for_Packet :: Direction",
-        ),);
-        assert!(output.contains(
-            "pub (crate) use __typekin_marker_tree_for_Packet :: In",
-        ),);
     }
 
     #[test]

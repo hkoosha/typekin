@@ -1,3 +1,11 @@
+targets := "wasm32-unknown-unknown aarch64-unknown-linux-gnu armv7-unknown-linux-gnueabihf i686-unknown-linux-gnu"
+
+init:
+  for target in {{ targets }}; do \
+    rustup +nightly target add "$target"; \
+  done
+  rustup +nightly component add llvm-tools
+
 fmt:
   cargo fmt
 
@@ -14,7 +22,8 @@ test-fast: (z-test 'test_fast')
 test-slow: (z-test 'test_slow')
 
 z-test features='default': fmt
-  time cargo test --offline --no-default-features --features '{{ features }}'
+  just --justfile ../justfile --working-directory . z-test \
+    --no-default-features --features '{{ features }}'
 
 clean:
   cargo clean

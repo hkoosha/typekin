@@ -1,53 +1,10 @@
-#[typekin::integral(
-    konst = none,
-    tree = IntegralDirection {
-        IntegralBranch {
-            IntegralIn,
-        },
-    },
-)]
-pub struct TreeIntegral(u8);
-
-#[repr(u8)]
-#[typekin::bitflag(
-    konst = none,
-    tree = BitflagDirection {
-        BitflagIn,
-    },
-)]
-pub enum TreeBitflag {
-    Read = 1,
-}
-
-#[typekin::text(
-    konst = none,
-    tree = [TextDirection {
-        TextIn,
-    }],
-)]
-pub struct TreeText(String);
+use crate::fx_marker_tree::*;
+use crate::*;
 
 #[cfg(test)]
+#[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
-
-    fn accepts_integral_marker<T>()
-    where
-        T: IntegralDirection + IntegralBranch,
-    {
-    }
-
-    fn accepts_bitflag_marker<T>()
-    where
-        T: BitflagDirection,
-    {
-    }
-
-    fn accepts_text_marker<T>()
-    where
-        T: TextDirection,
-    {
-    }
 
     #[test]
     fn exported_tree_nodes_implement_their_visible_hierarchy() {
@@ -68,5 +25,31 @@ mod tests {
         assert!(text.is_ok());
         let text = text.unwrap();
         assert_eq!(text.as_str(), "tree");
+    }
+
+    #[test]
+    fn branches_extend_their_ancestors() {
+        root_in_extends_its_ancestors();
+    }
+
+    #[test]
+    fn leaf_markers_are_zero_sized() {
+        assert_eq!(root_in_size(), 0);
+        assert_eq!(size_of::<IntegralIn>(), 0);
+    }
+
+    #[test]
+    fn nodes_inherit_the_root_visibility() {
+        root_out_has_the_root_visibility();
+    }
+
+    #[test]
+    fn nodes_inherit_the_branch_visibility() {
+        inbound_has_the_branch_visibility();
+    }
+
+    #[test]
+    fn embedded_tree_honors_explicit_node_visibility() {
+        forward_has_the_route_visibility();
     }
 }

@@ -2,13 +2,11 @@ use std::cmp::Ordering;
 use std::collections::{
     BTreeMap,
     BTreeSet,
-    HashSet,
 };
 use std::fmt::{
     Debug,
     Formatter,
 };
-use std::str::FromStr;
 
 use proc_macro2::{
     Ident,
@@ -19,7 +17,6 @@ use quote::{
     ToTokens,
     quote,
 };
-pub(crate) use ranges::parse_domain;
 use syn::parse::{
     Parse,
     ParseStream,
@@ -28,29 +25,36 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     Attribute,
-    Expr,
-    ExprRange,
-    Lit,
     Path,
-    RangeLimits,
     Token,
     Type,
-    UnOp,
     Visibility,
+    braced,
     bracketed,
     parenthesized,
 };
 
+use crate::zz_domain::{
+    Domain,
+    Tri,
+};
+use crate::zz_domain_float::{
+    MathProvider,
+    ResolvedFloatDomain,
+};
+use crate::zz_domain_int::ResolvedDomain;
+use crate::zz_names::{
+    NameKey,
+    ResolvedNames,
+};
 use crate::zz_runner::{
     MkErr,
-    MySpanned,
     ToCollection,
 };
-use crate::zz_value_type::{
-    Int,
+use crate::zz_values::{
+    FnName,
     N,
-    POINTER_WIDTHS,
-    RangeEnding,
+    Num,
 };
 
 #[derive(Clone)]
@@ -81,27 +85,27 @@ impl Eq for PathIdentity {}
 impl PartialEq for PathIdentity {
     fn eq(
         &self,
-        other: &Self,
+        that: &Self,
     ) -> bool {
-        return self.identity == other.identity;
+        return self.identity == that.identity;
     }
 }
 
 impl PartialOrd for PathIdentity {
     fn partial_cmp(
         &self,
-        other: &Self,
+        that: &Self,
     ) -> Option<Ordering> {
-        return Some(self.cmp(other));
+        return Some(self.cmp(that));
     }
 }
 
 impl Ord for PathIdentity {
     fn cmp(
         &self,
-        other: &Self,
+        that: &Self,
     ) -> Ordering {
-        return self.identity.cmp(&other.identity);
+        return self.identity.cmp(&that.identity);
     }
 }
 
@@ -115,6 +119,7 @@ pub(crate) enum Konsts {
     Bit,
     Comparison,
     Conversion,
+    CoreFloat,
     CoreInt,
     Div,
     DivAssign,
@@ -127,6 +132,7 @@ pub(crate) enum Konsts {
     Math,
     Mul,
     MulAssign,
+    Neg,
     Not,
     Of,
     Or,
@@ -163,6 +169,7 @@ impl Konsts {
         Self::Bit,
         Self::Comparison,
         Self::Conversion,
+        Self::CoreFloat,
         Self::CoreInt,
         Self::Div,
         Self::DivAssign,
@@ -174,6 +181,7 @@ impl Konsts {
         Self::Math,
         Self::Mul,
         Self::MulAssign,
+        Self::Neg,
         Self::Not,
         Self::Of,
         Self::Or,
@@ -196,14 +204,35 @@ impl Konsts {
         Self::XorAssign,
     ];
 
+    pub(crate) const TEXT: &[Self] = &[
+        Self::Friendship,
+        Self::From,
+        Self::Text,
+        Self::TextAccess,
+        Self::TextFriendship,
+        Self::TextFrom,
+    ];
+
     pub(crate) fn is_stable(self) -> bool {
         return matches!(
             self,
-            Self::CoreInt | Self::TryMake | Self::Value | Self::TextAccess
+            Self::CoreInt
+                | Self::CoreFloat
+                | Self::TryMake
+                | Self::Value
+                | Self::TextAccess
         );
     }
 
-    pub(crate) fn parse_konst_flags(name: &str) -> Option<Konsts> {
+    /// `name`'s `konst_*` flag, if `family` (`INTEGRAL`, `TEXT`) has it.
+    pub(crate) fn of_in(
+        name: &str,
+        family: &[Self],
+    ) -> Option<Self> {
+        return Self::parse_konst_flags(name).filter(|it| family.contains(it));
+    }
+
+    fn parse_konst_flags(name: &str) -> Option<Konsts> {
         return Some(match name {
             "konst_add" => Konsts::Add,
             "konst_add_assign" => Konsts::AddAssign,
@@ -213,17 +242,20 @@ impl Konsts {
             "konst_bit" => Konsts::Bit,
             "konst_comparison" => Konsts::Comparison,
             "konst_conversion" => Konsts::Conversion,
+            "konst_core_float" => Konsts::CoreFloat,
             "konst_core_int" => Konsts::CoreInt,
             "konst_div" => Konsts::Div,
             "konst_div_assign" => Konsts::DivAssign,
             "konst_eq" => Konsts::Eq,
             "konst_friendship" => Konsts::Friendship,
+            "konst_from" => Konsts::From,
             "konst_into" => Konsts::Into,
             "konst_iterator" => Konsts::Iterator,
             "konst_map" => Konsts::Map,
             "konst_math" => Konsts::Math,
             "konst_mul" => Konsts::Mul,
             "konst_mul_assign" => Konsts::MulAssign,
+            "konst_neg" => Konsts::Neg,
             "konst_not" => Konsts::Not,
             "konst_of" => Konsts::Of,
             "konst_or" => Konsts::Or,
@@ -239,6 +271,10 @@ impl Konsts {
             "konst_shr_assign" => Konsts::ShrAssign,
             "konst_sub" => Konsts::Sub,
             "konst_sub_assign" => Konsts::SubAssign,
+            "konst_text" => Konsts::Text,
+            "konst_text_access" => Konsts::TextAccess,
+            "konst_text_friendship" => Konsts::TextFriendship,
+            "konst_text_from" => Konsts::TextFrom,
             "konst_try_into" => Konsts::TryInto,
             "konst_try_make" => Konsts::TryMake,
             "konst_value" => Konsts::Value,
@@ -246,14 +282,6 @@ impl Konsts {
             "konst_xor_assign" => Konsts::XorAssign,
             _ => return None,
         });
-    }
-}
-
-impl FromStr for Konsts {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        return Self::parse_konst_flags(s).ok_or(());
     }
 }
 
@@ -329,128 +357,94 @@ impl Konst {
             false => None,
         };
     }
-}
 
-#[derive(Clone)]
-enum DomainRanges {
-    Shared(Vec<ExprRange>),
-    PerWidth([Vec<ExprRange>; POINTER_WIDTHS.len()]),
-}
+    /// `[const] #bound + [const] Destruct` when `is_const`, else `#bound`.
+    pub(crate) fn bound(
+        is_const: bool,
+        bound: TokenStream,
+    ) -> TokenStream {
+        let bonst = Self::bonst(is_const);
+        let destruct = Self::destruct(is_const);
+        return quote! { #bonst #bound #destruct };
+    }
 
-impl DomainRanges {
-    fn at_width(
-        &self,
-        index: usize,
-    ) -> &[ExprRange] {
+    /// `#[derive_const(traits)]` under `konst = nightly`, else
+    /// `#[derive(traits)]`.
+    pub(crate) fn derive(
+        self,
+        traits: TokenStream,
+    ) -> TokenStream {
         return match self {
-            Self::Shared(ranges) => ranges,
-            Self::PerWidth(ranges) => &ranges[index],
+            Self::Nightly => quote! { #[derive_const(#traits)] },
+            Self::None | Self::Stable => quote! { #[derive(#traits)] },
         };
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct IntegralDomain {
-    ranges: DomainRanges,
-    zero_included: [bool; POINTER_WIDTHS.len()],
+/// `#[repr(transparent)]` when `enabled`.
+pub(crate) fn repr_transparent(enabled: bool) -> Option<TokenStream> {
+    return enabled.then(|| quote! { #[repr(transparent)] });
 }
 
-impl IntegralDomain {
-    #[cfg(test)]
-    pub(crate) fn ranges(&self) -> impl ExactSizeIterator<Item = &ExprRange> {
-        return self.ranges.at_width(0).iter();
-    }
+/// A lint a family allows on the `const _` scope of its generated code.
+#[derive(Clone, Copy)]
+pub(crate) enum ScopeLint {
+    DeadCode,
+    UnusedQualifications,
+    UnnecessaryCast,
+}
 
-    #[cfg(test)]
-    pub(crate) fn contains_at_pointer_width(
-        &self,
-        value: Int,
-        pointer_width: u32,
-    ) -> bool {
-        let index = POINTER_WIDTHS
-            .iter()
-            .position(|width| *width == pointer_width)
-            .expect("supported pointer width");
-        return self.ranges.at_width(index).iter().any(|range| {
-            ComparableRange::of(range.clone())
-                .expect("domain bounds were validated")
-                .contains(value, index)
-        });
-    }
-
-    pub(crate) fn contains_zero(&self) -> bool {
-        return self.zero_included.iter().any(|included| *included);
-    }
-
-    pub(crate) fn excludes_zero(&self) -> bool {
-        return !self.contains_zero();
-    }
-
-    fn validation_expression(
-        &self,
-        value: &TokenStream,
-    ) -> TokenStream {
-        return match &self.ranges {
-            DomainRanges::Shared(ranges) => Self::range_union(ranges, value),
-            DomainRanges::PerWidth(ranges) => {
-                let variants = POINTER_WIDTHS.into_iter().zip(ranges).map(
-                    |(width, ranges)| {
-                        let width = width.to_string();
-                        let condition = Self::range_union(ranges, value);
-                        return quote! {
-                            #[cfg(target_pointer_width = #width)]
-                            let __typekin_domain_valid = #condition;
-                        };
-                    },
-                );
-                quote! {
-                    {
-                        #(#variants)*
-                        __typekin_domain_valid
-                    }
-                }
-            }
+impl ScopeLint {
+    fn path(self) -> TokenStream {
+        return match self {
+            Self::DeadCode => quote! { dead_code },
+            Self::UnusedQualifications => quote! { unused_qualifications },
+            Self::UnnecessaryCast => quote! { clippy::unnecessary_cast },
         };
     }
+}
 
-    fn range_union(
-        ranges: &[ExprRange],
-        value: &TokenStream,
-    ) -> TokenStream {
-        return ranges
-            .iter()
-            .map(|it| Self::range_condition(it, value))
-            .reduce(|left, right| quote! { (#left) || (#right) })
-            .unwrap_or_else(|| quote! { false });
-    }
+/// The scope lints of the numeric families (integral, float, bitflag).
+pub(crate) const NUMERIC_LINTS: &[ScopeLint] = &[
+    ScopeLint::DeadCode,
+    ScopeLint::UnusedQualifications,
+    ScopeLint::UnnecessaryCast,
+];
 
-    fn range_condition(
-        it: &ExprRange,
-        value: &TokenStream,
-    ) -> TokenStream {
-        let lower = it.start.as_ref().map(|start| {
-            return quote! { #value >= (#start) };
-        });
-        let upper = it.end.as_ref().map(|end| {
-            return match &it.limits {
-                RangeLimits::HalfOpen(_) => {
-                    quote! { #value < (#end) }
-                }
-                RangeLimits::Closed(_) => {
-                    quote! { #value <= (#end) }
-                }
-            };
-        });
+/// The scope lints of text.
+pub(crate) const TEXT_LINTS: &[ScopeLint] = &[
+    ScopeLint::DeadCode,
+    ScopeLint::UnusedQualifications,
+];
 
-        return match (lower, upper) {
-            (None, None) => quote! { true },
-            (Some(lower), None) => quote! { #lower },
-            (None, Some(upper)) => quote! { #upper },
-            (Some(lower), Some(upper)) => {
-                quote! { (#lower) && (#upper) }
-            }
+/// `const _: () = { items };` with one `#[allow(..)]` per lint, in order.
+pub(crate) fn lint_scope(
+    lints: &[ScopeLint],
+    items: TokenStream,
+) -> TokenStream {
+    let lints = lints.iter().map(|it| it.path());
+    return quote! {
+        #(#[allow(#lints)])*
+        const _: () = {
+            #items
         };
-    }
+    };
+}
+
+/// `return if #condition { Ok(#ok) } else { Err(#err) };`, fully qualified.
+pub(crate) fn validated_result(
+    condition: &TokenStream,
+    ok: TokenStream,
+    err: TokenStream,
+) -> TokenStream {
+    return quote! {
+        return if #condition {
+            ::core::result::Result::Ok(#ok)
+        }
+        else {
+            ::core::result::Result::Err(#err)
+        };
+    };
 }
 
 pub(crate) fn callback_condition(
@@ -463,32 +457,139 @@ pub(crate) fn callback_condition(
         .reduce(|left, right| quote! { (#left) && (#right) });
 }
 
+/// A domain resolved for its value type.
+#[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum Resolved {
+    Int(ResolvedDomain),
+    Float(ResolvedFloatDomain),
+}
+
+impl Resolved {
+    /// The domain's membership condition on `value`.
+    fn emit(
+        &self,
+        value: &TokenStream,
+    ) -> TokenStream {
+        return match self {
+            Self::Int(it) => it.emit(value),
+            Self::Float(it) => it.emit(value),
+        };
+    }
+
+    /// The domain is symmetric, so negation stays inside it.
+    fn neg_closed(&self) -> bool {
+        return match self {
+            Self::Int(it) => it.neg_closed(),
+            Self::Float(it) => it.neg_closed(),
+        };
+    }
+
+    /// `abs` of a member is a member.
+    fn abs_closed(&self) -> bool {
+        return match self {
+            Self::Int(it) => it.abs_closed(),
+            Self::Float(it) => it.abs_closed(),
+        };
+    }
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct ValidationCfg {
     pub(crate) callbacks: Vec<Path>,
-    pub(crate) domain: Option<IntegralDomain>,
+    pub(crate) domain: Option<Domain>,
+    resolved: Option<Resolved>,
     non_zero: bool,
 }
 
 impl ValidationCfg {
+    /// Domain first, then callbacks in declaration order (D12): callbacks only
+    /// see values the domain admits.
     pub(crate) fn emit(
         &self,
         value: &TokenStream,
     ) -> TokenStream {
+        let domain = self.resolved.as_ref().map(|it| it.emit(value));
+        assert!(
+            domain.is_some() || (self.domain.is_none() && !self.non_zero),
+            "validation is emitted after the domain is resolved"
+        );
         let callbacks = callback_condition(&self.callbacks, value);
 
-        let domain = self
-            .domain
-            .as_ref()
-            .map(|domain| domain.validation_expression(value));
-        let non_zero = self.non_zero.then(|| quote! { #value != 0 });
-
-        return callbacks
+        return domain
             .into_iter()
-            .chain(domain)
-            .chain(non_zero)
+            .chain(callbacks)
             .reduce(|left, right| quote! { (#left) && (#right) })
             .unwrap_or_else(|| quote! { true });
+    }
+
+    /// Types the domain (and `non_zero`) for the value type. Called where the
+    /// type is first known; repeated calls re-resolve.
+    pub(crate) fn resolve(
+        &mut self,
+        subject: Num,
+        math: MathProvider,
+    ) -> syn::Result<()> {
+        self.resolved = match (subject, &self.domain, self.non_zero) {
+            (Num::Int(subject), Some(domain), non_zero) => {
+                Some(Resolved::Int(domain.resolve(subject, non_zero)?))
+            }
+            (Num::Int(subject), None, true) => {
+                Some(Resolved::Int(Domain::non_zero_only(subject)))
+            }
+            (Num::Float(subject), Some(domain), _) => {
+                Some(Resolved::Float(domain.resolve_float(subject, math)?))
+            }
+            (_, None, _) => None,
+        };
+        return Ok(());
+    }
+
+    /// The resolved integer domain, if any.
+    pub(crate) fn resolved(&self) -> Option<&ResolvedDomain> {
+        return match self.resolved.as_ref() {
+            Some(Resolved::Int(it)) => Some(it),
+            _ => None,
+        };
+    }
+
+    /// The resolved float domain, if any.
+    pub(crate) fn float_domain(&self) -> Option<&ResolvedFloatDomain> {
+        return match self.resolved.as_ref() {
+            Some(Resolved::Float(it)) => Some(it),
+            _ => None,
+        };
+    }
+
+    /// Some NaN passes the domain (exact before the float width is known).
+    /// No domain admits every value, NaN included.
+    pub(crate) fn admits_nan(&self) -> bool {
+        return self.domain.as_ref().is_none_or(Domain::admits_nan_untyped);
+    }
+
+    /// Negating a valid value always gives a valid value, so `Neg` needs no
+    /// check. Callbacks are opaque: any callback rules this out.
+    pub(crate) fn neg_closed(&self) -> bool {
+        return self.callbacks.is_empty()
+            && self.resolved.as_ref().is_some_and(Resolved::neg_closed);
+    }
+
+    /// `abs` of a valid value is always valid, so `abs` needs no check.
+    pub(crate) fn abs_closed(&self) -> bool {
+        return self.callbacks.is_empty()
+            && self.resolved.as_ref().is_some_and(Resolved::abs_closed);
+    }
+
+    /// The domain as written (with `with = non_zero` folded in), for
+    /// generated documentation.
+    pub(crate) fn domain_text(&self) -> String {
+        let text = self.domain.as_ref().map(|it| it.text().to_string());
+        return match (text, self.non_zero) {
+            (Some(text), false) => text,
+            (Some(text), true) => format!("({text}) & !{{0}}"),
+            (None, true) => "!{0}".to_string(),
+            (None, false) => String::new(),
+        };
     }
 }
 
@@ -500,13 +601,7 @@ impl Debug for ValidationCfg {
         return f
             .debug_struct("ValidationCfg")
             .field("callbacks_count", &self.callbacks.len())
-            .field(
-                "ranges_count",
-                &self
-                    .domain
-                    .as_ref()
-                    .map_or(0, |it| it.ranges.at_width(0).len()),
-            )
+            .field("domain", &self.domain.is_some())
             .field("non_zero", &self.non_zero)
             .finish();
     }
@@ -519,11 +614,18 @@ impl ValidationCfg {
             || self.non_zero;
     }
 
+    /// Zero is rejected at every pointer width: exact once resolved; before
+    /// that, only when the untyped probe is definite.
     pub(crate) fn domain_excludes_zero(&self) -> bool {
+        match &self.resolved {
+            Some(Resolved::Int(it)) => return it.excludes_zero(),
+            Some(Resolved::Float(_)) => return false,
+            None => {}
+        }
         return self
             .domain
             .as_ref()
-            .is_some_and(IntegralDomain::excludes_zero);
+            .is_some_and(|it| it.admits_zero_untyped() == Tri::False);
     }
 
     pub(crate) fn require_non_zero(
@@ -535,12 +637,12 @@ impl ValidationCfg {
 
     pub(crate) fn parse_attr(
         &mut self,
-        attr: &str,
+        attr: Key,
         input: ParseStream,
     ) -> syn::Result<bool> {
         match attr {
-            "valid" => self.callbacks = parse_callbacks(input)?,
-            "domain" => self.domain = Some(parse_domain(input)?),
+            Key::Valid => self.callbacks = parse_callbacks(input)?,
+            Key::Domain => self.domain = Some(input.parse()?),
             _ => return Ok(false),
         };
 
@@ -548,233 +650,8 @@ impl ValidationCfg {
     }
 }
 
-#[derive(Clone)]
-struct ComparableRange {
-    range: ExprRange,
-    lower: [Option<Int>; POINTER_WIDTHS.len()],
-    upper: [RangeEnding; POINTER_WIDTHS.len()],
-}
-
-impl ComparableRange {
-    fn of(it: ExprRange) -> syn::Result<Self> {
-        let lower = match &it.start {
-            None => [None; POINTER_WIDTHS.len()],
-            Some(start) => parse_int_const(start)?.map(Some),
-        };
-        let upper = match &it.end {
-            None => [RangeEnding::Unbounded; POINTER_WIDTHS.len()],
-            Some(end) => parse_int_const(end)?.map(|end| {
-                return match &it.limits {
-                    RangeLimits::HalfOpen(_) => end
-                        .predecessor()
-                        .map_or(RangeEnding::Empty, RangeEnding::Value),
-                    RangeLimits::Closed(_) => RangeEnding::Value(end),
-                };
-            }),
-        };
-
-        return Ok(Self {
-            range: it,
-            lower,
-            upper,
-        });
-    }
-
-    fn contains(
-        &self,
-        value: Int,
-        width_index: usize,
-    ) -> bool {
-        let above_lower =
-            self.lower[width_index].is_none_or(|lower| lower <= value);
-        let below_upper = match self.upper[width_index] {
-            RangeEnding::Empty => false,
-            RangeEnding::Value(upper) => value <= upper,
-            RangeEnding::Unbounded => true,
-        };
-        return above_lower && below_upper;
-    }
-
-    fn is_width_independent(&self) -> bool {
-        return self.lower.iter().all(|lower| *lower == self.lower[0])
-            && self.upper.iter().all(|upper| *upper == self.upper[0]);
-    }
-}
-
-mod ranges {
-    use std::cmp::Ordering;
-
-    use syn::Expr;
-    use syn::parse::ParseStream;
-
-    use crate::zz_lib::{
-        ComparableRange,
-        DomainRanges,
-        Int,
-        IntegralDomain,
-        one_or_list,
-    };
-    use crate::zz_runner::{
-        MkErr,
-        ToCollection,
-    };
-    use crate::zz_value_type::RangeEnding;
-
-    pub(crate) fn parse_domain(
-        input: ParseStream
-    ) -> syn::Result<IntegralDomain> {
-        let ranges = one_or_list(input)?
-            .map(|it| {
-                let Expr::Range(range) = it
-                else {
-                    return it.fail("invalid range definition");
-                };
-
-                if !range.attrs.is_empty() {
-                    return range.fail("invalid range definition");
-                }
-
-                return ComparableRange::of(range);
-            })
-            .collect::<syn::Result<Vec<_>>>()?;
-
-        // Analyze the original union before any range endpoints are merged.
-        let zero_included = std::array::from_fn(|index| {
-            ranges
-                .iter()
-                .any(|range| range.contains(Int::NonNegative(0), index))
-        });
-
-        let ranges = if ranges.iter().all(ComparableRange::is_width_independent)
-        {
-            DomainRanges::Shared(merge_ranges(ranges, 0))
-        }
-        else {
-            // Merging on the host's width can change the target's union.
-            // Normalize separately and emit only the target's expression.
-            let variants = [
-                merge_ranges(ranges.clone(), 0),
-                merge_ranges(ranges.clone(), 1),
-                merge_ranges(ranges, 2),
-            ];
-            DomainRanges::PerWidth(variants)
-        };
-
-        return Ok(IntegralDomain {
-            ranges,
-            zero_included,
-        });
-    }
-
-    fn merge_ranges(
-        mut ranges: Vec<ComparableRange>,
-        width_index: usize,
-    ) -> Vec<syn::ExprRange> {
-        ranges.sort_by(|l, r| {
-            return match (l.lower[width_index], r.lower[width_index]) {
-                (None, None) => Ordering::Equal,
-                (None, Some(_)) => Ordering::Less,
-                (Some(_), None) => Ordering::Greater,
-                (Some(left), Some(right)) => left.cmp(&right),
-            };
-        });
-
-        let mut merged = Vec::<ComparableRange>::with_capacity(ranges.len());
-        for mut next in ranges {
-            let Some(curr) = merged.last_mut()
-            else {
-                merged.push(next);
-                continue;
-            };
-
-            let connected =
-                match (&curr.upper[width_index], next.lower[width_index]) {
-                    (RangeEnding::Empty, _) => false,
-                    (RangeEnding::Unbounded, _) | (_, None) => true,
-                    (RangeEnding::Value(hi), Some(lo)) => {
-                        lo <= *hi || hi.successor().is_some_and(|it| it == lo)
-                    }
-                };
-            if !connected {
-                merged.push(next);
-                continue;
-            }
-
-            if next.upper[width_index].cmp(&curr.upper[width_index])
-                == Ordering::Greater
-            {
-                curr.range.end = next.range.end.take();
-                curr.range.limits = next.range.limits;
-                curr.upper = next.upper;
-            }
-        }
-
-        return merged.into_iter().map(|it| it.range).vec();
-    }
-}
-
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
     return Ok(one_or_list::<Path>(input)?.collect());
-}
-
-fn parse_int_const(expr: &Expr) -> syn::Result<[Int; POINTER_WIDTHS.len()]> {
-    return match expr {
-        Expr::Lit(expr) if expr.attrs.is_empty() => {
-            let Lit::Int(literal) = &expr.lit
-            else {
-                return expr.fail("need an integer constant");
-            };
-
-            Int::parse_non_negative(literal.base10_digits(), literal.suffix())
-                .map(|value| [value; POINTER_WIDTHS.len()])
-                .map_err(|_| expr.errorful("invalid number"))
-        }
-
-        Expr::Unary(expr)
-            if expr.attrs.is_empty() && matches!(&expr.op, UnOp::Neg(_)) =>
-        {
-            Ok(parse_int_const(&expr.expr)?.map(Int::negate))
-        }
-
-        Expr::Path(expr) if expr.attrs.is_empty() && expr.qself.is_none() => {
-            let Some(ty) = expr.path.segments.first()
-            else {
-                return expr.fail("need an integer constant");
-            };
-
-            let Some(bound) = expr.path.segments.last()
-            else {
-                return expr.fail("need an integer constant");
-            };
-
-            if expr.path.segments.len() != 2
-                || !matches!(ty.arguments, syn::PathArguments::None)
-                || !matches!(bound.arguments, syn::PathArguments::None)
-            {
-                return expr.fail("need an integer constant");
-            }
-
-            let bounds = N::of(ty.ident.to_string())
-                .map(|it| {
-                    POINTER_WIDTHS.map(|width| {
-                        return it.bounds_for_pointer_width(width);
-                    })
-                })
-                .ok_or_else(|| expr.errorful("need an integer constant"))?;
-
-            match bound.ident.to_string().as_str() {
-                "MIN" => Ok(bounds.map(|(min, _)| min)),
-                "MAX" => Ok(bounds.map(|(_, max)| max)),
-                _ => expr.fail("need an integer constant"),
-            }
-        }
-
-        Expr::Paren(expr) if expr.attrs.is_empty() => {
-            parse_int_const(&expr.expr)
-        }
-
-        _ => expr.fail("need an integer constant"),
-    };
 }
 
 pub(crate) fn get_concrete_type(
@@ -844,6 +721,19 @@ pub(crate) fn list<T: Parse>(
     return Ok(items);
 }
 
+/// `{a, b}`: a braced, comma-separated set.
+pub(crate) fn set<T: Parse>(
+    stream: ParseStream
+) -> syn::Result<impl Iterator<Item = T>> {
+    let content;
+    let _ = braced!(content in stream);
+
+    let items =
+        Punctuated::<T, Token![,]>::parse_terminated(&content)?.into_iter();
+
+    return Ok(items);
+}
+
 pub(crate) fn one_or_list<T: Parse>(
     stream: ParseStream
 ) -> syn::Result<impl Iterator<Item = T>> {
@@ -879,62 +769,87 @@ pub(crate) fn tuple<T: Parse>(
     return Ok(many);
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum DuplicateFlagPolicy {
-    WithinList,
-    AnyList,
+/// A generated function forwarding to a `core` function (text: a `String`
+/// method). `without = fn_{name}` removes it, `name` keying both its removal
+/// and its generated name.
+pub(crate) struct Forward {
+    name: FnName,
+    tokens: TokenStream,
 }
 
-pub(crate) struct ExplicitFlag {
-    pub(crate) name: String,
-    pub(crate) value: bool,
-    pub(crate) span: Span,
-}
-
-impl MySpanned for ExplicitFlag {
-    fn my_span(&self) -> Span {
-        return self.span;
+impl Forward {
+    /// `emit` receives the function's identifier from `names`.
+    pub(crate) fn new<K: NameKey + From<FnName>>(
+        name: FnName,
+        names: &ResolvedNames<K>,
+        emit: impl FnOnce(&Ident) -> TokenStream,
+    ) -> Self {
+        let tokens = emit(&names.get(K::from(name)));
+        return Self { name, tokens };
     }
 }
 
-pub(crate) fn parse_explicit_flags(
-    input: ParseStream,
-    value: bool,
-    seen: &mut BTreeMap<String, bool>,
-    duplicates: DuplicateFlagPolicy,
-    mut on_flag: impl FnMut(&ExplicitFlag) -> syn::Result<()>,
-) -> syn::Result<()> {
-    let attrs = one_or_list::<Ident>(input)?;
-    let mut list_seen = BTreeSet::new();
+/// `without = fn_{name}`: the generated functions to remove, with the span
+/// of each flag.
+#[derive(Clone, Default)]
+pub(crate) struct Removals(BTreeMap<FnName, Span>);
 
-    for attr in attrs {
-        let flag = ExplicitFlag {
-            name: attr.to_string(),
-            value,
-            span: attr.span(),
-        };
+impl Removals {
+    /// Records the removal of `function`, written at `span`.
+    pub(crate) fn insert(
+        &mut self,
+        function: FnName,
+        span: Span,
+    ) {
+        self.0.insert(function, span);
+    }
 
-        if matches!(duplicates, DuplicateFlagPolicy::WithinList)
-            && !list_seen.insert(flag.name.clone())
+    pub(crate) fn extend(
+        &mut self,
+        that: &Self,
+    ) {
+        self.0
+            .extend(that.0.iter().map(|(name, span)| (*name, *span)));
+    }
+
+    pub(crate) fn removes(
+        &self,
+        name: FnName,
+    ) -> bool {
+        return self.0.contains_key(&name);
+    }
+
+    pub(crate) fn first_span(&self) -> Option<Span> {
+        return self.0.values().next().copied();
+    }
+
+    /// The forwards not removed. A removal naming none of `forwards` is an
+    /// error: the configuration does not generate that function.
+    pub(crate) fn keep(
+        &self,
+        forwards: Vec<Forward>,
+    ) -> syn::Result<TokenStream> {
+        let mut removed = BTreeSet::new();
+        let mut kept = TokenStream::new();
+        for forward in forwards {
+            if self.removes(forward.name) {
+                removed.insert(forward.name);
+                continue;
+            }
+            kept.extend(forward.tokens);
+        }
+
+        if let Some((name, span)) =
+            self.0.iter().find(|(name, _)| !removed.contains(*name))
         {
-            return flag.fail("duplicated flags");
+            let name = name.name();
+            return span.fail(format!(
+                "`fn_{name}` removes nothing: no generated function `{name}`"
+            ));
         }
 
-        if let Some(previous) = seen.get(&flag.name) {
-            if *previous != value {
-                return flag
-                    .fail("flag specified in both `with` and `without`");
-            }
-            if matches!(duplicates, DuplicateFlagPolicy::AnyList) {
-                return flag.fail("duplicated flags");
-            }
-        }
-
-        on_flag(&flag)?;
-        seen.insert(flag.name, flag.value);
+        return Ok(kept);
     }
-
-    return Ok(());
 }
 
 pub(crate) fn find_repr_n(
@@ -966,60 +881,174 @@ pub(crate) fn find_repr_n(
     return Ok(repr);
 }
 
-// TODO cleanup the mess...
+/// A configuration argument key, `key = ...`, as read by [`parse_inner`].
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Key {
+    Conversion,
+    Domain,
+    Error,
+    ExtraCaps,
+    Facet,
+    Friend,
+    GetRaw,
+    HideIn,
+    Integral,
+    Konst,
+    LitName,
+    LitPath,
+    Maker,
+    Math,
+    Mod,
+    Precedes,
+    Produce,
+    Profile,
+    Prove,
+    Relation,
+    Relationship,
+    Repr,
+    Scope,
+    Seal,
+    Std,
+    Suffix,
+    Tree,
+    Valid,
+    Value,
+    ValueName,
+    With,
+    Without,
+}
+
+impl Key {
+    const ITEMS: [Self; 32] = [
+        Self::Conversion,
+        Self::Domain,
+        Self::Error,
+        Self::ExtraCaps,
+        Self::Facet,
+        Self::Friend,
+        Self::GetRaw,
+        Self::HideIn,
+        Self::Integral,
+        Self::Konst,
+        Self::LitName,
+        Self::LitPath,
+        Self::Maker,
+        Self::Math,
+        Self::Mod,
+        Self::Precedes,
+        Self::Produce,
+        Self::Profile,
+        Self::Prove,
+        Self::Relation,
+        Self::Relationship,
+        Self::Repr,
+        Self::Scope,
+        Self::Seal,
+        Self::Std,
+        Self::Suffix,
+        Self::Tree,
+        Self::Valid,
+        Self::Value,
+        Self::ValueName,
+        Self::With,
+        Self::Without,
+    ];
+
+    pub(crate) fn name(self) -> &'static str {
+        return match self {
+            Self::Conversion => "conversion",
+            Self::Domain => "domain",
+            Self::Error => "error",
+            Self::ExtraCaps => "extra_caps",
+            Self::Facet => "facet",
+            Self::Friend => "friend",
+            Self::GetRaw => "get_raw",
+            Self::HideIn => "hide_in",
+            Self::Integral => "integral",
+            Self::Konst => "konst",
+            Self::LitName => "lit_name",
+            Self::LitPath => "lit_path",
+            Self::Maker => "maker",
+            Self::Math => "math",
+            Self::Mod => "mod",
+            Self::Precedes => "precedes",
+            Self::Produce => "produce",
+            Self::Profile => "profile",
+            Self::Prove => "prove",
+            Self::Relation => "relation",
+            Self::Relationship => "relationship",
+            Self::Repr => "repr",
+            Self::Scope => "scope",
+            Self::Seal => "seal",
+            Self::Std => "std",
+            Self::Suffix => "suffix",
+            Self::Tree => "tree",
+            Self::Valid => "valid",
+            Self::Value => "value",
+            Self::ValueName => "value_name",
+            Self::With => "with",
+            Self::Without => "without",
+        };
+    }
+
+    pub(crate) fn of(name: &str) -> Option<Self> {
+        return Self::ITEMS.into_iter().find(|it| it.name() == name);
+    }
+}
+
+/// Parses `key = value, ...`. A name outside [`Key`], or a key `on_attr`
+/// rejects, is an unknown attribute at the value span; a repeated key is a
+/// duplicated arg at the key span.
+///
+/// `on_attr` parses the value after `=` and returns `Ok(true)`, or returns
+/// `Ok(false)` to reject the key; it must reject before consuming any input,
+/// so the error lands on the value span. `FacetCfg` records `precedes_span`
+/// before delegating, and `Profile::parse_attr` returns `false` for
+/// `precedes` on a non-circular profile without consuming.
 pub(crate) fn parse_inner(
     stream: ParseStream,
-    mut on_attr: impl FnMut(&str, ParseStream) -> syn::Result<bool>,
+    mut on_attr: impl FnMut(Key, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
-    let mut seen = HashSet::with_capacity(5);
+    let mut seen = BTreeSet::new();
 
     while !stream.is_empty() {
-        let attr = {
-            let here = stream.span();
-
-            let it = if stream.peek(Token![_]) {
-                let _: Token![_] = stream.parse()?;
-                "_".to_string()
-            }
-            else if stream.peek(Token![mod]) {
-                let _: Token![mod] = stream.parse()?;
-                "mod".to_string()
-            }
-            else if stream.peek(Token![in]) {
-                let _: Token![in] = stream.parse()?;
-                "in".to_string()
-            }
-            else {
-                let key: Ident = stream.parse()?;
-                key.to_string()
-            };
-
-            if seen.contains(&it) {
-                return here.fail("duplicated arg");
-            }
-
-            it
-        };
+        let here = stream.span();
+        let key = parse_key(stream)?;
+        if key.is_some_and(|key| !seen.insert(key)) {
+            return here.fail("duplicated arg");
+        }
 
         stream.parse::<Token![=]>()?;
 
-        match on_attr(&attr, stream) {
-            Ok(true) => {}
-            Ok(false) => {
-                return stream.span().fail("unknown attribute");
-            }
-            Err(err) => {
-                return Err(err);
-            }
+        if !key.map_or(Ok(false), |key| on_attr(key, stream))? {
+            return stream.span().fail("unknown attribute");
         }
-
-        seen.insert(attr);
 
         if !stream.is_empty() {
             stream.parse::<Token![,]>()?;
         }
     }
     return Ok(());
+}
+
+/// [`Key::of`] an identifier or `mod`; `None` for `_`, `in` and other names.
+/// `mod` is a keyword `Ident` rejects; other keywords stay "expected
+/// identifier".
+fn parse_key(stream: ParseStream) -> syn::Result<Option<Key>> {
+    if stream.peek(Token![_]) {
+        let _: Token![_] = stream.parse()?;
+        return Ok(None);
+    }
+    if stream.peek(Token![mod]) {
+        let _: Token![mod] = stream.parse()?;
+        return Ok(Some(Key::Mod));
+    }
+    if stream.peek(Token![in]) {
+        let _: Token![in] = stream.parse()?;
+        return Ok(None);
+    }
+    let key: Ident = stream.parse()?;
+    return Ok(Key::of(&key.to_string()));
 }
 
 pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
@@ -1030,12 +1059,4 @@ pub(crate) fn parse_unit_error(input: ParseStream) -> syn::Result<()> {
     }
 
     return error.fail("only `()` is currently supported for `error`");
-}
-
-pub(crate) fn resolve_konst(
-    flags: &[Konsts],
-    value: impl FnMut(&Konsts) -> Option<bool>,
-    fallback: impl FnOnce() -> bool,
-) -> bool {
-    return flags.iter().find_map(value).unwrap_or_else(fallback);
 }

@@ -1,20 +1,15 @@
 [package]
 name = "typekin"
 authors = ["Koosha H <git@koosha.io>"]
-version = "0.17.0"
+version = "0.18.0"
 edition = "2024"
+rust-version = "1.97"
 license = "MIT"
 description = "new-type pattern with concept of Friends borrowed from c++, no-std and fully const"
 homepage = "https://koosha.io/project/typekin"
 repository = "https://gitlab.com/hkoosha/typekin"
 keywords = ["newtype", "derive", "invariant", "no_std"]
 categories = ["data-structures"]
-
-[lints.clippy]
-needless_return = "allow"
-
-[lib]
-proc-macro = true
 
 [features]
 nightly = []
@@ -23,6 +18,13 @@ nightly = []
 quote = "1"
 syn = { version = "3", features = ["full", "visit-mut"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
+
+[lib]
+proc-macro = true
+doctest = false
+
+[lints.clippy]
+needless_return = "allow"
 
 [[example]]
 name = "my_plain"
@@ -103,8 +105,44 @@ path = "examples/my_u32_stable_const.rs"
 name = "my_u32_stable_const_exp"
 path = "examples/my_u32_stable_const_exp.rs"
 [[example]]
-name = "my_unchecked"
-path = "examples/my_unchecked.rs"
+name = "my_blind_trust"
+path = "examples/my_blind_trust.rs"
 [[example]]
-name = "my_unchecked_exp"
-path = "examples/my_unchecked_exp.rs"
+name = "my_blind_trust_exp"
+path = "examples/my_blind_trust_exp.rs"
+[[example]]
+name = "my_f64"
+path = "examples/my_f64.rs"
+[[example]]
+name = "my_f64_exp"
+path = "examples/my_f64_exp.rs"
+[[example]]
+name = "my_unit"
+path = "examples/my_unit.rs"
+[[example]]
+name = "my_unit_exp"
+path = "examples/my_unit_exp.rs"
+[[example]]
+name = "my_f32_point"
+path = "examples/my_f32_point.rs"
+[[example]]
+name = "my_f32_point_exp"
+path = "examples/my_f32_point_exp.rs"
+[[example]]
+name = "my_lit"
+path = "examples/my_lit.rs"
+[[example]]
+name = "my_lit_exp"
+path = "examples/my_lit_exp.rs"
+[[example]]
+name = "my_proven"
+path = "examples/my_proven.rs"
+[[example]]
+name = "my_proven_exp"
+path = "examples/my_proven_exp.rs"
+[[example]]
+name = "my_within"
+path = "examples/my_within.rs"
+[[example]]
+name = "my_within_exp"
+path = "examples/my_within_exp.rs"

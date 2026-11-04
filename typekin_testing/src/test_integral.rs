@@ -1,758 +1,24 @@
+use crate::fx_integral::*;
 use crate::*;
-
-#[typekin::integral(konst = nightly)]
-struct My32(u32);
-
-#[typekin::integral(konst = nightly)]
-struct MyAuto64(u64);
-
-#[typekin::integral(konst = none)]
-struct PointerUnsigned(usize);
-
-#[typekin::integral(konst = none)]
-struct PointerSigned(isize);
-
-#[typekin::integral(konst = none)]
-struct SignedNarrow(i16);
-
-#[typekin::integral(
-    konst = none,
-    friend = _(u64) -> Make,
-)]
-struct ExplicitPointerFriend(usize);
-
-#[cfg(target_pointer_width = "64")]
-#[typekin::integral(
-    konst = none,
-    domain = [isize::MIN..-2_147_483_648, -isize::MAX..],
-)]
-struct PointerDomainIncludesMinimum(isize);
-
-#[cfg(target_pointer_width = "64")]
-#[typekin::integral(
-    konst = none,
-    domain = [-isize::MAX.., -2_147_483_648..=-2_147_483_648],
-)]
-struct PointerDomainExcludesMinimum(isize);
-
-#[typekin::integral(konst = none, with = konst_add)]
-struct ConstAddOnly(u8);
-
-const CONST_ADD_ONLY: ConstAddOnly = ConstAddOnly(20) + ConstAddOnly(3);
-
-#[typekin::integral(
-    konst = none,
-    with = [konst_add_assign, konst_or_assign],
-    without = [konst_add, konst_or],
-)]
-struct ConstAssignmentOverride(u8);
-
-const CONST_ADD_ASSIGN_ONLY: ConstAssignmentOverride = {
-    let mut lhs = ConstAssignmentOverride(20);
-    let rhs = ConstAssignmentOverride(3);
-    lhs += rhs;
-    lhs
+use core::cmp::Ordering;
+use serde_test::{
+    Configure,
+    Token,
+    assert_de_tokens_error,
+    assert_tokens,
 };
-
-const CONST_OR_ASSIGN_ONLY: ConstAssignmentOverride = {
-    let mut lhs = ConstAssignmentOverride(0b1000);
-    let rhs = ConstAssignmentOverride(0b0011);
-    lhs |= rhs;
-    lhs
-};
-
-#[typekin::integral(
-    konst = none,
-    without = [math_add, math_or],
-)]
-struct AssignmentWithoutBinary(u8);
-
-#[typekin::integral(konst = nightly)]
-struct ConstMap(u8);
-
-const CONST_MAPPED: ConstMap = ConstMap(20).map(const |value| value + 3);
-
-const fn accepts_final_mapping(value: u8) -> bool {
-    return value == 0 || value >= 3;
-}
-
-#[typekin::integral(valid = accepts_final_mapping)]
-struct Mapped(u8);
-
-#[typekin::integral(konst = none)]
-struct PlainMapped(u8);
-
-#[typekin::integral]
-struct FullyGenerated(u8);
-
-#[typekin::integral(konst = none, with = range)]
-struct RangeValue(u8);
-
-#[typekin::integral(konst = nightly)]
-struct FullyGeneratedConst(u8);
-
-const FULLY_GENERATED_CLONE: FullyGeneratedConst =
-    FullyGeneratedConst::make(23).clone();
-
-#[typekin::integral(without = [clone, copy, repr])]
-#[derive(Copy, Clone)]
-struct ManuallyDerivedIntegral(u8);
-
-#[typekin::integral(
-    without = fn_conv_raw,
-    get_raw = Self::decoded,
-)]
-struct AccessedMap(u8);
-
-impl AccessedMap {
-    const fn decoded(self) -> u8 {
-        return self.0 - 100;
-    }
-}
-
-#[typekin::integral(konst = nightly, with = display)]
-struct MyI32(i32);
-
-#[typekin::integral(
-    konst = nightly,
-    with = display,
-    without = fn_conv_raw,
-    get_raw = Self::decoded,
-)]
-struct EncodedDisplay(i32);
-
-impl EncodedDisplay {
-    const fn decoded(self) -> i32 {
-        self.0 - 100
-    }
-}
-
-const CONST_NUMBER: My32 = match My32::try_make(23) {
-    Ok(number) => number,
-    Err(_) => panic!("valid number rejected"),
-};
-
-const fn is_even(value: u8) -> bool {
-    return value % 2 == 0;
-}
-
-const fn is_not_fifty(value: u8) -> bool {
-    return value != 50;
-}
-
-#[typekin::integral(
-    valid = is_even,
-    with = serde,
-)]
-struct SerdeIntegral(u8);
-
-const fn accepts_ranged(_: u8) -> bool {
-    return true;
-}
-
-#[typekin::integral(
-    konst = nightly,
-    friend = self(u8) -> [Math, Rel],
-    valid = [is_even, is_not_fifty],
-    domain = 2..=100,
-)]
-struct Even(u8);
-
-#[typekin::integral(
-    konst = nightly,
-    friend = [self(u8) -> [Math, Rel]],
-    domain = [2..=4, 8..10],
-    valid = accepts_ranged,
-)]
-struct Ranged(u8);
-
-#[typekin::integral(konst = none, with = non_zero)]
-struct RequiredNonZero(u8);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroUsize(usize);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroIsize(isize);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroU8(u8);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroU16(u16);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroU32(u32);
-
-#[typekin::integral(
-    konst = none,
-    domain = 1..,
-    profile = wrapping {},
-    without = fn_conv_raw,
-    get_raw = Self::value,
-)]
-struct CustomStoredRaw(u32);
-
-impl CustomStoredRaw {
-    const fn value(self) -> u32 {
-        return self.0.0.get();
-    }
-}
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroU64(u64);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroU128(u128);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroI8(i8);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroI16(i16);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroI32(i32);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroI64(i64);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct NonZeroI128(i128);
-
-#[typekin::integral(
-    konst = none,
-    domain = 0..=10,
-    with = non_zero,
-)]
-struct DomainRequiredNonZero(u8);
-
-#[typekin::integral(konst = none, domain = 1..)]
-struct ExplicitlyPrivateNonZero(pub(self) u8);
-
-#[typekin::integral(
-    konst = none,
-    domain = 1..,
-    with = [display, serde],
-)]
-struct NonZeroSerde(u8);
-
-#[typekin::integral(
-    konst = none,
-    domain = 1..=10,
-    without = non_zero,
-)]
-struct PrimitivePositive(u8);
-
-#[typekin::integral(konst = nightly, domain = ..)]
-struct AnyU8(u8);
-
-#[typekin::integral(konst = nightly, domain = ..5)]
-struct BelowFive(u8);
-
-#[typekin::integral(konst = nightly, domain = ..=5)]
-struct AtMostFive(u8);
-
-#[typekin::integral(konst = nightly, domain = -2..)]
-struct FromNegativeTwo(i8);
-
-const fn is_even_i8(value: i8) -> bool {
-    return value % 2 == 0;
-}
-
-#[typekin::integral(
-    konst = nightly,
-    valid = is_even_i8,
-    domain = [..=-6, 4..],
-)]
-struct SplitEven(i8);
-
-#[typekin::integral(
-    konst = nightly,
-    valid = is_even,
-    without = fn_make_unchecked_try,
-)]
-struct ParsedEven(u8);
-
-#[typekin::integral(
-    konst = nightly,
-    without = core_int,
-)]
-struct CoreDisabled(u8);
-
-#[typekin::integral(
-    konst = nightly,
-    without = [
-        self_friend_math_ops,
-        self_friend_math_bit,
-    ],
-)]
-struct SelfOperations(u8);
-
-const RANGED_NUMBER: Ranged = match Ranged::try_make(3) {
-    Ok(number) => number,
-    Err(_) => panic!("valid ranged number rejected"),
-};
-
-#[typekin::integral(
-    konst = nightly,
-    friend = self(u16) -> [Math, Rel],
-    get_raw = Self::value
-)]
-struct CustomRaw(u16);
-
-#[typekin::integral(konst = nightly)]
-struct Wide(u128);
-
-#[typekin::integral(
-    konst = nightly,
-    friend = self(u8) -> [Math, unsafe],
-    valid = is_even,
-    domain = 2..=10,
-)]
-struct TrustEven(u8);
-
-const TRUSTED_ODD_NUMBER: TrustEven = TrustEven::of(3u8);
-
-#[typekin::integral(
-    konst = none,
-    domain = 1..,
-    profile = wrapping {},
-    friend = self(u8) -> unsafe,
-)]
-struct WrappingTrusted(u8);
-
-// ==============================================================================
-
-struct DefaultSource(Box<u8>);
-struct CheckedSource(Box<u8>);
-struct TrustSource(Box<u8>);
-struct MathOnlySource(Box<u8>);
-struct BitOnlySource(Box<u8>);
-
-fn default_raw(source: DefaultSource) -> u8 {
-    *source.0
-}
-
-fn checked_raw(source: CheckedSource) -> u8 {
-    *source.0
-}
-
-fn trusted_raw(source: TrustSource) -> u8 {
-    *source.0
-}
-
-fn math_only_raw(source: MathOnlySource) -> u8 {
-    *source.0
-}
-
-fn bit_only_raw(source: BitOnlySource) -> u8 {
-    *source.0
-}
-
-#[typekin::integral(
-    friend = [
-        default_raw(DefaultSource) -> Make,
-        checked_raw(CheckedSource) -> [Make],
-        trusted_raw(TrustSource) -> [Math, unsafe],
-        math_only_raw(MathOnlySource),
-        bit_only_raw(BitOnlySource) -> [Bit, unsafe],
-        self(u8) -> Rel,
-    ],
-    valid = is_even,
-    domain = 2..=10,
-)]
-struct Number(u8);
-
-#[typekin::integral(
-    friend = [
-        self(TrustSelfNumber) -> unsafe,
-        self(u8) -> unsafe,
-    ],
-    valid = is_even,
-    domain = 2..=10,
-)]
-struct TrustSelfNumber(u8);
-
-// ==============================================================================
-
-#[typekin::integral(with = display)]
-struct NumWithDisplay(i32);
-
-#[typekin::integral(
-    with = display,
-    without = fn_conv_raw,
-    get_raw = Self::decoded,
-)]
-struct EncodedWithDisplay(i32);
-
-impl EncodedWithDisplay {
-    const fn decoded(self) -> i32 {
-        self.0 - 100
-    }
-}
-
-// ==============================================================================
-
-#[typekin::integral(without = [clone, copy, repr])]
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-struct IntegralWithCallerProvidedRepr(u8);
-
-#[derive(Debug, Eq, PartialEq)]
-struct OperatorOutput(u8);
-
-static OPERATOR_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-static CHECKED_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-#[typekin::integral(
-    konst = none,
-    produce = OutputSource::into_output(_) -> OperatorOutput,
-)]
-struct OutputSource(u8);
-
-impl OutputSource {
-    fn into_output(self) -> OperatorOutput {
-        OPERATOR_OUTPUT_CALLS
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return OperatorOutput(self.raw());
-    }
-}
-
-#[typekin::integral(
-    konst = nightly,
-    produce = ConstOutputSource::into_output(_) -> OperatorOutput,
-)]
-struct ConstOutputSource(u8);
-
-impl ConstOutputSource {
-    const fn into_output(self) -> OperatorOutput {
-        return OperatorOutput(self.raw());
-    }
-}
-
-const CONST_OPERATOR_OUTPUT: OperatorOutput =
-    ConstOutputSource::make(2) + ConstOutputSource::make(3);
-
-const fn is_at_most_ten(value: u8) -> bool {
-    return value <= 10;
-}
-
-#[typekin::integral(
-    konst = none,
-    valid = is_at_most_ten,
-    produce = CheckedOutputSource::into_output(_) -> OperatorOutput,
-)]
-struct CheckedOutputSource(u8);
-
-impl CheckedOutputSource {
-    fn into_output(self) -> OperatorOutput {
-        CHECKED_OUTPUT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return OperatorOutput(self.raw());
-    }
-}
-
-static NON_ZERO_OUTPUT_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-#[typekin::integral(
-    konst = none,
-    with = non_zero,
-    produce = NonZeroOutputSource::into_output(_) -> OperatorOutput,
-)]
-struct NonZeroOutputSource(u8);
-
-impl NonZeroOutputSource {
-    fn into_output(self) -> OperatorOutput {
-        NON_ZERO_OUTPUT_CALLS
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return OperatorOutput(self.raw());
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-struct BoundedOutput(u8);
-
-impl BoundedOutput {
-    fn make(value: u8) -> Self {
-        assert!(value <= 5);
-        return Self(value);
-    }
-}
-
-#[typekin::integral(
-    konst = none,
-    produce = TargetCheckedSource::into_output(_) -> BoundedOutput,
-)]
-struct TargetCheckedSource(u8);
-
-impl TargetCheckedSource {
-    fn into_output(self) -> BoundedOutput {
-        return BoundedOutput::make(self.raw());
-    }
-}
-
-#[typekin::int(
-    konst = none,
-    produce = Self(_) -> Self,
-)]
-struct ExplicitSelfOutput(u8);
-
-#[typekin::circular(konst = none)]
-struct CircularSequence(u8);
-
-#[typekin::circular(konst = none)]
-struct CircularSigned(i8);
-
-#[typekin::delta(konst = none)]
-struct DeltaSequence(u8);
-
-#[typekin::circular(konst = none, precedes = false)]
-struct CircularWithoutPrecedes(u8);
-
-#[typekin::circular(
-    konst = none,
-    with = [math_mul, math_div, math_rem, math_shl, math_shr],
-)]
-struct CircularExtended(u8);
-
-#[typekin::wrapping(konst = none)]
-struct WrappingSequence(u8);
-
-#[typekin::integral(
-    konst = none,
-    profile = wrapping {},
-    with = range,
-)]
-struct WrappingRangeValue(u8);
-
-#[typekin::integral(
-    konst = none,
-    profile = wrapping {},
-    with = non_zero,
-)]
-struct WrappingNonZero(u8);
-
-#[typekin::integral(
-    konst = nightly,
-    profile = wrapping {},
-)]
-struct ConstWrappingSequence(u8);
-
-const CONST_WRAPPING_RESULT: ConstWrappingSequence =
-    ConstWrappingSequence::make(u8::MAX) + ConstWrappingSequence::make(1);
-
-#[typekin::sequential(konst = none)]
-struct SequentialCounter(u8);
-
-#[typekin::integral(
-    konst = none,
-    profile = sequential {
-        with = [math_mul, math_div, math_rem, math_shl, math_shr],
-    },
-)]
-struct SequentialExtended(u8);
-
-#[typekin::integral(
-    konst = none,
-    profile = [
-        sequential {
-            with = math_mul,
-        },
-        circular {
-            with = math_mul,
-            precedes = false,
-        },
-    ],
-)]
-struct LayeredProfiles(u8);
-
-#[typekin::point(
-    konst = none,
-    produce = Self::into_difference(_) -> i16,
-)]
-struct LinearPoint(i16);
-
-impl LinearPoint {
-    fn into_difference(self) -> i16 {
-        return self.raw();
-    }
-}
-
-#[typekin::integral(
-    konst = none,
-    profile = [sequential, point],
-    produce = Self::into_difference(_) -> u8,
-)]
-struct CheckedPoint(u8);
-
-impl CheckedPoint {
-    fn into_difference(self) -> u8 {
-        return self.raw();
-    }
-}
-
-#[typekin::integral(
-    konst = none,
-    profile = [wrapping, point],
-    produce = Self::into_difference(_) -> u8,
-)]
-struct WrappingPoint(u8);
-
-impl WrappingPoint {
-    fn into_difference(self) -> u8 {
-        return self.raw();
-    }
-}
-
-#[typekin::integral(
-    konst = none,
-    profile = [circular, point],
-    produce = Self::into_difference(_) -> u8,
-    facet = point {
-        with = math_add,
-        friend = facet_offset_raw(FacetOffset) -> Math,
-        produce = Self,
-    },
-)]
-pub struct SurfaceFacetPoint(u8);
-
-impl SurfaceFacetPoint {
-    fn into_difference(self) -> u8 {
-        return self.raw();
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct FacetResult(u8);
-
-#[derive(Copy, Clone)]
-pub struct FacetOffset(u8);
-
-#[derive(Copy, Clone)]
-pub struct FacetChecked(u8);
-
-#[derive(Copy, Clone)]
-pub struct FacetBits(u8);
-
-#[derive(Copy, Clone)]
-pub struct FacetWrapping(u8);
-
-fn facet_offset_raw(value: FacetOffset) -> u8 {
-    return value.0;
-}
-
-fn facet_checked_raw(value: FacetChecked) -> u8 {
-    return value.0;
-}
-
-fn facet_bits_raw(value: FacetBits) -> u8 {
-    return value.0;
-}
-
-fn facet_wrapping_raw(value: FacetWrapping) -> u8 {
-    return value.0;
-}
-
-#[typekin::integral(
-    konst = none,
-    profile = circular {},
-    produce = FacetPoint::into_result(_) -> FacetResult,
-    facet = [
-        circular {
-            friend = facet_offset_raw(FacetOffset) -> Math,
-            produce = Self,
-        },
-        sequential {
-            friend = facet_checked_raw(FacetChecked) -> Math,
-            without = math_sub,
-            produce = Self,
-        },
-        int {
-            friend = facet_bits_raw(FacetBits) -> Bit,
-            with = math_xor,
-            produce = Self,
-        },
-        wrapping {
-            friend = facet_wrapping_raw(FacetWrapping) -> Math,
-            produce = Self,
-        },
-    ],
-)]
-pub struct FacetPoint(u8);
-
-impl FacetPoint {
-    fn into_result(self) -> FacetResult {
-        return FacetResult(self.raw());
-    }
-}
-
-#[derive(Copy, Clone)]
-struct FacetConstOffset(u8);
-
-const fn facet_const_offset_raw(value: FacetConstOffset) -> u8 {
-    return value.0;
-}
-
-#[typekin::integral(
-    konst = nightly,
-    facet = [
-        wrapping {
-            friend = facet_const_offset_raw(FacetConstOffset) -> Math,
-            without = math_sub,
-        },
-    ],
-)]
-struct FacetConstPoint(u8);
-
-const FACET_CONST_RESULT: FacetConstPoint =
-    FacetConstPoint::make(2) + FacetConstOffset(3);
-
-#[derive(Debug, Eq, PartialEq)]
-struct FacetValidatedResult(u8);
-
-static FACET_OUTPUTS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-const fn facet_valid(value: u8) -> bool {
-    return value != 5;
-}
-
-#[typekin::integral(
-    konst = none,
-    valid = facet_valid,
-    with = non_zero,
-    produce = FacetValidated::into_result(_) -> FacetValidatedResult,
-    facet = [
-        wrapping {
-            with = self_math,
-        },
-    ],
-)]
-struct FacetValidated(u8);
-
-impl FacetValidated {
-    fn into_result(self) -> FacetValidatedResult {
-        FACET_OUTPUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return FacetValidatedResult(self.raw());
-    }
-}
-
-// ==============================================================================
 
 #[cfg(test)]
 #[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
-    use core::cmp::Ordering;
-    use serde_test::{
-        Configure,
-        Token,
-        assert_de_tokens_error,
-        assert_tokens,
-    };
+
+    #[test]
+    fn bitwise_ands_friend_value() {
+        let value = 0b10111;
+        let it = My32::make(value);
+        assert_eq!((it & value).raw(), value);
+    }
 
     #[test]
     fn empty_friend_capabilities_do_not_call_conversion() {
@@ -765,7 +31,7 @@ mod tests {
             }
         }
 
-        #[typekin::integral(konst = none, friend = Source::convert(Source) -> [])]
+        #[typekin::integral(hide_in = none, konst = none, friend = Source::convert(Source) -> [])]
         struct Value(u32);
 
         let raw = 7u32;
@@ -777,7 +43,7 @@ mod tests {
     fn empty_const_generic_friend_uses_its_conversion_in_scope() {
         struct Source<T>(core::marker::PhantomData<T>);
 
-        #[typekin::integral(konst = nightly, friend = Self::convert(Source<T>) -> [])]
+        #[typekin::integral(hide_in = none, konst = nightly, friend = Self::convert(Source<T>) -> [])]
         struct Value<T: Copy>(u32);
 
         impl<T: Copy> Value<T> {
@@ -804,6 +70,7 @@ mod tests {
         }
 
         #[typekin::integral(
+            hide_in = none,
             konst = none,
             with = konst_friendship,
             facet = int { friend = convert(Source) -> [] },
@@ -825,6 +92,7 @@ mod tests {
         }
 
         #[typekin::integral(
+            hide_in = none,
             konst = none,
             with = konst_add,
             facet = int { friend = convert(Source) -> [] },
@@ -846,6 +114,7 @@ mod tests {
         }
 
         #[typekin::integral(
+            hide_in = none,
             konst = none,
             friend = __typekin_check_empty_friends(Source<T>) -> [],
         )]
@@ -887,7 +156,8 @@ mod tests {
 
     #[test]
     fn facets_dispatch_by_rhs_with_independent_policies_and_outputs() {
-        let storage: core::num::Wrapping<u8> = FacetPoint::make(1).0;
+        let storage: core::num::Wrapping<u8> =
+            facet_point_storage(FacetPoint::make(1));
         assert_eq!(storage.0, 1);
 
         let wrapped = FacetPoint::make(u8::MAX) + FacetOffset(1);
@@ -934,11 +204,13 @@ mod tests {
     #[test]
     fn facets_preserve_constness_and_validate_before_output_conversion() {
         assert_eq!(FACET_CONST_RESULT.raw(), 5);
-        let storage: core::num::Wrapping<u8> = FACET_CONST_RESULT.0;
+        let storage: core::num::Wrapping<u8> =
+            facet_const_point_storage(FACET_CONST_RESULT);
         assert_eq!(storage.0, 5);
 
         let lhs = FacetValidated::try_make(2).unwrap();
-        let storage: core::num::Wrapping<core::num::NonZeroU8> = lhs.0;
+        let storage: core::num::Wrapping<core::num::NonZeroU8> =
+            facet_validated_storage(lhs);
         assert_eq!(storage.0.get(), 2);
         let rhs = FacetValidated::try_make(3).unwrap();
         FACET_OUTPUTS.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -1093,7 +365,7 @@ mod tests {
     fn wrapping_point_differences_keep_wrapping_storage() {
         let source = WrappingPoint::make(0);
         let origin = WrappingPoint::make(1);
-        let _storage: core::num::Wrapping<u8> = source.0;
+        let _storage: core::num::Wrapping<u8> = wrapping_point_storage(source);
         let difference: u8 = source - origin;
 
         assert_eq!(difference, u8::MAX);
@@ -1183,7 +455,8 @@ mod tests {
     #[test]
     fn wrapping_profile_uses_physical_wrapping_storage_and_linear_ordering() {
         let maximum = WrappingSequence::make(u8::MAX);
-        let storage: core::num::Wrapping<u8> = maximum.0;
+        let storage: core::num::Wrapping<u8> =
+            wrapping_sequence_storage(maximum);
         assert_eq!(storage.0, u8::MAX);
 
         let wrapped = maximum + WrappingSequence::make(1);
@@ -1204,7 +477,8 @@ mod tests {
     #[test]
     fn wrapping_profile_supports_combined_non_zero_storage() {
         let value = WrappingNonZero::try_make(2).unwrap();
-        let storage: core::num::Wrapping<core::num::NonZeroU8> = value.0;
+        let storage: core::num::Wrapping<core::num::NonZeroU8> =
+            wrapping_non_zero_storage(value);
         assert_eq!(storage.0.get(), 2);
         assert_eq!(
             core::mem::size_of::<Option<WrappingNonZero>>(),
@@ -1272,35 +546,63 @@ mod tests {
     }
 
     #[test]
-    fn trusted_const_construction_bypasses_callback_and_range_validation() {
-        assert_eq!(TRUSTED_ODD_NUMBER.raw(), 3);
-        assert_eq!(TrustEven::of(12u8).raw(), 12);
-        assert_eq!(TrustEven::try_make(3), Err(3));
-        assert_eq!(TrustEven::try_make(12), Err(12));
+    fn blind_trust_const_construction_bypasses_callback_and_range_validation() {
+        assert_eq!(BLIND_TRUST_ODD_NUMBER.raw(), 3);
+        assert_eq!(BlindTrustEven::of(12u8).raw(), 12);
+        assert_eq!(BlindTrustEven::try_make(3), Err(3));
+        assert_eq!(BlindTrustEven::try_make(12), Err(12));
     }
 
     #[test]
-    fn trusted_construction_cannot_bypass_non_zero_storage() {
-        assert_panics(|| TrustEven::of(0u8));
+    fn blind_trust_construction_cannot_bypass_non_zero_storage() {
+        assert_panics(|| BlindTrustEven::of(0u8));
     }
 
     #[test]
-    fn trusted_construction_preserves_combined_storage_validity() {
-        assert_panics(|| WrappingTrusted::of(0u8));
+    fn blind_trust_construction_preserves_combined_storage_validity() {
+        assert_panics(|| WrappingBlindTrust::of(0u8));
 
-        let value = WrappingTrusted::of(7u8);
-        let storage: core::num::Wrapping<core::num::NonZeroU8> = value.0;
+        let value = WrappingBlindTrust::of(7u8);
+        let storage: core::num::Wrapping<core::num::NonZeroU8> =
+            wrapping_blind_trust_storage(value);
         assert_eq!(storage.0.get(), 7);
     }
 
     #[test]
-    fn trusted_const_friend_operations_still_validate() {
+    fn blind_trust_const_friend_operations_still_validate() {
         assert_panics(|| {
-            let _ = TrustEven::try_make(4).unwrap() + 1u8;
+            let _ = BlindTrustEven::try_make(4).unwrap() + 1u8;
         });
         assert_panics(|| {
-            let _ = TrustEven::try_make(4).unwrap() | 1u8;
+            let _ = BlindTrustEven::try_make(4).unwrap() | 1u8;
         });
+    }
+
+    #[test]
+    fn with_blind_trust_constructs_without_validation() {
+        let raw = 200;
+        let value = blind_trust_on_request(raw);
+
+        assert_eq!(value.raw(), raw, "{raw}");
+        assert_eq!(BlindTrustOnRequest::try_make(raw), Err(raw), "{raw}");
+    }
+
+    #[test]
+    fn with_blind_trust_cannot_store_zero_in_non_zero_storage() {
+        let raw = 0;
+
+        assert_panics(move || blind_trust_on_request(raw));
+    }
+
+    #[test]
+    fn non_const_validator_works_without_konst() {
+        let odd = OddAtRuntime::try_make(3);
+        let even = OddAtRuntime::try_make(4);
+        assert!(odd.is_ok(), "3");
+
+        assert_eq!(even, Err(4));
+        assert_panics(move || odd.unwrap() + 1u8);
+        assert_eq!((odd.unwrap() + 2u8).raw(), 5);
     }
 
     #[test]
@@ -1446,7 +748,7 @@ mod tests {
             return 42;
         });
 
-        assert_eq!(mapped.0, 42);
+        assert_eq!(accessed_map_storage(mapped), 42);
     }
 
     #[test]
@@ -2184,9 +1486,6 @@ mod tests {
 
     #[test]
     fn range_validation_lowers_open_and_closed_endpoints() {
-        assert_eq!(AnyU8::try_make(0).map(AnyU8::raw), Ok(0));
-        assert_eq!(AnyU8::try_make(u8::MAX).map(AnyU8::raw), Ok(u8::MAX));
-
         assert_eq!(BelowFive::try_make(0).map(BelowFive::raw), Ok(0));
         assert_eq!(BelowFive::try_make(4).map(BelowFive::raw), Ok(4));
         assert_eq!(BelowFive::try_make(5), Err(5));
@@ -2381,52 +1680,6 @@ mod tests {
         assert_eq!(value.raw(), 1);
     }
 
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn usize_exposes_upper_bytes_on_64_bit_targets() {
-        let raw = 0x0123_4567_89ab_cdefusize;
-        let value = PointerUnsigned::make(raw);
-        let upper_byte = value.byte4();
-        let highest_byte = value.byte7();
-
-        assert_eq!(upper_byte, 0x67, "{raw}");
-        assert_eq!(highest_byte, 0x01, "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn u64_to_usize_is_infallible_on_64_bit_targets() {
-        let raw = u64::MAX;
-        let value = MyAuto64::make(raw);
-        let converted = value.into_usize();
-        let via_trait: usize = value.into();
-        let checked = value.try_into_usize();
-
-        assert_eq!(converted, usize::MAX, "{raw}");
-        assert_eq!(via_trait, usize::MAX, "{raw}");
-        assert_eq!(checked, Ok(usize::MAX), "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn u64_is_an_automatic_usize_make_friend_on_64_bit_targets() {
-        let raw = u64::MAX;
-        let value = PointerUnsigned::of(raw);
-        let result = value.raw();
-
-        assert_eq!(result, usize::MAX, "{raw}");
-    }
-
-    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
-    #[test]
-    fn explicitly_declared_u64_make_friend_is_available() {
-        let raw = 23u64;
-        let value = ExplicitPointerFriend::of(raw);
-        let result = value.raw();
-
-        assert_eq!(result, 23, "{raw}");
-    }
-
     #[test]
     fn negative_isize_to_u128_is_rejected() {
         let raw = -1isize;
@@ -2439,6 +1692,28 @@ mod tests {
     }
 
     #[test]
+    fn negative_isize_to_u64_is_rejected() {
+        let raw = -1isize;
+        let value = PointerSigned::make(raw);
+        let result = value.try_into_u64();
+        let via_trait: Result<u64, ()> = value.try_into();
+
+        assert_eq!(result, Err(()), "{raw}");
+        assert_eq!(via_trait, Err(()), "{raw}");
+    }
+
+    #[test]
+    fn pointer_bounds_validate_non_zero_domain() {
+        let zero =
+            PointerNonZeroSigned::try_make(0).map(PointerNonZeroSigned::raw);
+        let minimum = PointerNonZeroSigned::try_make(isize::MIN)
+            .map(PointerNonZeroSigned::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(minimum, Ok(isize::MIN));
+    }
+
+    #[test]
     fn negative_i16_to_u16_is_rejected() {
         let raw = -1i16;
         let value = SignedNarrow::make(raw);
@@ -2447,53 +1722,6 @@ mod tests {
 
         assert_eq!(result, Err(()), "{raw}");
         assert_eq!(via_trait, Err(()), "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn usize_to_u64_is_infallible() {
-        let raw = usize::MAX;
-        let value = PointerUnsigned::make(raw);
-        let result: u64 = value.into();
-
-        assert_eq!(result, u64::MAX, "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn isize_to_i64_is_infallible() {
-        let raw = isize::MIN;
-        let value = PointerSigned::make(raw);
-        let result: i64 = value.into();
-
-        assert_eq!(result, i64::MIN, "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn isize_domain_includes_native_minimum_when_first_range_is_nonempty() {
-        let raw = isize::MIN;
-        let result = PointerDomainIncludesMinimum::try_make(raw)
-            .map(PointerDomainIncludesMinimum::raw);
-
-        assert_eq!(result, Ok(raw), "{raw}");
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn isize_domain_excludes_native_minimum_when_singleton_is_above_it() {
-        let raw = isize::MIN;
-        let result = PointerDomainExcludesMinimum::try_make(raw);
-
-        assert_eq!(result, Err(raw), "{raw}");
-    }
-
-    #[test]
-    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
-    fn converts_into_usize() {
-        let it = My32::make(23);
-        let value: usize = it.into_usize();
-        assert_eq!(value, 23);
     }
 
     #[test]
@@ -2623,14 +1851,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
-    fn implements_into_usize() {
-        let it = My32::make(23);
-        let value: usize = it.into();
-        assert_eq!(value, 23);
-    }
-
-    #[test]
     fn implements_into_u32() {
         let it = My32::make(23);
         let value: u32 = it.into();
@@ -2674,33 +1894,6 @@ mod tests {
         assert_eq!(value, 23);
     }
 
-    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
-    #[test]
-    fn implements_try_into_isize() {
-        let it = My32::make(23);
-        let value: Result<isize, ()> = it.try_into();
-        assert_eq!(value, Ok(23));
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn implements_into_isize_when_u32_fits() {
-        let raw = u32::MAX;
-        let it = My32::make(raw);
-        let value: isize = it.into();
-        assert_eq!(value, i64::from(raw) as isize);
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn blanket_try_into_isize_is_infallible_when_u32_fits() {
-        let raw = u32::MAX;
-        let value = My32::make(raw);
-        let result: Result<isize, core::convert::Infallible> = value.try_into();
-
-        assert_eq!(result, Ok(i64::from(raw) as isize));
-    }
-
     #[test]
     fn implements_try_into_u8() {
         let it = My32::make(256);
@@ -2734,11 +1927,6 @@ mod tests {
         let it = My32::make(2_147_483_648);
         let value: Result<i32, ()> = it.try_into();
         assert_eq!(value, Err(()));
-    }
-
-    fn bitwise_ands_friend_value() {
-        let it = My32::make(0b10111);
-        assert_eq!((it & 0b10111).raw(), 0b10111);
     }
 
     #[test]
@@ -2897,7 +2085,7 @@ mod tests {
     #[test]
     fn const_mode_display_uses_configured_raw_accessor() {
         let value = EncodedWithDisplay::make(123);
-        assert_eq!(value.0, 123);
+        assert_eq!(encoded_with_display_storage(value), 123);
         assert_eq!(format!("{}", value), "23");
         assert_eq!(format!("{:+06}", value), "+00023");
     }
@@ -2941,12 +2129,12 @@ mod tests {
     fn same_type_construction_requires_explicit_target_trust_to_bypass_validation()
      {
         for raw in [3, 12] {
-            let untrusted_target = Number::of(TrustSource(Box::new(raw)));
+            let untrusted_target = Number::of(BlindTrustSource(Box::new(raw)));
             assert_panics(|| Number::of(untrusted_target));
 
-            let trusted_target = TrustSelfNumber::of(raw);
-            assert_eq!(TrustSelfNumber::of(trusted_target).raw(), raw);
-            assert_eq!(TrustSelfNumber::try_make(raw), Err(raw));
+            let blind_trust_target = BlindTrustSelfNumber::of(raw);
+            assert_eq!(BlindTrustSelfNumber::of(blind_trust_target).raw(), raw);
+            assert_eq!(BlindTrustSelfNumber::try_make(raw), Err(raw));
         }
     }
 
@@ -2971,17 +2159,19 @@ mod tests {
     }
 
     #[test]
-    fn trusted_owned_friend_bypasses_odd_value_construction() {
+    fn blind_trust_owned_friend_bypasses_odd_value_construction() {
         let raw = 3;
-        let source = TrustSource(Box::new(raw));
+        let source = BlindTrustSource(Box::new(raw));
         assert_eq!(Number::of(source).raw(), raw);
         assert_eq!(Number::try_make(raw), Err(raw));
 
         assert_panics(|| {
-            let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
+            let _ =
+                Number::try_make(4).unwrap() + BlindTrustSource(Box::new(1));
         });
         assert_panics(|| {
-            let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
+            let _ =
+                Number::try_make(4).unwrap() | BlindTrustSource(Box::new(1));
         });
         assert_panics(|| {
             let _ = Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
@@ -2989,17 +2179,19 @@ mod tests {
     }
 
     #[test]
-    fn trusted_owned_friend_bypasses_out_of_range_construction() {
+    fn blind_trust_owned_friend_bypasses_out_of_range_construction() {
         let raw = 12;
-        let source = TrustSource(Box::new(raw));
+        let source = BlindTrustSource(Box::new(raw));
         assert_eq!(Number::of(source).raw(), raw);
         assert_eq!(Number::try_make(raw), Err(raw));
 
         assert_panics(|| {
-            let _ = Number::try_make(4).unwrap() + TrustSource(Box::new(1));
+            let _ =
+                Number::try_make(4).unwrap() + BlindTrustSource(Box::new(1));
         });
         assert_panics(|| {
-            let _ = Number::try_make(4).unwrap() | TrustSource(Box::new(1));
+            let _ =
+                Number::try_make(4).unwrap() | BlindTrustSource(Box::new(1));
         });
         assert_panics(|| {
             let _ = Number::try_make(6).unwrap() + Number::try_make(6).unwrap();
@@ -3007,29 +2199,29 @@ mod tests {
     }
 
     #[test]
-    fn trusted_assignment_rejects_odd_rhs_without_mutating() {
+    fn blind_trust_assignment_rejects_odd_rhs_without_mutating() {
         let rhs = 1;
         let mut number = Number::try_make(4).unwrap();
-        assert_panics(move || number += TrustSource(Box::new(rhs)));
+        assert_panics(move || number += BlindTrustSource(Box::new(rhs)));
         assert_eq!(number.raw(), 4);
 
-        assert_panics(move || number |= TrustSource(Box::new(rhs)));
+        assert_panics(move || number |= BlindTrustSource(Box::new(rhs)));
         assert_eq!(number.raw(), 4);
     }
 
     #[test]
-    fn trusted_assignment_rejects_out_of_range_rhs_without_mutating() {
+    fn blind_trust_assignment_rejects_out_of_range_rhs_without_mutating() {
         let rhs = 8;
         let mut number = Number::try_make(4).unwrap();
-        assert_panics(move || number += TrustSource(Box::new(rhs)));
+        assert_panics(move || number += BlindTrustSource(Box::new(rhs)));
         assert_eq!(number.raw(), 4);
 
-        assert_panics(move || number |= TrustSource(Box::new(rhs)));
+        assert_panics(move || number |= BlindTrustSource(Box::new(rhs)));
         assert_eq!(number.raw(), 4);
     }
 
     #[test]
-    fn trusted_operation_only_friends_consume_sources_and_validate_results() {
+    fn blind_trust_op_friends_consume_sources_and_validate_results() {
         let math_source = MathOnlySource(Box::new(2));
         assert_eq!((Number::try_make(4).unwrap() + math_source).raw(), 6);
         let bit_source = BitOnlySource(Box::new(2));
@@ -3098,7 +2290,7 @@ mod tests {
     #[test]
     fn display_uses_configured_raw_accessor() {
         let value = EncodedWithDisplay::make(123);
-        assert_eq!(value.0, 123);
+        assert_eq!(encoded_with_display_storage(value), 123);
         assert_eq!(format!("{}", value), "23");
         assert_eq!(format!("{:+06}", value), "+00023");
     }
@@ -3107,5 +2299,1280 @@ mod tests {
     fn traits_and_layout_can_be_supplied_by_the_caller() {
         accepts_copy::<IntegralWithCallerProvidedRepr>();
         assert_eq!(IntegralWithCallerProvidedRepr::make(1).raw(), 1);
+    }
+
+    #[test]
+    fn validated_integral_has_no_make() {
+        assert_no_associated_fn!(ValidatedWithoutMake, make);
+    }
+
+    #[test]
+    fn make_does_not_grant_math() {
+        let source = MakeSource(2);
+        let number = MakeFriendNumber::of(source);
+
+        assert_eq!(number.raw(), 2);
+        assert_not_impl!(MakeFriendNumber: core::ops::Add<MakeSource>);
+    }
+
+    #[test]
+    fn bit_does_not_grant_math() {
+        let source = BitSource(2);
+        let combined = BitFriendNumber::make(1) | source;
+
+        assert_eq!(combined.raw(), 3);
+        assert_not_impl!(BitFriendNumber: core::ops::Add<BitSource>);
+    }
+
+    #[test]
+    fn without_removes_raw() {
+        let value = WithoutRaw::make(3);
+
+        assert_eq!(value.value(), 3);
+        assert_no_method!(WithoutRaw, raw);
+    }
+
+    #[test]
+    fn without_removes_self_math() {
+        assert_not_impl!(WithoutSelfMath: core::ops::Add<WithoutSelfMath>);
+    }
+
+    #[test]
+    fn without_removes_self_bit() {
+        assert_not_impl!(WithoutSelfBit: core::ops::BitOr<WithoutSelfBit>);
+    }
+
+    #[test]
+    fn output_type_removes_bitxor_assignment() {
+        assert_not_impl!(
+            OutputWithoutXorAssign: core::ops::BitXorAssign<OutputWithoutXorAssign>
+        );
+    }
+
+    #[test]
+    fn point_profile_has_no_point_addition() {
+        assert_not_impl!(PointOnly: core::ops::Add<PointOnly>);
+    }
+
+    #[test]
+    fn point_profile_has_no_point_addition_assignment() {
+        assert_not_impl!(PointOnly: core::ops::AddAssign<PointOnly>);
+    }
+
+    #[test]
+    fn point_profile_has_no_primitive_subtraction() {
+        assert_not_impl!(PointOnly: core::ops::Sub<u8>);
+    }
+
+    #[test]
+    fn point_profile_has_no_core_integer_helpers() {
+        assert_no_method!(PointOnly, count_ones);
+    }
+
+    #[test]
+    fn circular_profile_without_precedes_has_no_precedes_method() {
+        assert_no_method!(CircularWithoutPrecedes, precedes);
+    }
+
+    #[test]
+    fn circular_profile_has_no_linear_ordering() {
+        assert_not_impl!(CircularSequence: core::cmp::Ord);
+    }
+
+    #[test]
+    fn circular_profile_has_no_primitive_arithmetic() {
+        assert_not_impl!(CircularSequence: core::ops::Add<u8>);
+    }
+
+    #[test]
+    fn circular_profile_has_no_core_integer_helpers() {
+        assert_no_method!(CircularSequence, count_ones);
+    }
+
+    #[test]
+    fn without_removes_from_str() {
+        assert_not_impl!(WithoutFromStr: core::str::FromStr);
+    }
+
+    #[test]
+    fn without_removes_common_integral_methods() {
+        assert_no_method!(CoreDisabled, count_ones);
+    }
+
+    #[test]
+    fn core_integral_methods_exclude_unsafe_operations() {
+        assert_no_method!(DefaultCoreMethods, unchecked_add);
+    }
+
+    #[test]
+    fn forbid_unsafe_code_accepts_inferred_non_zero_storage() {
+        use forbid_unsafe::Positive;
+
+        let zero = Positive::try_make(0).map(Positive::raw);
+        let one = Positive::try_make(1).map(Positive::raw);
+        let option_size = core::mem::size_of::<Option<Positive>>();
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(one, Ok(1));
+        assert_eq!(option_size, core::mem::size_of::<u32>());
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+#[cfg(target_pointer_width = "64")]
+mod pointer_width_64 {
+    use super::*;
+
+    #[test]
+    fn usize_exposes_upper_bytes_on_64_bit_targets() {
+        let raw = 0x0123_4567_89ab_cdefusize;
+        let value = PointerUnsigned::make(raw);
+        let upper_byte = value.byte4();
+        let highest_byte = value.byte7();
+
+        assert_eq!(upper_byte, 0x67, "{raw}");
+        assert_eq!(highest_byte, 0x01, "{raw}");
+    }
+
+    #[test]
+    fn u64_to_usize_is_infallible_on_64_bit_targets() {
+        let raw = u64::MAX;
+        let value = MyAuto64::make(raw);
+        let converted = value.into_usize();
+        let via_trait: usize = value.into();
+        let checked = value.try_into_usize();
+
+        assert_eq!(converted, usize::MAX, "{raw}");
+        assert_eq!(via_trait, usize::MAX, "{raw}");
+        assert_eq!(checked, Ok(usize::MAX), "{raw}");
+    }
+
+    #[test]
+    fn u64_is_an_automatic_usize_make_friend_on_64_bit_targets() {
+        let raw = u64::MAX;
+        let value = PointerUnsigned::of(raw);
+        let result = value.raw();
+
+        assert_eq!(result, usize::MAX, "{raw}");
+    }
+
+    #[test]
+    fn usize_to_u64_is_infallible() {
+        let raw = usize::MAX;
+        let value = PointerUnsigned::make(raw);
+        let result: u64 = value.into();
+
+        assert_eq!(result, u64::MAX, "{raw}");
+    }
+
+    #[test]
+    fn isize_to_i64_is_infallible() {
+        let raw = isize::MIN;
+        let value = PointerSigned::make(raw);
+        let result: i64 = value.into();
+
+        assert_eq!(result, i64::MIN, "{raw}");
+    }
+
+    #[test]
+    fn isize_domain_includes_native_minimum_when_first_range_is_nonempty() {
+        let raw = isize::MIN;
+        let result = PointerDomainIncludesMinimum::try_make(raw)
+            .map(PointerDomainIncludesMinimum::raw);
+
+        assert_eq!(result, Ok(raw), "{raw}");
+    }
+
+    #[test]
+    fn isize_domain_excludes_native_minimum_when_singleton_is_above_it() {
+        let raw = isize::MIN;
+        let result = PointerDomainExcludesMinimum::try_make(raw);
+
+        assert_eq!(result, Err(raw), "{raw}");
+    }
+
+    #[test]
+    fn implements_into_isize_when_u32_fits() {
+        let raw = u32::MAX;
+        let it = My32::make(raw);
+        let value: isize = it.into();
+        assert_eq!(value, i64::from(raw) as isize);
+    }
+
+    #[test]
+    fn blanket_try_into_isize_is_infallible_when_u32_fits() {
+        let raw = u32::MAX;
+        let value = My32::make(raw);
+        let result: Result<isize, core::convert::Infallible> = value.try_into();
+
+        assert_eq!(result, Ok(i64::from(raw) as isize));
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+mod pointer_width_32_or_64 {
+    use super::*;
+
+    #[test]
+    fn converts_into_usize() {
+        let it = My32::make(23);
+        let value: usize = it.into_usize();
+        assert_eq!(value, 23);
+    }
+
+    #[test]
+    fn implements_into_usize() {
+        let it = My32::make(23);
+        let value: usize = it.into();
+        assert_eq!(value, 23);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+#[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
+mod pointer_width_16_or_32 {
+    use super::*;
+
+    #[test]
+    fn explicitly_declared_u64_make_friend_is_available() {
+        let raw = 23u64;
+        let value = ExplicitPointerFriend::of(raw);
+        let result = value.raw();
+
+        assert_eq!(result, 23, "{raw}");
+    }
+
+    #[test]
+    fn implements_try_into_isize() {
+        let it = My32::make(23);
+        let value: Result<isize, ()> = it.try_into();
+        assert_eq!(value, Ok(23));
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod profiles {
+    use super::*;
+
+    #[test]
+    fn delta_shorthand_applies_root_settings() {
+        let lhs = DeltaExtended::make(200);
+        let rhs = DeltaExtended::make(2);
+        let product = lhs * rhs;
+
+        assert_eq!(product.raw(), 144);
+        assert_no_method!(DeltaExtended, precedes);
+    }
+
+    #[test]
+    fn delta_profile_body_enables_wrapping_multiplication() {
+        let lhs = DeltaBodyExtended::make(200);
+        let rhs = DeltaBodyExtended::make(2);
+        let product = lhs * rhs;
+
+        assert_eq!(product.raw(), 144);
+        assert_no_method!(DeltaBodyExtended, precedes);
+    }
+
+    #[test]
+    fn int_profile_keeps_integral_defaults() {
+        let lhs = IntProfile::make(5);
+        let rhs = IntProfile::make(3);
+
+        assert_eq!((lhs + rhs).raw(), 8);
+        assert_eq!((lhs - rhs).raw(), 2);
+        assert_eq!((lhs | rhs).raw(), 7);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Greater);
+        assert_no_method!(IntProfile, precedes);
+    }
+
+    #[test]
+    fn default_profile_is_linear_without_precedes() {
+        let lhs = FullyGenerated::make(1);
+        let rhs = FullyGenerated::make(2);
+
+        assert_eq!(lhs.cmp(&rhs), Ordering::Less);
+        assert_no_method!(FullyGenerated, precedes);
+    }
+
+    #[test]
+    fn empty_profile_list_keeps_integral_defaults() {
+        let lhs = EmptyProfileList::make(5);
+        let rhs = EmptyProfileList::make(3);
+
+        assert_eq!((lhs + rhs).raw(), 8);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Greater);
+        assert_no_method!(EmptyProfileList, precedes);
+    }
+
+    #[test]
+    fn bare_profile_preserves_following_root_flags() {
+        let zero = BareCircularWithoutAdd::make(0);
+        let one = BareCircularWithoutAdd::make(1);
+
+        assert_eq!((zero - one).raw(), u8::MAX);
+        assert_not_impl!(
+            BareCircularWithoutAdd: core::ops::Add<BareCircularWithoutAdd>
+        );
+    }
+
+    #[test]
+    fn bare_profiles_mix_with_configured_profiles() {
+        let maximum = BareMixedProfiles::make(u8::MAX);
+        let one = BareMixedProfiles::make(1);
+        let sum = maximum + one;
+
+        assert_eq!(sum.raw(), 0);
+        assert!(maximum.precedes(one));
+    }
+
+    #[test]
+    fn bare_facet_preserves_following_root_flags() {
+        let three = BareFacetWithoutAdd::make(3);
+        let one = BareFacetWithoutAdd::make(1);
+
+        assert_eq!((three - one).raw(), 2);
+        assert_not_impl!(
+            BareFacetWithoutAdd: core::ops::Add<BareFacetWithoutAdd>
+        );
+    }
+
+    #[test]
+    fn single_facet_preserves_following_root_flags() {
+        let three = SingleFacetWithoutAdd::make(3);
+        let one = SingleFacetWithoutAdd::make(1);
+
+        assert_eq!((three - one).raw(), 2);
+        assert_not_impl!(
+            SingleFacetWithoutAdd: core::ops::Add<SingleFacetWithoutAdd>
+        );
+    }
+
+    #[test]
+    fn bare_facets_keep_configured_dispatch() {
+        let small = BareFacetDispatch::make(10);
+        let offset = FacetOffset(3);
+        let product = small * offset;
+        let large = BareFacetDispatch::make(200);
+
+        assert_eq!(product.raw(), 30);
+        assert_panics(move || large * FacetOffset(2));
+        assert_not_impl!(BareFacetDispatch: core::ops::Add<FacetOffset>);
+    }
+
+    #[test]
+    fn point_profile_keeps_subtraction_and_linear_ordering() {
+        let lhs = PointOnly::make(5);
+        let rhs = PointOnly::make(3);
+        let difference = lhs - rhs;
+
+        assert_eq!(difference.raw(), 2);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Greater);
+    }
+
+    #[test]
+    fn point_profile_has_no_multiplication() {
+        assert_not_impl!(PointOnly: core::ops::Mul<PointOnly>);
+    }
+
+    #[test]
+    fn point_profile_has_no_self_bitwise_operations() {
+        assert_not_impl!(PointOnly: core::ops::BitOr<PointOnly>);
+    }
+
+    #[test]
+    fn point_profile_has_no_primitive_comparison() {
+        assert_not_impl!(PointOnly: core::cmp::PartialEq<u8>);
+    }
+
+    #[test]
+    fn point_profile_preserves_circular_policy() {
+        let zero = CircularPoint::make(0);
+        let one = CircularPoint::make(1);
+        let difference = zero - one;
+
+        assert_eq!(difference.raw(), u8::MAX);
+        assert!(zero.precedes(one));
+        assert_not_impl!(CircularPoint: core::cmp::Ord);
+        assert_not_impl!(CircularPoint: core::ops::Add<CircularPoint>);
+    }
+
+    #[test]
+    fn point_profile_preserves_delta_policy() {
+        let zero = DeltaPoint::make(0);
+        let one = DeltaPoint::make(1);
+        let difference = zero - one;
+
+        assert_eq!(difference.raw(), u8::MAX);
+        assert_no_method!(DeltaPoint, precedes);
+    }
+
+    #[test]
+    fn checked_point_keeps_linear_ordering_without_addition() {
+        let lhs = CheckedPoint::make(5);
+        let rhs = CheckedPoint::make(3);
+
+        assert_eq!(lhs.cmp(&rhs), Ordering::Greater);
+        assert_not_impl!(CheckedPoint: core::ops::Add<CheckedPoint>);
+    }
+
+    #[test]
+    fn wrapping_point_keeps_linear_ordering_without_addition() {
+        let lhs = WrappingPoint::make(5);
+        let rhs = WrappingPoint::make(3);
+
+        assert_eq!(lhs.cmp(&rhs), Ordering::Greater);
+        assert_not_impl!(WrappingPoint: core::ops::Add<WrappingPoint>);
+    }
+
+    #[test]
+    fn point_profile_allows_explicit_addition() {
+        let lhs = PointWithAddition::make(2);
+        let rhs = PointWithAddition::make(3);
+        let sum = lhs + rhs;
+        let mut assigned = PointWithAddition::make(2);
+        assigned += rhs;
+
+        assert_eq!(sum.raw(), 5);
+        assert_eq!(assigned.raw(), 5);
+    }
+
+    #[test]
+    fn point_profile_resets_earlier_addition_overrides() {
+        let lhs = PointResetsAddition::make(5);
+        let rhs = PointResetsAddition::make(3);
+        let difference = lhs - rhs;
+
+        assert_eq!(difference.raw(), 2);
+        assert_not_impl!(
+            PointResetsAddition: core::ops::Add<PointResetsAddition>
+        );
+        assert_not_impl!(
+            PointResetsAddition: core::ops::AddAssign<PointResetsAddition>
+        );
+    }
+
+    #[test]
+    fn circular_profile_wraps_subtraction_assignment() {
+        let mut assigned = CircularWithoutPrecedes::make(0);
+        assigned -= CircularWithoutPrecedes::make(1);
+
+        assert_eq!(assigned.raw(), u8::MAX);
+    }
+
+    #[test]
+    fn circular_profile_has_no_multiplication() {
+        assert_not_impl!(
+            CircularWithoutPrecedes: core::ops::Mul<CircularWithoutPrecedes>
+        );
+    }
+
+    #[test]
+    fn circular_profile_has_no_bitwise_operations() {
+        assert_not_impl!(
+            CircularWithoutPrecedes: core::ops::BitAnd<CircularWithoutPrecedes>
+        );
+    }
+
+    #[test]
+    fn delta_profile_wraps_assignments() {
+        let mut added = DeltaSequence::make(u8::MAX);
+        added += DeltaSequence::make(1);
+        let mut subtracted = DeltaSequence::make(0);
+        subtracted -= DeltaSequence::make(1);
+
+        assert_eq!(added.raw(), 0);
+        assert_eq!(subtracted.raw(), u8::MAX);
+    }
+
+    #[test]
+    fn delta_profile_has_no_precedes_method() {
+        assert_no_method!(DeltaSequence, precedes);
+    }
+
+    #[test]
+    fn delta_profile_has_no_multiplication() {
+        assert_not_impl!(DeltaSequence: core::ops::Mul<DeltaSequence>);
+    }
+
+    #[test]
+    fn delta_profile_has_no_linear_ordering() {
+        assert_not_impl!(DeltaSequence: core::cmp::Ord);
+    }
+
+    #[test]
+    fn delta_profile_has_no_core_integer_helpers() {
+        assert_no_method!(DeltaSequence, count_ones);
+    }
+
+    #[test]
+    fn sequential_profile_keeps_linear_ordering() {
+        let lhs = SequentialCounter::make(1);
+        let rhs = SequentialCounter::make(2);
+
+        assert_eq!(lhs.cmp(&rhs), Ordering::Less);
+        assert_no_method!(SequentialCounter, precedes);
+    }
+
+    #[test]
+    fn sequential_profile_has_no_multiplication() {
+        assert_not_impl!(SequentialCounter: core::ops::Mul<SequentialCounter>);
+    }
+
+    #[test]
+    fn sequential_profile_has_no_self_bitwise_operations() {
+        assert_not_impl!(
+            SequentialCounter: core::ops::BitXor<SequentialCounter>
+        );
+    }
+
+    #[test]
+    fn wrapping_profile_keeps_bitwise_and_core_integer_methods() {
+        let lhs = WrappingSequence::make(0b1100);
+        let rhs = WrappingSequence::make(0b1010);
+        let bits = lhs ^ rhs;
+
+        assert_eq!(bits.raw(), 0b0110);
+        assert_eq!(lhs.count_ones(), 2);
+    }
+
+    #[test]
+    fn last_wrapping_profile_selects_wrapping_storage() {
+        let maximum = CircularThenWrapping::make(u8::MAX);
+        let storage: core::num::Wrapping<u8> =
+            circular_then_wrapping_storage(maximum);
+        let sum = maximum + CircularThenWrapping::make(1);
+
+        assert_eq!(storage.0, u8::MAX);
+        assert_eq!(sum.raw(), 0);
+    }
+
+    #[test]
+    fn later_circular_profile_restores_primitive_storage() {
+        let maximum = WrappingThenCircular::make(u8::MAX);
+        let storage: u8 = wrapping_then_circular_storage(maximum);
+        let sum = maximum + WrappingThenCircular::make(1);
+
+        assert_eq!(storage, u8::MAX);
+        assert_eq!(sum.raw(), 0);
+    }
+
+    #[test]
+    fn root_wrapping_storage_survives_non_wrapping_facets() {
+        let value = WrappingWithIntFacet::make(7);
+        let storage: core::num::Wrapping<u8> =
+            wrapping_with_int_facet_storage(value);
+        let sum = value + FacetOffset(3);
+
+        assert_eq!(storage.0, 7);
+        assert_eq!(sum.raw(), 10);
+    }
+
+    #[test]
+    fn root_flags_override_profile_body_regardless_of_attribute_order() {
+        let root_first =
+            RootAddBeforeProfile::make(u8::MAX) + RootAddBeforeProfile::make(1);
+        let profile_first =
+            ProfileBeforeRootAdd::make(u8::MAX) + ProfileBeforeRootAdd::make(1);
+
+        assert_eq!(root_first.raw(), 0);
+        assert_eq!(profile_first.raw(), 0);
+    }
+
+    #[test]
+    fn profile_list_applies_profiles_in_order() {
+        let value = OrderedProfiles::make(0b1011);
+
+        assert_eq!(value.count_ones(), 3);
+        assert_not_impl!(OrderedProfiles: core::ops::Add<OrderedProfiles>);
+        assert_not_impl!(OrderedProfiles: core::ops::Sub<OrderedProfiles>);
+        assert_not_impl!(OrderedProfiles: core::ops::Mul<OrderedProfiles>);
+        assert_no_method!(OrderedProfiles, precedes);
+        assert_no_method!(OrderedProfiles, lo8);
+    }
+
+    #[test]
+    fn later_profile_body_overrides_earlier_profile_body() {
+        let lhs = LaterProfileAdds::make(2);
+        let rhs = LaterProfileAdds::make(3);
+        let sum = lhs + rhs;
+
+        assert_eq!(sum.raw(), 5);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod facets {
+    use super::*;
+
+    #[test]
+    fn explicit_facet_wraps_and_keeps_self_output() {
+        let maximum = ExplicitFacets::make(u8::MAX);
+        let sum: ExplicitFacets = maximum + FacetOffset(1);
+        let difference: ExplicitFacets = sum - FacetOffset(1);
+
+        assert_eq!(sum.raw(), 0);
+        assert_eq!(difference.raw(), u8::MAX);
+    }
+
+    #[test]
+    fn facet_without_output_inherits_the_root_output() {
+        let value = ExplicitFacets::make(0b1100);
+        let bits: RootOutput = value | FacetBits(0b0011);
+
+        assert_eq!(bits, RootOutput(0b1111));
+        assert_not_impl!(ExplicitFacets: core::ops::Sub<FacetBits>);
+    }
+
+    #[test]
+    fn root_fallback_uses_root_policy_output_and_construction() {
+        let constructed = ExplicitFacets::of(RootRhs(7));
+        let sum: RootOutput = constructed + RootRhs(3);
+        let same_type: RootOutput = constructed + constructed;
+        let maximum = ExplicitFacets::make(u8::MAX);
+
+        assert_eq!(constructed.raw(), 7);
+        assert_eq!(sum, RootOutput(10));
+        assert_eq!(same_type, RootOutput(14));
+        assert_panics(move || maximum + RootRhs(1));
+    }
+
+    #[test]
+    fn facet_friend_defaults_to_math_without_bit() {
+        let value = DefaultFacetFriend::make(2);
+        let sum = value + FacetChecked(3);
+
+        assert_eq!(sum.raw(), 5);
+        assert_not_impl!(DefaultFacetFriend: core::ops::BitOr<FacetChecked>);
+    }
+
+    #[test]
+    fn single_configured_facet_preserves_dispatch() {
+        let maximum = SingleConfiguredFacet::make(u8::MAX);
+        let sum: SingleConfiguredFacet =
+            SingleConfiguredFacet::make(2) + FacetOffset(3);
+        let zero = SingleConfiguredFacet::make(0);
+        let one = SingleConfiguredFacet::make(1);
+        let difference: FacetResult = zero - one;
+
+        assert_eq!(sum.raw(), 5);
+        assert_panics(move || maximum + FacetOffset(1));
+        assert_eq!(difference, FacetResult(u8::MAX));
+        assert_not_impl!(
+            SingleConfiguredFacet: core::ops::Add<SingleConfiguredFacet>
+        );
+    }
+
+    #[test]
+    fn explicit_facet_claims_its_slot() {
+        let maximum = SlotResolution::make(u8::MAX);
+        let sum: SlotResolution = SlotResolution::make(2) + FacetOffset(3);
+
+        assert_eq!(sum.raw(), 5);
+        assert_panics(move || maximum + FacetOffset(1));
+    }
+
+    #[test]
+    fn unclaimed_rhs_slot_keeps_the_root_facet() {
+        let zero = SlotResolution::make(0);
+        let difference: FacetResult = zero - FacetOffset(1);
+
+        assert_eq!(difference, FacetResult(u8::MAX));
+    }
+
+    #[test]
+    fn unclaimed_self_slot_keeps_the_root_facet() {
+        let maximum = SlotResolution::make(u8::MAX);
+        let one = SlotResolution::make(1);
+        let sum: FacetResult = maximum + one;
+
+        assert_eq!(sum, FacetResult(0));
+    }
+
+    #[test]
+    fn self_facet_claims_the_self_slot() {
+        let zero = SlotResolution::make(0);
+        let one = SlotResolution::make(1);
+        let difference: SlotSelfOutput = zero - one;
+
+        assert_eq!(difference, SlotSelfOutput(u8::MAX));
+    }
+
+    #[test]
+    fn distinct_facets_serve_different_operations_for_one_rhs() {
+        let value = DistinctFacetOperations::make(10);
+        let sum = value + FacetOffset(1);
+        let difference = value - FacetOffset(1);
+
+        assert_eq!(sum.raw(), 11);
+        assert_eq!(difference.raw(), 8);
+    }
+
+    #[test]
+    fn facets_dispatch_root_and_facet_friends_without_assignments() {
+        let maximum = FacetDispatchOperators::make(u8::MAX);
+        let by_facet = maximum + FacetWrapping(1);
+        let by_root = maximum + FacetOffset(1);
+        let by_self = maximum + FacetDispatchOperators::make(1);
+
+        assert_eq!(by_facet.raw(), 0);
+        assert_eq!(by_root.raw(), 0);
+        assert_eq!(by_self.raw(), 0);
+        assert_not_impl!(
+            FacetDispatchOperators: core::ops::AddAssign<FacetDispatchOperators>
+        );
+    }
+
+    #[test]
+    fn faceted_friendship_retains_make_and_rel_capabilities() {
+        let offset = FacetOffset(4);
+        let value = FacetedFriendship::of(offset);
+
+        assert_eq!(value.raw(), 4);
+        assert!(value == offset);
+        assert!(value < FacetOffset(5));
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod output_types {
+    use super::*;
+
+    #[test]
+    fn produce_accepts_a_qualified_callback_and_generic_target() {
+        let lhs = GenericProduce::make(2);
+        let rhs = GenericProduce::make(3);
+        let sum: GenericOffset<u32> = lhs + rhs;
+
+        assert_eq!(sum, GenericOffset(5));
+    }
+
+    #[test]
+    fn produce_removes_add_assignment() {
+        assert_not_impl!(GenericProduce: core::ops::AddAssign<GenericProduce>);
+    }
+
+    #[test]
+    fn produce_removes_sub_assignment() {
+        assert_not_impl!(GenericProduce: core::ops::SubAssign<GenericProduce>);
+    }
+
+    #[test]
+    fn produce_removes_and_assignment() {
+        assert_not_impl!(
+            GenericProduce: core::ops::BitAndAssign<GenericProduce>
+        );
+    }
+
+    #[test]
+    fn produce_removes_or_assignment() {
+        assert_not_impl!(
+            GenericProduce: core::ops::BitOrAssign<GenericProduce>
+        );
+    }
+
+    #[test]
+    fn with_const_map_fn_makes_map_const_without_konst() {
+        assert_eq!(CONST_MAP_FN.raw(), 23);
+    }
+
+    #[test]
+    fn without_removes_map() {
+        assert_no_method!(WithoutSerdeAndMap, map);
+    }
+
+    #[test]
+    fn without_removes_serde() {
+        assert_not_impl!(WithoutSerdeAndMap: serde::Serialize);
+    }
+
+    #[test]
+    fn without_removes_display() {
+        assert_not_impl!(WithoutDisplay: core::fmt::Display);
+    }
+
+    #[test]
+    fn empty_friend_list_keeps_automatic_raw_friends() {
+        let raw = 4u8;
+        let value = EmptyFriendList::of(raw);
+        let sum = value + 1u8;
+
+        assert_eq!(value.raw(), raw, "{raw}");
+        assert_eq!(sum.raw(), 5, "{raw}");
+    }
+
+    #[test]
+    fn bracketed_tree_generates_every_root() {
+        fn accepts_mode<T: IntegralMode>() {}
+        fn accepts_flow<T: IntegralFlow>() {}
+
+        accepts_mode::<IntegralActive>();
+        accepts_flow::<IntegralForward>();
+        accepts_flow::<IntegralBackward>();
+        assert_not_impl!(IntegralActive: IntegralFlow);
+        assert_eq!(size_of::<IntegralActive>(), 0);
+    }
+
+    #[test]
+    fn wrapping_storage_uses_a_custom_or_panic_constructor() {
+        let accepted = CustomOrPanicWrapping::make(7);
+        let limit = 101;
+
+        assert_eq!(accepted.raw(), 7);
+        assert_panics(move || CustomOrPanicWrapping::make(limit));
+    }
+
+    #[test]
+    fn blind_trust_is_absent_without_flag_or_unsafe_friend() {
+        assert_no_associated_fn!(NonZeroU8, _blind_trust);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod constness {
+    use super::*;
+
+    #[test]
+    fn konst_math_family_makes_addition_const() {
+        assert_eq!(KONST_MATH_SUM.raw(), 23);
+    }
+
+    #[test]
+    fn konst_family_stays_const_for_operations_not_overridden() {
+        assert_eq!(KONST_MATH_DIFFERENCE.raw(), 17);
+    }
+
+    #[test]
+    fn nightly_konst_stays_const_for_operations_not_overridden() {
+        assert_eq!(KONST_NIGHTLY_DIFFERENCE.raw(), 17);
+    }
+
+    #[test]
+    fn konst_map_makes_map_const_without_konst() {
+        assert_eq!(KONST_MAPPED.raw(), 23);
+    }
+
+    #[test]
+    fn root_const_flag_overrides_profile_const_flags() {
+        assert_eq!(PROFILE_KONST_SUM.raw(), 23);
+    }
+
+    #[test]
+    fn default_konst_makes_validation_and_core_integer_methods_const() {
+        assert_eq!(DEFAULT_KONST_ONES, 3);
+    }
+
+    #[test]
+    fn explicit_const_flag_extends_the_default_konst() {
+        assert_eq!(DEFAULT_KONST_SUM.raw(), 23);
+    }
+
+    #[test]
+    fn stable_konst_makes_validation_const() {
+        assert_eq!(KONST_STABLE.raw(), 7);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod friends {
+    use super::*;
+
+    #[test]
+    fn raw_identifier_type_builds_its_friend_protocol() {
+        let raw = 7;
+        let value = r#Type::of(raw);
+
+        assert_eq!(value.raw(), raw, "{raw}");
+        assert_eq!(r#Type::make(raw), value, "{raw}");
+    }
+
+    #[test]
+    fn no_primitive_make_friend_generates_no_make() {
+        assert_no_associated_fn!(NoPrimitiveMake, make);
+    }
+
+    #[test]
+    fn qualified_friend_paths_construct_with_blind_trust() {
+        let odd = 3;
+        let value = QualifiedFriend::of(QualifiedSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+        assert_not_impl!(QualifiedFriend: core::ops::Add<QualifiedSource>);
+    }
+
+    #[test]
+    fn unsafe_friend_constructs_with_blind_trust() {
+        let odd = 3;
+        let value = UnsafeOnly::of(UnsafeSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+    }
+
+    #[test]
+    fn unsafe_friend_grants_no_math() {
+        assert_not_impl!(UnsafeOnly: core::ops::Add<UnsafeSource>);
+    }
+
+    #[test]
+    fn unsafe_friend_grants_no_bit() {
+        assert_not_impl!(UnsafeOnly: core::ops::BitOr<UnsafeSource>);
+    }
+
+    #[test]
+    fn bracketed_unsafe_friend_constructs_with_blind_trust() {
+        let odd = 3;
+        let value = BracketedUnsafeOnly::of(UnsafeSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+        assert_not_impl!(BracketedUnsafeOnly: core::ops::Add<UnsafeSource>);
+    }
+
+    #[test]
+    fn capability_list_accepts_a_trailing_comma() {
+        let odd = 3;
+        let value = TrailingCommaCapabilities::of(UnsafeSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+    }
+
+    #[test]
+    fn bit_rel_and_unsafe_friend_combines_capabilities() {
+        let odd = 3;
+        let value = BitRelUnsafe::of(RelSource(odd));
+        let even = BitRelUnsafe::try_make(4).unwrap();
+
+        assert_eq!(value.raw(), odd, "{odd}");
+        assert_eq!((even | RelSource(2)).raw(), 6);
+        assert_panics(move || even | RelSource(1));
+        assert!(even == RelSource(4));
+        assert_not_impl!(BitRelUnsafe: core::ops::Add<RelSource>);
+    }
+
+    #[test]
+    fn implicit_unsafe_friend_constructs_with_blind_trust() {
+        let odd = 3;
+        let value = ImplicitUnsafe::of(ImplicitSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+        assert_not_impl!(ImplicitUnsafe: core::ops::Add<ImplicitSource>);
+    }
+
+    #[test]
+    fn implicit_friend_source_accepts_a_trailing_comma() {
+        let odd = 3;
+        let value = ImplicitTrailingComma::of(ImplicitSource(odd));
+
+        assert_eq!(value.raw(), odd, "{odd}");
+    }
+
+    #[test]
+    fn implicit_friend_defaults_to_math() {
+        let value = ImplicitDefault::of(ImplicitSource(4));
+        let sum = value + ImplicitSource(2);
+        let bits = value | ImplicitSource(1);
+
+        assert_eq!(value.raw(), 4);
+        assert_eq!(sum.raw(), 6);
+        assert_eq!(bits.raw(), 5);
+    }
+
+    #[test]
+    fn implicit_math_friend_enables_construction_math_and_bits() {
+        let value = ImplicitMath::of(ImplicitSource(4));
+        let sum = value + ImplicitSource(2);
+        let bits = value | ImplicitSource(1);
+
+        assert_eq!(value.raw(), 4);
+        assert_eq!(sum.raw(), 6);
+        assert_eq!(bits.raw(), 5);
+    }
+
+    #[test]
+    fn absolute_friend_paths_accept_a_trailing_source_comma() {
+        let source = core::num::NonZeroU8::new(9).unwrap();
+        let value = AbsoluteFriendPaths::of(source);
+
+        assert_eq!(value.raw(), 9, "{source}");
+        assert_not_impl!(
+            AbsoluteFriendPaths: core::ops::Add<core::num::NonZeroU8>
+        );
+    }
+
+    #[test]
+    fn make_and_bit_friend_grants_no_math() {
+        let value = MakeBitFriend::of(CapabilitySource(4));
+        let bits = value | CapabilitySource(1);
+
+        assert_eq!(value.raw(), 4);
+        assert_eq!(bits.raw(), 5);
+        assert_not_impl!(MakeBitFriend: core::ops::Add<CapabilitySource>);
+    }
+
+    #[test]
+    fn math_friend_grants_make_and_bit_without_rel() {
+        let value = ExplicitMathFriend::of(CapabilitySource(4));
+        let sum = value + CapabilitySource(2);
+        let bits = value | CapabilitySource(1);
+
+        assert_eq!(value.raw(), 4);
+        assert_eq!(sum.raw(), 6);
+        assert_eq!(bits.raw(), 5);
+        assert_not_impl!(
+            ExplicitMathFriend: core::cmp::PartialEq<CapabilitySource>
+        );
+    }
+
+    #[test]
+    fn omitted_friend_capabilities_grant_no_rel() {
+        assert_not_impl!(Number: core::cmp::PartialEq<MathOnlySource>);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod domain_membership {
+    use super::*;
+
+    #[test]
+    fn validation_lists_combine_callbacks_and_domain_alternatives() {
+        let zero = ValidationLists::try_make(0).map(ValidationLists::raw);
+        let negative = ValidationLists::try_make(-8).map(ValidationLists::raw);
+        let gap = ValidationLists::try_make(6).map(ValidationLists::raw);
+        let odd = ValidationLists::try_make(3).map(ValidationLists::raw);
+        let rejected = ValidationLists::try_make(-50).map(ValidationLists::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert_eq!(negative, Ok(-8));
+        assert_eq!(gap, Err(6));
+        assert_eq!(odd, Err(3));
+        assert_eq!(rejected, Err(-50));
+    }
+
+    #[test]
+    fn primitive_constant_domain_preserves_boundaries() {
+        let zero = ConstantBounds::try_make(0).map(ConstantBounds::raw);
+        let maximum =
+            ConstantBounds::try_make(u32::MAX).map(ConstantBounds::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(maximum, Ok(u32::MAX));
+    }
+
+    #[test]
+    fn unordered_domain_preserves_boundary_membership() {
+        let below = UnorderedDomain::try_make(0).map(UnorderedDomain::raw);
+        let lower = UnorderedDomain::try_make(1).map(UnorderedDomain::raw);
+        let joined = UnorderedDomain::try_make(6).map(UnorderedDomain::raw);
+        let upper = UnorderedDomain::try_make(12).map(UnorderedDomain::raw);
+        let above = UnorderedDomain::try_make(13).map(UnorderedDomain::raw);
+
+        assert_eq!(below, Err(0));
+        assert_eq!(lower, Ok(1));
+        assert_eq!(joined, Ok(6));
+        assert_eq!(upper, Ok(12));
+        assert_eq!(above, Err(13));
+    }
+
+    #[test]
+    fn open_zero_upper_bound_excludes_zero() {
+        let zero = BelowZero::try_make(0).map(BelowZero::raw);
+        let below = BelowZero::try_make(-1).map(BelowZero::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(below, Ok(-1));
+        assert!(has_niche::<BelowZero>());
+    }
+
+    #[test]
+    fn closed_zero_upper_bound_contains_zero() {
+        let zero = AtMostZero::try_make(0).map(AtMostZero::raw);
+        let above = AtMostZero::try_make(1).map(AtMostZero::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert_eq!(above, Err(1));
+        assert!(!has_niche::<AtMostZero>());
+    }
+
+    #[test]
+    fn negative_domain_excludes_zero() {
+        let zero = NegativeOpen::try_make(0).map(NegativeOpen::raw);
+        let lowest = NegativeOpen::try_make(-5).map(NegativeOpen::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(lowest, Ok(-5));
+        assert!(has_niche::<NegativeOpen>());
+    }
+
+    #[test]
+    fn split_domain_excludes_zero() {
+        let zero = SplitAroundZero::try_make(0).map(SplitAroundZero::raw);
+        let below = SplitAroundZero::try_make(-1).map(SplitAroundZero::raw);
+        let above = SplitAroundZero::try_make(1).map(SplitAroundZero::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(below, Ok(-1));
+        assert_eq!(above, Ok(1));
+        assert!(has_niche::<SplitAroundZero>());
+    }
+
+    #[test]
+    fn adjacent_negative_domains_exclude_zero() {
+        let zero = AdjacentNegative::try_make(0).map(AdjacentNegative::raw);
+        let joined = AdjacentNegative::try_make(-5).map(AdjacentNegative::raw);
+        let highest = AdjacentNegative::try_make(-1).map(AdjacentNegative::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(joined, Ok(-5));
+        assert_eq!(highest, Ok(-1));
+        assert!(has_niche::<AdjacentNegative>());
+    }
+
+    #[test]
+    fn domain_union_contains_zero_when_any_member_does() {
+        let zero = UnionWithZero::try_make(0).map(UnionWithZero::raw);
+        let above = UnionWithZero::try_make(6).map(UnionWithZero::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert_eq!(above, Err(6));
+        assert!(!has_niche::<UnionWithZero>());
+    }
+
+    #[test]
+    fn signed_minimum_constant_is_negative() {
+        let zero = FromSignedMinimum::try_make(0).map(FromSignedMinimum::raw);
+        let minimum =
+            FromSignedMinimum::try_make(i32::MIN).map(FromSignedMinimum::raw);
+
+        assert_eq!(zero, Err(0));
+        assert_eq!(minimum, Ok(i32::MIN));
+        assert!(has_niche::<FromSignedMinimum>());
+    }
+
+    #[test]
+    fn unsigned_minimum_constant_is_zero() {
+        let zero =
+            UnsignedMinimumOnly::try_make(0).map(UnsignedMinimumOnly::raw);
+        let one =
+            UnsignedMinimumOnly::try_make(1).map(UnsignedMinimumOnly::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert_eq!(one, Err(1));
+        assert!(!has_niche::<UnsignedMinimumOnly>());
+    }
+
+    #[test]
+    fn pointer_domain_excluding_zero_selects_non_zero_storage() {
+        assert!(has_niche::<PointerNonZeroSigned>());
+    }
+
+    #[test]
+    fn pointer_domain_including_zero_keeps_primitive_storage() {
+        let zero = PointerAroundZero::try_make(0).map(PointerAroundZero::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert!(!has_niche::<PointerAroundZero>());
+    }
+
+    #[test]
+    fn unsigned_pointer_minimum_domain_includes_zero() {
+        let zero = PointerMinimumOnly::try_make(0).map(PointerMinimumOnly::raw);
+        let one = PointerMinimumOnly::try_make(1).map(PointerMinimumOnly::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert_eq!(one, Err(1));
+        assert!(!has_niche::<PointerMinimumOnly>());
+    }
+
+    #[test]
+    fn callback_validation_keeps_primitive_storage() {
+        let zero = CallbackOnly::try_make(0).map(CallbackOnly::raw);
+
+        assert_eq!(zero, Ok(0));
+        assert!(!has_niche::<CallbackOnly>());
+    }
+
+    #[test]
+    fn gapped_positive_domain_selects_non_zero_storage() {
+        let gap = GappedPositive::try_make(50).map(GappedPositive::raw);
+        let upper = GappedPositive::try_make(122).map(GappedPositive::raw);
+
+        assert_eq!(gap, Err(50));
+        assert_eq!(upper, Ok(122));
+        assert!(has_niche::<GappedPositive>());
+    }
+
+    #[test]
+    fn root_non_zero_overrides_profile_setting() {
+        let zero = RootSuppressesProfileNonZero::make(0);
+
+        assert_eq!(zero.raw(), 0);
+        assert!(!has_niche::<RootSuppressesProfileNonZero>());
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod lit_macro_names {
+    use super::*;
+
+    #[test]
+    fn literal_macro_name_splits_a_leading_acronym() {
+        let value = http_server!(80);
+
+        assert_eq!(value.raw(), 80);
+    }
+
+    #[test]
+    fn literal_macro_name_splits_an_embedded_acronym() {
+        let value = my_url_value!(80);
+
+        assert_eq!(value.raw(), 80);
+    }
+
+    #[test]
+    fn literal_macro_name_keeps_an_alphanumeric_prefix() {
+        let value = x509_certificate!(80);
+
+        assert_eq!(value.raw(), 80);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+mod function_removals {
+    use super::*;
+
+    #[test]
+    fn without_fn_removes_only_the_named_core_int_methods() {
+        let raw = -6;
+        let value = WithoutSomeIntFns::make(raw);
+
+        crate::assert_no_method!(WithoutSomeIntFns, count_ones);
+        crate::assert_no_method!(WithoutSomeIntFns, checked_add);
+        crate::assert_no_method!(WithoutSomeIntFns, abs);
+        crate::assert_no_associated_fn!(WithoutSomeIntFns, from_be_bytes);
+        assert_eq!(value.count_zeros(), raw.count_zeros(), "{raw}");
+        assert_eq!(value.checked_sub(value).map(|it| it.raw()), Some(0));
+        assert_eq!(value.unsigned_abs(), raw.unsigned_abs(), "{raw}");
+        let bytes = value.to_le_bytes();
+        assert_eq!(WithoutSomeIntFns::from_le_bytes(bytes).raw(), raw);
+    }
+
+    #[test]
+    fn profile_body_removes_a_core_int_method() {
+        let raw = 6;
+        let value = ProfileWithoutCountOnes::make(raw);
+
+        crate::assert_no_method!(ProfileWithoutCountOnes, count_ones);
+        assert_eq!(value.count_zeros(), raw.count_zeros(), "{raw}");
     }
 }

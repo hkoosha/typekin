@@ -1,4 +1,8 @@
 use std::collections::BTreeSet;
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 
 use proc_macro2::{
     Ident,
@@ -16,19 +20,56 @@ use syn::{
     Token,
 };
 
-use crate::zz_lib::PathIdentity;
-use crate::zz_runner::ToCollection;
-use crate::{
-    zz_lib as zz,
-    zz_runner,
+use crate::zz_friend::Capability;
+use crate::zz_lib as zz;
+use crate::zz_lib::{
+    Key,
+    PathIdentity,
 };
+use crate::zz_names::{
+    NameKey,
+    Names,
+};
+use crate::zz_runner::ToCollection;
+
+/// A name the constructor generates.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum ConstructorName {
+    /// `of` unless `maker` names one.
+    Maker,
+}
+
+impl NameKey for ConstructorName {
+    type Owner = ();
+
+    fn default_name(
+        self,
+        _owner: &(),
+    ) -> String {
+        return match self {
+            Self::Maker => "of".to_string(),
+        };
+    }
+}
+/// The attribute carrying the paired friendship configuration.
+const FRIENDSHIP: &str = "friendship";
 
 #[derive(Clone)]
 pub(crate) struct Cfg {
     pub(crate) relationship: Path,
-    pub(crate) maker: Ident,
+    /// `maker`.
+    pub(crate) names: Names<ConstructorName>,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) scope: Scope,
+}
+
+impl Debug for Cfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return f.debug_struct("Cfg").finish_non_exhaustive();
+    }
 }
 
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -126,16 +167,18 @@ impl Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut relationship: Option<Path> = None;
-        let mut maker = quote::format_ident!("of");
+        let mut names = Names::default();
         let mut friends = BTreeSet::new();
         let mut scope = None;
 
         zz::parse_inner(input, |attr, stream| {
             match attr {
-                "relationship" => relationship = Some(stream.parse()?),
-                "maker" => maker = stream.parse()?,
-                "friend" => friends = zz::one_or_list(stream)?.set(),
-                "scope" => scope = Some(stream.parse()?),
+                Key::Relationship => relationship = Some(stream.parse()?),
+                Key::Maker => {
+                    names.choose(ConstructorName::Maker, stream.parse()?);
+                }
+                Key::Friend => friends = zz::one_or_list(stream)?.set(),
+                Key::Scope => scope = Some(stream.parse()?),
                 _ => return Ok(false),
             };
 
@@ -149,10 +192,13 @@ impl Parse for Cfg {
                     "missing required `relationship` argument",
                 )
             })?,
-            scope: scope.or(None).ok_or_else(|| {
-                syn::Error::new(input.span(), "missing required `mod` argument")
+            scope: scope.ok_or_else(|| {
+                syn::Error::new(
+                    input.span(),
+                    "missing required `scope` argument",
+                )
             })?,
-            maker,
+            names,
             friends,
         };
         return Ok(this);
@@ -175,12 +221,16 @@ pub(crate) fn expand(
     let target = &protocol.target;
     let visibility = &protocol.visibility;
     let of_relation = &cfg.relationship;
-    let maker = &cfg.maker;
+    let maker = cfg
+        .names
+        .clone()
+        .resolve((), BTreeSet::new())
+        .get(ConstructorName::Maker);
     let relation = &protocol.relation;
     let value = &protocol.value;
     let seal = &protocol.seal;
     let conversion = &protocol.conversion;
-    let make = quote::format_ident!("Make");
+    let make = Capability::Make.ident();
 
     let items = quote! {
         impl #target {
@@ -210,22 +260,17 @@ pub(crate) fn expand(
 pub(crate) fn ekran(
     attr: Cfg,
     mut item: Item,
-) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || {
-        let (_, _, attrs) = zz::get_concrete_type(&mut item)?;
-        let friendship = zz::pop_attr(attrs, "friendship")?
-            .ok_or_else(|| {
-                syn::Error::new(
-                    item.span(),
-                    "`#[typekin::constructor]` requires \
-                     `#[typekin::friendship(...)]` immediately below it",
-                )
-            })?
-            .parse_args::<crate::friendship::cfg::Cfg>()?;
+) -> syn::Result<TokenStream> {
+    let (_, _, attrs) = zz::get_concrete_type(&mut item)?;
+    let friendship = zz::pop_attr(attrs, FRIENDSHIP)?
+        .ok_or_else(|| {
+            syn::Error::new(
+                item.span(),
+                "`#[typekin::constructor]` requires \
+                 `#[typekin::friendship(...)]` immediately below it",
+            )
+        })?
+        .parse_args::<crate::friendship::Cfg>()?;
 
-        return crate::friendship::expand_with_constructor(
-            item, friendship, attr,
-        );
-    })
-    .into();
+    return crate::friendship::expand_with_constructor(item, friendship, attr);
 }

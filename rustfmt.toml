@@ -7,3 +7,6 @@ max_width = 80
 reorder_imports = true
 group_imports = "StdExternalCrate"
 imports_granularity = "module"
+
+# use_small_heuristics = "off"
+short_array_element_width_threshold = 0

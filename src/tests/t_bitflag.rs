@@ -1,94 +1,28 @@
 #[cfg(test)]
 mod tests {
+    use proc_macro2::TokenStream;
+    use syn::ItemEnum;
+
     use crate::bitflag::{
+        BitFlag,
         Cfg,
+        ekran,
         resolve_repr,
     };
     use crate::zz_lib::Konsts;
-    use crate::zz_value_type::N;
+    use crate::zz_values::N;
+
+    fn expand(source: &str) -> syn::Result<TokenStream> {
+        let configuration = syn::parse_str::<Cfg>("konst = none")?;
+        let item = syn::parse_str::<ItemEnum>(source)?;
+        return ekran(Box::new(configuration), item);
+    }
 
     #[test]
     fn attrs_friends_and_konst() {
         let it = "
-            friend = crate::convert(crate::source::Source) -> Inspector,
+            friend = crate::convert(crate::source::Source) -> Bit,
             konst = stable
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn attrs_tree_and_konst() {
-        let it = "
-            tree = Direction {
-                In,
-                Out,
-            },
-            konst = none
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-        let config = this.unwrap();
-
-        assert!(config.tree.is_some());
-    }
-
-    #[test]
-    fn attrs_konst_and_friends_and_integral() {
-        let it = "
-            konst = stable,
-            friend = crate::convert(crate::source::Source) -> [Bit, unsafe],
-            integral = []
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn attrs_konst_and_integral_and_friends() {
-        let it = "
-            konst = stable,
-            integral = [],
-            friend = Foo(crate::source::Source) -> Bit
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn attrs_konst_and_integral_and_friends_and_valid() {
-        let it = "
-            konst = stable,
-            integral = [
-                friend = crate::convert(crate::source::Source) -> Make,
-                valid = is_valid,
-            ]
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn attrs_integral_and_suffix() {
-        let it = "
-            integral = [
-                valid = is_valid,
-                friend = Foo(crate::source::Source) -> [Math, Bit]
-            ],
-            suffix = \"Value\"
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn attrs_friend_and_integral() {
-        let it = "
-            friend = [],
-            integral = [
-                friend = [],
-                valid = is_valid
-            ]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -163,6 +97,69 @@ mod tests {
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
+    }
+
+    #[test]
+    fn rejects_unknown_root_capability_at_its_span() {
+        let it = "friend = convert(Source) -> Inspector";
+        let this = syn::parse_str::<Cfg>(it);
+        assert!(this.is_err(), "{it}");
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), "unknown capability", "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("Inspector").unwrap(),
+            "{it}",
+        );
+    }
+
+    const ROOT_VALUE_CAPABILITY: &str = "bitflag root friends only support `Bit`; declare value capabilities in `integral = [friend = ...]`";
+
+    fn assert_root_capability_rejected(
+        it: &str,
+        capability: &str,
+    ) {
+        let this = syn::parse_str::<Cfg>(it);
+        assert!(this.is_err(), "{it}");
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), ROOT_VALUE_CAPABILITY, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find(capability).unwrap(),
+            "{it}",
+        );
+    }
+
+    #[test]
+    fn rejects_root_make_capability_at_its_span() {
+        let it = "friend = convert(Source) -> [Bit, Make]";
+        assert_root_capability_rejected(it, "Make");
+    }
+
+    #[test]
+    fn rejects_root_math_capability_at_its_span() {
+        let it = "friend = convert(Source) -> Math";
+        assert_root_capability_rejected(it, "Math");
+    }
+
+    #[test]
+    fn rejects_root_cmp_capability_at_its_span() {
+        let it = "friend = convert(Source) -> Cmp";
+        assert_root_capability_rejected(it, "Cmp");
+    }
+
+    #[test]
+    fn rejects_root_unsafe_capability_at_its_span() {
+        let it = "friend = convert(Source) -> unsafe";
+        assert_root_capability_rejected(it, "unsafe");
+    }
+
+    #[test]
+    fn rejects_root_unsafe_capability_beside_bit_at_its_span() {
+        let it = "friend = convert(Source) -> [Bit, unsafe]";
+        assert_root_capability_rejected(it, "unsafe");
     }
 
     #[test]
@@ -301,25 +298,30 @@ mod tests {
     }
 
     #[test]
-    fn accepts_konst_nightly() {
-        let it = "
-            konst = nightly
+    fn rejects_negative_pointer_domain_in_integral() {
+        let input = "
+            konst = none,
+            integral = [
+                domain = isize::MIN..-2_147_483_648 | -isize::MAX..0
+            ]
         ";
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("top-level nightly konst should parse");
-        assert_eq!(config.int.konst, crate::zz_lib::Konst::Nightly);
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag integral domain must include zero",
+        );
     }
 
     #[test]
-    fn accepts_konst_stable() {
-        let it = "
-            konst = stable
-        ";
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("top-level stable konst should parse");
-        assert_eq!(config.int.konst, crate::zz_lib::Konst::Stable);
-        assert!(config.int.konst_for(&[Konsts::Value]));
-        assert!(!config.int.konst_for(&[Konsts::Math]));
+    fn stable_konst_leaves_math_non_const() {
+        let it = "konst = stable";
+        let this = syn::parse_str::<Cfg>(it);
+        assert!(this.is_ok(), "{it}");
+        let config = this.unwrap();
+
+        assert!(!config.int.konst_for(&[Konsts::Math]), "{it}");
     }
 
     #[test]
@@ -333,119 +335,33 @@ mod tests {
     }
 
     #[test]
-    fn accepts_serde_auto() {
-        let it = "
-            with = serde_with_auto
-        ";
-        let config = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(config.bit.serde);
-    }
-
-    #[test]
-    fn accepts_serde_name() {
-        let it = "
-            with = serde_with_name
-        ";
-        let config = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(config.bit.serde);
-    }
-
-    #[test]
-    fn accepts_serde_value() {
-        let it = "
-            with = serde_with_value
-        ";
-        let config = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(config.bit.serde);
-    }
-
-    #[test]
-    fn serde_defaults_to_auto() {
-        let it = "
-            with = serde
-        ";
-        let config = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(config.bit.serde);
-        assert!(!config.bit.serde_with_name);
-        assert!(!config.bit.serde_with_value);
-    }
-
-    #[test]
-    fn bitflag_derives_default() {
-        let it = "
-        ";
-        let this = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(this.bit.clone);
-        assert!(this.bit.copy);
-        assert!(this.bit.hash);
-        assert!(this.bit.debug);
-        assert!(this.bit.repr);
-    }
-
-    #[test]
-    fn bitflag_derives_enabled() {
-        let it = "
-            with = [clone, copy, hash, debug, repr]
-        ";
-        let this = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(this.bit.clone);
-        assert!(this.bit.copy);
-        assert!(this.bit.hash);
-        assert!(this.bit.debug);
-        assert!(this.bit.repr);
-    }
-
-    #[test]
-    fn bitflag_derives_disabled() {
-        let it = "
-            without = [clone, copy, hash, debug, repr]
-        ";
-        let this = syn::parse_str::<Cfg>(it).unwrap();
-        assert!(!this.bit.clone);
-        assert!(!this.bit.copy);
-        assert!(!this.bit.hash);
-        assert!(!this.bit.debug);
-        assert!(!this.bit.repr);
-    }
-
-    #[test]
-    fn with_display() {
-        let it = "
-            with = display
-        ";
+    fn repr_defaults_to_transparent_value() {
+        let it = "";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
         let config = this.unwrap();
-        assert!(config.bit.display);
+
+        assert!(config.bit.has(BitFlag::Repr), "{it}");
     }
 
     #[test]
-    fn without_display() {
-        let it = "
-            without = display
-        ";
+    fn with_repr_keeps_transparent_value() {
+        let it = "with = repr";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
         let config = this.unwrap();
-        assert!(!config.bit.display);
+
+        assert!(config.bit.has(BitFlag::Repr), "{it}");
     }
 
     #[test]
-    fn integral_with_display() {
-        let input = "integral = [with = display]";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
-        assert!(config.int.flags.display);
-    }
-
-    #[test]
-    fn integral_without_display() {
-        let it = "
-            integral = [without = display]
-        ";
+    fn without_repr_drops_transparent_value() {
+        let it = "without = repr";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
         let config = this.unwrap();
-        assert!(!config.int.flags.display);
+
+        assert!(!config.bit.has(BitFlag::Repr), "{it}");
     }
 
     #[test]
@@ -536,14 +452,6 @@ mod tests {
     }
 
     #[test]
-    fn accepts_nested_unit_error() {
-        let it = "
-            integral = [error = ()]
-        ";
-        syn::parse_str::<Cfg>(it).unwrap();
-    }
-
-    #[test]
     fn rejects_custom_error_type() {
         let it = "
             integral = [error = FlagError]
@@ -556,32 +464,6 @@ mod tests {
             error.to_string(),
             "only `()` is currently supported for `error`",
         );
-    }
-
-    #[test]
-    fn accepts_forwarding_konst_to_integral() {
-        let it = "
-            integral = [with = [konst_value]]
-        ";
-
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("matching forwarded konst flag should parse");
-
-        assert!(config.int.konst_for(&[Konsts::Value]));
-    }
-
-    #[test]
-    fn forwards_explicit_const_override_to_integral() {
-        let input = "
-            konst = none,
-            with = konst_value,
-            integral = [with = konst_value]
-        ";
-        let parsed = syn::parse_str::<Cfg>(input);
-        assert!(parsed.is_ok(), "{input}");
-        let config = parsed.unwrap();
-
-        assert!(config.int.konst_for(&[Konsts::Value]), "{input}");
     }
 
     #[test]
@@ -611,19 +493,17 @@ mod tests {
     }
 
     #[test]
-    fn defaults_missing_konst_to_crate_default() {
-        let it = "
-            friend = [Foo(u8) -> Bit]
-        ";
+    fn default_konst_follows_crate_feature() {
+        let it = "friend = [Foo(u8) -> Bit]";
+        let this = syn::parse_str::<Cfg>(it);
+        assert!(this.is_ok(), "{it}");
+        let config = this.unwrap();
 
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("konst should default to the crate feature");
-
-        assert_eq!(config.int.konst, crate::zz_lib::Konst::default());
-        assert!(config.int.konst_for(&[Konsts::Value]));
+        assert_eq!(config.int.konst, crate::zz_lib::Konst::default(), "{it}");
         assert_eq!(
             config.int.konst_for(&[Konsts::Math]),
             cfg!(feature = "nightly"),
+            "{it}",
         );
     }
 
@@ -640,75 +520,23 @@ mod tests {
     }
 
     #[test]
-    fn accepts_friend_capabilities() {
-        let it = "
-            konst = none,
-            friend = [Foo(u8) -> [Bit]],
-            integral = []
-        ";
-
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("bitflag capabilities should parse");
-
-        let friend = config.friends.iter().next().unwrap();
-
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
-    }
-
-    #[test]
-    fn accepts_unsafe_friend() {
-        let it = "
-            friend = [Foo(Source) -> unsafe]
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_unsafe_and_bit_friend() {
-        let it = "
-            friend = [Foo(Source) -> [Bit, unsafe]]
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_unsafe_integral_friends() {
-        let it = "
-            integral = [friend = [Foo(Source) -> unsafe]]
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_unsafe_integral_friends_combined() {
-        let it = "
-            integral = [friend = [Foo(Source) -> [Math, Bit, unsafe]]]
-        ";
-        let input = format!("konst = none, {it}");
-        let this = syn::parse_str::<Cfg>(&input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
     fn accept_flag_friend_and_integral_friend() {
         let it = "
             friend = [
-                convert(Source) -> Inspector
+                convert(Source) -> Bit
             ],
             integral = [
                 friend = [Foo(Other) -> Math]
             ]
         ";
 
-        let config = syn::parse_str::<Cfg>(it)
-            .expect("bitflag root capabilities may name arbitrary markers");
+        let config = syn::parse_str::<Cfg>(it);
+        assert!(config.is_ok(), "{it}");
+        let config = config.unwrap();
 
         let friend = config.friends.iter().next().unwrap();
 
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Inspector)));
+        assert!(friend.capabilities.contains(&syn::parse_quote!(Bit)));
         assert!(friend.conv.as_ref().unwrap().is_ident("convert"));
         assert!(friend.ty.path().is_ident("Source"));
     }
@@ -749,5 +577,41 @@ mod tests {
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_err(), "{it}");
+    }
+
+    #[test]
+    fn rejects_generic_enum_at_its_parameters() {
+        let source = "#[repr(u8)] pub enum Flag<T> { Read = 1 }";
+        let this = expand(source);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag does not support generic enums",
+            "{source}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            source.find("T>").unwrap(),
+            "{source}",
+        );
+    }
+
+    #[test]
+    fn rejects_generic_enum_at_its_where_clause() {
+        let source = "#[repr(u8)] pub enum Flag where u8: Copy { Read = 1 }";
+        let this = expand(source);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "bitflag does not support generic enums",
+            "{source}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            source.find("where").unwrap(),
+            "{source}",
+        );
     }
 }

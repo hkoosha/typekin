@@ -1,331 +1,5 @@
+use crate::fx_friendship::*;
 use crate::*;
-
-#[typekin::friends(
-    relation = DocumentParts,
-    friend = [
-        document_parts(Self) -> [],
-        reader_parts(Reader) -> [DocumentInspector],
-        writer_parts(Writer) -> [DocumentInspector],
-    ],
-)]
-pub struct Document {
-    id: u32,
-    access: u8,
-}
-
-impl Document {
-    pub fn of_parts(parts: DocumentParts) -> Self {
-        return Self {
-            id: parts.id,
-            access: parts.access,
-        };
-    }
-}
-
-#[typekin::friends(
-    relation = (u32, u8),
-    mod = pub declared_document_protocol,
-    extra_caps = [DocumentDeclared],
-)]
-pub struct DocumentProtocol;
-
-#[allow(dead_code)]
-impl DocumentProtocol {
-    pub fn of_parts(_: (u32, u8)) -> Self {
-        return Self;
-    }
-}
-
-#[typekin::friends(
-    relation = DirectParts,
-    scope = pub direct_friendship,
-    friend = [],
-)]
-pub struct Direct;
-
-impl Direct {
-    pub fn of_parts(_: DirectParts) -> Self {
-        return Self;
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct DirectParts;
-
-#[derive(Copy, Clone)]
-pub struct DocumentParts {
-    id: u32,
-    access: u8,
-}
-
-pub fn document_parts(document: Document) -> DocumentParts {
-    return DocumentParts {
-        id: document.id,
-        access: document.access,
-    };
-}
-
-pub struct Reader {
-    id: u32,
-}
-
-pub struct Writer {
-    id: u32,
-}
-
-pub fn reader_parts(reader: Reader) -> DocumentParts {
-    return DocumentParts {
-        id: reader.id,
-        access: 0b001,
-    };
-}
-
-pub fn writer_parts(writer: Writer) -> DocumentParts {
-    return DocumentParts {
-        id: writer.id,
-        access: 0b010,
-    };
-}
-
-impl declared_document_protocol::Seal for Reader {}
-
-impl declared_document_protocol::DocumentDeclared for Reader {
-    fn convert(self) -> (u32, u8) {
-        let parts = reader_parts(self);
-        (parts.id, parts.access)
-    }
-}
-
-// ==============================================================================
-
-#[typekin::friends(
-    relation = ::core::primitive::u128,
-    friend = [
-        make_parts(CapabilitySpecificSource) -> Make,
-        bit_parts(CapabilitySpecificSource) -> Bit,
-    ],
-    scope = capability_specific_protocol,
-)]
-pub struct CapabilitySpecificTarget(u128);
-
-pub struct CapabilitySpecificSource(u128);
-
-pub fn make_parts(source: CapabilitySpecificSource) -> u128 {
-    return source.0 / 4;
-}
-
-pub fn bit_parts(source: CapabilitySpecificSource) -> u128 {
-    return source.0 / 2;
-}
-
-impl CapabilitySpecificTarget {
-    pub fn of_parts(value: u128) -> Self {
-        return Self(value);
-    }
-}
-
-mod qualified_sources {
-    pub(super) struct Source(pub(super) u8);
-}
-
-fn qualified_make(source: qualified_sources::Source) -> u8 {
-    return source.0 + 1;
-}
-
-fn qualified_bit(source: qualified_sources::Source) -> u8 {
-    return source.0 + 2;
-}
-
-#[typekin::friends(
-    relation = u8,
-    friend = [
-        qualified_make(qualified_sources::Source) -> Make,
-        qualified_bit(qualified_sources::Source) -> Bit,
-    ],
-    scope = qualified_friend_protocol,
-)]
-pub struct QualifiedTarget(u8);
-
-impl QualifiedTarget {
-    fn of_parts(value: u8) -> Self {
-        return Self(value);
-    }
-}
-
-// ==============================================================================
-
-#[typekin::friends(
-    relation = ScopedDocumentParts,
-    scope = pub scoped_document_protocol,
-    friend = scoped_document_parts(Self) -> [],
-)]
-pub struct ScopedDocument;
-
-pub struct ScopedDocumentParts;
-
-impl ScopedDocument {
-    pub fn of_parts(_: ScopedDocumentParts) -> Self {
-        return Self;
-    }
-}
-
-pub fn scoped_document_parts(_: ScopedDocument) -> ScopedDocumentParts {
-    return ScopedDocumentParts;
-}
-
-// ==============================================================================
-
-#[typekin::friends(relation = ConstDocumentParts)]
-pub struct ConstDocument;
-
-pub struct ConstDocumentParts;
-
-impl ConstDocument {
-    pub fn of_parts(_: ConstDocumentParts) -> Self {
-        return Self;
-    }
-}
-
-// ==============================================================================
-
-#[typekin::friends(
-    relation = String,
-    mod = pub trusted_title_protocol,
-    friend = title_conversions::owned_title(OwnedTitle,) -> unsafe,
-)]
-pub struct TrustDocument {
-    title: String,
-}
-
-pub struct OwnedTitle(String);
-
-mod title_conversions {
-    pub(super) fn owned_title(source: super::OwnedTitle) -> String {
-        source.0
-    }
-}
-
-impl TrustDocument {
-    pub fn of_parts(title: String) -> Self {
-        assert!(!title.is_empty(), "a document must have a title");
-        Self {
-            title: title.to_uppercase(),
-        }
-    }
-}
-
-fn construct_trusted_title<T>(source: T) -> TrustDocument
-where
-    T: trusted_title_protocol::Make + trusted_title_protocol::Unsafe,
-{
-    TrustDocument::of(source)
-}
-
-// ==============================================================================
-
-pub mod inspector_conversions {
-    pub fn inspector_text(source: super::InspectorSource) -> String {
-        let super::InspectorSource {
-            text,
-            lifetime: _lifetime,
-        } = source;
-        text
-    }
-}
-
-#[typekin::friends(
-    relation = String,
-    mod = pub inspector_protocol,
-    extra_caps = [ReservedScalar, ReservedFirst, ReservedSecond],
-    friend = [
-        inspector_conversions::inspector_text(InspectorSource) -> [Inspect, unsafe],
-    ],
-)]
-pub struct Inspectable;
-
-#[allow(dead_code)]
-impl Inspectable {
-    fn of_parts(_: String) -> Self {
-        return Self;
-    }
-}
-
-const _: () = {
-    // Do not remove this unless you are adding a direct usage of this
-    // struct somewhere, else rust will warn about unused struct.
-    let _ = Inspectable;
-};
-
-pub struct InspectorSource {
-    text: String,
-    lifetime: SourceLifetime,
-}
-
-pub struct SourceLifetime(std::rc::Rc<std::cell::Cell<usize>>);
-
-impl Drop for SourceLifetime {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() + 1);
-    }
-}
-
-impl inspector_protocol::ReservedScalar for InspectorSource {
-    fn to_string(self) -> String {
-        return inspector_conversions::inspector_text(self);
-    }
-}
-
-impl inspector_protocol::ReservedFirst for InspectorSource {
-    fn to_string(self) -> String {
-        return inspector_conversions::inspector_text(self);
-    }
-}
-
-impl inspector_protocol::ReservedSecond for InspectorSource {
-    fn to_string(self) -> String {
-        return inspector_conversions::inspector_text(self);
-    }
-}
-
-fn inspect<T>(source: T) -> String
-where
-    T: inspector_protocol::Inspect
-        + inspector_protocol::Unsafe
-        + inspector_protocol::ReservedScalar
-        + inspector_protocol::ReservedFirst
-        + inspector_protocol::ReservedSecond,
-{
-    inspector_protocol::Inspect::to_string(source)
-}
-
-fn construct_declared<T>(source: T) -> Document
-where
-    T: declared_document_protocol::DocumentDeclared,
-{
-    let (id, access) =
-        declared_document_protocol::DocumentDeclared::convert(source);
-    Document::of(DocumentParts { id, access })
-}
-
-// ==============================================================================
-
-#[typekin::friends(
-        relation = SelfScopedParts,
-        seal = SelfScopedSeal,
-        scope = self,
-        friend = [],
-)]
-pub struct SelfScoped;
-
-pub struct SelfScopedParts;
-
-impl SelfScoped {
-    pub fn of_parts(_: SelfScopedParts) -> Self {
-        return Self;
-    }
-}
-
-// ==============================================================================
 
 #[cfg(test)]
 #[cfg(feature = "test_fast")]
@@ -336,20 +10,23 @@ mod tests {
     fn standalone_marker_gates_owned_document_construction() {
         let _ = DocumentProtocol;
         let document = construct_declared(Reader { id: 5 });
-        assert_eq!((document.id, document.access), (5, 0b001));
+        assert_eq!(
+            (document_id(&document), document_access(&document)),
+            (5, 0b001)
+        );
     }
 
     #[test]
     fn constructs_from_friend_with_constructor_capability() {
         let document = Document::of(Reader { id: 7 });
 
-        assert_eq!(document.id, 7);
-        assert_eq!(document.access, 0b001);
+        assert_eq!(document_id(&document), 7);
+        assert_eq!(document_access(&document), 0b001);
 
         let document = Document::of(Writer { id: 13 });
 
-        assert_eq!(document.id, 13);
-        assert_eq!(document.access, 0b010);
+        assert_eq!(document_id(&document), 13);
+        assert_eq!(document_access(&document), 0b010);
     }
 
     #[test]
@@ -359,17 +36,20 @@ mod tests {
             access: 0b100,
         });
 
-        assert_eq!((document.id, document.access), (11, 0b100));
+        assert_eq!(
+            (document_id(&document), document_access(&document)),
+            (11, 0b100)
+        );
     }
 
     #[test]
     fn constructor_self_alias_grants_target() {
-        let document = Document::of(Document {
-            id: 17,
-            access: 0b011,
-        });
+        let document = Document::of(make_document(17, 0b011));
 
-        assert_eq!((document.id, document.access), (17, 0b011));
+        assert_eq!(
+            (document_id(&document), document_access(&document)),
+            (17, 0b011)
+        );
     }
 
     #[test]
@@ -378,19 +58,19 @@ mod tests {
 
         let document = Document::of(reader);
 
-        assert_eq!((document.id, document.access), (23, 0b001));
+        assert_eq!(
+            (document_id(&document), document_access(&document)),
+            (23, 0b001)
+        );
     }
 
     #[test]
     fn capabilities_use_their_own_conversions() {
+        assert_eq!(capability_specific_bit(CapabilitySpecificSource(12)), 6,);
         assert_eq!(
-            capability_specific_protocol::Bit::to_u128(
+            capability_specific_value(&CapabilitySpecificTarget::of(
                 CapabilitySpecificSource(12)
-            ),
-            6,
-        );
-        assert_eq!(
-            CapabilitySpecificTarget::of(CapabilitySpecificSource(12)).0,
+            )),
             3,
         );
     }
@@ -400,10 +80,10 @@ mod tests {
         let value = 4;
         let source = qualified_sources::Source(value);
         let constructed = QualifiedTarget::of(source);
-        assert_eq!(constructed.0, value + 1);
+        assert_eq!(qualified_value(&constructed), value + 1);
 
         let source = qualified_sources::Source(value);
-        let converted = qualified_friend_protocol::Bit::to_u8(source);
+        let converted = qualified_friend_bit(source);
         assert_eq!(converted, value + 2);
     }
 
@@ -424,13 +104,18 @@ mod tests {
     }
 
     #[test]
-    fn trusted_constructor_consumes_friend_and_still_calls_of_relation() {
+    fn blind_trust_constructor_consumes_friend_and_still_calls_of_relation() {
         let source = OwnedTitle(String::from("owned title"));
-        let document = construct_trusted_title(source);
-        assert_eq!(document.title, "OWNED TITLE");
+        let document = construct_blind_trust_title(source);
+        assert_eq!(blind_trust_title(&document), "OWNED TITLE");
         let relation = String::from("owned relation");
-        assert_eq!(TrustDocument::of(relation).title, "OWNED RELATION");
-        assert_panics(|| construct_trusted_title(OwnedTitle(String::new())));
+        assert_eq!(
+            blind_trust_title(&BlindTrustDocument::of(relation)),
+            "OWNED RELATION"
+        );
+        assert_panics(|| {
+            construct_blind_trust_title(OwnedTitle(String::new()))
+        });
     }
 
     #[test]
@@ -452,9 +137,106 @@ mod tests {
 
     #[test]
     fn self_scope_exposes_the_friendship_protocol() {
-        fn requires_seal<T: SelfScopedSeal>(_: T) {}
-
-        requires_seal(SelfScopedParts);
+        requires_self_scoped_seal(SelfScopedParts);
         let _ = SelfScoped::of(SelfScopedParts);
+    }
+
+    #[test]
+    fn crate_rooted_friend_paths_resolve_from_the_protocol_module() {
+        let value = 5;
+
+        let converted = rooted_friend_inspect(rooted_sources::Source(value));
+        let constructed = RootedTarget::of(rooted_sources::Source(value));
+
+        assert_eq!(converted, value * 3, "{value}");
+        assert_eq!(rooted_value(&constructed), value * 3, "{value}");
+    }
+
+    #[test]
+    fn conversion_names_the_capability_method() {
+        let reading = 42;
+
+        let converted = sensor_into_value()(Sensor(reading));
+
+        assert_eq!(converted, reading, "{reading}");
+    }
+
+    #[test]
+    fn value_is_the_capability_conversion_result() {
+        let reading = 42;
+        let convert: fn(Sensor) -> u16 = sensor_into_value();
+
+        let converted = convert(Sensor(reading));
+        let gauge = Gauge::of(Sensor(reading));
+
+        assert_eq!(converted, reading, "{reading}");
+        assert_eq!(gauge_value(&gauge), reading, "{reading}");
+    }
+
+    #[test]
+    fn constructor_builds_friends_through_its_relationship() {
+        let number = 7;
+
+        let ticket = self_scoped_constructor::Ticket::of(
+            constructor_sources::Stub(number),
+        );
+
+        assert_eq!(ticket.0, number, "{number}");
+    }
+
+    #[test]
+    fn constructor_maker_names_the_constructor() {
+        let number = 9;
+
+        let ticket = MadeTicket::from_source(constructor_sources::Stub(number));
+
+        assert_eq!(made_ticket_value(&ticket), number, "{number}");
+        assert_no_associated_fn!(MadeTicket, of);
+    }
+
+    #[test]
+    fn constructor_relationship_can_be_a_free_function() {
+        let number = 11;
+
+        let ticket =
+            RoutedTicket::from_source(constructor_sources::Stub(number));
+
+        assert_eq!(routed_ticket_value(&ticket), number * 2, "{number}");
+    }
+
+    #[test]
+    fn constructor_scope_module_holds_the_protocol() {
+        let number = 13;
+
+        let converted = routed_inspect(constructor_sources::Stub(number));
+
+        assert_eq!(converted, number, "{number}");
+    }
+
+    #[test]
+    fn constructor_accepts_each_listed_friend() {
+        let number = 3;
+
+        let from_stub = multi_friend_constructor::Gate::from_source(
+            constructor_sources::Stub(number),
+        );
+        let from_pass = multi_friend_constructor::Gate::from_source(
+            constructor_sources::Pass(number),
+        );
+
+        assert_eq!(from_stub.0, number, "{number}");
+        assert_eq!(from_pass.0, number + 100, "{number}");
+    }
+
+    #[test]
+    fn empty_constructor_friends_construct_only_from_the_relation() {
+        let number = 17;
+
+        let booth = Booth::from_source(number);
+        let converted = booth_inspect(constructor_sources::Stub(number));
+
+        assert_eq!(booth_value(&booth), number, "{number}");
+        assert_eq!(converted, number, "{number}");
+        assert_stub_is_not_booth_make();
     }
 }

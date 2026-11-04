@@ -1,251 +1,5 @@
-#[typekin::bitflag(
-    with = display,
-    friend = self(u8) -> Bit,
-    integral = [
-        friend = self(u8) -> [Math, Rel],
-    ],
-)]
-#[repr(u8)]
-pub enum Thingy {
-    FirstThing = 0,
-    ReadThing = 0b001,
-    WritersBlock = 0b010,
-    Execute = 0b100,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(
-    suffix = "Holder",
-    integral = [domain = 0..=7],
-)]
-pub enum Thingy1 {
-    FirstThing = 0,
-    ReadThing = 0b001,
-    WritersBlock = 0b010,
-    Execute = 0b100,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(value_name = "Thingies2", suffix = "")]
-pub enum Thingy2 {
-    FirstThing = 0,
-    ReadThing = 0b001,
-    WritersBlock = 0b010,
-    Execute = 0b100,
-}
-
-#[typekin::bitflag(with = serde)]
-#[repr(u8)]
-enum AutoSerdeFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-}
-
-#[typekin::bitflag(with = serde_with_name)]
-#[repr(u8)]
-enum NameSerdeFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-}
-
-#[typekin::bitflag(with = serde_with_value)]
-#[repr(u8)]
-enum ValueSerdeFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-}
-
-#[typekin::bitflag(
-    with = serde,
-    integral = [domain = 0..=7],
-)]
-#[repr(u8)]
-enum ValidatedSerdeFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-}
-
-#[typekin::bitflag(with = display)]
-#[repr(u8)]
-enum CompositeFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-    ReadWrite = 0b0011,
-}
-
-#[typekin::bitflag(repr = u8)]
-enum FullyGeneratedFlag {
-    Read = 0b0001,
-    Write = 0b0010,
-}
-
-#[cfg(target_pointer_width = "64")]
-#[typekin::bitflag(konst = none)]
-#[repr(usize)]
-enum PointerFlag {
-    One = 1,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(konst = nightly)]
-enum FullyGeneratedConstFlag {
-    Read = 0b0001,
-}
-
-const FULLY_GENERATED_FLAG_CLONE: FullyGeneratedConstFlag =
-    FullyGeneratedConstFlag::Read.clone();
-
-#[derive(Copy, Clone)]
-#[repr(u8)]
-#[typekin::bitflag(without = [clone, copy, repr],)]
-enum ManuallyDerivedFlag {
-    Read = 0b0001,
-}
-
-const THINGY_READ_VALUE: ThingyValue = ThingyValue::ReadThing;
-
-// =============================================================================
-
-#[repr(u8)]
-#[typekin::bitflag(konst = nightly)]
-enum ConstFlag {
-    Empty = 0,
-    Read = 0b001,
-    Write = 0b010,
-    Execute = 0b100,
-}
-
-const RETAINED: ConstFlagValue = ConstFlag::from_bits_retain(0b1011);
-const TRUNCATED: ConstFlagValue = ConstFlag::from_bits_truncate(0b1011);
-const SET_ALGEBRA: ConstFlagValue = ConstFlagValue::Read
-    .union(ConstFlagValue::Write)
-    .toggled(ConstFlagValue::Execute);
-const FROM_ENUM: ConstFlagValue = ConstFlag::Read.into_value();
-const ENUM_NEGATED: ConstFlagValue = !ConstFlag::Read;
-const VALUE_NEGATED: ConstFlagValue = !ConstFlagValue::Read;
-
-// =============================================================================
-
-#[typekin::bitflag(with = display)]
-#[repr(u32)]
-enum DisplayWide {
-    Low = 1,
-    High = 0x8000_0000,
-}
-
-#[typekin::bitflag(with = display)]
-#[repr(i16)]
-enum DisplaySigned {
-    Positive = 1,
-    Negative = -1,
-}
-
-// =============================================================================
-
-#[repr(u8)]
-#[typekin::bitflag(
-    with = display,
-    integral = [without = display],
-)]
-enum RootBeforeNested {
-    Read = 1,
-    Write = 2,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(
-    integral = [without = display],
-    with = display,
-)]
-enum NestedBeforeRoot {
-    Read = 1,
-    Write = 2,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(integral = [with = display])]
-enum NestedOnly {
-    Read = 1,
-    Write = 2,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(
-    without = display,
-    integral = [with = display],
-)]
-enum DisabledRootBeforeNested {
-    Read = 1,
-    Write = 2,
-}
-
-#[repr(u8)]
-#[typekin::bitflag(
-    integral = [with = display],
-    without = display,
-)]
-enum NestedBeforeDisabledRoot {
-    Read = 1,
-    Write = 2,
-}
-
-// =============================================================================
-
-struct DefaultBits(u8);
-struct CheckedBits(u8);
-struct TrustBits(u8);
-struct BitOnlyBits(u8);
-struct MathOnlyBits(u8);
-
-const fn default_bits(source: DefaultBits) -> u8 {
-    source.0
-}
-
-const fn checked_bits(source: CheckedBits) -> u8 {
-    source.0
-}
-
-const fn trusted_bits(source: TrustBits) -> u8 {
-    source.0
-}
-
-const fn bit_only_bits(source: BitOnlyBits) -> u8 {
-    source.0
-}
-
-const fn math_only_bits(source: MathOnlyBits) -> u8 {
-    source.0
-}
-
-const fn is_even(bits: u8) -> bool {
-    bits % 2 == 0
-}
-
-#[repr(u8)]
-#[typekin::bitflag(
-    friend = [
-        trusted_bits(TrustBits) -> [Bit, unsafe],
-        bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
-    ],
-    integral = [
-        friend = [
-            default_bits(DefaultBits) -> Make,
-            checked_bits(CheckedBits) -> [Make],
-            trusted_bits(TrustBits) -> [Bit, unsafe],
-            bit_only_bits(BitOnlyBits) -> [Bit, unsafe],
-            math_only_bits(MathOnlyBits) -> [Math, unsafe],
-        ],
-        valid = is_even,
-        domain = 0..=6,
-    ],
-)]
-enum Flags {
-    Empty = 0,
-    Read = 2,
-    Write = 4,
-}
-
-// =============================================================================
+use crate::fx_bitflag::*;
+use crate::*;
 
 #[cfg(test)]
 #[cfg(feature = "test_fast")]
@@ -255,6 +9,10 @@ mod tests {
     use super::*;
     use crate::{
         accepts_copy_clone,
+        accepts_debug,
+        accepts_hash,
+        assert_no_associated_fn,
+        assert_not_impl,
         assert_panics,
         unsafe_assert_panics,
     };
@@ -268,33 +26,26 @@ mod tests {
     };
 
     #[test]
+    fn raw_identifier_enum_builds_its_value_type() {
+        let one = r#Type::One;
+        let two = r#Type::Two;
+        let both: TypeValue = one.inserted(two);
+
+        assert_eq!(both.raw(), 0b11);
+    }
+
+    #[test]
     fn value_empty() {
         let it = Thingy::empty();
         assert_eq!(it.raw(), 0b0);
     }
 
-    #[cfg(target_pointer_width = "64")]
     #[test]
-    fn pointer_bitflag_value_exposes_upper_bytes_on_64_bit_targets() {
-        let value = PointerFlagValue::of(0x0123_4567_89ab_cdefu64);
-        let upper_byte = value.byte4();
-        let highest_byte = value.byte7();
-        let raw: u64 = value.into();
+    fn nested_without_fn_removes_a_value_method() {
+        let value = NoCountOnesFlag::all();
 
-        assert_eq!(upper_byte, 0x67);
-        assert_eq!(highest_byte, 0x01);
-        assert_eq!(raw, 0x0123_4567_89ab_cdef);
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[test]
-    fn pointer_bitflag_value_checks_u32_narrowing_on_64_bit_targets() {
-        let value = PointerFlagValue::of(1u64 << 32);
-        let result = value.try_into_u32();
-        let via_trait: Result<u32, ()> = value.try_into();
-
-        assert_eq!(result, Err(()));
-        assert_eq!(via_trait, Err(()));
+        crate::assert_no_method!(NoCountOnesFlagValue, count_ones);
+        assert_eq!(value.count_zeros(), 6, "{value:?}");
     }
 
     #[test]
@@ -912,69 +663,71 @@ mod tests {
     }
 
     #[test]
-    fn trusted_generated_value_friend_bypasses_invalid_value_construction() {
+    fn blind_trust_value_friend_bypasses_invalid_value_construction() {
         let raw = 3;
-        let source = TrustBits(raw);
+        let source = BlindTrustBits(raw);
         assert_eq!(FlagsValue::of(source).raw(), raw);
         assert_eq!(FlagsValue::try_make(raw), Err(raw));
         assert_panics(|| Flags::from_bits_retain(raw));
 
         let rhs = 1;
         assert_panics(|| {
-            let _ = FlagsValue::try_make(2).unwrap() | TrustBits(rhs);
+            let _ = FlagsValue::try_make(2).unwrap() | BlindTrustBits(rhs);
         });
         assert_panics(|| {
-            let _ = Flags::Read | TrustBits(rhs);
+            let _ = Flags::Read | BlindTrustBits(rhs);
         });
 
         assert_panics(|| {
-            let _ = Flags::Read.into_value() | FlagsValue::of(TrustBits(8));
+            let _ =
+                Flags::Read.into_value() | FlagsValue::of(BlindTrustBits(8));
         });
     }
 
     #[test]
-    fn trusted_generated_value_friend_bypasses_unknown_bits_construction() {
+    fn blind_trust_value_friend_bypasses_unknown_bits_construction() {
         let raw = 8;
-        let source = TrustBits(raw);
+        let source = BlindTrustBits(raw);
         assert_eq!(FlagsValue::of(source).raw(), raw);
         assert_eq!(FlagsValue::try_make(raw), Err(raw));
         assert_panics(|| Flags::from_bits_retain(raw));
 
         let rhs = 1;
         assert_panics(|| {
-            let _ = FlagsValue::try_make(2).unwrap() | TrustBits(rhs);
+            let _ = FlagsValue::try_make(2).unwrap() | BlindTrustBits(rhs);
         });
         assert_panics(|| {
-            let _ = Flags::Read | TrustBits(rhs);
+            let _ = Flags::Read | BlindTrustBits(rhs);
         });
 
         assert_panics(|| {
-            let _ = Flags::Read.into_value() | FlagsValue::of(TrustBits(8));
+            let _ =
+                Flags::Read.into_value() | FlagsValue::of(BlindTrustBits(8));
         });
     }
 
     #[test]
-    fn trusted_assignment_rejects_invalid_rhs_without_mutating() {
+    fn blind_trust_assignment_rejects_invalid_rhs_without_mutating() {
         let rhs = 1;
         let mut flags = FlagsValue::try_make(2).unwrap();
         unsafe_assert_panics(|| {
-            flags |= TrustBits(rhs);
+            flags |= BlindTrustBits(rhs);
         });
         assert_eq!(flags.raw(), 2);
     }
 
     #[test]
-    fn trusted_assignment_rejects_unknown_rhs_without_mutating() {
+    fn blind_trust_assignment_rejects_unknown_rhs_without_mutating() {
         let rhs = 8;
         let mut flags = FlagsValue::try_make(2).unwrap();
         unsafe_assert_panics(|| {
-            flags |= TrustBits(rhs);
+            flags |= BlindTrustBits(rhs);
         });
         assert_eq!(flags.raw(), 2);
     }
 
     #[test]
-    fn trusted_bit_and_math_friends_still_validate_results() {
+    fn blind_trust_bit_and_math_friends_still_validate_results() {
         let root_source = BitOnlyBits(4);
         assert_eq!((Flags::Read | root_source).raw(), 6);
         let value_source = BitOnlyBits(4);
@@ -1010,33 +763,188 @@ mod tests {
 
         assert_eq!(ManuallyDerivedFlag::Read.raw(), 1);
     }
+
+    #[test]
+    fn stable_konst_makes_value_api_const() {
+        assert_eq!(STABLE_RETAINED.raw(), 0b111);
+        assert_eq!(STABLE_UNION.raw(), 0b11);
+    }
+
+    #[test]
+    fn default_konst_makes_value_api_const() {
+        assert_eq!(DEFAULT_RETAINED.raw(), 0b1011);
+        assert_eq!(DEFAULT_UNION.raw(), 0b101);
+    }
+
+    #[test]
+    fn nested_konst_value_makes_value_api_const() {
+        assert_eq!(FORWARDED_RETAINED.raw(), 0b111);
+        assert_eq!(FORWARDED_UNION.raw(), 0b11);
+    }
+
+    #[test]
+    fn konst_value_overrides_konst_none() {
+        assert_eq!(OVERRIDDEN_RETAINED.raw(), 0b111);
+        assert_eq!(OVERRIDDEN_UNION.raw(), 0b11);
+    }
+
+    #[test]
+    fn explicit_derive_flags_generate_enum_traits() {
+        accepts_copy_clone::<DerivedFlag>();
+        accepts_hash::<DerivedFlag>();
+        accepts_debug::<DerivedFlag>();
+    }
+
+    #[test]
+    fn disabled_derive_flags_omit_hash_and_debug() {
+        accepts_copy_clone::<UnderivedFlag>();
+        assert_not_impl!(UnderivedFlag: core::hash::Hash);
+        assert_not_impl!(UnderivedFlag: core::fmt::Debug);
+    }
+
+    #[test]
+    fn without_display_omits_enum_and_value_display() {
+        assert_not_impl!(UndisplayedFlag: core::fmt::Display);
+        assert_not_impl!(UndisplayedFlagValue: core::fmt::Display);
+    }
+
+    #[test]
+    fn nested_without_display_omits_value_display() {
+        assert_not_impl!(UndisplayedValueFlag: core::fmt::Display);
+        assert_not_impl!(UndisplayedValueFlagValue: core::fmt::Display);
+    }
+
+    #[test]
+    fn nested_unit_error_keeps_constructor_errors() {
+        let raw = 0b1000;
+        let text = "0x8";
+        let made = UnitErrorFlagValue::try_make(raw);
+        let parsed = UnitErrorFlagValue::from_str(text);
+
+        assert_eq!(made, Err(raw), "{raw:#x}");
+        assert_eq!(parsed, Err(()), "{text}");
+    }
+
+    #[test]
+    fn signed_value_negates_without_nested_integral() {
+        let value = SignedWithoutNestedValue::Read;
+        let negated = -value;
+
+        assert_eq!(negated.bits(), -1, "{value:?}");
+    }
+
+    #[test]
+    fn signed_value_negates_with_empty_nested_integral() {
+        let value = SignedEmptyNestedValue::Read;
+        let negated = -value;
+
+        assert_eq!(negated.bits(), -1, "{value:?}");
+    }
+
+    #[test]
+    fn unsigned_value_lacks_neg_without_nested_integral() {
+        assert_not_impl!(UnsignedWithoutNestedValue: core::ops::Neg);
+    }
+
+    #[test]
+    fn unsigned_value_lacks_neg_with_empty_nested_integral() {
+        assert_not_impl!(UnsignedEmptyNestedValue: core::ops::Neg);
+    }
+
+    #[test]
+    fn value_unsafe_friend_constructs_without_validation() {
+        let raw = 0b1000;
+        let source = ValueUnsafeBits(raw);
+        let value = ValueUnsafeFlagValue::of(source);
+        let made = ValueUnsafeFlagValue::try_make(raw);
+
+        assert_eq!(value.raw(), raw, "{raw:#x}");
+        assert_eq!(made, Err(raw), "{raw:#x}");
+    }
+
+    #[test]
+    fn value_unsafe_friend_grants_no_operations() {
+        assert_not_impl!(
+            ValueUnsafeFlagValue: core::ops::BitOr<ValueUnsafeBits>
+        );
+        assert_not_impl!(ValueUnsafeFlagValue: core::ops::Add<ValueUnsafeBits>);
+    }
+
+    #[test]
+    fn empty_friend_lists_keep_only_the_automatic_value_friend() {
+        let rhs = 0b10u8;
+        let combined = FriendlessFlagValue::Read | rhs;
+
+        assert_eq!(combined.raw(), 0b11, "{rhs:#b}");
+        assert_not_impl!(FriendlessFlag: core::ops::BitOr<u8>);
+    }
+
+    #[test]
+    fn nested_math_and_bit_friend_operates_on_values() {
+        let read = MathBitFlagValue::Read;
+        let rhs = 4;
+        let made = MathBitFlagValue::of(MathBitBits(rhs));
+
+        assert_eq!((read | MathBitBits(rhs)).raw(), 6, "{rhs}");
+        assert_eq!((read + MathBitBits(rhs)).raw(), 6, "{rhs}");
+        assert_eq!(made.raw(), rhs, "{rhs}");
+    }
+
+    #[test]
+    fn nested_math_and_bit_friend_rejects_invalid_results() {
+        let read = MathBitFlagValue::Read;
+        let odd = 1;
+
+        assert_panics(|| read | MathBitBits(odd));
+        assert_panics(|| read + MathBitBits(odd));
+        assert_panics(|| MathBitFlagValue::of(MathBitBits(odd)));
+    }
+
+    #[test]
+    fn unhidden_nested_blind_trust_stays_in_the_defining_module() {
+        let raw = 0b100;
+        let value = unhidden_blind_trust(raw);
+        let made = UnhiddenBlindTrustFlagValue::try_make(raw);
+
+        assert_eq!(value.raw(), raw, "{raw:#b}");
+        assert_eq!(made, Err(raw), "{raw:#b}");
+        assert_no_associated_fn!(UnhiddenBlindTrustFlagValue, _blind_trust);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_fast")]
+#[cfg(target_pointer_width = "64")]
+mod pointer_width_64 {
+    use super::*;
+
+    #[test]
+    fn pointer_bitflag_value_exposes_upper_bytes_on_64_bit_targets() {
+        let value = PointerFlagValue::of(0x0123_4567_89ab_cdefu64);
+        let upper_byte = value.byte4();
+        let highest_byte = value.byte7();
+        let raw: u64 = value.into();
+
+        assert_eq!(upper_byte, 0x67);
+        assert_eq!(highest_byte, 0x01);
+        assert_eq!(raw, 0x0123_4567_89ab_cdef);
+    }
+
+    #[test]
+    fn pointer_bitflag_value_checks_u32_narrowing_on_64_bit_targets() {
+        let value = PointerFlagValue::of(1u64 << 32);
+        let result = value.try_into_u32();
+        let via_trait: Result<u32, ()> = value.try_into();
+
+        assert_eq!(result, Err(()));
+        assert_eq!(via_trait, Err(()));
+    }
 }
 
 #[cfg(test)]
 #[cfg(feature = "test_fast")]
 mod display_native_values {
-    #[typekin::bitflag(with = display)]
-    #[repr(u32)]
-    enum Wide {
-        Low = 1,
-        High = 0x8000_0000,
-    }
-
-    #[typekin::bitflag(with = display)]
-    #[repr(i16)]
-    enum Signed {
-        Positive = 1,
-        Negative = -1,
-    }
-
-    fn assert_display(
-        value: impl core::fmt::Display,
-        expected: &str,
-    ) {
-        assert_eq!(format!("{value}"), expected);
-        assert_eq!(format!("{value:+014}"), expected);
-        assert_eq!(format!("{value:*^15.2}"), expected);
-    }
+    use super::*;
 
     #[test]
     fn displays_zero_wide_value_with_signed_minimum() {

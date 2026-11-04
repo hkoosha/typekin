@@ -1,0 +1,14 @@
+# Nextest runs every test in its own process, so the `LazyLock`s that build a
+# fixture crate once per `cargo test` run build it again in each process. Those
+# builds share their crate and target directories under
+# `target/typekin-fixtures/`; running them one at a time keeps processes from
+# rewriting or locking each other's fixture crates.
+[test-groups]
+fixture-crates = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = '''
+test(/^test_(compile_fail|compile_pass|no_std|pointer_width_compile)::/)
+| test(/^test_\w+_asm::/)
+'''
+test-group = 'fixture-crates'

@@ -1,3 +1,4 @@
+use crate::fx_text::*;
 use crate::*;
 use serde_test::{
     Configure,
@@ -5,215 +6,6 @@ use serde_test::{
     assert_de_tokens_error,
     assert_tokens,
 };
-use std::alloc::GlobalAlloc;
-use std::cell::Cell;
-use std::rc::Rc;
-
-//noinspection SpellCheckingInspection
-const MY_WORD: &str = "safeé";
-
-fn valid_owned_text(value: &str) -> bool {
-    if value == "panic" {
-        panic!("validator panic");
-    }
-    return value == "safe" || value == MY_WORD;
-}
-
-#[typekin::text(valid = valid_owned_text)]
-struct OwnedText(String);
-
-fn tracked_text(value: &str) -> (OwnedText, AllocationWatch) {
-    let mut backing = String::with_capacity(64);
-    backing.push_str(value);
-    let text = OwnedText::try_make(backing).unwrap();
-    assert!(text.capacity() >= 64);
-    let watch = AllocationWatch::watch(text.as_str().as_ptr());
-    return (text, watch);
-}
-
-struct EmptySetSource(String);
-struct TrustEmptySetSource(String);
-
-fn empty_set_text(source: EmptySetSource) -> String {
-    source.0
-}
-
-fn trusted_empty_set_text(source: TrustEmptySetSource) -> String {
-    source.0
-}
-
-#[typekin::text(
-    domain = [],
-    friend = [
-        empty_set_text(EmptySetSource) -> Make,
-        trusted_empty_set_text(TrustEmptySetSource) -> [Make, unsafe],
-    ],
-)]
-struct EmptySetText(String);
-
-struct DropProbe(Rc<Cell<usize>>);
-
-impl DropProbe {
-    fn assert_live(&self) {
-        assert_eq!(self.0.get(), 0);
-    }
-}
-
-impl Drop for DropProbe {
-    fn drop(&mut self) {
-        self.0.set(self.0.get() + 1);
-    }
-}
-
-// =============================================================================
-
-fn is_slug(value: &str) -> bool {
-    return !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
-}
-
-fn is_not_reserved(value: &str) -> bool {
-    return value != "reserved";
-}
-
-struct SlugSource(String);
-struct TrustSlugSource(String);
-
-impl SlugSource {
-    fn into_string(self) -> String {
-        return self.0;
-    }
-}
-
-impl TrustSlugSource {
-    fn into_string(self) -> String {
-        return self.0;
-    }
-}
-
-#[typekin::text(
-    domain = ["draft", "published"],
-    friend = [
-        SlugSource::into_string(SlugSource) -> Make,
-        TrustSlugSource::into_string(TrustSlugSource) -> unsafe,
-    ],
-)]
-struct Slug(String);
-
-#[typekin::text]
-struct FullyGeneratedText(String);
-
-#[typekin::text(without = [clone, repr])]
-#[repr(transparent)]
-#[derive(Clone)]
-struct ManuallyDerivedText(String);
-
-#[typekin::text(
-    friend = SlugSource::into_string(SlugSource) -> Make,
-    valid = is_slug,
-)]
-struct CallbackText(String);
-
-#[typekin::text(valid = [is_slug, is_not_reserved])]
-struct CallbackChainText(String);
-
-#[typekin::text(domain = ["", "é"])]
-struct LiteralText(String);
-
-#[typekin::text(friend = self(Self) -> [Rel])]
-struct DisplayText(String);
-
-#[typekin::text(without = display)]
-struct NoDisplayText(String);
-
-impl core::fmt::Display for NoDisplayText {
-    fn fmt(
-        &self,
-        formatter: &mut core::fmt::Formatter<'_>,
-    ) -> core::fmt::Result {
-        return formatter.write_str(self.as_str());
-    }
-}
-
-thread_local! {
-    static MUTATION_CALLS: Cell<usize> = const { Cell::new(0) };
-}
-
-fn reset() {
-    MUTATION_CALLS.set(0);
-}
-fn inc() {
-    MUTATION_CALLS.update(|it| it + 1);
-}
-fn require(it: usize) {
-    MUTATION_CALLS.with(|v| assert_eq!(v.get(), it));
-}
-
-fn validate_mutation(value: &str) -> bool {
-    inc();
-    return !value.is_empty() && value != "b" && !value.contains('!');
-}
-
-#[typekin::text(valid = validate_mutation)]
-struct CheckedMutationText(String);
-
-fn validate_empty_mutation(value: &str) -> bool {
-    inc();
-    return value.is_empty();
-}
-
-#[typekin::text(valid = validate_empty_mutation)]
-struct CheckedEmptyText(String);
-
-#[typekin::text(domain = ["a", "ab", "abc"])]
-struct MemberMutationText(String);
-
-#[typekin::text(valid = is_not_reserved)]
-struct MutationAllocationText(String);
-
-fn is_serde_text_valid(value: &str) -> bool {
-    return value == "valid";
-}
-
-#[typekin::text(
-    valid = is_serde_text_valid,
-    with = serde,
-)]
-struct SerdeText(String);
-
-#[typekin::text(
-    valid = is_slug,
-    friend = Self::into_inner(Self) -> [Rel, unsafe],
-)]
-struct RelatedText(String);
-
-struct CheckedSource(String);
-struct TrustSource(String);
-
-fn checked_text(source: CheckedSource) -> String {
-    source.0
-}
-
-fn trusted_text(source: TrustSource) -> String {
-    source.0
-}
-
-#[typekin::text(
-    domain = [],
-    friend = [
-        checked_text(CheckedSource) -> Make,
-        trusted_text(TrustSource) -> [unsafe],
-    ],
-)]
-struct EmptyDomain(String);
-
-#[typekin::text(domain = [])]
-struct CallbackEmptyDomain(String);
-
-#[typekin::text(domain = [""])]
-struct EmptyStringOnly(String);
 
 #[cfg(test)]
 #[cfg(feature = "test_fast")]
@@ -513,8 +305,18 @@ mod tests {
             let _ = Slug::of(SlugSource(invalid.into()));
         });
 
-        let trusted = Slug::of(TrustSlugSource(invalid.into()));
-        assert_eq!(trusted.as_str(), invalid);
+        let blind_trust = Slug::of(BlindTrustSlugSource(invalid.into()));
+        assert_eq!(blind_trust.as_str(), invalid);
+    }
+
+    #[test]
+    fn with_blind_trust_text_constructs_without_validation() {
+        let raw = "published";
+        let tag = blind_trust_tag(String::from(raw));
+        let checked = BlindTrustTag::try_from_str(raw);
+
+        assert_eq!(tag.as_str(), raw);
+        assert!(checked.is_err(), "{raw}");
     }
 
     #[test]
@@ -900,7 +702,7 @@ mod tests {
     }
 
     #[test]
-    fn trusted_self_relation_preserves_checked_validation() {
+    fn blind_trust_self_relation_preserves_checked_validation() {
         let earlier = RelatedText::try_from_str("draft").unwrap();
         let later = RelatedText::try_from_str("published").unwrap();
         assert!(earlier < later);
@@ -955,12 +757,12 @@ mod tests {
         let value = "é🦀";
         let checked = CheckedSource(String::from(value));
         assert_panics(|| EmptyDomain::of(checked));
-        let trusted = TrustSource(String::from(value));
-        assert_eq!(EmptyDomain::of(trusted).into_inner(), value);
+        let blind_trust = BlindTrustSource(String::from(value));
+        assert_eq!(EmptyDomain::of(blind_trust).into_inner(), value);
     }
 
     #[test]
-    fn trusted_empty_domain_values_revalidate_maps_and_all_checked_mutators() {
+    fn blind_trust_empty_domain_values_revalidate_maps_and_mutators() {
         type Mutation = fn(EmptyDomain) -> bool;
         let mutations: [(&str, Mutation); 11] = [
             ("map no-op", |text| text.map(|_| {}).is_err()),
@@ -982,11 +784,11 @@ mod tests {
             ("pop", |text| text.try_pop().is_err()),
         ];
         for (name, mutate) in mutations {
-            let text = EmptyDomain::of(TrustSource(String::from("é🦀")));
+            let text = EmptyDomain::of(BlindTrustSource(String::from("é🦀")));
             assert!(mutate(text), "{name} must reject an empty-domain value");
         }
 
-        let text = EmptyDomain::of(TrustSource(String::from("é🦀")));
+        let text = EmptyDomain::of(BlindTrustSource(String::from("é🦀")));
         assert_panics(|| text + "");
     }
 
@@ -997,6 +799,202 @@ mod tests {
             ManuallyDerivedText::try_from_str("text").unwrap().as_str(),
             "text"
         );
+    }
+
+    #[test]
+    fn validated_text_has_no_infallible_from() {
+        assert_not_impl!(ValidatedSlug: core::convert::From<String>);
+    }
+
+    #[test]
+    fn validated_text_has_no_infallible_str_from() {
+        assert_not_impl!(ValidatedSlug: core::convert::From<&'static str>);
+    }
+
+    #[test]
+    fn validated_text_has_no_as_mut() {
+        assert_not_impl!(ValidatedSlug: core::convert::AsMut<str>);
+    }
+
+    #[test]
+    fn validated_text_has_no_deref_mut() {
+        assert_not_impl!(ValidatedSlug: core::ops::DerefMut);
+    }
+
+    #[test]
+    fn validated_text_has_no_mutable_string() {
+        assert_not_impl!(ValidatedSlug: core::convert::AsMut<String>);
+        assert_not_impl!(ValidatedSlug: core::borrow::BorrowMut<String>);
+    }
+
+    #[test]
+    fn friend_without_capabilities_generates_no_constructor() {
+        assert_no_associated_fn!(CapabilityFreeFriendText, of);
+    }
+
+    #[test]
+    fn empty_friend_list_generates_no_constructor() {
+        assert_no_associated_fn!(NoFriendText, of);
+    }
+
+    #[test]
+    fn implicit_self_rel_friend_generates_no_constructor() {
+        assert_no_associated_fn!(SelfRelText, of);
+    }
+
+    #[test]
+    fn blind_trust_self_friend_constructs_from_self() {
+        let value = "draft";
+        let this = SelfMakeText::try_from_str(value);
+        assert!(this.is_ok(), "{value}");
+
+        let rebuilt = SelfMakeText::of(this.unwrap());
+        assert_eq!(rebuilt.as_str(), value);
+    }
+
+    #[test]
+    fn unit_error_rejects_with_unit() {
+        let value = "Draft";
+        let this: Result<UnitErrorText, ()> =
+            UnitErrorText::try_from_str(value);
+        assert_eq!(this, Err(()), "{value}");
+    }
+
+    #[test]
+    fn disabled_serde_generates_no_serialize() {
+        assert_not_impl!(NoSerdeText: serde::Serialize);
+    }
+
+    #[test]
+    fn disabled_serde_generates_no_deserialize() {
+        assert_not_impl!(NoSerdeText: serde::de::DeserializeOwned);
+    }
+
+    #[test]
+    fn unbracketed_display_flag_generates_display() {
+        let value = "shown";
+        let text = SingleDisplayFlagText::from(value);
+        assert_eq!(format!("{text}"), value);
+    }
+
+    #[test]
+    fn explicit_traits_generate_clone_debug_and_hash() {
+        accepts_clone::<ExplicitTraitsText>();
+        accepts_debug::<ExplicitTraitsText>();
+        accepts_hash::<ExplicitTraitsText>();
+
+        let value = "explicit";
+        let text = ExplicitTraitsText::from(value).clone();
+        assert_eq!(format!("{text:?}"), r#"ExplicitTraitsText("explicit")"#);
+    }
+
+    #[test]
+    fn disabled_debug_is_not_generated() {
+        assert_not_impl!(NoTraitsText: core::fmt::Debug);
+    }
+
+    #[test]
+    fn disabled_hash_is_not_generated() {
+        assert_not_impl!(NoTraitsText: core::hash::Hash);
+    }
+
+    #[test]
+    fn disabled_clone_is_not_generated() {
+        assert_not_impl!(NoTraitsText: core::clone::Clone);
+    }
+
+    #[test]
+    fn default_konst_makes_read_only_accessors_const() {
+        const fn read(text: &FullyGeneratedText) -> (&str, &[u8], usize, bool) {
+            let _ = text.capacity();
+            return (
+                text.as_str(),
+                text.as_bytes(),
+                text.len(),
+                text.is_empty(),
+            );
+        }
+
+        let value = "full";
+        let text = FullyGeneratedText::from(value);
+        assert_eq!(read(&text), (value, value.as_bytes(), 4, false));
+    }
+
+    #[test]
+    fn stable_konst_makes_read_only_accessors_const() {
+        const fn read(text: &StableKonstText) -> (&str, &[u8], usize, bool) {
+            let _ = text.capacity();
+            return (
+                text.as_str(),
+                text.as_bytes(),
+                text.len(),
+                text.is_empty(),
+            );
+        }
+
+        let value = "stable";
+        let text = StableKonstText::from(value);
+        assert_eq!(read(&text), (value, value.as_bytes(), 6, false));
+    }
+
+    #[test]
+    fn nightly_konst_makes_owned_operations_const() {
+        const MADE: NightlyKonstText =
+            match NightlyKonstText::try_make(String::new()) {
+                Ok(text) => text,
+                Err(()) => panic!("unvalidated text accepts every value"),
+            };
+        const FROM: NightlyKonstText = NightlyKonstText::from(String::new());
+        const INNER: String = MADE.into_inner();
+        const BYTES: Vec<u8> = FROM.into_bytes();
+
+        assert_eq!(INNER, "");
+        assert!(BYTES.is_empty());
+    }
+
+    #[test]
+    fn specific_const_enables_take_precedence_over_text_family() {
+        const fn length(text: &SpecificKonstText) -> usize {
+            return text.len();
+        }
+        const FROM: SpecificKonstText = SpecificKonstText::from(String::new());
+
+        assert_eq!(length(&FROM), 0);
+    }
+
+    #[test]
+    fn without_fn_removes_only_the_named_text_methods() {
+        let value = "draft";
+        let text = WithoutSomeTextFns::from(value);
+
+        assert_no_method!(WithoutSomeTextFns, try_push);
+        assert_no_method!(WithoutSomeTextFns, len);
+        let pushed = text.try_push_str("-new");
+        assert!(pushed.is_ok(), "{value}");
+        assert_eq!(pushed.unwrap().as_str(), "draft-new", "{value}");
+    }
+
+    #[test]
+    fn generated_traits_need_no_forwarded_text_method() {
+        let value = "draft";
+        let text = WithoutTextFns::from(value);
+        let joined = text.clone() + "-new";
+        let set = std::collections::HashSet::from([
+            text.clone(),
+            WithoutTextFns::from(value),
+        ]);
+
+        assert_no_method!(WithoutTextFns, as_str);
+        assert_eq!(format!("{text}"), value);
+        assert_eq!(format!("{text:?}"), r#"WithoutTextFns("draft")"#);
+        assert_eq!(AsRef::<str>::as_ref(&text), value);
+        assert_eq!(AsRef::<[u8]>::as_ref(&text), value.as_bytes());
+        assert_eq!(core::borrow::Borrow::<str>::borrow(&text), value);
+        assert_eq!(&*text, value);
+        assert!(joined > text, "{joined:?}");
+        assert_eq!(set.len(), 1, "{value}");
+        assert_tokens(&text, &[Token::Str(value)]);
+        assert_eq!(String::from(joined), "draft-new");
     }
 }
 
@@ -1078,7 +1076,7 @@ mod test_mutation_drop {
     }
 
     #[test]
-    fn empty_membership_releases_trusted_buffers_after_rejected_noop_changes() {
+    fn empty_membership_releases_blind_trust_buffers_after_rejected_noops() {
         type Mutation = fn(EmptySetText) -> bool;
         let mutations: [Mutation; 2] = [
             |text| text.map(|_| {}).is_err(),
@@ -1088,7 +1086,7 @@ mod test_mutation_drop {
             let mut raw = String::with_capacity(64);
             raw.push_str("é🦀");
             let watch = AllocationWatch::watch(raw.as_ptr());
-            let text = EmptySetText::of(TrustEmptySetSource(raw));
+            let text = EmptySetText::of(BlindTrustEmptySetSource(raw));
             assert_eq!(watch.deallocations(), 0);
             assert!(mutate(text));
             watch.assert_released();

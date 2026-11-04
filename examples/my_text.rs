@@ -1,6 +1,6 @@
 #[typekin::text(
     std = true,
-    domain = ["draft", "published", "published-new", "archive", "-"],
+    domain = {"draft", "published", "published-new", "archive", "-"},
     tree = TextState {
         Valid,
         Invalid,

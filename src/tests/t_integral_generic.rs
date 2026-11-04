@@ -6,13 +6,11 @@ use syn::{
     ItemStruct,
 };
 
-use crate::integral::{
-    Cfg,
-    ekran,
-};
+use crate::integral::ekran;
+use crate::integral_cfg::Cfg;
 
 fn expand(source: &str) -> syn::Result<TokenStream> {
-    let configuration = syn::parse_str::<Cfg>("konst = none")?;
+    let configuration = syn::parse_str::<Cfg>("konst = none, hide_in = none")?;
     let item = syn::parse_str::<ItemStruct>(source)?;
     return ekran(Box::new(configuration), item);
 }
@@ -68,76 +66,96 @@ fn reject_at(
     assert_eq!(error.span().start().column, column);
 }
 
-#[test]
-fn generic_shape_preserves_declaration_and_marker_order() {
-    let source = "
-        struct Tagged<
-            'a,
-            #[allow(unused)] T: ?Sized,
-            const SPACE: u8 = 7,
-            const ENABLED: bool = true,
-            Meta = (),
-        >(u32)
-        where
-            T: 'a,
-            Meta: Clone;
-    ";
-    let original = syn::parse_str::<ItemStruct>(source);
-    assert!(original.is_ok(), "{source}");
-    let original = original.unwrap();
+const GENERIC_SOURCE: &str = "
+    struct Tagged<
+        'a,
+        #[allow(unused)] T: ?Sized,
+        const SPACE: u8 = 7,
+        const ENABLED: bool = true,
+        Meta = (),
+    >(u32)
+    where
+        T: 'a,
+        Meta: Clone;
+";
+
+fn expand_file(source: &str) -> syn::File {
     let result = expand(source);
     assert!(result.is_ok(), "{source}");
     let expanded = syn::parse2::<syn::File>(result.unwrap());
     assert!(expanded.is_ok(), "{source}");
-    let expanded = expanded.unwrap();
-    let target = expanded
+    return expanded.unwrap();
+}
+
+fn find_struct<'a>(
+    file: &'a syn::File,
+    ident: &syn::Ident,
+) -> &'a ItemStruct {
+    return file
         .items
         .iter()
         .find_map(|item| match item {
-            Item::Struct(item) if item.ident == original.ident => Some(item),
+            Item::Struct(item) if item.ident == *ident => Some(item),
             _ => None,
         })
         .unwrap();
-    let Fields::Unnamed(fields) = &target.fields
+}
+
+fn tuple_fields(item: &ItemStruct) -> Vec<&syn::Field> {
+    let Fields::Unnamed(fields) = &item.fields
     else {
         panic!("integral declaration lost its tuple shape");
     };
-    let types = fields
-        .unnamed
-        .iter()
-        .map(|field| &field.ty)
-        .collect::<Vec<_>>();
+    return fields.unnamed.iter().collect();
+}
+
+#[test]
+fn generic_declaration_tokens_are_preserved() {
+    let source = GENERIC_SOURCE;
+    let original = syn::parse_str::<ItemStruct>(source);
+    assert!(original.is_ok(), "{source}");
+    let original = original.unwrap();
+    let expanded = expand_file(source);
+    let target = find_struct(&expanded, &original.ident);
 
     assert_eq!(
         target.generics.to_token_stream().to_string(),
-        original.generics.to_token_stream().to_string()
+        original.generics.to_token_stream().to_string(),
+        "{source}"
     );
     assert_eq!(
         target.generics.where_clause.to_token_stream().to_string(),
-        original.generics.where_clause.to_token_stream().to_string()
+        original.generics.where_clause.to_token_stream().to_string(),
+        "{source}"
     );
-    assert_eq!(types.len(), 6);
-    assert!(type_path(types[0]).is_ident("u32"));
-    let syn::Type::Reference(lifetime_marker) = phantom_argument(types[1])
-    else {
-        panic!("lifetime markers must borrow the unit type");
-    };
-    assert_eq!(lifetime_marker.lifetime.as_ref().unwrap().ident, "a");
-    assert!(lifetime_marker.mutability.is_none());
-    let syn::Type::Tuple(unit) = &*lifetime_marker.elem
-    else {
-        panic!("lifetime markers must borrow the unit type");
-    };
-    assert!(unit.elems.is_empty());
-    assert!(type_path(phantom_argument(types[2])).is_ident("T"));
-    assert!(type_path(phantom_argument(types[5])).is_ident("Meta"));
+}
+
+#[test]
+fn generic_marker_fields_are_private() {
+    let source = GENERIC_SOURCE;
+    let original = syn::parse_str::<ItemStruct>(source);
+    assert!(original.is_ok(), "{source}");
+    let original = original.unwrap();
+    let expanded = expand_file(source);
+    let fields = tuple_fields(find_struct(&expanded, &original.ident));
+
+    assert_eq!(fields.len(), 6, "{source}");
     assert!(
         fields
-            .unnamed
             .iter()
-            .all(|field| matches!(field.vis, syn::Visibility::Inherited))
+            .all(|field| matches!(field.vis, syn::Visibility::Inherited)),
+        "{source}"
     );
+}
 
+#[test]
+fn const_markers_use_private_helper_structs() {
+    let source = GENERIC_SOURCE;
+    let original = syn::parse_str::<ItemStruct>(source);
+    assert!(original.is_ok(), "{source}");
+    let original = original.unwrap();
+    let expanded = expand_file(source);
+    let fields = tuple_fields(find_struct(&expanded, &original.ident));
     let markers = expanded
         .items
         .iter()
@@ -146,10 +164,11 @@ fn generic_shape_preserves_declaration_and_marker_order() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(markers.len(), 2);
+
+    assert_eq!(markers.len(), 2, "{source}");
     assert_ne!(markers[0].ident, markers[1].ident);
-    let first_marker = type_path(phantom_argument(types[3]));
-    let second_marker = type_path(phantom_argument(types[4]));
+    let first_marker = type_path(phantom_argument(&fields[3].ty));
+    let second_marker = type_path(phantom_argument(&fields[4].ty));
     assert_eq!(first_marker.segments[0].ident, markers[0].ident);
     assert_eq!(second_marker.segments[0].ident, markers[1].ident);
     assert!(type_path(type_argument(first_marker)).is_ident("SPACE"));
@@ -167,29 +186,16 @@ fn generic_shape_preserves_declaration_and_marker_order() {
 }
 
 #[test]
-fn nongeneric_shape_does_not_acquire_marker_helpers() {
+fn nongeneric_declaration_emits_no_marker_helpers() {
     let source = "struct Plain(u32);";
-    let result = expand(source);
-    assert!(result.is_ok(), "{source}");
-    let expanded = syn::parse2::<syn::File>(result.unwrap());
-    assert!(expanded.is_ok(), "{source}");
-    let expanded = expanded.unwrap();
+    let expanded = expand_file(source);
     let structs = expanded
         .items
         .iter()
-        .filter_map(|item| match item {
-            Item::Struct(item) => Some(item),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let Fields::Unnamed(fields) = &structs[0].fields
-    else {
-        panic!("integral declaration lost its tuple shape");
-    };
+        .filter(|item| matches!(item, Item::Struct(_)))
+        .count();
 
-    assert_eq!(structs.len(), 1);
-    assert_eq!(fields.unnamed.len(), 1);
-    assert!(structs[0].generics.params.is_empty());
+    assert_eq!(structs, 1, "{source}");
 }
 
 #[test]

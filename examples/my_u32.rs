@@ -37,7 +37,9 @@ fn main() {
     assert_eq!(
         range,
         [
-            1, 2, 3
+            1,
+            2,
+            3
         ]
     );
 

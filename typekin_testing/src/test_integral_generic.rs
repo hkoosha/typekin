@@ -1,193 +1,11 @@
 #![allow(unused, dead_code)]
 
+use crate::fx_integral_generic::Checked;
+use crate::fx_integral_generic::*;
 use crate::*;
 use core::marker::PhantomData;
 
-struct NotTraits;
-
-#[typekin::integral(with = [display, serde, math_xor])]
-struct Tagged<T: ?Sized = NotTraits>(u32);
-
-#[typekin::integral( with = [display, serde])]
-struct Mixed<'de, T, F, H, S, D, const SPACE: u8, const FLAG: bool, Meta = str>(
-    u16,
-)
-where
-    T: ?Sized,
-    Meta: ?Sized;
-
-type CollisionTagged<'a> =
-    Mixed<'a, NotTraits, NotTraits, NotTraits, NotTraits, NotTraits, 7, true>;
-
-#[typekin::integral]
-struct ConstTagged<const BYTE: u8 = 3, const SYMBOL: char = 'x'>(u32);
-
-#[typekin::integral( domain = 1..)]
-struct Positive<T>(u16);
-
-#[typekin::integral( profile = wrapping {})]
-struct Wrapped<T>(u8);
-
-#[typekin::integral(without = repr)]
-struct ReprFree<T: ?Sized>(u64);
-
-struct CheckedFriend<T>(u32, PhantomData<T>);
-struct TrustedFriend<T>(u32, PhantomData<T>);
-
-const fn is_even(value: u32) -> bool {
-    return value % 2 == 0;
-}
-
-#[typekin::integral(
-    domain = 2..=100,
-    valid = is_even,
-    profile = wrapping {},
-    friend = [
-        Self::checked_raw(CheckedFriend<T>) -> Make,
-        Self::trusted_raw(TrustedFriend<T>) -> [Make, unsafe],
-        self(u32) -> [Math, Rel],
-    ],
-    with = [serde, math_xor],
-)]
-struct Checked<T>(u32);
-
-impl<T> Checked<T> {
-    const fn checked_raw(friend: CheckedFriend<T>) -> u32 {
-        return friend.0;
-    }
-
-    const fn trusted_raw(friend: TrustedFriend<T>) -> u32 {
-        return friend.0;
-    }
-}
-
-#[typekin::integral(
-    produce = Self::into_tagged(_) -> Tagged<T>,
-    with = math_xor,
-)]
-struct Producing<T>(u32);
-
-impl<T> Producing<T> {
-    fn into_tagged(self) -> Tagged<T> {
-        return Tagged::make(self.raw());
-    }
-}
-
-trait OwnIdentity<T> {}
-struct OnlySelf;
-
-#[typekin::integral(
-    profile = circular {},
-    facet = [
-        circular {
-            friend = Self::delta_raw(Tagged<T>) -> Math,
-            produce = Self,
-        },
-    ],
-)]
-struct WhereSelf<T>(u8)
-where
-    T: OwnIdentity<Self>;
-
-impl OwnIdentity<WhereSelf<OnlySelf>> for OnlySelf {}
-
-impl<T> WhereSelf<T>
-where
-    T: OwnIdentity<Self>,
-{
-    fn delta_raw(delta: Tagged<T>) -> u8 {
-        return delta.raw() as u8;
-    }
-}
-
-#[typekin::tree(
-    Direction {
-        In,
-        Out,
-    },
-)]
-trait MakerSeal {}
-
-#[typekin::integral(
-    profile = [circular, point],
-    produce = Self::into_offset(_) -> Offset<'a, D, SPACE>,
-    facet = circular {
-        with = math_add,
-        friend = Self::offset_raw(Offset<'a, D, SPACE>) -> Math,
-        produce = Self,
-    },
-)]
-struct Point<'a, D: Direction, const SPACE: u8>(u32);
-
-#[typekin::delta]
-struct Offset<'a, D: Direction, const SPACE: u8>(i32);
-
-impl<'a, D: Direction, const SPACE: u8> Point<'a, D, SPACE> {
-    fn into_offset(self) -> Offset<'a, D, SPACE> {
-        return Offset::make(self.raw() as i32);
-    }
-
-    fn offset_raw(offset: Offset<'a, D, SPACE>) -> u32 {
-        return offset.raw() as u32;
-    }
-}
-
-#[typekin::integral(konst = nightly)]
-struct ConstValue<T>(u8);
-
-const CONST_CLONED: ConstValue<NotTraits> = ConstValue::make(7).clone();
-const CONST_ADDED: ConstValue<NotTraits> =
-    ConstValue::make(2) + ConstValue::make(3);
-const CONST_MAPPED: ConstValue<NotTraits> =
-    ConstValue::make(2).map(const |value| value + 3);
-const STABLE_CHECKED: Checked<NotTraits> = match Checked::try_make(4) {
-    Ok(value) => value,
-    Err(_) => panic!("valid generic value rejected"),
-};
-
-#[typekin::integral(
-    konst = nightly,
-    profile = circular {},
-    facet = [
-        circular {
-            friend = Tagged::raw(Tagged<T>) -> Math,
-        },
-    ],
-)]
-struct ConstFacet<T>(u32);
-
-const CONST_FACET_RESULT: ConstFacet<NotTraits> = ConstFacet::make(u32::MAX)
-    + match Tagged::<NotTraits>::try_make(2) {
-        Ok(value) => value,
-        Err(_) => panic!("valid generic value rejected"),
-    };
-
-#[typekin::integral]
-struct ProtocolNames<Seal, Make, Math, Bit, Rel, UnsafeTrust, T, __TypekinT>(
-    u8,
-);
-
-type CollisionProtocol = ProtocolNames<
-    NotTraits,
-    NotTraits,
-    NotTraits,
-    NotTraits,
-    NotTraits,
-    NotTraits,
-    NotTraits,
-    NotTraits,
->;
-
-#[typekin::tree(
-    pub Transport {
-        pub DirectionBranch {
-            pub Incoming,
-            pub Outgoing,
-        },
-    },
-)]
-trait TreeSeal {}
-
+#[cfg(test)]
 #[cfg(feature = "test_fast")]
 mod tests {
     use super::*;
@@ -220,16 +38,26 @@ mod tests {
     }
 
     #[test]
+    fn nongeneric_declaration_keeps_its_single_value_field() {
+        let value = Untagged::make(23);
+        let raw = untagged_field(value);
+
+        assert_eq!(raw, 23, "{value:?}");
+    }
+
+    #[test]
     fn mixed_parameters_preserve_tuple_field_order() {
         let value = CollisionTagged::make(23);
-        let raw: u16 = value.0;
-        let _: PhantomData<&()> = value.1;
-        let _: PhantomData<NotTraits> = value.2;
-        let _: PhantomData<NotTraits> = value.3;
-        let _: PhantomData<NotTraits> = value.4;
-        let _: PhantomData<NotTraits> = value.5;
-        let _: PhantomData<NotTraits> = value.6;
-        let _: PhantomData<str> = value.9;
+        let (raw, one, two, three, four, five, six, nine) =
+            collision_tagged_fields(value);
+        let raw: u16 = raw;
+        let _: PhantomData<&()> = one;
+        let _: PhantomData<NotTraits> = two;
+        let _: PhantomData<NotTraits> = three;
+        let _: PhantomData<NotTraits> = four;
+        let _: PhantomData<NotTraits> = five;
+        let _: PhantomData<NotTraits> = six;
+        let _: PhantomData<str> = nine;
 
         assert_eq!(raw, 23);
         assert_eq!(size_of::<CollisionTagged>(), size_of::<u16>());
@@ -250,8 +78,9 @@ mod tests {
     #[test]
     fn unsized_markers_keep_transparent_layout() {
         let value = Tagged::<str>::make(42);
-        let raw: u32 = value.0;
-        let _: PhantomData<str> = value.1;
+        let (raw, marker) = tagged_fields(value);
+        let raw: u32 = raw;
+        let _: PhantomData<str> = marker;
 
         assert_eq!(raw, 42);
         assert_eq!(size_of::<Tagged<str>>(), size_of::<u32>());
@@ -263,7 +92,7 @@ mod tests {
         let result = Positive::<NotTraits>::try_make(7);
         assert!(result.is_ok());
         let value = result.unwrap();
-        let storage: core::num::NonZeroU16 = value.0;
+        let storage: core::num::NonZeroU16 = positive_storage(value);
 
         assert_eq!(storage.get(), 7);
         assert_eq!(value.raw(), 7);
@@ -276,7 +105,7 @@ mod tests {
         let maximum = Wrapped::<NotTraits>::make(u8::MAX);
         let one = Wrapped::<NotTraits>::make(1);
         let result = maximum + one;
-        let storage: core::num::Wrapping<u8> = result.0;
+        let storage: core::num::Wrapping<u8> = wrapped_storage(result);
 
         assert_eq!(result.raw(), 0);
         assert_eq!(storage.0, 0);
@@ -287,7 +116,8 @@ mod tests {
     #[test]
     fn combined_storage_retains_raw_api_and_layout() {
         let value = STABLE_CHECKED;
-        let storage: core::num::Wrapping<core::num::NonZeroU32> = value.0;
+        let storage: core::num::Wrapping<core::num::NonZeroU32> =
+            checked_storage(value);
 
         assert_eq!(storage.0.get(), 4);
         assert_eq!(value.raw(), 4);
@@ -368,13 +198,13 @@ mod tests {
     }
 
     #[test]
-    fn trusted_friend_bypasses_only_construction_validation() {
-        let source = TrustedFriend::<NotTraits>(3, PhantomData);
-        let trusted = Checked::<NotTraits>::of(source);
-        let rejected = trusted.try_map(|raw| raw);
-        let repaired = trusted.try_map(|raw| raw + 1);
+    fn blind_trust_friend_bypasses_only_construction_validation() {
+        let source = BlindTrustFriend::<NotTraits>(3, PhantomData);
+        let blind_trust = Checked::<NotTraits>::of(source);
+        let rejected = blind_trust.try_map(|raw| raw);
+        let repaired = blind_trust.try_map(|raw| raw + 1);
 
-        assert_eq!(trusted.raw(), 3);
+        assert_eq!(blind_trust.raw(), 3);
         assert_eq!(rejected.unwrap_err(), 3);
         assert!(repaired.is_ok());
         assert_eq!(repaired.unwrap().raw(), 4);
@@ -508,5 +338,114 @@ mod tests {
         accepts_root::<Outgoing>();
         accepts_transport::<Outgoing>();
         accepts_direction::<Outgoing>();
+    }
+
+    #[test]
+    fn marks_and_gaps_combine_within_one_lane() {
+        let start = Mark::<Outbound>::make(10);
+        let step = Gap::<Outbound>::make(5);
+        let moved = start + step;
+        let gap = moved - start;
+        let doubled = step + step;
+
+        assert_eq!(moved.raw(), 15);
+        assert_eq!(gap.raw(), 5);
+        assert_eq!(doubled.raw(), 10);
+    }
+
+    #[test]
+    fn outbound_mark_cannot_add_inbound_gap() {
+        assert_not_impl!(Mark<Outbound>: core::ops::Add<Gap<Inbound>>);
+    }
+
+    #[test]
+    fn inbound_mark_cannot_add_outbound_gap() {
+        assert_not_impl!(Mark<Inbound>: core::ops::Add<Gap<Outbound>>);
+    }
+
+    #[test]
+    fn outbound_mark_cannot_subtract_inbound_gap() {
+        assert_not_impl!(Mark<Outbound>: core::ops::Sub<Gap<Inbound>>);
+    }
+
+    #[test]
+    fn inbound_mark_cannot_subtract_outbound_gap() {
+        assert_not_impl!(Mark<Inbound>: core::ops::Sub<Gap<Outbound>>);
+    }
+
+    #[test]
+    fn outbound_mark_cannot_subtract_inbound_mark() {
+        assert_not_impl!(Mark<Outbound>: core::ops::Sub<Mark<Inbound>>);
+    }
+
+    #[test]
+    fn inbound_mark_cannot_subtract_outbound_mark() {
+        assert_not_impl!(Mark<Inbound>: core::ops::Sub<Mark<Outbound>>);
+    }
+
+    #[test]
+    fn outbound_gap_cannot_add_inbound_gap() {
+        assert_not_impl!(Gap<Outbound>: core::ops::Add<Gap<Inbound>>);
+    }
+
+    #[test]
+    fn inbound_gap_cannot_add_outbound_gap() {
+        assert_not_impl!(Gap<Inbound>: core::ops::Add<Gap<Outbound>>);
+    }
+
+    #[test]
+    fn outbound_gap_cannot_subtract_inbound_gap() {
+        assert_not_impl!(Gap<Outbound>: core::ops::Sub<Gap<Inbound>>);
+    }
+
+    #[test]
+    fn inbound_gap_cannot_subtract_outbound_gap() {
+        assert_not_impl!(Gap<Inbound>: core::ops::Sub<Gap<Outbound>>);
+    }
+
+    #[test]
+    fn marks_cannot_be_added() {
+        assert_not_impl!(Mark<Outbound>: core::ops::Add<Mark<Outbound>>);
+    }
+
+    #[test]
+    fn gaps_cannot_add_marks() {
+        assert_not_impl!(Gap<Outbound>: core::ops::Add<Mark<Outbound>>);
+    }
+
+    #[test]
+    fn gaps_cannot_subtract_marks() {
+        assert_not_impl!(Gap<Outbound>: core::ops::Sub<Mark<Outbound>>);
+    }
+
+    #[test]
+    fn const_arguments_are_part_of_operator_identity() {
+        let sum = SpaceTagged::<7>::make(1) + SpaceTagged::<7>::make(2);
+
+        assert_eq!(sum.raw(), 3);
+        assert_not_impl!(SpaceTagged<7>: core::ops::Add<SpaceTagged<9>>);
+    }
+
+    #[test]
+    fn owning_markers_propagate_send_constraints() {
+        fn accepts_send<T: Send>() {}
+
+        accepts_send::<OwningMarker<u8>>();
+        assert_not_impl!(OwningMarker<std::rc::Rc<()>>: Send);
+    }
+
+    #[test]
+    fn owning_markers_propagate_sync_constraints() {
+        fn accepts_sync<T: Sync>() {}
+
+        accepts_sync::<OwningMarker<u8>>();
+        assert_not_impl!(OwningMarker<std::cell::Cell<u8>>: Sync);
+    }
+
+    #[test]
+    fn enum_const_parameters_preserve_their_declared_type() {
+        let raw = OUTGOING_MODE.raw();
+
+        assert_eq!(raw, 7);
     }
 }

@@ -10,6 +10,7 @@ use quote::{
     format_ident,
     quote,
 };
+use syn::ext::IdentExt;
 use syn::parse::{
     Parse,
     ParseStream,
@@ -22,10 +23,12 @@ use syn::{
     braced,
 };
 
-use crate::{
-    zz_lib as zz,
-    zz_runner,
+use crate::zz_hide::{
+    EmbeddedTree,
+    reexport,
 };
+use crate::zz_lib as zz;
+use crate::zz_runner::MkErr;
 
 #[derive(Clone)]
 pub(crate) struct Cfg {
@@ -119,10 +122,12 @@ impl Cfg {
         self.validate(&seal)?;
 
         let nodes = self.collect(visibility, &seal);
-        let definitions = EmittedNode::emit_definitions(&nodes, true);
-        let owner_name = owner.to_string();
-        let owner_name = owner_name.trim_start_matches("r#");
-        let module = format_ident!("__typekin_marker_tree_for_{}", owner_name,);
+        let definitions =
+            EmittedNode::emit_definitions(&nodes, Placement::Embedded);
+        let module = format_ident!(
+            "__typekin_marker_tree_for_{}",
+            owner.unraw().to_string(),
+        );
         let exports = nodes.iter().map(|node| node.emit_export(&module));
 
         return Ok(quote! {
@@ -165,54 +170,6 @@ impl Cfg {
 
         return nodes;
     }
-
-    fn expand(
-        &self,
-        root: ItemTrait,
-    ) -> syn::Result<TokenStream> {
-        if root.unsafety.is_some() {
-            return Err(syn::Error::new(
-                root.ident.span(),
-                "marker tree root must be a safe trait",
-            ));
-        }
-        if root.modifiers.auto_token.is_some() {
-            return Err(syn::Error::new(
-                root.ident.span(),
-                "marker tree root must not be an auto trait",
-            ));
-        }
-        if !root.generics.params.is_empty()
-            || root.generics.where_clause.is_some()
-        {
-            return Err(syn::Error::new(
-                root.ident.span(),
-                "marker tree root must not be generic",
-            ));
-        }
-        if !root.supertraits.is_empty() {
-            return Err(syn::Error::new(
-                root.ident.span(),
-                "marker tree root must not have supertraits",
-            ));
-        }
-        if !root.items.is_empty() {
-            return Err(syn::Error::new(
-                root.ident.span(),
-                "marker tree root must not define trait items",
-            ));
-        }
-
-        self.validate(&root.ident)?;
-
-        let nodes = self.collect(&root.vis, &root.ident);
-        let definitions = EmittedNode::emit_definitions(&nodes, false);
-
-        return Ok(quote! {
-            #root
-            #definitions
-        });
-    }
 }
 
 impl Node {
@@ -245,31 +202,29 @@ impl Node {
             Visibility::Inherited => parent_visibility.clone(),
             visibility => visibility.clone(),
         };
-        let ident = self.ident.clone();
+        nodes.push(EmittedNode {
+            visibility: visibility.clone(),
+            ident: self.ident.clone(),
+            ancestors: ancestors.to_vec(),
+            branch: self.children.is_some(),
+        });
 
         if let Some(children) = &self.children {
-            nodes.push(EmittedNode {
-                visibility: visibility.clone(),
-                ident: ident.clone(),
-                ancestors: ancestors.to_vec(),
-                branch: true,
-            });
-
             let mut child_ancestors = ancestors.to_vec();
-            child_ancestors.push(ident);
+            child_ancestors.push(self.ident.clone());
             for child in children {
                 child.collect(&visibility, &child_ancestors, nodes);
             }
         }
-        else {
-            nodes.push(EmittedNode {
-                visibility,
-                ident,
-                ancestors: ancestors.to_vec(),
-                branch: false,
-            });
-        }
     }
+}
+
+/// Where the marker tree's items live: beside the user's root trait, or in a
+/// hidden module embedded by an owning macro (every item `pub`, re-exported).
+#[derive(Clone, Copy)]
+enum Placement {
+    Standalone,
+    Embedded,
 }
 
 struct EmittedNode {
@@ -282,16 +237,16 @@ struct EmittedNode {
 impl EmittedNode {
     fn emit_definitions(
         nodes: &[Self],
-        public: bool,
+        placement: Placement,
     ) -> TokenStream {
         let branches = nodes
             .iter()
             .filter(|node| node.branch)
-            .map(|node| node.emit_branch(public));
+            .map(|node| node.emit_branch(placement));
         let leaves = nodes
             .iter()
             .filter(|node| !node.branch)
-            .map(|node| node.emit_leaf(public));
+            .map(|node| node.emit_leaf(placement));
 
         return quote! {
             #(#branches)*
@@ -301,9 +256,9 @@ impl EmittedNode {
 
     fn emit_branch(
         &self,
-        public: bool,
+        placement: Placement,
     ) -> TokenStream {
-        let visibility = self.emit_visibility(public);
+        let visibility = self.emit_visibility(placement);
         let ident = &self.ident;
         let parent = self
             .ancestors
@@ -328,9 +283,9 @@ impl EmittedNode {
 
     fn emit_leaf(
         &self,
-        public: bool,
+        placement: Placement,
     ) -> TokenStream {
-        let visibility = self.emit_visibility(public);
+        let visibility = self.emit_visibility(placement);
         let ident = &self.ident;
         let ancestors = &self.ancestors;
 
@@ -342,40 +297,75 @@ impl EmittedNode {
 
     fn emit_visibility(
         &self,
-        public: bool,
+        placement: Placement,
     ) -> TokenStream {
-        if public {
-            return quote! { pub };
-        }
-
-        let visibility = &self.visibility;
-        return quote! { #visibility };
+        return match placement {
+            Placement::Embedded => quote! { pub },
+            Placement::Standalone => {
+                let visibility = &self.visibility;
+                quote! { #visibility }
+            }
+        };
     }
 
     fn emit_export(
         &self,
         module: &Ident,
     ) -> TokenStream {
-        let visibility = &self.visibility;
-        let ident = &self.ident;
-
-        return quote! {
-            #[allow(unused_imports)]
-            #visibility use #module::#ident;
-        };
+        return reexport(&self.visibility, module, &self.ident);
     }
 }
 
-pub(crate) fn marker_tree(
-    cfg: Cfg,
-    root: ItemTrait,
-) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || expand(cfg, root)).into();
+fn validate_root(root: &ItemTrait) -> syn::Result<()> {
+    if root.unsafety.is_some() {
+        return root.ident.fail("marker tree root must be a safe trait");
+    }
+    if root.modifiers.auto_token.is_some() {
+        return root
+            .ident
+            .fail("marker tree root must not be an auto trait");
+    }
+    if !root.generics.params.is_empty() || root.generics.where_clause.is_some()
+    {
+        return root.ident.fail("marker tree root must not be generic");
+    }
+    if !root.supertraits.is_empty() {
+        return root
+            .ident
+            .fail("marker tree root must not have supertraits");
+    }
+    if !root.items.is_empty() {
+        return root
+            .ident
+            .fail("marker tree root must not define trait items");
+    }
+
+    return Ok(());
 }
 
 pub(crate) fn expand(
     cfg: Cfg,
     root: ItemTrait,
 ) -> syn::Result<TokenStream> {
-    return cfg.expand(root);
+    validate_root(&root)?;
+    cfg.validate(&root.ident)?;
+
+    let nodes = cfg.collect(&root.vis, &root.ident);
+    let definitions =
+        EmittedNode::emit_definitions(&nodes, Placement::Standalone);
+
+    return Ok(quote! {
+        #root
+        #definitions
+    });
+}
+
+impl EmbeddedTree for Cfg {
+    fn embed(
+        &self,
+        owner: &Ident,
+        visibility: &Visibility,
+    ) -> syn::Result<TokenStream> {
+        return self.expand_embedded(owner, visibility);
+    }
 }

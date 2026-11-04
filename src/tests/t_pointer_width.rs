@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::zz_value_type::N;
+    use crate::zz_values::N;
 
     #[test]
     fn u16_fits_a_16_bit_usize() {

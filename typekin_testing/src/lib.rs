@@ -1,4 +1,5 @@
 #![allow(unused, dead_code)]
+#![feature(adt_const_params)]
 #![feature(const_clone)]
 #![feature(const_closures)]
 #![feature(const_cmp)]
@@ -11,41 +12,65 @@
 #![feature(negative_impls)]
 #![feature(step_trait)]
 
-pub use crate::{
+pub use crate::machinery::{
     alloc::*,
-    asserts::*,
-    dir::*,
-    ops::*,
-};
-
-#[cfg(feature = "test_slow_only")]
-pub use crate::{
     asm::*,
+    asserts::*,
+    fixture::*,
+    ops::*,
     proc::*,
 };
 
-#[cfg(feature = "test_slow_only")]
-pub mod asm;
+pub mod machinery;
 
-#[cfg(feature = "test_slow_only")]
-pub mod proc;
+mod asm_case_compile_time;
+mod asm_case_domain_int;
+mod asm_case_my_f32;
+mod asm_case_my_f64;
+mod asm_case_my_i32;
+mod asm_case_my_sequence;
+mod asm_case_my_u32;
+mod asm_case_my_u64_const;
+mod asm_case_my_unit;
+mod asm_case_within;
 
-pub mod alloc;
-pub mod asserts;
-pub mod dir;
-pub mod ops;
+mod fx_bitflag;
+mod fx_compile_fail;
+mod fx_compile_pass;
+mod fx_cross_asm;
+mod fx_domain;
+mod fx_float;
+mod fx_friendship;
+mod fx_hide;
+mod fx_integral;
+mod fx_integral_generic;
+mod fx_integral_neg;
+mod fx_lit;
+mod fx_marker_tree;
+mod fx_no_std;
+mod fx_pointer_width_compile;
+mod fx_text;
+mod fx_within;
 
 mod test_bitflag;
 mod test_compile_fail;
+mod test_compile_pass;
+mod test_compile_time_asm;
+mod test_cross_asm;
+mod test_domain;
+mod test_domain_asm;
+mod test_float;
+mod test_float_asm;
 mod test_friendship;
+mod test_hide;
 mod test_integral;
 mod test_integral_asm;
 mod test_integral_generic;
-mod test_integral_generic_compile;
+mod test_integral_neg;
+mod test_lit;
 mod test_marker_tree;
 mod test_no_std;
 mod test_pointer_width_compile;
 mod test_text;
-
-#[global_allocator]
-static ALLOCATOR: ObservedAllocator = ObservedAllocator;
+mod test_within;
+mod test_within_asm;

@@ -2,11 +2,7 @@ use std::collections::{
     BTreeMap,
     BTreeSet,
 };
-use std::fmt::{
-    Debug,
-    Formatter,
-};
-use std::str::FromStr;
+use std::fmt::Debug;
 
 use proc_macro2::{
     Ident,
@@ -18,13 +14,11 @@ use quote::{
     format_ident,
     quote,
 };
-use syn::parse::{
-    Parse,
-    ParseStream,
-};
-use syn::spanned::Spanned as _;
+use syn::ext::IdentExt as _;
 use syn::visit_mut::VisitMut as _;
 use syn::{
+    ConstParam,
+    Field,
     Fields,
     GenericParam,
     Generics,
@@ -35,58 +29,43 @@ use syn::{
     parse_quote,
 };
 
-use crate::friendship::cfg::Friend;
-use crate::friendship::{
-    Construction,
-    Protocol,
-    ProtocolFriend,
+use crate::integral_cfg::{
+    Cfg,
+    IntegralFlag,
+    IntegralName,
+    Kind,
 };
+use crate::integral_within::WithinProof;
 use crate::zz_conv::{
     OperatorOutput,
     SelfConverter,
 };
+use crate::zz_friend::{
+    Capability,
+    Friend,
+};
+use crate::zz_hide::Envelope;
 use crate::zz_lib::{
-    DuplicateFlagPolicy,
     Konst,
-    Konsts,
-    ValidationCfg,
+    NUMERIC_LINTS,
+    lint_scope,
+    repr_transparent,
 };
-use crate::zz_profile::{
-    Arithmetic,
-    DefaultFacetCfg,
-    FacetCfg,
-    FacetOwner,
-    FacetSlot,
-    FacetSlotKey,
-    Profile,
-    Profiles,
+use crate::zz_names::{
+    Names,
+    ResolvedNames,
 };
-use crate::zz_runner::{
-    Merged,
-    MkErr,
-    ToCollection,
-    mk_flags,
-};
-use crate::zz_value_type::{
+use crate::zz_profile_integral::Arithmetic;
+use crate::zz_runner::MkErr;
+use crate::zz_values::{
     ArithmeticOp,
     N,
-    Operator,
+    Num,
     POINTER_WIDTHS,
 };
-use crate::{
-    marker_tree,
-    zz_lib as zz,
-    zz_runner,
-};
-
-const MATH: &str = "Math";
-const BIT: &str = "Bit";
-const MAKE: &str = "Make";
-const REL: &str = "Rel";
-const UNSAFE: &str = "Unsafe";
 
 // An empty token stream means the item is valid on every supported target.
-fn pointer_width_cfg(
+pub(crate) fn pointer_width_cfg(
     mut enabled: impl FnMut(u32) -> bool
 ) -> Option<TokenStream> {
     let widths = POINTER_WIDTHS
@@ -105,30 +84,92 @@ fn pointer_width_cfg(
     };
 }
 
-pub(crate) fn integral(
-    attr: Box<Cfg>,
-    item: ItemStruct,
-) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || ekran(attr, item)).into();
-}
+/// Float types typekin names but does not support (diagnostic only).
+const UNSUPPORTED_FLOATS: [&str; 2] = [
+    "f16",
+    "f128",
+];
 
 pub(crate) fn ekran(
-    attr: Box<Cfg>,
+    mut attr: Box<Cfg>,
     mut item: ItemStruct,
 ) -> syn::Result<TokenStream> {
     let target = IntegralTarget::new(item.ident.clone(), item.generics.clone());
-    let repr: Option<TokenStream> =
-        attr.flags.repr.then(|| quote! { #[repr(transparent)] });
-    let derive_copy: Option<TokenStream> = (attr.flags.copy
+    let attributes = declaration_attributes(&attr, &target);
+    let field = value_field(&item)?;
+    let (raw, el) = value_type(attr.kind, field)?;
+    let field_visibility = field.vis.clone();
+    attr.settle(raw)?;
+    let storage = StoragePlan::new(
+        raw,
+        attr.requires_non_zero_storage(),
+        attr.requires_wrapping_storage(),
+    );
+    value_privacy(&mut attr, &target, &storage, &field_visibility)?;
+
+    let mut envelope = Envelope::new(&attr.hide_in, &item, &item.vis);
+    if envelope.is_hidden() {
+        hidden_access_checks(&attr)?;
+    }
+    envelope.prepare(&mut item, attr.tree.as_ref())?;
+    rewrite_value_field(&mut item, &target, &storage);
+
+    let (impl_generics, where_clause) = target.impl_header(&[], &[]);
+    let target_ty = target.ty();
+    let manual_copy_clone = manual_copy_clone(&attr, &target);
+    let markers = &target.const_markers;
+    let const_markers = quote! { #(#markers)* };
+
+    let lit = match attr.lit_macro()? {
+        true => Some(crate::zz_lit::LitMacro::new(
+            &item.ident,
+            &item.generics,
+            envelope.declared(),
+            attr.lit_name.as_ref(),
+            attr.lit_path.as_ref(),
+        )?),
+        false => None,
+    };
+    let lit_guard = lit
+        .as_ref()
+        .map(|lit| lit.guard(&impl_generics, &target_ty, &where_clause));
+    let lit_definition = lit.as_ref().map(|lit| envelope.lit_definition(lit));
+
+    let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
+    let scope = lint_scope(NUMERIC_LINTS, it);
+
+    let implementation = quote::quote! {
+        #const_markers
+
+        #lit_definition
+
+        #manual_copy_clone
+        #lit_guard
+
+        #scope
+    };
+
+    return Ok(envelope.finish(attributes, item, implementation));
+}
+
+/// `repr(transparent)`, `derive(Copy)` and the (possibly const) `Clone`
+/// derive of a non-generic declaration.
+fn declaration_attributes(
+    cfg: &Cfg,
+    target: &IntegralTarget,
+) -> TokenStream {
+    let repr = repr_transparent(cfg.flags.has(IntegralFlag::Repr));
+    let derive_copy: Option<TokenStream> = (cfg.flags.has(IntegralFlag::Copy)
         && !target.has_generics())
     .then(|| quote! { #[derive(Copy)] });
-    let derive_clone: Option<TokenStream> = (attr.flags.clone
-        && !target.has_generics())
-    .then(|| match attr.konst {
-        Konst::Nightly => quote! { #[derive_const(Clone)] },
-        Konst::None | Konst::Stable => quote! { #[derive(Clone)] },
-    });
+    let derive_clone: Option<TokenStream> =
+        (cfg.flags.has(IntegralFlag::Clone) && !target.has_generics())
+            .then(|| cfg.konst.derive(quote! { Clone }));
+    return quote! { #repr #derive_copy #derive_clone };
+}
 
+/// The single unnamed value field of an integral declaration.
+fn value_field(item: &ItemStruct) -> syn::Result<&Field> {
     let Fields::Unnamed(fields) = &item.fields
     else {
         return item.ident.fail(
@@ -147,31 +188,57 @@ pub(crate) fn ekran(
             value field; phantom fields are generated automatically",
         );
     }
-    let field = fields.unnamed.first().unwrap();
-    let el = match &field.ty {
-        Type::Path(path) if path.qself.is_none() => path
-            .path
-            .get_ident()
-            .filter(|id| N::rust_names().contains(&id.to_string().as_str())),
-        _ => None,
-    }
-    .ok_or_else(|| {
-        syn::Error::new(
-            field.ty.span(),
-            "integral value field must be a concrete primitive integer",
-        )
-    })?
-    .clone();
-    let field_visibility = &field.vis;
+    return Ok(fields.unnamed.first().unwrap());
+}
 
-    let raw = N::of(el.to_string())
-        .ok_or_else(|| syn::Error::new(el.span(), "unknown integral type"))?;
-    let storage = StoragePlan::new(
-        raw,
-        attr.requires_non_zero_storage(),
-        attr.requires_wrapping_storage(),
-    );
-    let private = match &field_visibility {
+/// The primitive type of the value field and its identifier.
+fn value_type(
+    kind: Kind,
+    field: &Field,
+) -> syn::Result<(Num, Ident)> {
+    let field_name = match &field.ty {
+        Type::Path(path) if path.qself.is_none() => path.path.get_ident(),
+        _ => None,
+    };
+    let raw = field_name.and_then(|it| Num::of(it.to_string()));
+    let raw = match (kind, raw) {
+        (Kind::Int, Some(raw @ Num::Int(_)))
+        | (Kind::Float, Some(raw @ Num::Float(_))) => raw,
+        (Kind::Int, Some(Num::Float(_))) => {
+            return field.ty.fail(
+                "integral value field must be a concrete primitive integer; \
+                use #[typekin::float] for f32/f64",
+            );
+        }
+        (Kind::Int, None) => {
+            return field.ty.fail(
+                "integral value field must be a concrete primitive integer",
+            );
+        }
+        (Kind::Float, _)
+            if field_name.is_some_and(|it| {
+                UNSUPPORTED_FLOATS.iter().any(|name| it == name)
+            }) =>
+        {
+            return field.ty.fail("f16 and f128 are not supported");
+        }
+        (Kind::Float, _) => {
+            return field.ty.fail("float value field must be f32 or f64");
+        }
+    };
+    let el = field_name.expect("a typed field has a name").clone();
+    return Ok((raw, el));
+}
+
+/// Rejects a visible value field where generics, storage rewriting or float
+/// totality need it private; records the visibility on `cfg`.
+fn value_privacy(
+    cfg: &mut Cfg,
+    target: &IntegralTarget,
+    storage: &StoragePlan,
+    field_visibility: &Visibility,
+) -> syn::Result<()> {
+    let private = match field_visibility {
         Visibility::Inherited => true,
         Visibility::Restricted(visibility) => visibility.path.is_ident("self"),
         Visibility::Public(_) => false,
@@ -184,7 +251,37 @@ pub(crate) fn ekran(
         return field_visibility
             .fail("integral storage can only rewrite a private tuple field");
     }
+    cfg.visible_value = !private;
+    if cfg.kind == Kind::Float && !private {
+        cfg.require_private_totality()?;
+    }
+    return Ok(());
+}
 
+/// Features that need the value field, which `hide_in` hides.
+fn hidden_access_checks(cfg: &Cfg) -> syn::Result<()> {
+    if let Some(get_raw) = &cfg.get_raw {
+        return get_raw.fail(
+            "get_raw needs access to the value field, which hide_in hides; \
+            set hide_in = none",
+        );
+    }
+    if !cfg.flags.has(IntegralFlag::FnOrPanic) {
+        return cfg.explicit_span(IntegralFlag::FnOrPanic).fail(
+            "a custom or_panic constructor needs access to the value \
+                field, which hide_in hides; set hide_in = none",
+        );
+    }
+    return Ok(());
+}
+
+/// Rewrites the value field to its storage type and appends the phantom
+/// fields of the generic parameters.
+fn rewrite_value_field(
+    item: &mut ItemStruct,
+    target: &IntegralTarget,
+    storage: &StoragePlan,
+) {
     let Fields::Unnamed(fields) = &mut item.fields
     else {
         unreachable!("the integral shape was validated above");
@@ -202,22 +299,32 @@ pub(crate) fn ekran(
             ::core::marker::PhantomData<#phantom_type>
         });
     }
+}
 
+/// `Copy` and `Clone` impls of a generic target, which cannot derive them.
+fn manual_copy_clone(
+    cfg: &Cfg,
+    target: &IntegralTarget,
+) -> TokenStream {
     let (impl_generics, where_clause) = target.impl_header(&[], &[]);
     let target_ty = target.ty();
-    let manual_copy = (attr.flags.copy && target.has_generics()).then(|| {
+    let manual_copy = (cfg.flags.has(IntegralFlag::Copy)
+        && target.has_generics())
+    .then(|| {
         quote! {
             impl #impl_generics ::core::marker::Copy for #target_ty
             #where_clause
             {}
         }
     });
-    let manual_clone = (attr.flags.clone && target.has_generics()).then(|| {
-        let konst = Konst::konst(matches!(attr.konst, Konst::Nightly));
+    let manual_clone = (cfg.flags.has(IntegralFlag::Clone)
+        && target.has_generics())
+    .then(|| {
+        let konst = Konst::konst(matches!(cfg.konst, Konst::Nightly));
         let value = target.construct_storage(
             quote! { Self },
             quote! { self.0 },
-            attr.flags.assertions,
+            cfg.flags.has(IntegralFlag::Assertions),
         );
         quote! {
             #konst impl #impl_generics ::core::clone::Clone for #target_ty
@@ -230,47 +337,16 @@ pub(crate) fn ekran(
             }
         }
     });
-    let markers = &target.const_markers;
-    let const_markers = quote! { #(#markers)* };
-
-    let tree = attr
-        .tree
-        .as_ref()
-        .map(|tree| tree.expand_embedded(&item.ident, &item.vis))
-        .transpose()?;
-
-    let it = Maker::new_target(target, el, attr, storage)?.ekran()?;
-
-    let stream = quote::quote! {
-        #const_markers
-
-        #repr
-        #derive_copy
-        #derive_clone
-        #item
-        #tree
-
-
-        #manual_copy
-        #manual_clone
-
-        #[allow(dead_code)]
-        #[allow(unused_qualifications)]
-        #[allow(clippy::unnecessary_cast)]
-        const _: () = {
-            #it
-        };
-    };
-
-    return Ok(stream);
+    return quote! { #manual_copy #manual_clone };
 }
 
 pub(crate) fn ekran_with(
     ty: Ident,
     el: Ident,
-    cfg: Box<Cfg>,
+    mut cfg: Box<Cfg>,
     storage: StoragePlan,
 ) -> syn::Result<TokenStream> {
+    cfg.settle(storage.raw)?;
     return Maker::new_target(
         IntegralTarget::new(ty, Generics::default()),
         el,
@@ -280,8 +356,8 @@ pub(crate) fn ekran_with(
     .ekran();
 }
 
-struct IntegralTarget {
-    ident: Ident,
+pub(crate) struct IntegralTarget {
+    pub(crate) ident: Ident,
     generics: Generics,
     phantom_types: Vec<TokenStream>,
     const_markers: Vec<TokenStream>,
@@ -293,7 +369,24 @@ impl IntegralTarget {
         ident: Ident,
         generics: Generics,
     ) -> Self {
-        let occupied_names = generics
+        let mut this = Self {
+            ident,
+            occupied_names: Self::generic_names(&generics),
+            generics,
+            phantom_types: Vec::new(),
+            const_markers: Vec::new(),
+        };
+        let parameters = this.generics.params.clone();
+        for (index, parameter) in parameters.iter().enumerate() {
+            let phantom = this.phantom_for(index, parameter);
+            this.phantom_types.push(phantom);
+        }
+        return this;
+    }
+
+    /// The user's generic parameter identifiers, avoided by fresh names.
+    fn generic_names(generics: &Generics) -> BTreeSet<String> {
+        return generics
             .params
             .iter()
             .map(|parameter| match parameter {
@@ -304,74 +397,75 @@ impl IntegralTarget {
                 GenericParam::Const(parameter) => parameter.ident.to_string(),
             })
             .collect();
-        let mut this = Self {
-            ident,
-            generics,
-            phantom_types: Vec::new(),
-            const_markers: Vec::new(),
-            occupied_names,
+    }
+
+    /// The `PhantomData` argument that uses generic parameter `index`.
+    fn phantom_for(
+        &mut self,
+        index: usize,
+        parameter: &GenericParam,
+    ) -> TokenStream {
+        return match parameter {
+            GenericParam::Lifetime(parameter) => {
+                let lifetime = &parameter.lifetime;
+                quote! { &#lifetime () }
+            }
+            GenericParam::Type(parameter) => {
+                let name = &parameter.ident;
+                quote! { #name }
+            }
+            GenericParam::Const(parameter) => {
+                self.const_marker(index, parameter)
+            }
         };
+    }
 
-        for (index, parameter) in this.generics.params.iter().enumerate() {
-            let phantom = match parameter {
-                GenericParam::Lifetime(parameter) => {
-                    let lifetime = &parameter.lifetime;
-                    quote! { &#lifetime () }
-                }
-                GenericParam::Type(parameter) => {
-                    let name = &parameter.ident;
-                    quote! { #name }
-                }
-                GenericParam::Const(parameter) => {
-                    let name = &parameter.ident;
-                    let type_name = this.ident.to_string();
-                    let type_name = type_name.trim_start_matches("r#");
-                    let marker = this.fresh_ident(&format!(
-                        "__Typekin{type_name}Const{index}",
-                    ));
-                    let ty = &parameter.ty;
-                    if this.uses_generic_names(ty.to_token_stream()) {
-                        // A nightly const type may itself depend on another
-                        // parameter. Keep its entire declaration scope, with
-                        // zero-sized fields for otherwise-unused parameters.
-                        let generics = this.external_generics();
-                        let (parameters, arguments, where_clause) =
-                            generics.split_for_impl();
-                        let fields = generics.params.iter().filter_map(|it| {
-                            return match it {
-                                GenericParam::Lifetime(it) => {
-                                    let lifetime = &it.lifetime;
-                                    Some(quote! { &#lifetime () })
-                                }
-                                GenericParam::Type(it) => {
-                                    let name = &it.ident;
-                                    Some(quote! { #name })
-                                }
-                                GenericParam::Const(_) => None,
-                            };
-                        });
-                        this.const_markers.push(quote! {
-                            #[doc(hidden)]
-                            struct #marker #parameters(
-                                #(::core::marker::PhantomData<#fields>),*
-                            ) #where_clause;
-                        });
-                        quote! { #marker #arguments }
+    /// Declares a marker type carrying const parameter `index` and returns
+    /// its use.
+    fn const_marker(
+        &mut self,
+        index: usize,
+        parameter: &ConstParam,
+    ) -> TokenStream {
+        let name = &parameter.ident;
+        let type_name = self.ident.unraw();
+        let marker =
+            self.fresh_ident(&format!("__Typekin{type_name}Const{index}"));
+        let ty = &parameter.ty;
+        if self.uses_generic_names(ty.to_token_stream()) {
+            // A nightly const type may itself depend on another
+            // parameter. Keep its entire declaration scope, with
+            // zero-sized fields for otherwise-unused parameters.
+            let generics = self.external_generics();
+            let (parameters, arguments, where_clause) =
+                generics.split_for_impl();
+            let fields = generics.params.iter().filter_map(|it| {
+                return match it {
+                    GenericParam::Lifetime(it) => {
+                        let lifetime = &it.lifetime;
+                        Some(quote! { &#lifetime () })
                     }
-                    else {
-                        let value = this.fresh_ident("VALUE");
-                        this.const_markers.push(quote! {
-                            #[doc(hidden)]
-                            struct #marker<const #value: #ty>;
-                        });
-                        quote! { #marker<#name> }
+                    GenericParam::Type(it) => {
+                        let name = &it.ident;
+                        Some(quote! { #name })
                     }
-                }
-            };
-            this.phantom_types.push(phantom);
+                    GenericParam::Const(_) => None,
+                };
+            });
+            self.const_markers.push(quote! {
+                #[doc(hidden)]
+                struct #marker #parameters(
+                    #(::core::marker::PhantomData<#fields>),*
+                ) #where_clause;
+            });
+            return quote! { #marker #arguments };
         }
-
-        return this;
+        let value = self.fresh_ident("VALUE");
+        self.const_markers.push(quote! {
+            #[doc(hidden)]
+            struct #marker<const #value: #ty>;
+        });
+        return quote! { #marker<#name> };
     }
 
     fn uses_generic_names(
@@ -390,20 +484,13 @@ impl IntegralTarget {
         });
     }
 
-    fn has_generics(&self) -> bool {
+    pub(crate) fn has_generics(&self) -> bool {
         return !self.generics.params.is_empty();
     }
 
-    fn ty(&self) -> TokenStream {
+    pub(crate) fn ty(&self) -> TokenStream {
         let ident = &self.ident;
         let (_, arguments, _) = self.generics.split_for_impl();
-        return quote! { #ident #arguments };
-    }
-
-    fn constructor(&self) -> TokenStream {
-        let ident = &self.ident;
-        let (_, arguments, _) = self.generics.split_for_impl();
-        let arguments = arguments.as_turbofish();
         return quote! { #ident #arguments };
     }
 
@@ -412,7 +499,7 @@ impl IntegralTarget {
         return quote! { #arguments };
     }
 
-    fn impl_header(
+    pub(crate) fn impl_header(
         &self,
         extra_parameters: &[GenericParam],
         extra_predicates: &[syn::WherePredicate],
@@ -441,13 +528,13 @@ impl IntegralTarget {
         return (quote! { #parameters }, quote! { #where_clause });
     }
 
-    fn external_generics(&self) -> Generics {
+    pub(crate) fn external_generics(&self) -> Generics {
         let mut generics = self.generics.clone();
         TargetSelf(self.ty()).visit_generics_mut(&mut generics);
         return generics;
     }
 
-    fn qualify_path(
+    pub(crate) fn qualify_path(
         &self,
         path: &Path,
     ) -> TokenStream {
@@ -466,7 +553,7 @@ impl IntegralTarget {
         return quote! { #path };
     }
 
-    fn external_type(
+    pub(crate) fn external_type(
         &self,
         ty: &Type,
     ) -> TokenStream {
@@ -475,7 +562,7 @@ impl IntegralTarget {
         return quote! { #ty };
     }
 
-    fn operator_output(
+    pub(crate) fn operator_output(
         &self,
         configuration: &SelfConverter,
         external: bool,
@@ -504,7 +591,7 @@ impl IntegralTarget {
         return OperatorOutput::of(configuration, ty, conversion);
     }
 
-    fn is_target(
+    pub(crate) fn is_target(
         &self,
         path: &Path,
     ) -> bool {
@@ -512,7 +599,7 @@ impl IntegralTarget {
             || path.to_token_stream().to_string() == self.ty().to_string();
     }
 
-    fn fresh_ident(
+    pub(crate) fn fresh_ident(
         &self,
         preferred: &str,
     ) -> Ident {
@@ -526,7 +613,7 @@ impl IntegralTarget {
         return Ident::new(&name, Span::mixed_site());
     }
 
-    fn fresh_lifetime(
+    pub(crate) fn fresh_lifetime(
         &self,
         preferred: &str,
     ) -> syn::Lifetime {
@@ -540,11 +627,12 @@ impl IntegralTarget {
         return syn::Lifetime::new(&format!("'{name}"), Span::mixed_site());
     }
 
-    fn layout_assertion(&self) -> Ident {
+    pub(crate) fn layout_assertion(&self) -> Ident {
         return self.fresh_ident("__TYPEKIN_LAYOUT_ASSERT");
     }
 
-    fn construct(
+    /// Construction after validation has accepted `raw`.
+    pub(crate) fn construct(
         &self,
         storage: &StoragePlan,
         constructor: TokenStream,
@@ -553,7 +641,22 @@ impl IntegralTarget {
     ) -> TokenStream {
         return self.construct_storage(
             constructor,
-            storage.storage_expression(raw),
+            storage.storage_expression(raw, true),
+            assert_layout,
+        );
+    }
+
+    /// Construction without validation (`_blind_trust`).
+    pub(crate) fn construct_blind_trust(
+        &self,
+        storage: &StoragePlan,
+        constructor: TokenStream,
+        raw: TokenStream,
+        assert_layout: bool,
+    ) -> TokenStream {
+        return self.construct_storage(
+            constructor,
+            storage.storage_expression(raw, false),
             assert_layout,
         );
     }
@@ -640,27 +743,27 @@ impl syn::visit_mut::VisitMut for TargetSelf {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct StoragePlan {
-    pub(crate) raw: N,
+    pub(crate) raw: Num,
     pub(crate) non_zero: bool,
     pub(crate) wrapping: bool,
 }
 
 impl StoragePlan {
-    pub(crate) fn primitive(raw: N) -> Self {
+    pub(crate) fn primitive(raw: impl Into<Num>) -> Self {
         return Self {
-            raw,
+            raw: raw.into(),
             non_zero: false,
             wrapping: false,
         };
     }
 
     pub(crate) fn new(
-        raw: N,
+        raw: impl Into<Num>,
         non_zero: bool,
         wrapping: bool,
     ) -> Self {
         return Self {
-            raw,
+            raw: raw.into(),
             non_zero,
             wrapping,
         };
@@ -670,10 +773,18 @@ impl StoragePlan {
         return self.non_zero || self.wrapping;
     }
 
+    fn non_zero_name(&self) -> &'static str {
+        return self
+            .raw
+            .int()
+            .expect("NonZero storage is integer-only")
+            .non_zero_rust_name();
+    }
+
     pub(crate) fn field_type(&self) -> TokenStream {
         let raw = format_ident!("{}", self.raw.rust_name());
         let storage = if self.non_zero {
-            let non_zero = format_ident!("{}", self.raw.non_zero_rust_name());
+            let non_zero = format_ident!("{}", self.non_zero_name());
             quote! { ::core::num::#non_zero }
         }
         else {
@@ -688,21 +799,32 @@ impl StoragePlan {
         };
     }
 
+    /// `validated`: validation already accepted `raw`. `NonZero` storage is
+    /// only selected when validation excludes zero exactly (`with = non_zero`,
+    /// or a domain whose zero probe is false at every width), so the
+    /// unchecked constructor is sound there and keeps codegen identical to
+    /// the plain check. Unvalidated construction keeps the checked one.
     fn storage_expression(
         &self,
         raw: TokenStream,
+        validated: bool,
     ) -> TokenStream {
         let storage = if self.non_zero {
-            let non_zero = format_ident!("{}", self.raw.non_zero_rust_name());
-            quote! {
-                match ::core::num::#non_zero::new(#raw) {
-                    ::core::option::Option::Some(value) => value,
-                    ::core::option::Option::None => {
-                        ::core::panic!(
-                            "zero cannot be stored by this integral type"
-                        )
+            let non_zero = format_ident!("{}", self.non_zero_name());
+            match validated {
+                true => quote! {
+                    unsafe { ::core::num::#non_zero::new_unchecked(#raw) }
+                },
+                false => quote! {
+                    match ::core::num::#non_zero::new(#raw) {
+                        ::core::option::Option::Some(value) => value,
+                        ::core::option::Option::None => {
+                            ::core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }
-                }
+                },
             }
         }
         else {
@@ -717,7 +839,7 @@ impl StoragePlan {
         };
     }
 
-    fn extract(
+    pub(crate) fn extract(
         &self,
         storage: TokenStream,
     ) -> TokenStream {
@@ -736,7 +858,7 @@ impl StoragePlan {
         };
     }
 
-    fn extract_ref(
+    pub(crate) fn extract_ref(
         &self,
         storage: TokenStream,
     ) -> TokenStream {
@@ -758,7 +880,7 @@ impl StoragePlan {
         };
     }
 
-    fn layout_assertions(
+    pub(crate) fn layout_assertions(
         &self,
         target: TokenStream,
     ) -> TokenStream {
@@ -782,32 +904,114 @@ impl StoragePlan {
     }
 }
 
-struct Ctx {
-    cfg: Box<Cfg>,
-    ty: TokenStream,
-    impl_generics: TokenStream,
-    where_clause: TokenStream,
+/// The integral friend protocol's trait names and conversion, from the names
+/// table.
+pub(crate) struct FriendTraits {
+    seal: Ident,
+    make: Ident,
+    math: Ident,
+    bit: Ident,
+    rel: Ident,
+    unsafe_: Ident,
+    conversion: Ident,
     arguments: TokenStream,
-    rhs_ty: Ident,
-    rhs_impl_generics: TokenStream,
-    validation: TokenStream,
-    fp_friend_conv: TokenStream,
-    rhs_raw: TokenStream,
-    self_raw: TokenStream,
-    self_raw_ref: TokenStream,
-    output: OperatorOutput,
-    trait_seal: Ident,
-    trait_seal_with_arguments: TokenStream,
-    trait_friend_make: Ident,
-    trait_friend_math: Ident,
-    trait_friend_bit: Ident,
-    trait_friend_rel: Ident,
-    fn_conv: Ident,
-    fp_get_raw: Path,
-    fp_unchecked: Path,
-    with_global_operators: bool,
-    with_self_math: bool,
-    with_self_bit: bool,
+    /// `<T as Seal…>::conv_…` or `Seal…::conv_…`.
+    conversion_path: TokenStream,
+}
+
+impl FriendTraits {
+    fn new(
+        names: &ResolvedNames<IntegralName>,
+        arguments: TokenStream,
+        rhs_ty: &Ident,
+        has_generics: bool,
+    ) -> Self {
+        let seal = names.get(IntegralName::SealTrait);
+        let conversion = names.get(IntegralName::Conversion);
+        let conversion_path = match has_generics {
+            true => quote! { <#rhs_ty as #seal #arguments>::#conversion },
+            false => quote! { #seal #arguments::#conversion },
+        };
+        return Self {
+            make: names.get(IntegralName::MakeTrait),
+            math: names.get(IntegralName::MathTrait),
+            bit: names.get(IntegralName::BitTrait),
+            rel: names.get(IntegralName::RelTrait),
+            unsafe_: names.get(IntegralName::UnsafeTrait),
+            seal,
+            conversion,
+            arguments,
+            conversion_path,
+        };
+    }
+
+    pub(crate) fn seal(&self) -> &Ident {
+        return &self.seal;
+    }
+
+    /// `#seal #arguments`.
+    pub(crate) fn seal_with_arguments(&self) -> TokenStream {
+        let seal = &self.seal;
+        let arguments = &self.arguments;
+        return quote! { #seal #arguments };
+    }
+
+    /// The seal's conversion method.
+    pub(crate) fn conversion(&self) -> &Ident {
+        return &self.conversion;
+    }
+
+    /// The path that converts a friend: `<T as Seal…>::conv_…` or
+    /// `Seal…::conv_…`.
+    pub(crate) fn conversion_path(&self) -> &TokenStream {
+        return &self.conversion_path;
+    }
+
+    /// The protocol trait of `capability`; `Cmp` and `Within` have none.
+    pub(crate) fn of(
+        &self,
+        capability: Capability,
+    ) -> Option<&Ident> {
+        return match capability {
+            Capability::Make => Some(&self.make),
+            Capability::Math => Some(&self.math),
+            Capability::Bit => Some(&self.bit),
+            Capability::Rel => Some(&self.rel),
+            Capability::Unsafe => Some(&self.unsafe_),
+            Capability::Cmp | Capability::Within => None,
+        };
+    }
+
+    /// `#trait #arguments` for `capability`'s protocol trait.
+    pub(crate) fn bound(
+        &self,
+        capability: Capability,
+    ) -> TokenStream {
+        let name = self
+            .of(capability)
+            .expect("integral capabilities have protocol traits");
+        let arguments = &self.arguments;
+        return quote! { #name #arguments };
+    }
+}
+
+pub(crate) struct Ctx {
+    pub(crate) cfg: Box<Cfg>,
+    pub(crate) names: ResolvedNames<IntegralName>,
+    pub(crate) friends: FriendTraits,
+    pub(crate) ty: TokenStream,
+    pub(crate) impl_generics: TokenStream,
+    pub(crate) where_clause: TokenStream,
+    pub(crate) arguments: TokenStream,
+    pub(crate) rhs_ty: Ident,
+    pub(crate) rhs_impl_generics: TokenStream,
+    pub(crate) validation: TokenStream,
+    pub(crate) rhs_raw: TokenStream,
+    pub(crate) self_raw: TokenStream,
+    pub(crate) self_raw_ref: TokenStream,
+    pub(crate) output: OperatorOutput,
+    pub(crate) get_raw: Path,
+    pub(crate) fp_or_panic: Path,
 }
 
 impl Ctx {
@@ -815,51 +1019,38 @@ impl Ctx {
         target: &IntegralTarget,
         cfg: Box<Cfg>,
         storage: &StoragePlan,
-    ) -> syn::Result<Self> {
+    ) -> Self {
+        let names = Names::<IntegralName>::default()
+            .resolve(target.ident.clone(), target.occupied_names.clone());
         let ty = target.ty();
         let (impl_generics, where_clause) = target.impl_header(&[], &[]);
         let arguments = target.arguments();
-        let trait_seal = target.fresh_ident("Seal");
-        let trait_friend_bit = target.fresh_ident(BIT);
-        let trait_friend_make = target.fresh_ident(MAKE);
-        let trait_friend_math = target.fresh_ident(MATH);
-        let trait_friend_rel = target.fresh_ident(REL);
-        let fp_unchecked = syn::parse_str(&cfg.flags.fp_unchecked)?;
-        let fp_get_raw = cfg
+        let or_panic = names.get(IntegralName::OrPanic);
+        let fp_or_panic = parse_quote! { Self::#or_panic };
+        let get_raw = cfg
             .get_raw
             .clone()
             .unwrap_or_else(|| parse_quote! { Self::raw });
-        let fn_conv = format_ident!(
-            "conv_{}",
-            zz_runner::snake_case_of(&target.ident.to_string())
-        );
         let rhs_ty = target.fresh_ident("T");
         let (rhs_impl_generics, _) =
             target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
-        let has_generics = target.has_generics();
+        let friends = FriendTraits::new(
+            &names,
+            arguments.clone(),
+            &rhs_ty,
+            target.has_generics(),
+        );
         let value = quote! { value };
         let validation = cfg.validation.emit(&value);
-        let trait_seal_path = quote! { #trait_seal #arguments };
         let rhs_raw = storage.extract(quote! { rhs.0 });
         let self_raw = storage.extract(quote! { self.0 });
         let self_raw_ref = storage.extract_ref(quote! { self.0 });
         let output = target.operator_output(&cfg.ty_out, false);
-        let with_global_operators = !cfg.facets_present();
-        let with_self_math =
-            cfg.flags.self_math && with_global_operators && !has_generics;
-        let with_self_bit =
-            cfg.flags.self_bit && with_global_operators && !has_generics;
-        let trait_seal_with_arguments = quote! { #trait_seal #arguments };
 
-        let fp_friend_conv = if has_generics {
-            quote! { <#rhs_ty as #trait_seal_path>::#fn_conv }
-        }
-        else {
-            quote! { #trait_seal_path::#fn_conv }
-        };
-
-        return Ok(Self {
+        return Self {
             cfg,
+            names,
+            friends,
             ty,
             impl_generics,
             where_clause,
@@ -867,33 +1058,88 @@ impl Ctx {
             rhs_ty,
             rhs_impl_generics,
             validation,
-            fp_friend_conv,
             rhs_raw,
             self_raw,
             self_raw_ref,
             output,
-            trait_seal,
-            trait_seal_with_arguments,
-            trait_friend_make,
-            trait_friend_math,
-            trait_friend_bit,
-            trait_friend_rel,
-            fn_conv,
-            fp_get_raw,
-            fp_unchecked,
-            with_global_operators,
-            with_self_math,
-            with_self_bit,
-        });
+            get_raw,
+            fp_or_panic,
+        };
+    }
+}
+
+pub(crate) struct Maker {
+    pub(crate) num: Num,
+    pub(crate) storage: StoragePlan,
+    pub(crate) el: Ident,
+    pub(crate) target: IntegralTarget,
+    pub(crate) ctx: Ctx,
+    pub(crate) conditional_make: BTreeMap<Num, TokenStream>,
+    empty_friend_checks: TokenStream,
+    /// The `Within` friends and how each is proven.
+    pub(crate) within: Vec<(Friend, WithinProof)>,
+}
+
+impl Maker {
+    fn new_target(
+        target: IntegralTarget,
+        el: Ident,
+        cfg: Box<Cfg>,
+        storage: StoragePlan,
+    ) -> syn::Result<Self> {
+        if storage.non_zero && !cfg.flags.has(IntegralFlag::FnOrPanic) {
+            return cfg
+                .explicit_span(IntegralFlag::FnOrPanic)
+                .fail("nonzero storage does not support a custom or_panic constructor");
+        }
+
+        let ctx = Ctx::new(&target, cfg, &storage);
+        let mut this = Self {
+            num: storage.raw,
+            storage,
+            el,
+            target,
+            ctx,
+            conditional_make: BTreeMap::new(),
+            empty_friend_checks: TokenStream::new(),
+            within: Vec::new(),
+        };
+
+        // Built-in friendships may add capabilities to an explicit empty list.
+        this.empty_friend_checks = this.make_empty_friend_checks();
+        this.fix_friendship()?;
+        this.within = this.plan_within()?;
+
+        return Ok(this);
     }
 
-    fn rhs_where_clause(
+    /// Operators are generated globally unless facets dispatch them.
+    pub(crate) fn with_global_operators(&self) -> bool {
+        return !self.ctx.cfg.facets_present();
+    }
+
+    /// Same-type arithmetic, unless facets or generics take it over.
+    pub(crate) fn with_self_math(&self) -> bool {
+        return self.ctx.cfg.flags.has(IntegralFlag::SelfMath)
+            && self.with_global_operators()
+            && !self.target.has_generics();
+    }
+
+    /// Same-type bitwise operations, unless facets or generics take them
+    /// over.
+    pub(crate) fn with_self_bit(&self) -> bool {
+        return self.ctx.cfg.flags.has(IntegralFlag::SelfBit)
+            && self.with_global_operators()
+            && !self.target.has_generics();
+    }
+
+    /// The where clause of an impl over the right-hand side `T: #bounds`.
+    pub(crate) fn rhs_where(
         &self,
-        maker: &Maker,
         bounds: TokenStream,
     ) -> TokenStream {
-        let rhs_ty = &self.rhs_ty;
-        return maker
+        let rhs_ty = &self.ctx.rhs_ty;
+        return self
             .target
             .impl_header(
                 &[parse_quote! { #rhs_ty }],
@@ -901,76 +1147,44 @@ impl Ctx {
             )
             .1;
     }
-}
 
-struct Maker {
-    repr: N,
-    storage: StoragePlan,
-    el: Ident,
-    target: IntegralTarget,
-    ctx: Ctx,
-    conditional_make: BTreeMap<String, TokenStream>,
-    empty_friend_checks: TokenStream,
-}
-
-impl Maker {
-    fn new_target(
-        target: IntegralTarget,
-        el: Ident,
-        mut cfg: Box<Cfg>,
-        storage: StoragePlan,
-    ) -> syn::Result<Self> {
-        if cfg.flags.auto_of_raw && cfg.validation.has_validation() {
-            cfg.flags.auto_of_raw = false;
-        }
-        let cfg = cfg;
-
-        let (unchecked_flag, emits_unchecked) =
-            match cfg.validation.has_validation() {
-                true => ("fn_make_unchecked", cfg.flags.fn_make_unchecked),
-                false => ("fn_make_checked", cfg.flags.fn_make_checked),
-            };
-
-        if storage.non_zero && !emits_unchecked {
-            return cfg
-                .explicit_flag(unchecked_flag)
-                .map_or_else(Span::call_site, |(_, span)| span)
-                .fail("nonzero storage does not support custom unchecked constructors");
-        }
-
-        let ctx = Ctx::new(&target, cfg, &storage)?;
-        let mut this = Self {
-            repr: N::of(el.to_string()).ok_or_else(|| {
-                syn::Error::new(el.span(), "unknown integral type")
-            })?,
-            storage,
-            el,
-            target,
-            ctx,
-            conditional_make: BTreeMap::new(),
-            empty_friend_checks: TokenStream::new(),
-        };
-
-        // Built-in friendships may add capabilities to an explicit empty list.
-        this.empty_friend_checks = this.make_empty_friend_checks();
-        this.fix_friendship()?;
-
-        return Ok(this);
+    /// `Self` built from a validated `raw` value.
+    pub(crate) fn construct_self(
+        &self,
+        raw: TokenStream,
+    ) -> TokenStream {
+        return self.target.construct(
+            &self.storage,
+            quote! { Self },
+            raw,
+            self.ctx.cfg.flags.has(IntegralFlag::Assertions),
+        );
     }
 
-    fn cast_targets(
+    /// The integer value type, for integer-only emitters (their flags are
+    /// off for floats).
+    pub(crate) fn repr(&self) -> N {
+        return self
+            .num
+            .int()
+            .expect("integer-only emitter on a float type");
+    }
+
+    /// Primitive conversion targets: lossless ones with `safe`, lossy ones
+    /// without.
+    pub(crate) fn cast_targets(
         &self,
         safe: bool,
-    ) -> impl Iterator<Item = (N, TokenStream)> + '_ {
-        return N::items().iter().copied().filter_map(move |target| {
+    ) -> impl Iterator<Item = (Num, TokenStream)> + '_ {
+        return Num::items().filter_map(move |target| {
             let cfg = pointer_width_cfg(|width| {
-                self.repr.can_safe_cast_to(target, width) == safe
+                self.num.can_safe_cast_to(target, width) == safe
             })?;
             Some((target, cfg))
         });
     }
 
-    fn arithmetic_method_name(
+    pub(crate) fn arithmetic_method_name(
         &self,
         operation: ArithmeticOp,
         is_konst: bool,
@@ -986,357 +1200,31 @@ impl Maker {
         };
     }
 
-    fn ekran_arithmetic_helper(
-        &self,
-        operation: ArithmeticOp,
-        rhs_type: TokenStream,
-    ) -> TokenStream {
-        let fp_get_raw = &self.ctx.fp_get_raw;
-        let fp_unchecked = &self.ctx.fp_unchecked;
-        let arithmetic = self.ctx.cfg.profile.arithmetic();
-        let method = self.arithmetic_method_name(operation, true);
-        let expression = arithmetic.make_const_expr(operation);
-        let wrapping = (arithmetic == Arithmetic::WrapperWrapping).then(|| {
-            let method = self.arithmetic_method_name(operation, false);
-            let expression = arithmetic.make_expr(operation);
-            quote! {
-                #[inline(always)]
-                pub(self) fn #method(
-                    &self,
-                    rhs: #rhs_type,
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = #expression;
-                    return #fp_unchecked(it);
-                }
-            }
-        });
-
-        return quote! {
-            #[inline(always)]
-            pub(self) const fn #method(
-                &self,
-                rhs: #rhs_type,
-            ) -> Self {
-                let lhs = #fp_get_raw(*self);
-                let it = #expression;
-                return #fp_unchecked(it);
-            }
-
-            #wrapping
-        };
-    }
-
-    fn is_operator_capability(capability: &Ident) -> bool {
-        return matches!(capability.to_string().as_str(), MATH | BIT);
-    }
-
-    fn friend_conversion_expression(
-        &self,
-        ty: &Path,
-        conversion: Option<&Path>,
-        value: TokenStream,
-    ) -> TokenStream {
-        if self.target.is_target(ty) {
-            let path = &self.ctx.fp_get_raw;
-            let fp_get_raw = self.target.qualify_path(path);
-            return quote! { #fp_get_raw(#value) };
-        }
-
-        let relation = &self.el;
-        if ty
-            .get_ident()
-            .is_some_and(|ident| N::of(ident.to_string()).is_some())
-        {
-            return quote! { #value as #relation };
-        }
-
-        if conversion.is_some_and(|conversion| conversion.is_ident("self")) {
-            return quote! {
-                {
-                    let relation: #relation = #value;
-                    relation
-                }
-            };
-        }
-
-        return match conversion {
-            Some(conversion) => {
-                let conversion = self.target.qualify_path(conversion);
-                quote! { #conversion(#value) }
-            }
-            None => quote! {
-                {
-                    let relation: #relation = #value.into();
-                    relation
-                }
-            },
-        };
-    }
-
-    fn trait_of(
-        &self,
-        capability: &Ident,
-    ) -> Ident {
-        return match capability.to_string().as_str() {
-            MAKE => self.ctx.trait_friend_make.clone(),
-            MATH => self.ctx.trait_friend_math.clone(),
-            BIT => self.ctx.trait_friend_bit.clone(),
-            REL => self.ctx.trait_friend_rel.clone(),
-            _ => self.target.fresh_ident(&capability.to_string()),
-        };
-    }
-
-    fn bounds_for(
-        &self,
-        flags: &[Konsts],
-    ) -> TokenStream {
-        let trait_seal = &self.ctx.trait_seal_with_arguments;
-        let is_konst = self.ctx.cfg.konst_for(flags);
-        let bonst = Konst::bonst(is_konst);
-        let destruct = Konst::destruct(is_konst);
-        return quote! { #bonst #trait_seal #destruct };
-    }
-
     fn ekran_items(&self) -> TokenStream {
-        let ctx = &self.ctx;
-        let mut stream = TokenStream::new();
-
-        stream.extend(self.make_fn_conv_of(ctx));
-        stream.extend(self.make_auto_of_raw(ctx));
-        stream.extend(self.make_fn_conv_raw(ctx));
-        stream.extend(self.make_fn_conv_into(ctx));
-        stream.extend(self.make_map(ctx));
-        stream.extend(self.make_fn_conv_try_into_unchecked(ctx));
-        stream.extend(self.make_fn_conv_try_into_checked(ctx));
-        stream.extend(self.make_fn_math_add(ctx));
-        stream.extend(self.make_fn_math_sub(ctx));
-        stream.extend(self.make_fn_math_mul(ctx));
-        stream.extend(self.make_fn_math_div(ctx));
-        stream.extend(self.make_fn_math_rem(ctx));
-        stream.extend(self.make_fn_math_xor(ctx));
-        stream.extend(self.make_fn_math_and(ctx));
-        stream.extend(self.make_fn_math_or(ctx));
-        stream.extend(self.make_fn_math_shr(ctx));
-        stream.extend(self.make_fn_math_shl(ctx));
-        stream.extend(self.make_fn_math_not(ctx));
-        stream.extend(self.make_precedes(ctx));
-        stream.extend(self.make_fn_op_eq(ctx));
-        stream.extend(self.make_fn_op_cmp(ctx));
-        stream.extend(self.make_fn_make_try(ctx));
-        stream.extend(self.make_fn_make(ctx));
-        stream.extend(self.make_items_core_int(ctx));
-
+        let mut stream = self.item_fns();
+        stream.extend(self.forward_items());
         return stream;
     }
 
     fn ekran_impls(&self) -> syn::Result<TokenStream> {
-        let ctx = &self.ctx;
-        let mut stream = TokenStream::new();
-
-        stream.extend(self.make_as_ref(ctx));
-        stream.extend(self.make_from_str(ctx));
-        stream.extend(self.make_serde(ctx));
-        stream.extend(self.make_core_int(ctx));
-        stream.extend(self.make_into(ctx));
-        stream.extend(self.make_try_into(ctx));
-        stream.extend(self.make_math_shr(ctx));
-        stream.extend(self.make_math_shl(ctx));
-        stream.extend(self.make_assign_shr(ctx));
-        stream.extend(self.make_assign_shl(ctx));
-        stream.extend(self.make_assign(ctx, Operator::BitAnd));
-        for &operator in Operator::math_items() {
-            stream.extend(self.make_assign(ctx, operator));
-        }
-        stream.extend(self.make_assign(ctx, Operator::BitOr));
-        stream.extend(self.make_range(ctx));
-        stream.extend(self.make_debug(ctx));
-        stream.extend(self.make_hash(ctx));
-        stream.extend(self.make_eq(ctx));
-        stream.extend(self.make_ord(ctx));
-        stream.extend(self.make_assertions(ctx));
-        for &operator in Operator::math_items() {
-            stream.extend(self.make_math_arithmetic(ctx, operator));
-        }
-        stream.extend(self.make_math_bitwise(ctx, Operator::BitAnd));
-        stream.extend(self.make_math_bitwise(ctx, Operator::BitOr));
-        stream.extend(self.make_math_xor(ctx));
-        stream.extend(self.make_math_not(ctx));
-        stream.extend(self.make_display(ctx));
-        stream.extend(self.make_fmt_binary(ctx));
-        stream.extend(self.make_fmt_octal(ctx));
-        stream.extend(self.make_fmt_hex_lower(ctx));
-        stream.extend(self.make_fmt_hex_upper(ctx));
-        stream.extend(self.make_partial_eq(ctx));
-        stream.extend(self.make_partial_ord(ctx));
-
+        let mut stream = self.impls_head();
+        stream.extend(self.make_core_int());
+        stream.extend(self.make_core_float());
+        stream.extend(self.make_forwards()?);
+        stream.extend(self.impls_body());
+        stream.extend(self.make_fmt_exp());
+        stream.extend(self.make_iterator_folds());
         return Ok(stream);
     }
 
-    fn ekran_bit_access_items(&self) -> TokenStream {
-        let fp_get_raw = &self.ctx.fp_get_raw;
-        let el = &self.el;
-
-        if !self.ctx.cfg.flags.bit_access || self.repr.is_signed() {
-            return TokenStream::new();
-        }
-
-        let bytes = (0..self.repr.bits_for_pointer_width(64) / 8)
-            .filter_map(|i| {
-                let cfg = pointer_width_cfg(|width| {
-                    self.repr.bits_for_pointer_width(width) >= 8 * (i + 1)
-                })?;
-                let name = format_ident!("byte{}", i);
-                Some(quote! {
-                    #cfg
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u8 {
-                        return ((#fp_get_raw(self) >> (8 * #i)) & (0xFF as #el)) as u8;
-                    }
-                })
-            })
-            .merged();
-
-        let words = (0..self.repr.bits_for_pointer_width(64) / 16)
-            .filter_map(|i| {
-                let cfg = pointer_width_cfg(|width| {
-                    self.repr.bits_for_pointer_width(width) >= 16 * (i + 1)
-                })?;
-                let name = format_ident!("word{}", i);
-                Some(quote! {
-                    #cfg
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u16 {
-                        return ((#fp_get_raw(self) >> (16 * #i)) & (0xFFFF as #el)) as u16;
-                    }
-                })
-            })
-            .merged();
-
-        let dwords = (0..self.repr.bits_for_pointer_width(64) / 32)
-            .filter_map(|i| {
-                let cfg = pointer_width_cfg(|width| {
-                    self.repr.bits_for_pointer_width(width) >= 32 * (i + 1)
-                })?;
-                let name = format_ident!("dword{}", i);
-                Some(quote! {
-                    #cfg
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u32 {
-                        return ((#fp_get_raw(self) >> (32 * #i)) & (0xFFFFFFFF as #el)) as u32;
-                    }
-                })
-            })
-            .merged();
-
-        let qwords = (0..self.repr.bits_for_pointer_width(64) / 64)
-            .filter_map(|i| {
-                let cfg = pointer_width_cfg(|width| {
-                    self.repr.bits_for_pointer_width(width) >= 64 * (i + 1)
-                })?;
-                let name = format_ident!("qword{}", i);
-                Some(quote! {
-                    #cfg
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn #name(self) -> u64 {
-                        return ((#fp_get_raw(self) >> (64 * #i)) & (0xFFFFFFFFFFFFFFFF as #el)) as u64;
-                    }
-                })
-            })
-            .merged();
-
-        let halved = match self.repr {
-            N::U016 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo8(self) -> u8 {
-                        return self.byte0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi8(self) -> u8 {
-                        return self.byte1();
-                    }
-                }
-            }
-
-            N::U032 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo16(self) -> u16 {
-                        return self.word0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi16(self) -> u16 {
-                        return self.word1();
-                    }
-                }
-            }
-
-            N::U064 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo32(self) -> u32 {
-                        return self.dword0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi32(self) -> u32 {
-                        return self.dword1();
-                    }
-                }
-            }
-
-            N::U128 => {
-                quote! {
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn lo64(self) -> u64 {
-                        return self.qword0();
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn hi64(self) -> u64 {
-                        return self.qword1();
-                    }
-                }
-            }
-
-            // N::USIZ => {}
-            _ => TokenStream::new(),
-        };
-
-        return quote! {
-            #halved
-
-            #bytes
-
-            #words
-
-            #dwords
-
-            #qwords
-        };
-    }
-
     fn ekran(&self) -> syn::Result<TokenStream> {
+        self.check_prove()?;
         let empty_friend_checks = &self.empty_friend_checks;
         let friends = self.ekran_friendship();
         let impls = self.ekran_impls()?;
         let items = self.ekran_items();
         let bit_access = self.ekran_bit_access_items();
+        let within = self.ekran_within();
 
         let ty = &self.ctx.ty;
         let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
@@ -1356,4380 +1244,8 @@ impl Maker {
             impl #impl_generics #ty #where_clause {
                 #bit_access
             }
+
+            #within
         });
-    }
-}
-
-// Friendship
-impl Maker {
-    fn make_empty_friend_checks(&self) -> TokenStream {
-        let cfg = &self.ctx.cfg;
-        let mut friends = cfg
-            .friends
-            .iter()
-            .filter(|friend| {
-                friend.capabilities.is_empty() && friend.conv.is_some()
-            })
-            .map(|friend| (friend, cfg.konst_friendship()))
-            .collect::<Vec<_>>();
-
-        for facet in &cfg.facets {
-            let mut facet_friends = facet
-                .friends
-                .iter()
-                .filter(|friend| {
-                    friend.capabilities.is_empty() && friend.conv.is_some()
-                })
-                .peekable();
-            if facet_friends.peek().is_none() {
-                continue;
-            }
-
-            let default = cfg
-                .default_facet
-                .as_ref()
-                .expect("facets require a resolved default facet");
-            let flags = Cfg::resolved_facet_flags(&default.flags, facet);
-            let konst = Operator::items().iter().any(|operator| {
-                flags.enabled(*operator)
-                    && cfg.konst_for(&operator.is_konst_flags())
-            });
-            friends.extend(facet_friends.map(|friend| (friend, konst)));
-        }
-
-        if friends.is_empty() {
-            return TokenStream::new();
-        }
-
-        let has_const_check = friends.iter().any(|(_, konst)| *konst);
-        let callback_name = self.target.fresh_ident("__typekin_callback");
-        let relation = &self.el;
-        let checks = friends
-            .iter()
-            .map(|(friend, konst)| {
-                let conversion = self.target.qualify_path(
-                    friend.conv.as_ref().expect("explicit callback missing"),
-                );
-                let source = friend.ty.path();
-                let source =
-                    self.target.external_type(&parse_quote! { #source });
-                if !konst {
-                    return quote! {
-                        let _: fn(#source) -> #relation = #conversion;
-                    };
-                }
-
-                // A const FnOnce bound checks const-callability without calling it.
-                return quote! {
-                    {
-                        let #callback_name = #conversion;
-                        {
-                            const fn __typekin_assert_const_fn<I, O, F>(_: F)
-                            where
-                                F: [const] ::core::ops::FnOnce(I) -> O
-                                    + ::core::marker::Copy,
-                            {}
-                            __typekin_assert_const_fn::<#source, #relation, _>(
-                                #callback_name,
-                            );
-                        }
-                    }
-                };
-            })
-            .merged();
-
-        if !self.target.has_generics() {
-            return checks;
-        }
-
-        let mut name = "__typekin_check_empty_friends".to_owned();
-        let check_name = loop {
-            let candidate = self.target.fresh_ident(&name);
-            let conflicts = friends.iter().any(|(friend, _)| {
-                friend
-                    .conv
-                    .as_ref()
-                    .and_then(|path| path.segments.first())
-                    .is_some_and(|segment| segment.ident == candidate)
-            });
-            if !conflicts {
-                break candidate;
-            }
-            name.push('_');
-        };
-        let generics = self.target.external_generics();
-        let (parameters, _, where_clause) = generics.split_for_impl();
-        let konst = Konst::konst(has_const_check);
-
-        return quote! {
-            #konst fn #check_name #parameters() #where_clause {
-                #checks
-            }
-        };
-    }
-
-    fn fix_friendship(&mut self) -> syn::Result<()> {
-        let target: Path = syn::parse2(self.target.ty())
-            .expect("integral targets does not emit valid type paths");
-
-        let target_friend = self
-            .ctx
-            .cfg
-            .friends
-            .iter()
-            .find(|friend| self.target.is_target(friend.ty.path()))
-            .cloned()
-            .unwrap_or_else(|| Friend::from(&target));
-
-        if let Some(it) = self.ctx.cfg.friends.get(&target_friend) {
-            if it.capabilities.contains(&format_ident!("{}", MATH)) {
-                return it.ty.path().fail(
-                    "self math operations use `self_math`, not `friend`",
-                );
-            }
-            if it.capabilities.contains(&format_ident!("{}", BIT)) {
-                return it
-                    .ty
-                    .path()
-                    .fail("self bit operations use `self_bit`, not `friend`");
-            }
-        }
-
-        for (f_def, conv, is_validated) in [
-            (target_friend, Some(parse_quote! { Self::raw }), false),
-            (
-                Friend::from(&self.el),
-                Some(parse_quote! { self }),
-                self.ctx.cfg.validation.has_validation(),
-            ),
-        ] {
-            let mut it = self
-                .ctx
-                .cfg
-                .friends
-                .take(&f_def)
-                .unwrap_or_else(|| f_def.clone());
-
-            if it.conv.is_none() {
-                it.conv = conv;
-            }
-
-            if !is_validated && self.ctx.cfg.flags.self_friend_make {
-                it.capabilities.insert(format_ident!("{}", MAKE));
-            }
-
-            if !self.target.is_target(f_def.ty.path())
-                && self.ctx.cfg.flags.self_friend_math_ops
-            {
-                it.capabilities.insert(format_ident!("{}", MATH));
-            }
-
-            if self.target.is_target(f_def.ty.path())
-                || self.ctx.cfg.flags.self_friend_rel
-            {
-                it.capabilities.insert(format_ident!("{}", REL));
-            }
-
-            if !self.target.is_target(f_def.ty.path())
-                && self.ctx.cfg.flags.self_friend_math_bit
-            {
-                it.capabilities.insert(format_ident!("{}", BIT));
-            }
-
-            // Generic Self operations share the RHS protocol: separate Self
-            // impls would overlap when downstream parameters satisfy it.
-            if self.target.has_generics()
-                && self.target.is_target(f_def.ty.path())
-            {
-                if self.ctx.cfg.flags.self_math {
-                    it.capabilities.insert(format_ident!("{}", MATH));
-                }
-                if self.ctx.cfg.flags.self_bit {
-                    it.capabilities.insert(format_ident!("{}", BIT));
-                }
-            }
-
-            assert!(self.ctx.cfg.friends.insert(it));
-        }
-
-        if !self.ctx.cfg.validation.has_validation()
-            && self.ctx.cfg.flags.self_friend_make
-        {
-            for source in N::items().iter().copied() {
-                if source == self.repr {
-                    continue;
-                }
-                let Some(cfg) = pointer_width_cfg(|width| {
-                    source.can_safe_cast_to(self.repr, width)
-                })
-                else {
-                    continue;
-                };
-                let ty = format_ident!("{}", source.rust_name());
-                let friend = Friend::from(&ty);
-                let mut friend =
-                    self.ctx.cfg.friends.take(&friend).unwrap_or(friend);
-                let newly_added =
-                    friend.capabilities.insert(format_ident!("{}", MAKE));
-                if newly_added && !cfg.is_empty() {
-                    self.conditional_make
-                        .insert(source.rust_name().to_owned(), cfg);
-                }
-                assert!(self.ctx.cfg.friends.insert(friend));
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn make_facet_dispatch(&self) -> TokenStream {
-        if !self.ctx.cfg.facets_present() {
-            return TokenStream::new();
-        }
-
-        let target = self.target.ty();
-        let generics = self.target.external_generics();
-        let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operators = self
-            .ctx
-            .cfg
-            .facet_slots
-            .keys()
-            .map(|slot| slot.operator)
-            .collect::<BTreeSet<_>>();
-        let traits = operators.iter().copied().map(|operator| {
-            let trait_name =
-                self.target.fresh_ident(&format!("{}Rhs", operator.name()));
-            let method = format_ident!("{}", operator.method_name());
-            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = Konst::konst(is_konst);
-
-            return quote! {
-                #[doc(hidden)]
-                #[allow(private_interfaces)]
-                pub #konst trait #trait_name #parameters #where_clause {
-                    type Output;
-
-                    fn #method(
-                        lhs: #target,
-                        rhs: Self,
-                    ) -> Self::Output;
-                }
-            };
-        });
-        let implementations =
-            self.ctx.cfg.facet_slots.iter().map(|(key, slot)| {
-                let operator = key.operator;
-                let trait_name =
-                    self.target.fresh_ident(&format!("{}Rhs", operator.name()));
-                let method = format_ident!("{}", operator.method_name());
-                let rhs_ty = slot.rhs.as_ref().map_or_else(
-                    || target.clone(),
-                    |rhs| self.target.external_type(&parse_quote! { #rhs }),
-                );
-                let rhs = match &slot.rhs {
-                    Some(rhs) => self.friend_conversion_expression(
-                        rhs,
-                        slot.conversion.as_ref(),
-                        quote! { rhs },
-                    ),
-                    None => {
-                        let path = &self.ctx.fp_get_raw;
-                        let fp_get_raw = self.target.qualify_path(path);
-                        quote! { #fp_get_raw(rhs) }
-                    }
-                };
-                let path = &self.ctx.fp_get_raw;
-                let lhs = self.target.qualify_path(path);
-                let path = &self.ctx.fp_unchecked;
-                let unchecked = self.target.qualify_path(path);
-                let output = self.target.operator_output(&slot.ty_out, true);
-                let output_ty = output.ty();
-                let result = output.convert(quote! { value });
-                let is_konst =
-                    self.ctx.cfg.konst_for(&operator.is_konst_flags());
-                let operation =
-                    slot.arithmetic.make_operator_expr(operator, is_konst);
-                let konst = Konst::konst(is_konst);
-
-                return quote! {
-                    #konst impl #parameters #trait_name #arguments for #rhs_ty
-                    #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn #method(
-                            lhs: #target,
-                            rhs: #rhs_ty,
-                        ) -> Self::Output {
-                            let lhs = #lhs(lhs);
-                            let rhs = #rhs;
-                            let value = #operation;
-                            let value = #unchecked(value);
-                            return #result;
-                        }
-                    }
-                };
-            });
-        let operator_impls = operators.iter().copied().map(|operator| {
-            let trait_name = self
-                .target
-                .fresh_ident(&format!("{}Rhs", operator.name()));
-            let method = format_ident!("{}", operator.method_name());
-            let operation = format_ident!("{}", operator.name());
-            let rhs = self.target.fresh_ident("T");
-            let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-            let konst = Konst::konst(is_konst);
-            let bonst = Konst::bonst(is_konst);
-            let destruct = Konst::destruct(is_konst);
-            let (impl_generics, where_clause) = self.target.impl_header(
-                &[parse_quote! { #rhs }],
-                &[parse_quote! {
-                    #rhs: #bonst #trait_name #arguments #destruct
-                }],
-            );
-
-            return quote! {
-                #[allow(private_bounds)]
-                #konst impl #impl_generics ::core::ops::#operation<#rhs>
-                    for #target
-                #where_clause {
-                    type Output = <#rhs as #trait_name #arguments>::Output;
-
-                    #[inline(always)]
-                    fn #method(
-                        self,
-                        rhs: #rhs,
-                    ) -> Self::Output {
-                        return <#rhs as #trait_name #arguments>::#method(self, rhs);
-                    }
-                }
-            };
-        });
-
-        return quote! {
-            #(#traits)*
-            #(#implementations)*
-            #(#operator_impls)*
-        };
-    }
-
-    fn ekran_friendship(&self) -> TokenStream {
-        let target = self.ctx.ty.clone();
-        let el = &self.el;
-        let relation: Type = parse_quote! { #el };
-        let seal = self.ctx.trait_seal.clone();
-        let conversion = self.ctx.fn_conv.clone();
-        let fp_get_raw = &self.ctx.fp_get_raw;
-        let target_conversion = self.ctx.cfg.flags.friend_seal.then(|| {
-            quote! {
-                return #fp_get_raw(self);
-            }
-        });
-        let capabilities = [
-            (
-                self.ctx.cfg.flags.friendzone_friend_make,
-                format_ident!("{}", MAKE),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_math_ops,
-                format_ident!("{}", MATH),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_math_bit,
-                format_ident!("{}", BIT),
-            ),
-            (
-                self.ctx.cfg.flags.friendzone_friend_rel,
-                format_ident!("{}", REL),
-            ),
-            (true, crate::friendship::cfg::trust_capability()),
-        ]
-        .into_iter()
-        .filter_map(|(enabled, capability)| enabled.then_some(capability))
-        .filter(|capability| {
-            return !self.ctx.cfg.facets_present()
-                || !Self::is_operator_capability(capability);
-        })
-        .map(|capability| self.trait_of(&capability))
-        .vec();
-        let friends = match self.ctx.cfg.flags.friend {
-            false => vec![],
-            true => self
-                .ctx
-                .cfg
-                .friends
-                .iter()
-                .filter_map(|friend| {
-                    let capabilities = friend
-                        .capabilities
-                        .iter()
-                        .filter(|capability| {
-                            return !self.ctx.cfg.facets_present()
-                                || !Self::is_operator_capability(capability);
-                        })
-                        .map(|capability| self.trait_of(capability))
-                        .collect::<BTreeSet<_>>();
-                    if capabilities.is_empty() {
-                        return None;
-                    }
-
-                    let make_cfg =
-                        friend.ty.path().get_ident().and_then(|ident| {
-                            self.conditional_make.get(&ident.to_string())
-                        });
-                    let seal_cfg = if capabilities.len() == 1 {
-                        make_cfg.cloned().unwrap_or_default()
-                    }
-                    else {
-                        TokenStream::new()
-                    };
-                    let mut capability_cfgs = BTreeMap::new();
-                    if let Some(cfg) = make_cfg {
-                        capability_cfgs.insert(
-                            self.ctx.trait_friend_make.clone(),
-                            cfg.clone(),
-                        );
-                    }
-
-                    let conversion = if self.target.is_target(friend.ty.path())
-                    {
-                        None
-                    }
-                    else {
-                        let value = self.friend_conversion_expression(
-                            friend.ty.path(),
-                            friend.conv.as_ref(),
-                            quote! { self },
-                        );
-                        Some(quote! { return #value; })
-                    };
-
-                    let friend_ty = friend.ty.path();
-                    return Some(ProtocolFriend {
-                        ty: syn::parse2(
-                            self.target
-                                .external_type(&parse_quote! { #friend_ty }),
-                        )
-                        .expect(
-                            "friend types remain valid after target lowering",
-                        ),
-                        capabilities,
-                        conversion,
-                        seal_cfg,
-                        capability_cfgs,
-                    });
-                })
-                .vec(),
-        };
-        let path = &self.ctx.fp_unchecked;
-        let checked = self.target.qualify_path(path);
-        let trusted = self.target.construct(
-            &self.storage,
-            self.target.constructor(),
-            quote! { raw },
-            self.ctx.cfg.flags.assertions,
-        );
-
-        let protocol = crate::friendship::emit_protocol(Protocol {
-            target,
-            generics: self.target.external_generics(),
-            relation,
-            seal,
-            conversion,
-            capabilities,
-            friends,
-            emit_seal: self.ctx.cfg.flags.friendzone_seal,
-            target_conversion,
-            construction: Some(Construction {
-                make: self.ctx.trait_friend_make.clone(),
-                trusted: self
-                    .trait_of(&crate::friendship::cfg::trust_capability()),
-                trusted_constructor: trusted,
-                checked: quote! { #checked },
-            }),
-            konst: self.ctx.cfg.konst_friendship(),
-        });
-
-        let dispatch = self.make_facet_dispatch();
-
-        return quote! {
-            #protocol
-
-            #dispatch
-        };
-    }
-}
-
-// Impls
-impl Maker {
-    fn make_range(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        if !self.ctx.cfg.flags.range {
-            return TokenStream::new();
-        }
-
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let el = &self.el;
-        let konst = Konst::konst(self.ctx.cfg.konst_for(&[Konsts::Iterator]));
-        let start_ref = self.storage.extract_ref(quote! { start.0 });
-        let end_ref = self.storage.extract_ref(quote! { end.0 });
-        let forward_start = self.storage.extract(quote! { start.0 });
-        let backward_start = self.storage.extract(quote! { start.0 });
-        let forward_overflow_start = self.storage.extract(quote! { start.0 });
-        let backward_overflow_start = self.storage.extract(quote! { start.0 });
-        let unchecked = &ctx.fp_unchecked;
-
-        return quote! {
-            #konst impl #impl_generics ::core::iter::Step for #ty #where_clause {
-                #[inline(always)]
-                fn steps_between(
-                    start: &Self,
-                    end: &Self,
-                ) -> (usize, ::core::option::Option<usize>) {
-                    return <#el as ::core::iter::Step>::steps_between(
-                        #start_ref,
-                        #end_ref,
-                    );
-                }
-
-                #[inline(always)]
-                fn forward_checked(
-                    start: Self,
-                    count: usize,
-                ) -> ::core::option::Option<Self> {
-                    return match <#el as ::core::iter::Step>::forward_checked(
-                        #forward_start,
-                        count,
-                    ) {
-                        ::core::option::Option::Some(value) => {
-                            ::core::option::Option::Some(#unchecked(value))
-                        }
-                        ::core::option::Option::None => {
-                            ::core::option::Option::None
-                        }
-                    };
-                }
-
-                #[inline(always)]
-                fn forward_overflowing(
-                    start: Self,
-                    count: usize,
-                ) -> (Self, bool) {
-                    let (value, overflowed) =
-                        <#el as ::core::iter::Step>::forward_overflowing(
-                            #forward_overflow_start,
-                            count,
-                        );
-                    return (#unchecked(value), overflowed);
-                }
-
-                #[inline(always)]
-                fn backward_checked(
-                    start: Self,
-                    count: usize,
-                ) -> ::core::option::Option<Self> {
-                    return match <#el as ::core::iter::Step>::backward_checked(
-                        #backward_start,
-                        count,
-                    ) {
-                        ::core::option::Option::Some(value) => {
-                            ::core::option::Option::Some(#unchecked(value))
-                        }
-                        ::core::option::Option::None => {
-                            ::core::option::Option::None
-                        }
-                    };
-                }
-
-                #[inline(always)]
-                fn backward_overflowing(
-                    start: Self,
-                    count: usize,
-                ) -> (Self, bool) {
-                    let (value, overflowed) =
-                        <#el as ::core::iter::Step>::backward_overflowing(
-                            #backward_overflow_start,
-                            count,
-                        );
-                    return (#unchecked(value), overflowed);
-                }
-            }
-        };
-    }
-
-    fn make_as_ref(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let el = &self.el;
-        let self_raw_ref = &ctx.self_raw_ref;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.as_ref_ {
-            let it = quote! {
-                impl #impl_generics ::core::convert::AsRef<#el> for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn as_ref(&self) -> &#el {
-                        return #self_raw_ref;
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_from_str(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let el = &self.el;
-        let validation = &ctx.validation;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.from_str {
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                quote! { value },
-                self.ctx.cfg.flags.assertions,
-            );
-            stream.extend(quote! {
-                impl #impl_generics ::core::str::FromStr for #ty
-                #where_clause {
-                    type Err = ();
-
-                    #[inline(always)]
-                    fn from_str(
-                        source: &str,
-                    ) -> ::core::result::Result<Self, Self::Err> {
-                        let value =
-                            match <#el as ::core::str::FromStr>::from_str(source) {
-                                ::core::result::Result::Ok(value) => value,
-                                ::core::result::Result::Err(_) => {
-                                    return ::core::result::Result::Err(());
-                                }
-                            };
-
-                        return if #validation {
-                            ::core::result::Result::Ok(#constructed)
-                        }
-                        else {
-                            ::core::result::Result::Err(())
-                        };
-                    }
-                }
-            });
-        }
-
-        return stream;
-    }
-
-    fn make_serde(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let el = &self.el;
-        let validation = &ctx.validation;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.serde {
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                quote! { value },
-                self.ctx.cfg.flags.assertions,
-            );
-            let serializer = self.target.fresh_ident("S");
-            let deserializer = self.target.fresh_ident("D");
-            let de = self.target.fresh_lifetime("de");
-            let (de_generics, de_where_clause) =
-                self.target.impl_header(&[parse_quote! { #de }], &[]);
-            stream.extend(quote! {
-                impl #impl_generics ::serde::Serialize for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn serialize<#serializer>(
-                        &self,
-                        serializer: #serializer,
-                    ) -> ::core::result::Result<#serializer::Ok, #serializer::Error>
-                    where
-                        #serializer: ::serde::Serializer,
-                    {
-                        let value = #fp_get_raw(*self);
-                        return <#el as ::serde::Serialize>::serialize(
-                            &value,
-                            serializer,
-                        );
-                    }
-                }
-
-                impl #de_generics ::serde::Deserialize<#de> for #ty
-                #de_where_clause {
-                    #[inline(always)]
-                    fn deserialize<#deserializer>(
-                        deserializer: #deserializer,
-                    ) -> ::core::result::Result<Self, #deserializer::Error>
-                    where
-                        #deserializer: ::serde::Deserializer<#de>,
-                    {
-                        let value =
-                            <#el as ::serde::Deserialize<#de>>::deserialize(
-                                deserializer,
-                            )?;
-
-                        return if #validation {
-                            ::core::result::Result::Ok(#constructed)
-                        }
-                        else {
-                            ::core::result::Result::Err(
-                                <#deserializer::Error as ::serde::de::Error>::custom(
-                                    "invalid value",
-                                ),
-                            )
-                        };
-                    }
-                }
-            });
-        }
-
-        return stream;
-    }
-
-    fn make_core_int(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.core_int {
-            let it = quote! {
-                impl #impl_generics #ty #where_clause {
-                    /// The number of bits in the wrapped primitive integer.
-                    pub const BITS: u32 = #el::BITS;
-
-                    #[inline(always)]
-                    pub const fn count_ones(self) -> u32 {
-                        return #fp_get_raw(self).count_ones();
-                    }
-
-                    #[inline(always)]
-                    pub const fn count_zeros(self) -> u32 {
-                        return #fp_get_raw(self).count_zeros();
-                    }
-
-                    #[inline(always)]
-                    pub const fn leading_zeros(self) -> u32 {
-                        return #fp_get_raw(self).leading_zeros();
-                    }
-
-                    #[inline(always)]
-                    pub const fn trailing_zeros(self) -> u32 {
-                        return #fp_get_raw(self).trailing_zeros();
-                    }
-
-                    #[inline(always)]
-                    pub const fn leading_ones(self) -> u32 {
-                        return #fp_get_raw(self).leading_ones();
-                    }
-
-                    #[inline(always)]
-                    pub const fn trailing_ones(self) -> u32 {
-                        return #fp_get_raw(self).trailing_ones();
-                    }
-
-                    #[inline(always)]
-                    pub const fn highest_one(self) -> ::core::option::Option<u32> {
-                        return #fp_get_raw(self).highest_one();
-                    }
-
-                    #[inline(always)]
-                    pub const fn lowest_one(self) -> ::core::option::Option<u32> {
-                        return #fp_get_raw(self).lowest_one();
-                    }
-
-                    #[inline(always)]
-                    pub const fn ilog(self, base: Self) -> u32 {
-                        return #fp_get_raw(self).ilog(#fp_get_raw(base));
-                    }
-
-                    #[inline(always)]
-                    pub const fn ilog2(self) -> u32 {
-                        return #fp_get_raw(self).ilog2();
-                    }
-
-                    #[inline(always)]
-                    pub const fn ilog10(self) -> u32 {
-                        return #fp_get_raw(self).ilog10();
-                    }
-
-                    #[inline(always)]
-                    pub const fn checked_ilog(
-                        self,
-                        base: Self,
-                    ) -> ::core::option::Option<u32> {
-                        return #fp_get_raw(self).checked_ilog(#fp_get_raw(base));
-                    }
-
-                    #[inline(always)]
-                    pub const fn checked_ilog2(self) -> ::core::option::Option<u32> {
-                        return #fp_get_raw(self).checked_ilog2();
-                    }
-
-                    #[inline(always)]
-                    pub const fn checked_ilog10(self) -> ::core::option::Option<u32> {
-                        return #fp_get_raw(self).checked_ilog10();
-                    }
-
-                    #[inline(always)]
-                    pub const fn to_be_bytes(
-                        self,
-                    ) -> [u8; ::core::mem::size_of::<#el>()] {
-                        return #fp_get_raw(self).to_be_bytes();
-                    }
-
-                    #[inline(always)]
-                    pub const fn to_le_bytes(
-                        self,
-                    ) -> [u8; ::core::mem::size_of::<#el>()] {
-                        return #fp_get_raw(self).to_le_bytes();
-                    }
-
-                    #[inline(always)]
-                    pub const fn to_ne_bytes(
-                        self,
-                    ) -> [u8; ::core::mem::size_of::<#el>()] {
-                        return #fp_get_raw(self).to_ne_bytes();
-                    }
-                }
-            };
-            stream.extend(it);
-
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::CoreInt,
-                Konsts::Value,
-            ]));
-            let it = quote! {
-                impl #impl_generics #ty #where_clause {
-                    #[inline(always)]
-                    pub #konst fn rotate_left(self, n: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).rotate_left(n));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn rotate_right(self, n: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).rotate_right(n));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn swap_bytes(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).swap_bytes());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn reverse_bits(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).reverse_bits());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn isolate_highest_one(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).isolate_highest_one());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn isolate_lowest_one(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).isolate_lowest_one());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn to_be(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).to_be());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn to_le(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).to_le());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn from_be(value: Self) -> Self {
-                        return Self::_core_int(#el::from_be(#fp_get_raw(value)));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn from_le(value: Self) -> Self {
-                        return Self::_core_int(#el::from_le(#fp_get_raw(value)));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn from_ne_bytes(
-                        bytes: [u8; ::core::mem::size_of::<#el>()],
-                    ) -> Self {
-                        return Self::_core_int(#el::from_ne_bytes(bytes));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn from_be_bytes(
-                        bytes: [u8; ::core::mem::size_of::<#el>()],
-                    ) -> Self {
-                        return Self::_core_int(#el::from_be_bytes(bytes));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn from_le_bytes(
-                        bytes: [u8; ::core::mem::size_of::<#el>()],
-                    ) -> Self {
-                        return Self::_core_int(#el::from_le_bytes(bytes));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_add(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_add(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_sub(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_sub(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_neg(
-                        self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_neg() {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_mul(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_mul(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_div(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_div(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_rem(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_rem(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_div_euclid(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_div_euclid(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_rem_euclid(
-                        self,
-                        rhs: Self,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_rem_euclid(#fp_get_raw(rhs)) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_shl(
-                        self,
-                        rhs: u32,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_shl(rhs) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_shr(
-                        self,
-                        rhs: u32,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_shr(rhs) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn checked_pow(
-                        self,
-                        exp: u32,
-                    ) -> ::core::option::Option<Self> {
-                        return match #fp_get_raw(self).checked_pow(exp) {
-                            ::core::option::Option::Some(value) => {
-                                Self::_core_int_checked(value)
-                            }
-                            ::core::option::Option::None => {
-                                ::core::option::Option::None
-                            }
-                        };
-                    }
-
-                }
-            };
-            stream.extend(it);
-
-            let it = quote! {
-                impl #impl_generics #ty #where_clause {
-                    #[inline(always)]
-                    pub #konst fn midpoint(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).midpoint(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn unbounded_shl(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).unbounded_shl(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn unbounded_shr(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).unbounded_shr(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn saturating_add(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).saturating_add(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn saturating_sub(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).saturating_sub(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn saturating_mul(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).saturating_mul(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn saturating_div(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).saturating_div(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn saturating_pow(self, exp: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).saturating_pow(exp));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_add(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_add(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_sub(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_sub(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_neg(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).wrapping_neg());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_mul(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_mul(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_div(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_div(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_rem(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_rem(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_div_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_div_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_rem_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).wrapping_rem_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_shl(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).wrapping_shl(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_shr(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).wrapping_shr(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn wrapping_pow(self, exp: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).wrapping_pow(exp));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn pow(self, exp: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).pow(exp));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn isqrt(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).isqrt());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn div_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).div_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn rem_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).rem_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_add(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_add(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_sub(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_sub(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_neg(self) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).strict_neg());
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_mul(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_mul(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_div(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_div(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_rem(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_rem(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_div_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_div_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_rem_euclid(self, rhs: Self) -> Self {
-                        return Self::_core_int(
-                            #fp_get_raw(self).strict_rem_euclid(#fp_get_raw(rhs))
-                        );
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_shl(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).strict_shl(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_shr(self, rhs: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).strict_shr(rhs));
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn strict_pow(self, exp: u32) -> Self {
-                        return Self::_core_int(#fp_get_raw(self).strict_pow(exp));
-                    }
-                }
-            };
-            stream.extend(it);
-
-            let it = quote! {
-                impl #impl_generics #ty #where_clause {
-                    #[inline(always)]
-                    pub #konst fn overflowing_add(self, rhs: Self) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_add(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_sub(self, rhs: Self) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_sub(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_neg(self) -> (Self, bool) {
-                        let (value, overflowed) = #fp_get_raw(self).overflowing_neg();
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_mul(self, rhs: Self) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_mul(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_div(self, rhs: Self) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_div(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_rem(self, rhs: Self) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_rem(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_div_euclid(
-                        self,
-                        rhs: Self,
-                    ) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_div_euclid(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_rem_euclid(
-                        self,
-                        rhs: Self,
-                    ) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_rem_euclid(#fp_get_raw(rhs));
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_shl(self, rhs: u32) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_shl(rhs);
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_shr(self, rhs: u32) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_shr(rhs);
-                        return (Self::_core_int(value), overflowed);
-                    }
-
-                    #[inline(always)]
-                    pub #konst fn overflowing_pow(
-                        self,
-                        exp: u32,
-                    ) -> (Self, bool) {
-                        let (value, overflowed) =
-                            #fp_get_raw(self).overflowing_pow(exp);
-                        return (Self::_core_int(value), overflowed);
-                    }
-                }
-            };
-            stream.extend(it);
-
-            if self.repr.is_signed() {
-                let unsigned =
-                    format_ident!("{}", self.repr.unsigned_rust_name());
-                let it = quote! {
-                    impl #impl_generics #ty #where_clause {
-                        #[inline(always)]
-                        pub #konst fn cast_unsigned(self) -> #unsigned {
-                            return #fp_get_raw(self).cast_unsigned();
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn abs(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).abs());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn checked_abs(
-                            self,
-                        ) -> ::core::option::Option<Self> {
-                            return match #fp_get_raw(self).checked_abs() {
-                                ::core::option::Option::Some(value) => {
-                                    Self::_core_int_checked(value)
-                                }
-                                ::core::option::Option::None => {
-                                    ::core::option::Option::None
-                                }
-                            };
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn checked_isqrt(
-                            self,
-                        ) -> ::core::option::Option<Self> {
-                            return match #fp_get_raw(self).checked_isqrt() {
-                                ::core::option::Option::Some(value) => {
-                                    Self::_core_int_checked(value)
-                                }
-                                ::core::option::Option::None => {
-                                    ::core::option::Option::None
-                                }
-                            };
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn strict_abs(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).strict_abs());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn saturating_neg(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).saturating_neg());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn saturating_abs(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).saturating_abs());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn wrapping_abs(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).wrapping_abs());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn overflowing_abs(self) -> (Self, bool) {
-                            let (value, overflowed) =
-                                #fp_get_raw(self).overflowing_abs();
-                            return (Self::_core_int(value), overflowed);
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn unsigned_abs(self) -> #unsigned {
-                            return #fp_get_raw(self).unsigned_abs();
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn abs_diff(self, rhs: Self) -> #unsigned {
-                            return #fp_get_raw(self).abs_diff(#fp_get_raw(rhs));
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn signum(self) -> Self {
-                            return Self::_core_int(#fp_get_raw(self).signum());
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn is_positive(self) -> bool {
-                            return #fp_get_raw(self).is_positive();
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn is_negative(self) -> bool {
-                            return #fp_get_raw(self).is_negative();
-                        }
-                    }
-                };
-                stream.extend(it);
-            }
-            else {
-                let signed = format_ident!(
-                    "{}",
-                    match self.repr {
-                        N::USIZ => "isize",
-                        N::U008 => "i8",
-                        N::U016 => "i16",
-                        N::U032 => "i32",
-                        N::U064 => "i64",
-                        N::U128 => "i128",
-                        _ => unreachable!("unsigned representation"),
-                    }
-                );
-                let funnel =
-                    matches!(self.ctx.cfg.konst, Konst::Nightly).then(|| {
-                        quote! {
-                            #[inline(always)]
-                            pub #konst fn funnel_shl(
-                                self,
-                                right: Self,
-                                n: u32,
-                            ) -> Self {
-                                return Self::_core_int(
-                                    #fp_get_raw(self).funnel_shl(
-                                        #fp_get_raw(right),
-                                        n,
-                                    )
-                                );
-                            }
-
-                            #[inline(always)]
-                            pub #konst fn funnel_shr(
-                                self,
-                                right: Self,
-                                n: u32,
-                            ) -> Self {
-                                return Self::_core_int(
-                                    #fp_get_raw(self).funnel_shr(
-                                        #fp_get_raw(right),
-                                        n,
-                                    )
-                                );
-                            }
-                        }
-                    });
-                let it = quote! {
-                    impl #impl_generics #ty #where_clause {
-                        #[inline(always)]
-                        pub #konst fn cast_signed(self) -> #signed {
-                            return #fp_get_raw(self).cast_signed();
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn bit_width(self) -> u32 {
-                            return #fp_get_raw(self).bit_width();
-                        }
-
-                        #funnel
-
-                        #[inline(always)]
-                        pub #konst fn abs_diff(self, rhs: Self) -> #el {
-                            return #fp_get_raw(self).abs_diff(#fp_get_raw(rhs));
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn is_multiple_of(self, rhs: Self) -> bool {
-                            return #fp_get_raw(self).is_multiple_of(#fp_get_raw(rhs));
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn is_power_of_two(self) -> bool {
-                            return #fp_get_raw(self).is_power_of_two();
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn next_power_of_two(self) -> Self {
-                            return Self::_core_int(
-                                #fp_get_raw(self).next_power_of_two()
-                            );
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn checked_next_power_of_two(
-                            self,
-                        ) -> ::core::option::Option<Self> {
-                            return match #fp_get_raw(self).checked_next_power_of_two() {
-                                ::core::option::Option::Some(value) => {
-                                    Self::_core_int_checked(value)
-                                }
-                                ::core::option::Option::None => {
-                                    ::core::option::Option::None
-                                }
-                            };
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn div_ceil(self, rhs: Self) -> Self {
-                            return Self::_core_int(
-                                #fp_get_raw(self).div_ceil(#fp_get_raw(rhs))
-                            );
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn next_multiple_of(self, rhs: Self) -> Self {
-                            return Self::_core_int(
-                                #fp_get_raw(self).next_multiple_of(#fp_get_raw(rhs))
-                            );
-                        }
-
-                        #[inline(always)]
-                        pub #konst fn checked_next_multiple_of(
-                            self,
-                            rhs: Self,
-                        ) -> ::core::option::Option<Self> {
-                            return match #fp_get_raw(self).checked_next_multiple_of(
-                                #fp_get_raw(rhs),
-                            ) {
-                                ::core::option::Option::Some(value) => {
-                                    Self::_core_int_checked(value)
-                                }
-                                ::core::option::Option::None => {
-                                    ::core::option::Option::None
-                                }
-                            };
-                        }
-
-                        #[inline(always)]
-                        pub fn carrying_add(
-                            self,
-                            rhs: Self,
-                            carry: bool,
-                        ) -> (Self, bool) {
-                            let (value, carry) = #fp_get_raw(self).carrying_add(
-                                #fp_get_raw(rhs),
-                                carry,
-                            );
-                            return (Self::_core_int(value), carry);
-                        }
-
-                        #[inline(always)]
-                        pub fn borrowing_sub(
-                            self,
-                            rhs: Self,
-                            borrow: bool,
-                        ) -> (Self, bool) {
-                            let (value, borrow) = #fp_get_raw(self).borrowing_sub(
-                                #fp_get_raw(rhs),
-                                borrow,
-                            );
-                            return (Self::_core_int(value), borrow);
-                        }
-
-                        #[inline(always)]
-                        pub fn carrying_mul(
-                            self,
-                            rhs: Self,
-                            carry: Self,
-                        ) -> (Self, Self) {
-                            let (low, high) = #fp_get_raw(self).carrying_mul(
-                                #fp_get_raw(rhs),
-                                #fp_get_raw(carry),
-                            );
-                            return (
-                                Self::_core_int(low),
-                                Self::_core_int(high),
-                            );
-                        }
-
-                        #[inline(always)]
-                        pub fn carrying_mul_add(
-                            self,
-                            rhs: Self,
-                            carry: Self,
-                            add: Self,
-                        ) -> (Self, Self) {
-                            let (low, high) =
-                                #fp_get_raw(self).carrying_mul_add(
-                                    #fp_get_raw(rhs),
-                                    #fp_get_raw(carry),
-                                    #fp_get_raw(add),
-                                );
-                            return (
-                                Self::_core_int(low),
-                                Self::_core_int(high),
-                            );
-                        }
-                    }
-                };
-                stream.extend(it);
-            }
-        }
-
-        return stream;
-    }
-
-    fn make_into(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.into {
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::Into,
-                Konsts::Conversion,
-            ]));
-            let it = self.cast_targets(true)
-                .map(|(it, cfg)| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("into_{}", it.rust_name());
-                    return quote! {
-                       #cfg
-                       #konst impl #impl_generics ::core::convert::Into<#target> for #ty
-                       #where_clause {
-                           #[inline(always)]
-                           fn into(self) -> #target {
-                                return Self::#conv(self);
-                           }
-                       }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_try_into(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.try_into {
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::TryInto,
-                Konsts::Conversion,
-            ]));
-            let it = self.cast_targets(false)
-                .map(|(it, cfg)| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("try_into_{}", it.rust_name());
-                    return quote! {
-                       #cfg
-                       #konst impl #impl_generics ::core::convert::TryInto<#target> for #ty
-                       #where_clause {
-                           type Error = ();
-
-                           #[inline(always)]
-                           fn try_into(self) -> ::core::result::Result<#target, Self::Error> {
-                                return Self::#conv(self);
-                           }
-
-                       }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_math_shr(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let output = &ctx.output;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_shr {
-            let is_konst = self.ctx.cfg.konst_for(&[
-                Konsts::Shr,
-                Konsts::Math,
-            ]);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(rhs) });
-            let it = quote! {
-                #konst impl #impl_generics ::core::ops::Shr<usize> for #ty
-                #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn shr(
-                        self,
-                        rhs: usize,
-                    ) -> Self::Output {
-                        return #result;
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_math_shl(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let output = &ctx.output;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_shl {
-            let is_konst = self.ctx.cfg.konst_for(&[
-                Konsts::Shl,
-                Konsts::Math,
-            ]);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(rhs) });
-            let it = quote::quote! {
-                #konst impl #impl_generics ::core::ops::Shl<usize> for #ty
-                #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn shl(
-                        self,
-                        rhs: usize,
-                    ) -> Self::Output {
-                        return #result;
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_shr(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_shr {
-            let is_konst = self.ctx.cfg.konst_for(&[
-                Konsts::ShrAssign,
-                Konsts::Shr,
-                Konsts::Assign,
-                Konsts::Math,
-            ]);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Shr, is_konst);
-            let it = quote! {
-                #konst impl #impl_generics ::core::ops::ShrAssign<usize> for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn shr_assign(
-                        &mut self,
-                        other: usize,
-                    ) {
-                        *self = self.#method(other);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign_shl(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assign_shl {
-            let is_konst = self.ctx.cfg.konst_for(&[
-                Konsts::ShlAssign,
-                Konsts::Shl,
-                Konsts::Assign,
-                Konsts::Math,
-            ]);
-            let konst = Konst::konst(is_konst);
-            let method =
-                self.arithmetic_method_name(ArithmeticOp::Shl, is_konst);
-            let it = quote! {
-                #konst impl #impl_generics ::core::ops::ShlAssign<usize> for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn shl_assign(
-                        &mut self,
-                        other: usize,
-                    ) {
-                        *self = self.#method(other);
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assign(
-        &self,
-        ctx: &Ctx,
-        operator: Operator,
-    ) -> TokenStream {
-        let configured = &self.ctx.cfg.flags;
-        let (enabled, assign_flag) = match operator {
-            Operator::Add => (configured.assign_add, Konsts::AddAssign),
-            Operator::Sub => (configured.assign_sub, Konsts::SubAssign),
-            Operator::Mul => (configured.assign_mul, Konsts::MulAssign),
-            Operator::Div => (configured.assign_div, Konsts::DivAssign),
-            Operator::Rem => (configured.assign_rem, Konsts::RemAssign),
-            Operator::BitAnd => (configured.assign_and, Konsts::AndAssign),
-            Operator::BitOr => (configured.assign_or, Konsts::OrAssign),
-            Operator::BitXor => {
-                unreachable!("XOR assignment is emitted together with XOR")
-            }
-        };
-        if !enabled || !ctx.with_global_operators {
-            return TokenStream::new();
-        }
-
-        let [
-            operator_flag,
-            family_flag,
-        ] = operator.is_konst_flags();
-        let flags = [
-            assign_flag,
-            operator_flag,
-            Konsts::Assign,
-            family_flag,
-        ];
-        let is_konst = self.ctx.cfg.konst_for(&flags);
-        let konst = Konst::konst(is_konst);
-        let bounds = self.bounds_for(&flags);
-        let (with_self, capability, method) = match operator.arithmetic_op() {
-            Some(arithmetic) => (
-                ctx.with_self_math,
-                &ctx.trait_friend_math,
-                self.arithmetic_method_name(arithmetic, is_konst),
-            ),
-            None => (
-                ctx.with_self_bit,
-                &ctx.trait_friend_bit,
-                format_ident!("_{}", operator.method_name()),
-            ),
-        };
-        let arguments = &ctx.arguments;
-        let trait_friend = quote! { #capability #arguments };
-        let operator_trait = format_ident!("{}Assign", operator.name());
-        let operator_method =
-            format_ident!("{}_assign", operator.method_name());
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let mut stream = TokenStream::new();
-
-        if with_self {
-            stream.extend(quote! {
-                #konst impl #impl_generics ::core::ops::#operator_trait for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn #operator_method(
-                        &mut self,
-                        rhs: Self,
-                    ) {
-                        *self = self.#method(#rhs_raw);
-                    }
-                }
-            });
-        }
-
-        let rhs_where =
-            ctx.rhs_where_clause(self, quote! { #trait_friend + #bounds });
-        stream.extend(quote! {
-            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
-            #rhs_where
-            {
-                #[inline(always)]
-                fn #operator_method(
-                    &mut self,
-                    rhs: #rhs_ty,
-                ) {
-                    let it = #fp_friend_conv(rhs);
-                    *self = self.#method(it);
-                }
-            }
-        });
-
-        return stream;
-    }
-
-    fn make_debug(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let self_raw = &ctx.self_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.debug {
-            let name = self.target.ident.to_string();
-            let it = quote! {
-                impl #impl_generics ::core::fmt::Debug for #ty #where_clause {
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        return f
-                            .debug_tuple(#name)
-                            .field(&#self_raw)
-                            .finish();
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_hash(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let self_raw = &ctx.self_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.hash {
-            let hasher = self.target.fresh_ident("H");
-            let it = quote! {
-                impl #impl_generics ::core::hash::Hash for #ty #where_clause {
-                    #[inline(always)]
-                    fn hash<#hasher>(
-                        &self,
-                        state: &mut #hasher,
-                    )
-                    where
-                        #hasher: ::core::hash::Hasher,
-                    {
-                        return ::core::hash::Hash::hash(&#self_raw, state);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_eq(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.eq {
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::Eq,
-                Konsts::Comparison,
-            ]));
-            // TODO why can't we do derive?
-            let it = quote! {
-                #konst impl #impl_generics ::core::cmp::Eq for #ty #where_clause {}
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_ord(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.ord {
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::Ord,
-                Konsts::Comparison,
-            ]));
-            let it = quote! {
-                #konst impl #impl_generics ::core::cmp::Ord for #ty #where_clause {
-                    #[inline(always)]
-                    fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
-                        return self.partial_cmp(other).unwrap();
-                    }
-                }
-            };
-
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_assertions(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.assertions {
-            let assertions = self.storage.layout_assertions(quote! { #ty });
-            if self.target.has_generics() {
-                let name = self.target.layout_assertion();
-                stream.extend(quote! {
-                    impl #impl_generics #ty #where_clause {
-                        const #name: () = {
-                            #assertions
-                        };
-                    }
-                });
-            }
-            else {
-                stream.extend(assertions);
-            }
-        }
-
-        return stream;
-    }
-
-    fn make_math_arithmetic(
-        &self,
-        ctx: &Ctx,
-        operator: Operator,
-    ) -> TokenStream {
-        if !self.ctx.cfg.flags.enabled(operator) || !ctx.with_global_operators {
-            return TokenStream::new();
-        }
-
-        let arithmetic = operator
-            .arithmetic_op()
-            .expect("expected an arithmetic operator");
-        let flags = operator.is_konst_flags();
-        let is_konst = self.ctx.cfg.konst_for(&flags);
-        let konst = Konst::konst(is_konst);
-        let method = self.arithmetic_method_name(arithmetic, is_konst);
-        let bounds = self.bounds_for(&flags);
-        let operator_trait = format_ident!("{}", operator.name());
-        let operator_method = format_ident!("{}", operator.method_name());
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_math = {
-            let math = &ctx.trait_friend_math;
-            let arguments = &ctx.arguments;
-            quote! { #math #arguments }
-        };
-        let mut stream = TokenStream::new();
-
-        if ctx.with_self_math {
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(#rhs_raw) });
-            stream.extend(quote! {
-                #konst impl #impl_generics ::core::ops::#operator_trait for #ty #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn #operator_method(
-                        self,
-                        rhs: Self,
-                    ) -> Self::Output {
-                        return #result;
-                    }
-                }
-            });
-        }
-
-        let output_ty = output.ty();
-        let result = output.convert(quote! { self.#method(it) });
-        let rhs_where =
-            ctx.rhs_where_clause(self, quote! { #trait_friend_math + #bounds });
-        stream.extend(quote! {
-            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
-            #rhs_where
-            {
-                type Output = #output_ty;
-
-                #[inline(always)]
-                fn #operator_method(
-                    self,
-                    rhs: #rhs_ty,
-                ) -> Self::Output {
-                    let it = #fp_friend_conv(rhs);
-                    return #result;
-                }
-            }
-        });
-
-        return stream;
-    }
-
-    fn make_math_bitwise(
-        &self,
-        ctx: &Ctx,
-        operator: Operator,
-    ) -> TokenStream {
-        if !matches!(operator, Operator::BitAnd | Operator::BitOr) {
-            unreachable!("only BitAnd and BitOr use this emitter");
-        }
-        if !self.ctx.cfg.flags.enabled(operator) || !ctx.with_global_operators {
-            return TokenStream::new();
-        }
-
-        let flags = operator.is_konst_flags();
-        let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-        let bounds = self.bounds_for(&flags);
-        let method = format_ident!("_{}", operator.method_name());
-        let operator_trait = format_ident!("{}", operator.name());
-        let operator_method = format_ident!("{}", operator.method_name());
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_bit = {
-            let bit = &ctx.trait_friend_bit;
-            let arguments = &ctx.arguments;
-            quote! { #bit #arguments }
-        };
-        let mut stream = TokenStream::new();
-
-        if ctx.with_self_bit {
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self.#method(#rhs_raw) });
-            stream.extend(quote! {
-                #konst impl #impl_generics ::core::ops::#operator_trait for #ty #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn #operator_method(
-                        self,
-                        rhs: Self,
-                    ) -> Self::Output {
-                        return #result;
-                    }
-                }
-            });
-        }
-
-        let output_ty = output.ty();
-        let result = output.convert(quote! { self.#method(it) });
-        let rhs_where =
-            ctx.rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-        stream.extend(quote! {
-            #konst impl #rhs_impl_generics ::core::ops::#operator_trait<#rhs_ty> for #ty
-            #rhs_where
-            {
-                type Output = #output_ty;
-
-                #[inline(always)]
-                fn #operator_method(
-                    self,
-                    rhs: #rhs_ty,
-                ) -> Self::Output {
-                    let it = #fp_friend_conv(rhs);
-                    return #result;
-                }
-            }
-        });
-
-        return stream;
-    }
-
-    fn make_math_xor(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let rhs_raw = &ctx.rhs_raw;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let output = &ctx.output;
-        let trait_friend_bit = {
-            let bit = &ctx.trait_friend_bit;
-            let arguments = &ctx.arguments;
-            quote! { #bit #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_xor && ctx.with_global_operators {
-            let flags = [
-                Konsts::Xor,
-                Konsts::Bit,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            let assign_flags = [
-                Konsts::XorAssign,
-                Konsts::Xor,
-                Konsts::Assign,
-                Konsts::Bit,
-            ];
-            let konst_assign =
-                Konst::konst(self.ctx.cfg.konst_for(&assign_flags));
-            let assign_bounds = self.bounds_for(&assign_flags);
-            if ctx.with_self_bit {
-                let output_ty = output.ty();
-                let result = output.convert(quote! { self._bitxor(#rhs_raw) });
-                stream.extend(quote! {
-                    #konst impl #impl_generics ::core::ops::BitXor for #ty #where_clause {
-                        type Output = #output_ty;
-
-                        #[inline(always)]
-                        fn bitxor(
-                            self,
-                            rhs: Self,
-                        ) -> Self::Output {
-                            return #result;
-                        }
-                    }
-                });
-
-                if self.ctx.cfg.ty_out.is_self() {
-                    stream.extend(quote! {
-                        #konst_assign impl #impl_generics ::core::ops::BitXorAssign for #ty
-                        #where_clause {
-                            #[inline(always)]
-                            fn bitxor_assign(
-                                &mut self,
-                                rhs: Self,
-                            ) {
-                                *self = self._bitxor(#rhs_raw);
-                            }
-                        }
-                    });
-                }
-            }
-
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self._bitxor(it) });
-            let rhs_where = ctx
-                .rhs_where_clause(self, quote! { #trait_friend_bit + #bounds });
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::ops::BitXor<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn bitxor(
-                        self,
-                        rhs: #rhs_ty,
-                    ) -> Self::Output {
-                        let it = #fp_friend_conv(rhs);
-                        return #result;
-                    }
-                }
-
-            };
-            stream.extend(it);
-
-            if self.ctx.cfg.ty_out.is_self() {
-                let rhs_where = ctx.rhs_where_clause(
-                    self,
-                    quote! { #trait_friend_bit + #assign_bounds },
-                );
-                let it = quote! {
-                    #konst_assign impl #rhs_impl_generics ::core::ops::BitXorAssign<#rhs_ty> for #ty
-                    #rhs_where
-                    {
-                        #[inline(always)]
-                        fn bitxor_assign(
-                            &mut self,
-                            rhs: #rhs_ty,
-                        ) {
-                            let it = #fp_friend_conv(rhs);
-                            *self = self._bitxor(it);
-                        }
-                    }
-                };
-                stream.extend(it);
-            }
-        }
-
-        return stream;
-    }
-
-    fn make_math_not(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let output = &ctx.output;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.math_not {
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-                Konsts::Not,
-                Konsts::Bit,
-            ]));
-            let output_ty = output.ty();
-            let result = output.convert(quote! { self._not() });
-            let it = quote! {
-                #konst impl #impl_generics ::core::ops::Not for #ty #where_clause {
-                    type Output = #output_ty;
-
-                    #[inline(always)]
-                    fn not(self) -> Self::Output {
-                        return #result;
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_display(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.display {
-            stream.extend(quote! {
-                impl #impl_generics ::core::fmt::Display for #ty #where_clause {
-                    #[inline(always)]
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        let raw = #fp_get_raw(*self);
-                        return ::core::fmt::Display::fmt(&raw, f);
-                    }
-                }
-            });
-        }
-
-        return stream;
-    }
-
-    fn make_fmt_binary(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.fmt_binary {
-            let it = quote! {
-                impl #impl_generics ::core::fmt::Binary for #ty #where_clause {
-                    #[inline(always)]
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        let raw = #fp_get_raw(*self);
-                        return ::core::fmt::Binary::fmt(&raw, f);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fmt_octal(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.fmt_octal {
-            let it = quote! {
-                impl #impl_generics ::core::fmt::Octal for #ty #where_clause {
-                    #[inline(always)]
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        let raw = #fp_get_raw(*self);
-                        return ::core::fmt::Octal::fmt(&raw, f);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fmt_hex_lower(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.fmt_hex_lower {
-            let it = quote! {
-                impl #impl_generics ::core::fmt::LowerHex for #ty #where_clause {
-                    #[inline(always)]
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        let raw = #fp_get_raw(*self);
-                        return ::core::fmt::LowerHex::fmt(&raw, f);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fmt_hex_upper(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let impl_generics = &ctx.impl_generics;
-        let where_clause = &ctx.where_clause;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.fmt_hex_upper {
-            let it = quote! {
-                impl #impl_generics ::core::fmt::UpperHex for #ty #where_clause {
-                    #[inline(always)]
-                    fn fmt(
-                        &self,
-                        f: &mut ::core::fmt::Formatter<'_>,
-                    ) -> ::core::fmt::Result {
-                        let raw = #fp_get_raw(*self);
-                        return ::core::fmt::UpperHex::fmt(&raw, f);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_partial_eq(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let trait_friend_rel = {
-            let rel = &ctx.trait_friend_rel;
-            let arguments = &ctx.arguments;
-            quote! { #rel #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.partial_eq {
-            let flags = [
-                Konsts::PartialEq,
-                Konsts::Comparison,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! {
-                    #trait_friend_rel + #bounds + ::core::marker::Copy
-                },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::cmp::PartialEq<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn eq(
-                        &self,
-                        rhs: &#rhs_ty,
-                    ) -> bool {
-                        let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_friend_conv(*rhs);
-                        return lhs == rhs;
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_partial_ord(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let rhs_ty = &ctx.rhs_ty;
-        let rhs_impl_generics = &ctx.rhs_impl_generics;
-        let fp_friend_conv = &ctx.fp_friend_conv;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let trait_friend_rel = {
-            let rel = &ctx.trait_friend_rel;
-            let arguments = &ctx.arguments;
-            quote! { #rel #arguments }
-        };
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.partial_ord {
-            let flags = [
-                Konsts::PartialOrd,
-                Konsts::Comparison,
-            ];
-            let konst = Konst::konst(self.ctx.cfg.konst_for(&flags));
-            let bounds = self.bounds_for(&flags);
-            let rhs_where = ctx.rhs_where_clause(
-                self,
-                quote! {
-                    #trait_friend_rel + #bounds + ::core::marker::Copy
-                },
-            );
-            let it = quote! {
-                #konst impl #rhs_impl_generics ::core::cmp::PartialOrd<#rhs_ty> for #ty
-                #rhs_where
-                {
-                    #[inline(always)]
-                    fn partial_cmp(
-                        &self,
-                        rhs: &#rhs_ty,
-                    ) -> ::core::option::Option<::core::cmp::Ordering> {
-                        let lhs = #fp_get_raw(*self);
-                        let rhs = #fp_friend_conv(*rhs);
-                        return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs);
-                    }
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-}
-
-// Items
-impl Maker {
-    fn make_fn_conv_of(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let arguments = &ctx.arguments;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_conv_of {
-            let is_konst = ctx.cfg.konst_for(&[
-                Konsts::Of,
-                Konsts::Conversion,
-            ]);
-            let konst = Konst::konst(is_konst);
-            let bonst = Konst::bonst(is_konst);
-            let destruct = Konst::destruct(is_konst);
-            let what = &ctx.trait_friend_make;
-            let parameter = self.target.fresh_ident("T");
-
-            let fn_of = format_ident!("of");
-
-            let it = quote! {
-                #[inline(always)]
-                #[allow(private_bounds)]
-                pub #konst fn #fn_of<#parameter>(
-                    it: #parameter,
-                ) -> #ty
-                where
-                    #parameter: #bonst #what #arguments #destruct,
-                {
-                    return <#parameter as #what #arguments>::make(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_auto_of_raw(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let ty = &ctx.ty;
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.auto_of_raw {
-            let konst = Konst::konst(ctx.cfg.konst_for(&[
-                Konsts::Of,
-                Konsts::Conversion,
-            ]));
-            let fn_make = format_ident!("{}", ctx.cfg.flags.fn_make);
-            let path = &parse_quote! { Self::of };
-            let fn_of = self.target.qualify_path(path);
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn #fn_make(it: #el) -> #ty {
-                    return #fn_of(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_conv_raw(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let raw = &ctx.self_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_conv_raw {
-            let get_raw = &fp_get_raw.segments.last().unwrap().ident;
-
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub const fn #get_raw(self) -> #el {
-                    return #raw;
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_conv_into(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_conv_into {
-            let it = self
-                .cast_targets(true)
-                .map(|(it, cfg)| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("into_{}", it.rust_name());
-                    return quote! {
-                        #cfg
-                        #[must_use]
-                        #[inline(always)]
-                        #[allow(clippy::unnecessary_cast)]
-                        pub const fn #conv(self) -> #target {
-                            let it = #fp_get_raw(self);
-                            return it as #target;
-                        }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_map(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.map {
-            let is_konst = ctx.cfg.konst_for(&[Konsts::Map])
-                || ctx.cfg.flags.with_const_map_fn;
-            let konst = Konst::konst(is_konst);
-            let bonst = Konst::bonst(is_konst);
-            let destruct = Konst::destruct(is_konst);
-            let callback = self.target.fresh_ident("F");
-            let value = quote! { value };
-            let validation = ctx.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                ctx.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn try_map<#callback>(
-                    self,
-                    function: #callback,
-                ) -> ::core::result::Result<Self, #el>
-                where
-                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
-                {
-                    let value = function(#fp_get_raw(self));
-                    return if #validation {
-                        ::core::result::Result::Ok(#constructed)
-                    }
-                    else {
-                        ::core::result::Result::Err(value)
-                    };
-                }
-
-                #[inline(always)]
-                #[track_caller]
-                pub #konst fn map<#callback>(
-                    self,
-                    function: #callback,
-                ) -> Self
-                where
-                    #callback: #bonst ::core::ops::FnOnce(#el) -> #el #destruct,
-                {
-                    return match self.try_map(function) {
-                        ::core::result::Result::Ok(value) => value,
-                        ::core::result::Result::Err(_) => {
-                            ::core::panic!(
-                                "mapping operation produced an invalid value"
-                            )
-                        }
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_conv_try_into_unchecked(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_conv_try_into_unchecked {
-            let it = self.cast_targets(true)
-                .map(|(it, cfg)| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let conv = format_ident!("try_into_{}", it.rust_name());
-                    return quote! {
-                        #cfg
-                        #[inline(always)]
-                        #[allow(clippy::unnecessary_cast)]
-                        pub const fn #conv(self) -> ::core::result::Result<#target, ()> {
-                            return ::core::result::Result::Ok(
-                                #fp_get_raw(self) as #target
-                            );
-                        }
-                    };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_conv_try_into_checked(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_conv_try_into_checked {
-            let source = format_ident!("{}", self.repr.rust_name());
-            let it = self.cast_targets(false)
-                .map(|(it, cfg)| {
-                    let target = format_ident!("{}", it.rust_name());
-                    let name = format_ident!("try_into_{}", it.rust_name());
-                    let sign_check = match (self.repr.is_signed(), it.is_signed()) {
-                        (false, true) => quote! { t >= 0 },
-                        (true, false) => quote! { r >= 0 },
-                        _ => quote! { true },
-                    };
-                    return quote! {
-                    #cfg
-                    #[inline(always)]
-                    #[allow(clippy::unnecessary_cast)]
-                    pub const fn #name(self) -> ::core::result::Result<#target, ()> {
-                        let r = #fp_get_raw(self);
-                        let t = r as #target;
-                        let s = t as #source;
-
-                        return if s == r && #sign_check {
-                            ::core::result::Result::Ok(t)
-                        }
-                        else {
-                            ::core::result::Result::Err(())
-                        };
-                    }
-                };
-                })
-                .merged();
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_add(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_add {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Add, quote! { #el }),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_sub(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_sub {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Sub, quote! { #el }),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_mul(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_mul {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Mul, quote! { #el }),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_div(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_div {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Div, quote! { #el }),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_rem(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_rem {
-            stream.extend(
-                self.ekran_arithmetic_helper(ArithmeticOp::Rem, quote! { #el }),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_xor(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let fp_unchecked = &ctx.fp_unchecked;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_xor {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitxor(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs ^ rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_and(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let fp_unchecked = &ctx.fp_unchecked;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_and {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitand(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs & rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_or(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-        let fp_unchecked = &ctx.fp_unchecked;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_or {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _bitor(
-                    &self,
-                    rhs: #el
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = lhs | rhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_shr(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_shr {
-            stream.extend(
-                self.ekran_arithmetic_helper(
-                    ArithmeticOp::Shr,
-                    quote! { usize },
-                ),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_shl(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_shl {
-            stream.extend(
-                self.ekran_arithmetic_helper(
-                    ArithmeticOp::Shl,
-                    quote! { usize },
-                ),
-            );
-        }
-
-        return stream;
-    }
-
-    fn make_fn_math_not(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let fp_get_raw = &ctx.fp_get_raw;
-        let fp_unchecked = &ctx.fp_unchecked;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_math_not {
-            let it = quote! {
-                #[inline(always)]
-                pub(self) const fn _not(
-                    &self,
-                ) -> Self {
-                    let lhs = #fp_get_raw(*self);
-                    let it = !lhs;
-                    return #fp_unchecked(it);
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_precedes(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.profile.emits_precedes() {
-            let unsigned = format_ident!("{}", self.repr.unsigned_rust_name());
-            let konst = Konst::konst(ctx.cfg.konst_for(&[Konsts::Value]));
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub #konst fn precedes(self, other: Self) -> bool {
-                    let lhs = #fp_get_raw(self) as #unsigned;
-                    let rhs = #fp_get_raw(other) as #unsigned;
-                    let difference = rhs.wrapping_sub(lhs);
-                    let half = (1 as #unsigned) << (#unsigned::BITS - 1);
-                    return difference != 0 && difference < half;
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_op_eq(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_op_eq {
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                #[doc(hidden)]
-                pub(self) const fn _eq(
-                    self,
-                    rhs: #el,
-                ) -> bool {
-                    let lhs = #fp_get_raw(self);
-                    return lhs == rhs;
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_op_cmp(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_get_raw = &ctx.fp_get_raw;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_op_cmp {
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                #[doc(hidden)]
-                pub(self) fn _cmp(
-                    self,
-                    rhs: #el,
-                ) -> ::core::cmp::Ordering {
-                    let lhs = #fp_get_raw(self);
-                    return ::core::cmp::PartialOrd::partial_cmp(&lhs, &rhs)
-                        .unwrap();
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_make_try(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-        let fp_unchecked = &ctx.fp_unchecked;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_make_unchecked_try
-            && ctx.cfg.validation.has_validation()
-        {
-            let konst = Konst::konst(ctx.cfg.konst_for(&[Konsts::TryMake]));
-            let value = quote! { it };
-            let validation = ctx.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                ctx.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                pub #konst fn try_make(it: #el) -> Result<Self, #el> {
-                    return if #validation {
-                        return ::core::result::Result::Ok(#constructed);
-                    }
-                    else {
-                        ::core::result::Result::Err(it)
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-        else if ctx.cfg.flags.fn_make_checked_try
-            && !ctx.cfg.validation.has_validation()
-        {
-            let it = quote! {
-                #[inline(always)]
-                pub const fn try_make(it: #el) -> Result<Self, #el> {
-                    return Ok(#fp_unchecked(it));
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_fn_make(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.fn_make_unchecked
-            && ctx.cfg.validation.has_validation()
-        {
-            let value = quote! { it };
-            let validation = ctx.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                ctx.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub(self) const fn _unchecked(it: #el) -> Self {
-                    if #validation {
-                        return #constructed;
-                    }
-                    else {
-                        ::core::panic!("invalid value");
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-        else if ctx.cfg.flags.fn_make_checked
-            && !ctx.cfg.validation.has_validation()
-        {
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                quote! { it },
-                ctx.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[must_use]
-                #[inline(always)]
-                pub(self) const fn _unchecked(it: #el) -> Self {
-                    return #constructed;
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-
-    fn make_items_core_int(
-        &self,
-        ctx: &Ctx,
-    ) -> TokenStream {
-        let el = &self.el;
-
-        let mut stream = TokenStream::new();
-
-        if ctx.cfg.flags.core_int {
-            let konst = Konst::konst(ctx.cfg.konst_for(&[
-                Konsts::CoreInt,
-                Konsts::Value,
-            ]));
-            let value = quote! { value };
-            let validation = ctx.cfg.validation.emit(&value);
-            let constructed = self.target.construct(
-                &self.storage,
-                quote! { Self },
-                value.clone(),
-                ctx.cfg.flags.assertions,
-            );
-            let it = quote! {
-                #[inline(always)]
-                #[track_caller]
-                pub(self) #konst fn _core_int(value: #el) -> Self {
-                    if #validation {
-                        return #constructed;
-                    }
-                    else {
-                        ::core::panic!("operation produced an invalid value");
-                    }
-                }
-
-                #[inline(always)]
-                pub(self) #konst fn _core_int_checked(
-                    value: #el,
-                ) -> ::core::option::Option<Self> {
-                    return if #validation {
-                        ::core::option::Option::Some(#constructed)
-                    }
-                    else {
-                        ::core::option::Option::None
-                    };
-                }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
-    }
-}
-
-// =============================================================================
-
-#[derive(Clone, Default)]
-pub(crate) struct IntSettings {
-    pub(crate) flags: BTreeMap<String, (bool, Span)>,
-    konst_flags: BTreeMap<Konsts, (bool, Span)>,
-    seen: BTreeMap<String, bool>,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) enum NonZeroPolicy {
-    #[default]
-    Infer,
-    Require,
-    Suppress,
-}
-
-#[derive(Default)]
-pub(crate) struct Cfg {
-    pub(crate) konst: Konst,
-    konst_flags: BTreeMap<Konsts, (bool, Span)>,
-    root_konst_flags: BTreeMap<Konsts, (bool, Span)>,
-    root_flags: BTreeMap<String, (bool, Span)>,
-    root_seen_flags: BTreeMap<String, bool>,
-    pub(crate) get_raw: Option<Path>,
-    pub(crate) tree: Option<marker_tree::Cfg>,
-    pub(crate) validation: ValidationCfg,
-    pub(crate) friends: BTreeSet<Friend>,
-    pub(crate) flags: Box<IntegralFlags>,
-    pub(crate) non_zero: NonZeroPolicy,
-    wrapping_storage: bool,
-    pub(crate) ty_out: SelfConverter,
-    pub(crate) profile: Profiles,
-    pub(crate) facets: Vec<FacetCfg>,
-    pub(crate) default_facet: Option<DefaultFacetCfg>,
-    pub(crate) facet_slots: BTreeMap<FacetSlotKey, FacetSlot>,
-    facets_present: bool,
-}
-
-impl Cfg {
-    pub(crate) fn requires_non_zero_storage(&self) -> bool {
-        return match self.non_zero {
-            NonZeroPolicy::Infer => self.validation.domain_excludes_zero(),
-            NonZeroPolicy::Require => true,
-            NonZeroPolicy::Suppress => false,
-        };
-    }
-
-    pub(crate) fn requires_wrapping_storage(&self) -> bool {
-        return self.wrapping_storage;
-    }
-
-    pub(crate) fn facets_present(&self) -> bool {
-        return self.facets_present;
-    }
-
-    pub(crate) fn parse_flags_into(
-        input: ParseStream,
-        value_if_seen: bool,
-        settings: &mut IntSettings,
-    ) -> syn::Result<()> {
-        return zz::parse_explicit_flags(
-            input,
-            value_if_seen,
-            &mut settings.seen,
-            DuplicateFlagPolicy::WithinList,
-            |setting| {
-                let name = &setting.name;
-                let value = setting.value;
-                let span = setting.span;
-
-                if name.starts_with("konst_") {
-                    let Some(flag) = Konsts::from_str(name).ok()
-                    else {
-                        return span.fail("unknown flag");
-                    };
-                    settings.konst_flags.insert(flag, (value, span));
-                }
-                else if IntegralFlags::default()
-                    .set_bool(name, value)
-                    .is_err()
-                {
-                    return span.fail("unknown flag");
-                }
-                else {
-                    settings.flags.insert(name.clone(), (value, span));
-                }
-
-                return Ok(());
-            },
-        );
-    }
-
-    fn parse_flags(
-        &mut self,
-        input: ParseStream,
-        value_if_seen: bool,
-    ) -> syn::Result<()> {
-        let mut settings = IntSettings {
-            flags: std::mem::take(&mut self.root_flags),
-            konst_flags: std::mem::take(&mut self.root_konst_flags),
-            seen: std::mem::take(&mut self.root_seen_flags),
-        };
-        let result =
-            Self::parse_flags_into(input, value_if_seen, &mut settings);
-
-        self.root_flags = settings.flags;
-        self.root_konst_flags = settings.konst_flags;
-        self.root_seen_flags = settings.seen;
-
-        return result;
-    }
-
-    fn apply_flag_settings(
-        flags: &mut IntegralFlags,
-        settings: &BTreeMap<String, (bool, Span)>,
-    ) {
-        for (name, (value, _)) in settings {
-            flags
-                .set_bool(name, *value)
-                .expect("integral configuration contains an unknown flag");
-        }
-    }
-
-    fn validate_facet(it: &FacetCfg) -> syn::Result<()> {
-        if let Some(span) = it.precedes_span {
-            return span.fail(
-                "`precedes` is wrapper-wide and cannot be configured inside a facet",
-            );
-        }
-
-        for profile in it.profile.iter() {
-            let settings = profile.int_settings();
-
-            if let Some((_, span)) = settings.konst_flags.values().next() {
-                return span.fail(
-                    "constness is wrapper-wide and cannot be configured inside a facet",
-                );
-            }
-
-            for (name, (enabled, span)) in &settings.flags {
-                if name == "non_zero" {
-                    return span.fail(
-                        "`non_zero` is wrapper-wide and cannot be configured inside a facet",
-                    );
-                }
-
-                if name.starts_with("assign_") {
-                    if *enabled {
-                        return span.fail(
-                            "facets do not support assignment operators",
-                        );
-                    }
-                    continue;
-                }
-
-                if !matches!(
-                    name.as_str(),
-                    "math_add"
-                        | "math_sub"
-                        | "math_mul"
-                        | "math_div"
-                        | "math_rem"
-                        | "math_and"
-                        | "math_or"
-                        | "math_xor"
-                        | "self_math"
-                        | "self_bit"
-                ) {
-                    return span.fail(
-                        "attribute is wrapper-wide or has no operand \
-                        slot and cannot be configured inside a facet",
-                    );
-                }
-            }
-        }
-
-        for friend in &it.friends {
-            for capability in &friend.capabilities {
-                if !matches!(capability.to_string().as_str(), MATH | BIT) {
-                    return capability.fail(
-                        "facet friends only support `Math` and `Bit` capabilities",
-                    );
-                }
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn resolved_facet_flags(
-        baseline: &IntegralFlags,
-        facet: &FacetCfg,
-    ) -> IntegralFlags {
-        let mut flags = baseline.clone();
-        for profile in facet.profile.iter() {
-            profile.apply(&mut flags);
-            Self::apply_flag_settings(
-                &mut flags,
-                &profile.int_settings().flags,
-            );
-        }
-        return flags;
-    }
-
-    fn insert_explicit_slot(
-        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
-        key: FacetSlotKey,
-        slot: FacetSlot,
-    ) -> syn::Result<()> {
-        if let Some(previous) = slots.get(&key) {
-            return slot.fail_combi(
-                "duplicate explicit facet slot",
-                previous.span,
-                "the slot was first claimed here",
-            );
-        }
-
-        slots.insert(key, slot);
-        return Ok(());
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn insert_slots(
-        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
-        operations: &[Operator],
-        flags: &IntegralFlags,
-        rhs: Option<&Path>,
-        conversion: Option<&Path>,
-        arithmetic: Arithmetic,
-        ty_out: &SelfConverter,
-        owner: FacetOwner,
-        span: Span,
-    ) -> syn::Result<()> {
-        let identity = rhs.map_or_else(
-            || "Self".to_string(),
-            |rhs| rhs.to_token_stream().to_string(),
-        );
-
-        for operator in operations
-            .iter()
-            .copied()
-            .filter(|operator| flags.enabled(*operator))
-        {
-            let key = FacetSlotKey {
-                operator,
-                rhs: identity.clone(),
-            };
-            let slot = FacetSlot {
-                rhs: rhs.cloned(),
-                conversion: conversion.cloned(),
-                arithmetic,
-                ty_out: ty_out.clone(),
-                owner,
-                span,
-            };
-
-            if matches!(owner, FacetOwner::Explicit(_)) {
-                Self::insert_explicit_slot(slots, key, slot)?;
-            }
-            else {
-                slots.entry(key).or_insert(slot);
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn resolve_facets(&mut self) -> syn::Result<()> {
-        self.facet_slots.clear();
-        if !self.facets_present() {
-            return Ok(());
-        }
-
-        let default = self
-            .default_facet
-            .as_ref()
-            .expect("facets require a resolved default facet");
-        let mut slots = BTreeMap::new();
-
-        for (index, facet) in self.facets.iter().enumerate() {
-            Self::validate_facet(facet)?;
-
-            let flags = Self::resolved_facet_flags(&default.flags, facet);
-            let arithmetic =
-                facet.profile.arithmetic_or(default.profile.arithmetic());
-            let ty_out = facet.ty_out.as_ref().unwrap_or(&default.ty_out);
-            let owner = FacetOwner::Explicit(index);
-
-            for friend in &facet.friends {
-                let span = friend.ty.path().span();
-                if friend.capabilities.contains(&format_ident!("{}", MATH)) {
-                    Self::insert_slots(
-                        &mut slots,
-                        Operator::math_items(),
-                        &flags,
-                        Some(friend.ty.path()),
-                        friend.conv.as_ref(),
-                        arithmetic,
-                        ty_out,
-                        owner,
-                        span,
-                    )?;
-                }
-                if friend.capabilities.contains(&format_ident!("{}", BIT)) {
-                    Self::insert_slots(
-                        &mut slots,
-                        Operator::bit_items(),
-                        &flags,
-                        Some(friend.ty.path()),
-                        friend.conv.as_ref(),
-                        arithmetic,
-                        ty_out,
-                        owner,
-                        span,
-                    )?;
-                }
-            }
-
-            if let Some((true, span)) = facet.explicit_flag("self_math") {
-                let conversion: Path = parse_quote! { Self::raw };
-                Self::insert_slots(
-                    &mut slots,
-                    Operator::math_items(),
-                    &flags,
-                    None,
-                    Some(&conversion),
-                    arithmetic,
-                    ty_out,
-                    owner,
-                    span,
-                )?;
-            }
-
-            if let Some((true, span)) = facet.explicit_flag("self_bit") {
-                let conversion: Path = parse_quote! { Self::raw };
-                Self::insert_slots(
-                    &mut slots,
-                    Operator::bit_items(),
-                    &flags,
-                    None,
-                    Some(&conversion),
-                    arithmetic,
-                    ty_out,
-                    owner,
-                    span,
-                )?;
-            }
-        }
-
-        let arithmetic = default.profile.arithmetic();
-        for friend in &default.friends {
-            let span = friend.ty.path().span();
-            if friend.capabilities.contains(&format_ident!("{}", MATH)) {
-                Self::insert_slots(
-                    &mut slots,
-                    Operator::math_items(),
-                    &default.flags,
-                    Some(friend.ty.path()),
-                    friend.conv.as_ref(),
-                    arithmetic,
-                    &default.ty_out,
-                    FacetOwner::Default,
-                    span,
-                )?;
-            }
-            if friend.capabilities.contains(&format_ident!("{}", BIT)) {
-                Self::insert_slots(
-                    &mut slots,
-                    Operator::bit_items(),
-                    &default.flags,
-                    Some(friend.ty.path()),
-                    friend.conv.as_ref(),
-                    arithmetic,
-                    &default.ty_out,
-                    FacetOwner::Default,
-                    span,
-                )?;
-            }
-        }
-
-        let conversion: Path = parse_quote! { Self::raw };
-        if default.flags.self_math {
-            Self::insert_slots(
-                &mut slots,
-                Operator::math_items(),
-                &default.flags,
-                None,
-                Some(&conversion),
-                arithmetic,
-                &default.ty_out,
-                FacetOwner::Default,
-                Span::call_site(),
-            )?;
-        }
-        if default.flags.self_bit {
-            Self::insert_slots(
-                &mut slots,
-                Operator::bit_items(),
-                &default.flags,
-                None,
-                Some(&conversion),
-                arithmetic,
-                &default.ty_out,
-                FacetOwner::Default,
-                Span::call_site(),
-            )?;
-        }
-
-        self.facet_slots = slots;
-        return Ok(());
-    }
-
-    fn explicit_flag(
-        &self,
-        name: &str,
-    ) -> Option<(bool, Span)> {
-        if let Some(setting) = self.root_flags.get(name) {
-            return Some(*setting);
-        }
-
-        let mut setting = None;
-        for profile in self.profile.iter() {
-            if profile.resets_flag(name) {
-                setting = None;
-            }
-            if let Some(value) = profile.int_settings().flags.get(name) {
-                setting = Some(*value);
-            }
-        }
-
-        return setting;
-    }
-
-    pub(crate) fn resolve(&mut self) -> syn::Result<()> {
-        self.non_zero = match self.explicit_flag("non_zero") {
-            Some((true, _)) => NonZeroPolicy::Require,
-            Some((false, _)) => NonZeroPolicy::Suppress,
-            None => NonZeroPolicy::Infer,
-        };
-        self.validation
-            .require_non_zero(self.non_zero == NonZeroPolicy::Require);
-
-        *self.flags = IntegralFlags::default();
-        self.konst_flags.clear();
-        for profile in self.profile.iter() {
-            profile.apply(&mut self.flags);
-            Self::apply_flag_settings(
-                &mut self.flags,
-                &profile.int_settings().flags,
-            );
-            self.konst_flags.extend(
-                profile
-                    .int_settings()
-                    .konst_flags
-                    .iter()
-                    .map(|(flag, value)| (*flag, *value)),
-            );
-        }
-        Self::apply_flag_settings(&mut self.flags, &self.root_flags);
-        self.konst_flags.extend(
-            self.root_konst_flags
-                .iter()
-                .map(|(flag, value)| (*flag, *value)),
-        );
-
-        if self.profile.is_circular() {
-            for name in [
-                "ord",
-                "partial_ord",
-            ] {
-                if let Some((true, span)) = self.explicit_flag(name) {
-                    return span.fail(
-                        "circular profiles do not support linear ordering",
-                    );
-                }
-            }
-            self.flags.ord = false;
-            self.flags.partial_ord = false;
-        }
-
-        if self.flags.range {
-            let span = self
-                .explicit_flag("range")
-                .map_or_else(Span::call_site, |(_, span)| span);
-            if self.validation.has_validation() {
-                return span
-                    .fail("range requires an unvalidated integral type");
-            }
-            if self.profile.is_circular() {
-                return span
-                    .fail("range is incompatible with circular profiles");
-            }
-        }
-
-        if !self.ty_out.is_self() {
-            for name in [
-                "assign_add",
-                "assign_and",
-                "assign_div",
-                "assign_mul",
-                "assign_or",
-                "assign_rem",
-                "assign_shl",
-                "assign_shr",
-                "assign_sub",
-            ] {
-                if let Some((true, span)) = self.explicit_flag(name) {
-                    return span
-                        .fail("produce cannot generate assignment operators");
-                }
-                self.flags
-                    .set_bool(name, false)
-                    .expect("integral configuration contains an unknown flag");
-            }
-        }
-
-        self.default_facet = self.facets_present().then(|| DefaultFacetCfg {
-            profile: self.profile.clone(),
-            friends: self.friends.clone(),
-            flags: self.flags.clone(),
-            ty_out: self.ty_out.clone(),
-        });
-        self.resolve_facets()?;
-        self.wrapping_storage = self.profile.requires_wrapping_storage()
-            || self.facets.iter().any(FacetCfg::requires_wrapping_storage);
-
-        return Ok(());
-    }
-
-    pub(crate) fn konst_for(
-        &self,
-        flags: &[Konsts],
-    ) -> bool {
-        return zz::resolve_konst(
-            flags,
-            |flag| self.konst_flags.get(flag).map(|(value, _)| *value),
-            || self.konst.enables(flags),
-        );
-    }
-
-    pub(crate) fn explicit_konst_flag(
-        &self,
-        flag: Konsts,
-    ) -> Option<(bool, Span)> {
-        return self.konst_flags.get(&flag).copied();
-    }
-
-    pub(crate) fn set_konst_flag(
-        &mut self,
-        flag: Konsts,
-        value: bool,
-    ) {
-        self.konst_flags.insert(flag, (value, Span::call_site()));
-    }
-
-    pub(crate) fn konst_friendship(&self) -> bool {
-        if self.konst_for(&[Konsts::Friendship]) {
-            return true;
-        }
-
-        return Konsts::INTEGRAL
-            .iter()
-            .filter(|flag| **flag != Konsts::Friendship && !flag.is_stable())
-            .any(|flag| self.konst_for(&[*flag]));
-    }
-
-    pub(crate) fn parse_friends(
-        input: ParseStream,
-        expand_math: bool,
-    ) -> syn::Result<BTreeSet<Friend>> {
-        let defaults = [format_ident!("{}", MATH)].set();
-        let valid = [
-            format_ident!("{}", MAKE),
-            format_ident!("{}", MATH),
-            format_ident!("{}", BIT),
-            format_ident!("{}", REL),
-            format_ident!("{}", UNSAFE),
-        ];
-        if !expand_math {
-            return Friend::parse_with_valid(input, &valid, &defaults);
-        }
-
-        return Friend::parse_with_expansion(
-            input,
-            &valid,
-            &defaults,
-            &([
-                (
-                    format_ident!("{}", MATH),
-                    vec![
-                        format_ident!("{}", MAKE),
-                        format_ident!("{}", BIT),
-                    ],
-                ),
-            ]
-            .into_iter()
-            .collect()),
-        );
-    }
-
-    pub(crate) fn add_friend(
-        &mut self,
-        ty: &Ident,
-        capabilities: impl IntoIterator<Item = Ident>,
-        conv: Path,
-    ) {
-        let req = Friend::from(ty);
-        let mut req = self.friends.take(&req).unwrap_or(req);
-        req.capabilities.extend(capabilities);
-        req.conv = Some(conv);
-        assert!(self.friends.insert(req));
-    }
-
-    fn parse_attrs(
-        &mut self,
-        input: ParseStream,
-        allow_konst: bool,
-        fixed_profile: bool,
-        allow_tree: bool,
-    ) -> syn::Result<()> {
-        return zz::parse_inner(input, |attr, rest| {
-            if self.validation.parse_attr(attr, rest)? {
-                return Ok(true);
-            }
-
-            match attr {
-                "konst" if allow_konst => self.konst = rest.parse()?,
-                "konst" => {
-                    return attr
-                        .fail("constness is specified in multiple places");
-                }
-                "error" => zz::parse_unit_error(rest)?,
-                "with" => self.parse_flags(rest, true)?,
-                "without" => self.parse_flags(rest, false)?,
-                "friend" => self.friends = Self::parse_friends(rest, true)?,
-                "tree" if allow_tree => {
-                    self.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
-                }
-                "tree" => {
-                    return attr.fail(
-                        "bitflag integral configuration does not support tree",
-                    );
-                }
-                "facet" => {
-                    self.facets = zz::one_or_list::<FacetCfg>(rest)?.collect();
-                    self.facets_present = true;
-                }
-                "precedes" if fixed_profile => {
-                    if !self.profile.single_mut().parse_attr(attr, rest)? {
-                        return Ok(false);
-                    }
-                }
-                "profile" if fixed_profile => {
-                    return attr.fail("profile is selected by this macro");
-                }
-                "get_raw" => self.get_raw = Some(rest.parse()?),
-                "produce" => self.ty_out = rest.parse()?,
-                "profile" => self.profile = rest.parse()?,
-                _ => return Ok(false),
-            };
-
-            return Ok(true);
-        });
-    }
-
-    pub(crate) fn parse_with_profile(
-        input: ParseStream,
-        profile_name: &str,
-    ) -> syn::Result<Self> {
-        let profile =
-            Profile::from_name(Ident::new(profile_name, Span::call_site()))
-                .expect("integral profile macro has a valid profile name");
-        let mut this = Self {
-            profile: Profiles::one(profile),
-            ..Default::default()
-        };
-        this.parse_attrs(input, true, true, true)?;
-        this.resolve()?;
-        return Ok(this);
-    }
-
-    pub(crate) fn parse_with_konst_unresolved(
-        input: ParseStream
-    ) -> syn::Result<Self> {
-        let mut this = Self::without_konst();
-        this.parse_attrs(input, false, false, false)?;
-        return Ok(this);
-    }
-
-    pub(crate) fn without_konst() -> Self {
-        return Self {
-            konst: Konst::None,
-            ..Default::default()
-        };
-    }
-}
-
-impl Debug for Cfg {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        return f
-            .debug_struct("IntegralCfg")
-            .field("konst", &self.konst)
-            .field("get_raw", &self.get_raw.to_token_stream().to_string())
-            .field("validation", &self.validation)
-            .field("friends", &self.friends)
-            .field("non_zero", &self.non_zero)
-            .field("ty_out", &!self.ty_out.is_self())
-            .field("profile", &self.profile.arithmetic())
-            .field("tree", &self.tree.is_some())
-            .field("facet_slots", &self.facet_slots)
-            .field("flags", &self.flags)
-            .finish_non_exhaustive();
-    }
-}
-
-impl Parse for Cfg {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut this = Self::default();
-        this.parse_attrs(input, true, false, true)?;
-        this.resolve()?;
-        return Ok(this);
-    }
-}
-
-// =============================================================================
-
-impl IntegralFlags {
-    const RESTRICTED_MATH_FLAGS: [&str; 22] = [
-        "self_friend_math_ops",
-        "self_friend_math_bit",
-        "self_friend_rel",
-        "self_bit",
-        "bit_access",
-        "core_int",
-        "math_and",
-        "math_div",
-        "math_mul",
-        "math_not",
-        "math_or",
-        "math_rem",
-        "math_shl",
-        "math_shr",
-        "math_xor",
-        "assign_and",
-        "assign_div",
-        "assign_mul",
-        "assign_or",
-        "assign_rem",
-        "assign_shl",
-        "assign_shr",
-    ];
-
-    pub(crate) fn restricted_math_flags() -> &'static [&'static str] {
-        return &Self::RESTRICTED_MATH_FLAGS;
-    }
-
-    pub(crate) fn enabled(
-        &self,
-        it: Operator,
-    ) -> bool {
-        return match it {
-            Operator::Add => self.math_add,
-            Operator::Sub => self.math_sub,
-            Operator::Mul => self.math_mul,
-            Operator::Div => self.math_div,
-            Operator::Rem => self.math_rem,
-            Operator::BitAnd => self.math_and,
-            Operator::BitOr => self.math_or,
-            Operator::BitXor => self.math_xor,
-        };
-    }
-}
-
-mk_flags! {
-    #[flag_default(bool=true, str="")]
-    #[derive(Debug, Clone)]
-    pub(crate) struct IntegralFlags {
-        pub range: bool = false,
-        pub as_ref_: bool,
-
-        pub auto_of_raw: bool,
-        pub assertions: bool,
-        pub bit_access: bool,
-        pub clone: bool,
-        pub copy: bool,
-
-        pub debug: bool,
-        pub display: bool = false,
-        pub hash: bool,
-        pub eq: bool,
-        pub fmt_binary: bool,
-        pub fmt_hex_lower: bool,
-        pub fmt_hex_upper: bool,
-        pub fmt_octal: bool,
-        pub from_str: bool,
-        pub core_int: bool,
-        pub into: bool,
-        pub map: bool,
-        pub ord: bool,
-        pub partial_eq: bool,
-        pub partial_ord: bool,
-        pub repr: bool,
-        pub serde: bool = false,
-        pub try_into: bool,
-        pub with_const_map_fn: bool = false,
-        pub non_zero: bool = false,
-
-        pub assign_add: bool,
-        pub assign_and: bool,
-        pub assign_div: bool,
-        pub assign_mul: bool,
-        pub assign_or: bool,
-        pub assign_rem: bool,
-        pub assign_shl: bool,
-        pub assign_shr: bool,
-        pub assign_sub: bool,
-        pub math_add: bool,
-        pub math_and: bool,
-        pub math_div: bool,
-        pub math_mul: bool,
-        pub math_not: bool,
-        pub math_or: bool,
-        pub math_rem: bool,
-        pub math_shl: bool,
-        pub math_shr: bool,
-        pub math_sub: bool,
-        pub math_xor: bool,
-
-        pub friend: bool,
-        pub self_friend_make: bool,
-        pub self_friend_math_bit: bool,
-        pub self_friend_math_ops: bool,
-        pub self_friend_rel: bool,
-        pub friend_seal: bool,
-        pub friendzone_friend_make: bool,
-        pub friendzone_friend_math_bit: bool,
-        pub friendzone_friend_math_ops: bool,
-        pub friendzone_friend_rel: bool,
-        pub friendzone_seal: bool,
-
-        pub self_math: bool,
-        pub self_bit: bool,
-
-        pub fn_conv_into: bool,
-        pub fn_conv_of: bool,
-        pub fn_conv_raw: bool,
-        pub fn_conv_try_into_checked: bool,
-        pub fn_conv_try_into_unchecked: bool,
-        pub fn_make_checked: bool,
-        pub fn_make_checked_try: bool,
-        pub fn_make_unchecked: bool,
-        pub fn_make_unchecked_try: bool,
-        pub fn_math_add: bool,
-        pub fn_math_and: bool,
-        pub fn_math_div: bool,
-        pub fn_math_mul: bool,
-        pub fn_math_not: bool,
-        pub fn_math_or: bool,
-        pub fn_math_rem: bool,
-        pub fn_math_shl: bool,
-        pub fn_math_shr: bool,
-        pub fn_math_sub: bool,
-        pub fn_math_xor: bool,
-        pub fn_op_cmp: bool,
-        pub fn_op_eq: bool,
-
-        pub fn_make: String = "make",
-
-        pub fp_unchecked: String = "Self::_unchecked",
     }
 }

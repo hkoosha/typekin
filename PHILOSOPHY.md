@@ -103,8 +103,9 @@ choice when callers are expected to handle invalid input.
 Friendship has no fallible result. A friend conversion consumes its source.
 Construction through an untrusted friend validates the converted relation. If
 validation rejects it, the operation panics because the declared infallible
-contract was violated. A trusted friend may bypass that construction check and
-carries the stronger obligation to produce a valid relation.
+contract was violated. A blind-trust (`unsafe`) friend may bypass that
+construction check and carries the stronger obligation to produce a valid
+relation.
 
 Expected rejection therefore does not belong in friendship. The caller should
 implement `TryFrom` and use `TryInto`; Typekin does not generate a parallel
@@ -118,7 +119,7 @@ can create a wrapper must either:
 
 - run all configured validators;
 - be statically incapable of creating an invalid value; or
-- be an explicitly trusted friendship edge.
+- be an explicit blind-trust friendship edge.
 
 This includes arithmetic and bitwise results, text mutation, standard
 conversions, parsing, and deserialization.
@@ -132,6 +133,23 @@ For intentional final-state-only validation, integral wrappers provide a
 separate mapping operation. Its fallible form returns the rejected final raw
 value; its infallible form panics. This does not weaken ordinary operator
 semantics.
+
+Validation moves to compile time where the compiler can carry it, never by
+weakening it:
+
+- A literal macro (`port!(443)`) evaluates the ordinary validating constructor
+  in a `const`, so an invalid constant is a compile error rather than a runtime
+  panic.
+- An operation whose results the domain provably contains (`Percent / Percent`
+  on `..=100`) is statically incapable of creating an invalid value. It skips
+  the runtime check, says so in its documentation, and `prove` turns the proof
+  into a checked API contract. A proof is a sound over-approximation; an
+  operation that cannot be proven keeps its check.
+- A `Within` friendship edge (`_(Percent) -> Within` on a `..=255` byte) is the
+  same idea across types: rustc proves at compile time that every value the
+  source can hold lies in the target's domain, and a failed proof is a compile
+  error with a counterexample. It is statically incapable of creating an invalid
+  value, not a bypass: nothing is trusted, and the debug check stays.
 
 ## Panic and Fallibility Are Different Contracts
 
@@ -253,13 +271,26 @@ select a clearly documented contract and accept its consequences.
 Examples include:
 
 - `with = [serde]` accepts a direct dependency on caller-visible Serde paths;
-- trusted friendship accepts responsibility for proving converted values valid;
+- blind-trust friendship accepts responsibility for proving converted values
+  valid;
 - operation flags select which generated behavior becomes part of the public
   API.
 
 Unsupported combinations should fail during macro expansion with a diagnostic at
 the relevant configuration span. They must not be ignored or silently
 downgraded.
+
+## Totality Only When the Invariant Guarantees It
+
+A float newtype is `Eq`, `Ord`, and `Hash` only when its validation rejects
+every NaN and its value field is private, so no code outside the type can store
+one. Typekin decides this from the `domain` expression itself; a callback is
+opaque and never makes a type total. Asking for totality on a type that can hold
+NaN is a diagnostic, not a silently weaker `Ord` that panics or lies.
+
+Where the raw type has no equivalent operation, such as checked float-to-integer
+conversion or a total order, the generated code is compared against the best
+correct hand-written raw code and must be identical or better.
 
 ## Zero-Cost and `no_std` Are Core Constraints
 

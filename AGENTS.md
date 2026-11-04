@@ -9,6 +9,9 @@ default:
 - `integral` and its fixed-profile entry points `int`, `circular`, `delta`,
   `sequential`, `wrapping`, and `point`: integer newtypes, validation,
   conversions, math, and bitwise operations.
+- `float` (and `point` on an `f32`/`f64` field): float newtypes sharing the
+  integral configuration, with float-correct NaN, totality, and conversion
+  semantics.
 - `bitflag`: a unit enum plus a generated `{Enum}Value` wrapper for combined or
   unknown bits; the value type's name is configurable.
 - `text`: validated `String` newtypes, using `std` or `alloc` paths as
@@ -28,21 +31,59 @@ constness, and runtime cost as API behavior.
 
 - `src/lib.rs`: proc-macro entry points.
 - `src/{integral,bitflag,text,friendship,constructor}.rs`: parsing and emission
-  for each macro family.
+  for each macro family. `src/integral.rs` holds the integral entry (`ekran`,
+  `ekran_with`), the target and storage model, and the emitter orchestration;
+  its siblings hold the rest: `integral_cfg.rs` (configuration, flags, and
+  resolution), `integral_friend.rs` (friend protocol and facet dispatch),
+  `integral_impls.rs` (trait and operator impls), `integral_items.rs` (inherent
+  items), `integral_forward.rs` (`core_int` forwards), `integral_proof.rs`
+  (closure-proof use and `prove`), and `integral_within.rs` (`Within` friends
+  and the constants sources publish for them). `src/float.rs` holds the
+  float-only `impl Maker` emitters (`core_float`, `float_math`, exponent
+  formatting, `Sum`/`Product`).
 - `src/marker_tree.rs`: standalone and embedded marker-tree generation.
-- `src/zz_runner.rs`: shared parsing, flag, diagnostic, and macro-runner
-  helpers.
-- `src/zz_lib.rs`: shared validation, constness, list parsing, item-shape, and
-  `repr` helpers.
-- `src/zz_profile.rs` and `src/zz_conv.rs`: integral profile/facet resolution
-  and operator-output conversion.
-- `src/zz_value_type.rs`: primitive integer and operator metadata.
-- `src/tests/`: parser and token-generation unit tests.
-- `typekin_testing/`: a separate unpublished Cargo crate. Its `src/` contains
-  downstream behavior, allocation, compile-fail, `no_std`, and assembly tests.
+- `src/zz_runner.rs`: shared parsing, diagnostic, and macro-runner helpers.
+- `src/zz_flags.rs`: typed `with`/`without` flags: the `Flag` trait each
+  family's hand-written flag enum implements, the `Flags` bitset, and the
+  per-level `FlagSettings` with their `konst_*` settings (`KonstFlags`) and
+  removals.
+- `src/zz_names.rs`: generated-name tables: the `NameKey` trait each family's
+  key enum implements, the names a user chose (`Names`), and the defaults
+  with today's spans and collision rule (`ResolvedNames`).
+- `src/zz_lib.rs`: shared validation, constness, list parsing (`Key`),
+  item-shape, `repr`, and function-removal (`Forward`, `Removals`) helpers.
+- `src/zz_friend.rs`: the friend capability model (`Friend`, `Capability`)
+  and protocol emission (`Protocol`, `emit_protocol`) that integral, float,
+  bitflag, text, `friends`, and `constructor` share.
+- `src/zz_profile_integral.rs` and `src/zz_conv.rs`: integral profile/facet
+  resolution (`ProfileKind`) and operator-output conversion.
+- `src/zz_values.rs`: primitive integer and float (`F`, `Num`), operator, and
+  function-name (`FnName`) metadata.
+- `src/zz_hide.rs`: `hide_in` parsing, path re-anchoring, and module wrapping.
+- `src/zz_lit.rs`: the per-type literal macro (`Port` → `port!`): naming, export
+  shape, guard, and arms.
+- `src/zz_domain.rs`: the `domain` expression language: its grammar, syntax, and
+  parser; `src/zz_domain_int.rs` probes zero, types, folds per pointer width,
+  normalizes, evaluates, and emits integer domains; `src/zz_domain_float.rs`
+  types, normalizes, probes, and emits float domains; `src/zz_domain_closure.rs`
+  proves operations closed over integer interval domains (closure proofs);
+  `src/zz_domain_within.rs` reduces integer domains to residue-class forms for
+  `Within` proofs, and `src/zz_domain_within_const.rs` holds their subset check,
+  which typekin both compiles and emits verbatim, so it stays plain stable
+  `const fn` code.
+- `src/tests/`: unit tests of what the public surface cannot show (diagnostics,
+  crate-private analysis, and token details; see "Tests and verification").
+- `typekin_testing/`: a separate unpublished Cargo crate and the default home
+  for tests. Its `src/` contains downstream behavior, allocation, compile-time
+  absence, fixture-crate (compile-fail, `no_std`, cross-crate, 32-bit), and
+  assembly tests in `test_*.rs`, their fixtures in the matching `fx_*.rs`, the
+  assembly fixture crate's `asm_case_*.rs` modules, and the shared helpers in
+  `src/machinery/` (`asserts.rs`, `absent.rs`, `alloc.rs`, `fixture.rs`,
+  `asm.rs`, …).
 - `examples/`: small source examples and checked-in `_exp.rs` expansions. Do not
-  edit `_exp.rs` files directly; use the corresponding `just <name>-expand`
-  target.
+  edit `_exp.rs` files directly; regenerate one with its `just <name>-expand`
+  target (`expandem --fix`), then run `cargo +nightly fmt`, because the
+  checked-in files are rustfmt-formatted.
 - `README.md`: practical public usage documentation. Modify it only when the
   user explicitly asks to change that README.
 - `PHILOSOPHY.md`: the project's design principles and intentional tradeoffs.
@@ -58,6 +99,16 @@ constness, and runtime cost as API behavior.
 - Favor explicit capabilities, ownership, and constness. Reuse shared parsing
   and emission machinery rather than adding parallel syntax or generators.
 - Do not create macros solely to reduce repetition.
+- Inspect generated code with `expandem` (from the `expandem` crate;
+  `just init-here` installs it), not `cargo expand`.
+  `expandem <file> 'typekin::**'` expands only typekin's macros in that source
+  file and leaves Rust's, serde's, and every other macro as written, so the
+  output shows exactly what typekin generates; `--fix` simplifies it for
+  reading, as the `*-expand` recipes do. Items declared inside function bodies
+  stay unexpanded. To show that a change leaves generated code alone, diff the
+  `expandem` output of every `typekin_testing/src` file with a typekin attribute
+  before and after; differences in trailing commas and spacing don't count. Use
+  `cargo expand` only when another macro's expansion matters.
 
 ## Design rules
 
@@ -67,9 +118,71 @@ constness, and runtime cost as API behavior.
   through their ordinary safe API. Validate ordinary ingress and value-changing
   results, including friend construction, operators, parsing, and
   deserialization. An unchanged clone of a valid value need not revalidate.
-- Integral combines `valid` callbacks and `domain` ranges; text treats `valid`
-  callbacks and literal `domain` membership as alternatives. Only `error = ()`
-  is currently supported.
+- Integral ANDs its `domain` expression (checked first) with its `valid`
+  callbacks; text treats `valid` callbacks and literal `domain` membership as
+  alternatives. Only `error = ()` is currently supported.
+- The integral `domain` is a set expression (`(1..12 | 87..) & !{10} &
+  !mul(3)`) with no comparisons and no arithmetic; its EBNF grammar, the source
+  of truth, is the module doc of `zz_domain.rs`. Typekin parses it untyped,
+  resolves it where the value type is known (`integral::ekran`, `ekran_with`,
+  `bitflag::Maker::ekran`), folds out-of-range constants per pointer width, and
+  normalizes without ever adding a comparison. Domains admitting every value or
+  none are errors. NonZero storage is inferred only from an exact zero probe,
+  which makes the validated `new_unchecked` construction sound; keep the probe
+  and the emitter on the same resolved tree.
+- Closure proofs (`zz_domain_closure`) decide at expansion time that an
+  operation on valid operands always yields a valid result, at every pointer
+  width. Only integer domains that are unions of plain intervals, without
+  `valid` callbacks, qualify. The `proven` flag enables them: on by default for
+  `u8`/`i8`, opt-in (`with = proven`) for wider integers, and implied by
+  `prove = [...]` (beside `without = proven` it is an error); `Neg`/`abs`'s
+  structural proofs don't depend on it. Proven results construct through
+  `_proven`, which reaches `new_unchecked` for `NonZero` storage, so a wrong
+  proof is undefined behavior: keep proofs sound over-approximations, keep the
+  exhaustive `u8`/`i8` soundness tests, and keep `_proven`'s `debug_assert!`.
+  A proof for same-type operands only adds a `_{helper}_proven` sibling for the
+  same-type impls. Proven items carry a generated "Cannot fail validation" doc
+  line; `prove = [...]` fails expansion with a counterexample when a listed
+  operation is not proven.
+- `Within` friends (`_(Source) -> Within`, `zz_domain_within`) construct without
+  validation once a proof shows every source value in the target's domain. Every
+  integral wrapper, bitflag value types included, publishes hidden versioned
+  constants (`__TYPEKIN_WITHIN_V1_*`: raw type, per-width form or why it has
+  none, an 8-bit validation table) unless `without = within_source`. A target
+  proves each wrapper source in an associated constant rustc evaluates: the
+  source's table against the target's own validation when both are
+  const-callable, else the two forms with the shared subset check. Non-generic
+  targets force it during `cargo check`; generic ones in the friend's
+  conversion, so where it is instantiated. Primitive sources are decided at
+  expansion. Forms must be exact: a source's holds every value it can hold
+  (every raw value with a visible field), a target's only valid ones; keep the
+  forms, the tables, and `contains` agreeing and the differential tests
+  exhaustive. Proven values construct through `_within`, which keeps a
+  `debug_assert!` and the safe storage path, so a wrong proof can break the
+  domain invariant but never reaches `new_unchecked`.
+- Every validated integral, float, and bitflag value type with a const
+  `try_make` gets a literal macro named after the snake-cased type (`lit_name`
+  overrides; `without = lit_macro` removes it). `name!(v)` checks `v` in a
+  block-level `const` item (reported by `cargo check`); `name!(const v)` uses an
+  inline `const` block for generic contexts. Below `pub` the macro is a
+  `macro_rules!` made path-addressable by a `use`; `pub` types export it with
+  `#[macro_export]` under a mangled name and re-export it beside the type
+  (absolute paths to macro-expanded exports are rejected by rustc). The
+  expansion names the type as written unless `lit_path` gives a crate-relative
+  path; a hidden guard method rejects a different type of the same name. Names
+  that are keywords or shadow prelude macros are rejected.
+- Float domains use float constants (`fNN::MAX`, `fNN::consts::PI`, emitted
+  through `::core`). Ranges, rosters, and multiples reject NaN; complement is
+  taken within the type, so `!{0.5}` admits NaN. A domain that rejects NaN
+  (decided at parse time, type-independently) makes the type NaN-free: only
+  then, and only with a private value field, are `Eq`, `Ord`, `Hash`, and `_cmp`
+  generated; explicitly requesting them otherwise is an error. `Hash` hashes
+  `to_bits()` and adds `+ 0.0` only when the domain admits both zeros. Float
+  divisors must be exact decimals. With a private value field, a `core_float`
+  query (`is_nan`, `is_normal`, …) returns a constant when every
+  sign-and-`FpCategory` class the domain may admit gives the same answer; keep
+  that analysis a sound over-approximation and keep the sampled soundness
+  tests.
 - Infallible operators and untrusted friend construction panic on invalid
   results. Integral `try_make` and `try_map` return the rejected raw value;
   `try_map` validates only the final mapped value, while `map` panics on
@@ -80,14 +193,27 @@ constness, and runtime cost as API behavior.
   drops the candidate rather than returning or restoring the original. String
   operations can still panic on invalid indices or UTF-8 boundaries.
 - The generated API cannot prevent direct access to a caller-declared public
-  field. Keep validated value fields private for an external invariant boundary;
-  code in the defining module can still access a private field.
+  field. Keep validated value fields private for an external invariant boundary.
+- `hide_in` is on by default for `integral` (and its profile entry points),
+  `text`, and the `bitflag` root: the item and its generated code move into a
+  private module (`__` + snake-cased name, or `hide_in = name`) that holds the
+  item first, then `use super::*` and the generated code, and `$vis use`
+  re-exports the type (bitflag: enum and value type). A private field is then
+  unreachable even from the defining module. The item's visibility is
+  re-anchored one level deeper (private → `pub(super)`), never widened.
+  `self::`/`super::` paths in the configuration and item gain one level; string
+  literals are not rewritten, so non-doc `"super::…"` strings are rejected.
+  `get_raw` and a custom `_or_panic` need field access and are rejected while
+  hidden. `hide_in = none` restores the unhidden expansion exactly. Fn-local
+  declarations cannot see fn-local items from the module; that is rustc's error,
+  not a typekin diagnostic.
 - For integral and text, including a bitflag's integral value, `unsafe` implies
-  `Make` and bypasses only that friend's construction validation. It grants no
-  `Math`, `Bit`, or `Rel` and does not bypass later result validation. The
-  friend author must guarantee validity; standalone `friends` has no generated
-  validator to bypass. Even trusted construction cannot store zero in `NonZero`
-  storage.
+  `Make` and bypasses only that friend's construction validation, through the
+  generated `_blind_trust` constructor (also emitted by `with_blind_trust`). It
+  grants no `Math`, `Bit`, or `Rel` and does not bypass later result validation.
+  The friend author must guarantee validity; standalone `friends` has no
+  generated validator to bypass. Even blind-trust construction cannot store zero
+  in `NonZero` storage.
 - Serde is opt-in with `with = serde` or a bitflag `serde_with_*` mode;
   consuming crates supply `serde` directly. Deserialization is an ingress and
   must revalidate. Bitflag's auto, name, and value modes are mutually exclusive;
@@ -100,12 +226,18 @@ constness, and runtime cost as API behavior.
 - Friend conversions consume the friend and return the relation by value. Do not
   restore blanket forwarding through `&T` or `&mut T`. Friendship is an
   infallible contract; use Rust's `TryFrom`/`TryInto` for expected rejection.
-- Root integral friends recognize `Make`, `Math`, `Bit`, `Rel`, and `unsafe`.
-  `Math` implies `Make` and `Bit`, while `Rel` enables comparisons with `Copy`
-  friends. Facet friends accept only `Math` and `Bit`, without expanding `Math`.
+- Root integral friends recognize `Make`, `Math`, `Bit`, `Rel`, `unsafe`, and
+  `Within`. `Math` implies `Make` and `Bit`, while `Rel` enables comparisons
+  with `Copy` friends. `Within` implies `Make`, has no protocol trait, and only
+  changes how `Make` constructs; it converts through the source's raw value, so
+  an explicit conversion or `unsafe` beside it is an error. Facet friends accept
+  only `Math` and `Bit`, without expanding `Math`.
 - Text recognizes `Make`, `unsafe`, and self-only `Rel`. Bitflag's root friend
   protocol controls enum-left operations; its nested integral friends control
-  value operations and use integral capabilities.
+  value operations and use integral capabilities, `Within` included.
+- Float friends: `Math` implies `Make` only; `Bit` and `Within` are rejected.
+  Primitive friends convert with `as`, so `Make` may round, while `Rel` and
+  `Math` need a lossless source.
 - Same-type integral arithmetic and bitwise operations are controlled by
   `self_math` and `self_bit`, not by declaring the wrapper as a friend.
 - Prefer consuming transformations over cloning or rollback allocation.
@@ -124,10 +256,32 @@ constness, and runtime cost as API behavior.
 - `produce = callback(_) -> Type` calls the callback once on an already
   validated operator result. A non-`Self` output disables incompatible
   assignment operators.
-- An integral domain excluding zero can select `NonZero` storage; `wrapping` can
+- An integral domain excluding zero selects `NonZero` storage; `wrapping` can
   select `Wrapping` storage. Rewritten storage requires a private field and
   `raw()` still exposes the primitive. `without = non_zero` suppresses the
   storage choice, not the declared domain's validation.
+- Floats accept only the `int` and `point` profiles (root and facets) and reject
+  integer-only flags (`bit_access`, `core_int`, bitwise operators,
+  binary/octal/hex formatting, `range`, `non_zero`, `proven`). `point`
+  dispatches on its field's type. Float-only flags (`core_float`, `float_math`,
+  `math_neg`, `sum`, `product`, and the key `math`) are rejected on integers;
+  `fmt_exp_lower`/`fmt_exp_upper` are opt-in for integers.
+- Float-to-integer `try_into_*` use the `as` round trip alone when the target's
+  `MAX` is exact in the float and add `r < 2^bits` otherwise (per pointer width
+  for `usize`/`isize`); `as` alone would saturate or round. Integer-to-float
+  conversions are `into_*` where every value is exact and otherwise `try_into_*`
+  with the round trip plus `t < 2^bits`, because `MAX` can round up and saturate
+  back. Bounds are emitted as exact decimal literals (`f32::INFINITY` for
+  `2^128`).
+- Signed integers and floats get `Neg` (`math_neg`, `fn_math_neg`) by default
+  except under `point`; integer `Neg` follows the profile's arithmetic
+  (primitive, wrapping, or checked). Unsigned integers drop it, and requesting
+  it is an error.
+- `Neg` and `abs` skip validation only when the resolved domain proves the
+  result valid: symmetric atoms for `Neg`, and additionally non-negative
+  intervals and positive predicates for `abs`, with no callbacks and the
+  generated `_or_panic`. The proof is structural per atom and must stay
+  conservative.
 - Bitflag takes a non-generic enum with unit variants and exactly one numeric
   representation from `repr = Type` or `#[repr(Type)]`, not both.
 - Bitflag's nested integral configuration uses only the default profile and
@@ -139,12 +293,12 @@ constness, and runtime cost as API behavior.
 
 ### Keep wrappers zero-cost
 
-- Annotated integral and text tuple structs have exactly one field: a primitive
-  integer and an unqualified `String`, respectively. Generic integral
-  declarations require a private value field and gain private zero-sized marker
-  fields in generated code. Preserve their generic identity, bounds, variance,
-  drop checking, and `Send`/`Sync` behavior without imposing extra marker bounds
-  on generated `Copy` or `Clone`.
+- Annotated integral, float, and text tuple structs have exactly one field: a
+  primitive integer, `f32`/`f64`, and an unqualified `String`, respectively.
+  Generic integral and float declarations require a private value field and gain
+  private zero-sized marker fields in generated code. Preserve their generic
+  identity, bounds, variance, drop checking, and `Send`/`Sync` behavior without
+  imposing extra marker bounds on generated `Copy` or `Clone`.
 - Preserve transparent representation by default and honor `without = repr`.
   Generated wrappers must add no runtime state.
 - Continue using `#[inline(always)]` on small generated forwarding and
@@ -158,10 +312,10 @@ constness, and runtime cost as API behavior.
 
 ### Constness is a caller-visible choice
 
-- Without the crate's `nightly` Cargo feature, `integral`, `bitflag`, and `text`
-  default to `konst = stable`; enabling that feature changes the default to
-  `nightly`. Merely selecting a nightly toolchain does not enable the feature.
-  Callers can explicitly choose `none`, `stable`, or `nightly`.
+- Without the crate's `nightly` Cargo feature, `integral`, `float`, `bitflag`,
+  and `text` default to `konst = stable`; enabling that feature changes the
+  default to `nightly`. Merely selecting a nightly toolchain does not enable the
+  feature. Callers can explicitly choose `none`, `stable`, or `nightly`.
 - Integral and bitflag `stable` enable stable validation and value operations;
   `nightly` enables const trait implementations and nightly-only integer
   operations. Text `stable` enables read-only accessors, while `nightly` enables
@@ -169,12 +323,23 @@ constness, and runtime cost as API behavior.
 - Bitflag forwards its const configuration to its generated integral value.
   Nested integral `konst = ...` is rejected; matching `konst_*` flags are
   accepted and conflicting ones are errors at those flags.
+- `math = core | std | nightly` selects float domain functions and the
+  `float_math` API: `std` calls inherent methods, `nightly` calls
+  `::core::fNN::math` (no_std, `core_float_math`). `rust-version` is 1.97, the
+  oldest stable that compiles the default integral output; float constness
+  (rounding family and `mul_add` const, `sqrt` and friends not) follows it.
 - `with = range` emits unstable `Step` even with `konst = none`; it is rejected
   with validation or circular profiles. Individual const overrides can also
   require nightly feature gates.
-- Default integral `_unchecked` and arithmetic helpers can remain `const` under
-  `konst = none`; validators and custom raw accessors they call must be
-  const-callable. Keep stable use independent of nightly-only const support.
+- Typekin never drops `const` because of what validation calls: only `konst` and
+  `konst_*` decide, and rustc reports a non-const call. The validating helpers
+  (`_or_panic`, `_add`-style helpers) are `const` iff a const item consumes them
+  (any non-stable const flag, or bitflag's named values); unvalidated helpers
+  stay `const`. Keep stable use independent of nightly-only const support.
+- Names state what happens: `_or_panic` panics, `_make` returns `Option`,
+  `try_make` returns `Result`; "checked"/"unchecked" are not used for typekin
+  validation. Paths that skip validation carry a warning word (`blind_trust`,
+  never `trusted`).
 
 ## Implementation conventions
 
@@ -186,6 +351,15 @@ constness, and runtime cost as API behavior.
   syntax unless making an intentional breaking change. Do not add compatibility
   checks, warnings, failures, migration code, or migration diagnostics for prior
   behavior unless explicitly asked.
+- Every generated function that forwards to a `core` function (text: a `String`
+  method) is built as a `zz_lib::Forward` and passes through `Removals::keep`,
+  so `without = fn_<generated name>` removes it (`fn_round_ties_even`,
+  `fn_count_ones`, `fn_try_push`). Removal is opt-out only (`with = fn_…` is an
+  error), applies at the root and in profile bodies but not in facets, and
+  naming a function the configuration does not generate is an error. Generated
+  code never calls these public functions; it uses the raw value or field, so
+  every removal still compiles. Constants (`BITS`, `RADIX`, …) stay with their
+  family flag.
 - `friend` accepts one declaration or a bracketed list. A declaration uses
   `conversion(SourceType)` or typed `_(SourceType)`, optionally followed by
   `-> Capability` or a bracketed capability list. Integral defaults an omitted
@@ -204,23 +378,143 @@ constness, and runtime cost as API behavior.
   from the parent. Node names must be unique and branches must have children.
 - Keep emitted names and ordering deterministic. Use the existing primitive
   metadata and naming helpers rather than duplicating type tables.
+- Names are types, not strings. Strongly prefer an enum for a family of names
+  that logic compares, matches, stores, or looks up: function names (`FnName`),
+  flags (`IntegralFlag`, `TextFlag`, `BitFlag`, each implementing `Flag`),
+  `konst_*` names (`Konsts`), capabilities (`Capability`), profiles
+  (`ProfileKind`), attribute keys (`Key`), primitive types (`N`, `F`), and
+  operators. Its text lives in one name table (`ITEMS`, `name()`, `of()`,
+  `ident()`; see `zz_values::Operator`). Convert user input with `of()` once at
+  the parse boundary and work with the enum afterwards; never compare an
+  `Ident`'s `to_string()` or a `&str` against a literal in logic. A lone name
+  used in one or two places is a module-level `const`, not an enum. Text stays
+  inline only for diagnostics, docs, `Debug` output, tokens inside `quote!`, an
+  identifier emitted at a single place, Rust syntax checks (`self`, `super`,
+  `crate`, `Self`), and data tables that are themselves the single boundary
+  table (zz_lit's keyword lists, float constants).
+- Generated names come from the family's names table (`zz_names`; key enums
+  `IntegralName`, `BitflagName`, `TextName`, `FriendsName`,
+  `ConstructorName`): an emitter that spells a generated public name, or one
+  a user can choose, writes `let seal = names.get(IntegralName::SealTrait);`
+  rather than `format_ident!` or `fresh_ident`. The table keeps today's
+  defaults, spans, and generic-parameter collision rule, and no logic
+  compares a generated name; decisions use the key.
+- Every macro emits the annotated item first; every generated module, type,
+  trait, impl, function, macro, constant, and re-export follows it. Under
+  `hide_in`, the private module comes first and the item is its first item.
 - Follow the family-local entry-point shape: parse configuration and item,
   validate them, and emit the item and generated code through existing
   machinery. Integral may rewrite storage and append marker fields.
+- An emitter is a `&self` method that returns one generated trait or impl
+  group, with its flag check as an early return. The orchestrators (integral's
+  `ekran_impls`, `ekran_items` and their slices `impls_head`, `impls_body`,
+  `item_fns`, `forward_items`; text's and bitflag's `ekran`) are only ordered
+  lists of calls, and that order is part of the public output. Keep logic
+  functions under about 100 lines: `just fn-lengths` lists only data tables
+  (`FnName::name`) and single straight `quote!` impls (`ekran_iter`).
 - Match local style. Explicit `return` is intentional
   (`needless_return = "allow"`). rustfmt uses an 80-column limit, vertical
   imports and parameters, and `ClosingNextLine` braces.
 - Share genuinely common grammar and emission rules. Do not force integral
   ranges and text literal membership through the same parser.
+- Keep the module tree flat: every module of either crate is a file directly in
+  its `src/`, declared from the crate root. Name a split-off part after its
+  parent with a suffix (`zz_domain_closure.rs` beside `zz_domain.rs`). Never
+  create a new directory, a module file under another module (`src/a/b.rs`), a
+  `mod` declared from a non-root module, or a `#[path]` module without the
+  user's explicit permission. The only exceptions are the existing `src/tests/`
+  directory of `t_*.rs` files; `typekin_testing/src/machinery/`, whose `mod.rs`
+  only declares its helper modules (tests and fixtures stay directly in
+  `typekin_testing/src/`); the inline test modules inside `test_*.rs` files; and
+  inline `mod name { … }` blocks that `fx_*.rs` files use as scopes for
+  declarations under test (privacy, paths, `scope = …`).
+- `zz_` marks machinery, never a macro entry point. A shared `zz_*` file never
+  imports a family module; a `zz_*` file that serves one family ends with that
+  family's name (`zz_profile_integral`) and imports only that family.
 
 ## Tests and verification
 
 Test behavior at the layer where it is observable:
 
-- Parser grammar, rejected legacy syntax, diagnostics, and token emission:
-  `src/tests/`.
-- Construction, ownership, validation, traits, layout, allocation, boundaries,
-  and generated operations as a consumer sees them: `typekin_testing/src/`.
+- `typekin_testing/src/` is the default home for every test. A behavior a
+  downstream crate can observe is tested there, as a consumer sees it, even when
+  a parser or emitter test could reach it more directly: accepted configuration,
+  defaults and flag resolution, construction, ownership, validation and domain
+  membership, generated traits, methods, and their absence, constness, layout
+  and storage, allocation, boundaries, and generated operations. Assert that a
+  trait, method, or associated function is absent with `assert_not_impl!`,
+  `assert_no_method!`, or `assert_no_associated_fn!`
+  (`typekin_testing/src/machinery/absent.rs`) in the fast modules; a violation
+  fails to compile.
+- `src/tests/` holds only what the public surface cannot show: typekin's own
+  diagnostics (a typekin rejection fails the consumer's build, and fixture
+  crates are reserved for rustc's rejections), crate-private functions and data
+  with no consumer-visible effect (closure-proof evaluation and its soundness
+  sweeps, domain normalization, float query analysis), token details without a
+  consumer-visible effect (attribute placement, item order, `#[inline]`), and
+  pointer widths other than the host's. Before adding a test there, confirm that
+  no consumer-side assertion can observe the behavior.
+- Only what needs a separate crate goes into a fixture crate
+  (`typekin_testing/src/machinery/fixture.rs`): rejections only rustc reports
+  (privacy, name resolution, bounds on private protocols, borrow checking,
+  constant evaluation), crate-level attributes such as `#![no_std]`, other
+  crates, toolchains, or targets. Add a case to an existing fixture before
+  adding a fixture; compile-pass and rejection cases never share one.
+- Test each behavior at one layer. Do not repeat in a fixture crate what a
+  `src/tests/` test or a fast-module assertion already covers.
+- Tests never include or depend on `examples/`; examples are not tests. Declare
+  test-specific types in the testing crate instead.
+- Keep fixtures and tests in separate files. A `test_<name>.rs` holds only tests
+  and their imports; everything they share lives in `fx_<name>.rs`: typekin
+  declarations, helper types, functions, traits, constants, statics, and
+  fixture-crate `Fixture`/`Case`/`Rejection` definitions. Fixture items are
+  `pub(crate)` (or `pub` where the declaration under test needs it); validated
+  value fields stay private, and a test that needs defining-module access gets a
+  helper function in the fixture file. Items used by a single test stay in its
+  body. The test file imports them with `use crate::fx_<name>::*;`.
+- Machinery and fixtures are unconditional: they compile in every build, feature
+  or not. Gate one only when compiling it needs something the environment does
+  not otherwise provide (a pointer width, a target, a binary required at compile
+  time).
+- Gate tests on modules, never on a `#[test]` function. Every inline test module
+  in a `test_*.rs` file carries `#[cfg(test)]` and its feature, repeated on each
+  module: `test_fast` for in-crate tests, `test_slow_only` for fixture crates
+  and assembly, and a per-target feature (`test_slow_wasm32`,
+  `test_slow_aarch64`, `test_slow_armv7`, `test_slow_i686`) for tests that build
+  for another target. A requirement the environment may lack (a rustup target, a
+  tool) gets its own feature outside `test_slow`. Nothing runs without a
+  feature. A test needing an extra condition moves into an inline module that
+  adds it (`mod opt_level_z` behind `test_slow_z`, `mod pointer_width_64`).
+  `typekin_testing/src/lib.rs` stays attribute-free apart from crate-level
+  `#![…]` attributes: it only declares modules and re-exports the machinery.
+- Every test lives in an inline module of its `test_*.rs` file, even a module
+  with a single test; no test function sits at the file's top level. Group tests
+  with modules rather than separator comments: a section that would get a
+  `// ----` heading is a module named after that heading. Prefer few modules; do
+  not split a group that has no distinct subject.
+- A test never passes by skipping. A missing toolchain, target, or tool fails
+  the test; make optional requirements a feature instead.
+- Assembly fixtures may share one crate per target and opt-level, one module per
+  case. What they check runs through `#[inline(always)]` paths, which other
+  cases in the same crate cannot inline differently: `alwaysinline` ignores
+  caller count and cost, so how widely a helper is shared does not matter, and
+  inline items are copied into every codegen unit that uses them, so how the
+  crate is split does not block inlining. LLVM can still merge identical probes
+  of different cases into an alias or a jump, so each case declares its own
+  types and gives its probes distinct bodies; merging is not disabled with
+  compiler flags. Panic locations, anonymous constants, and local labels are
+  numbered across the whole crate, so the comparison normalizes labels and
+  relocations. Effects within one case, such as instruction selection changing
+  below opt-level 2 or the extra `#[inline(always)]` layer of checked float
+  conversions, look the same batched or not. The exception is LLVM's machine
+  outliner, on by default for AArch64 at opt-level z: it moves instruction
+  sequences repeated anywhere in the crate into shared functions, and probes
+  with distinct IR can still compile to the same instructions, so that
+  combination builds one crate per case.
+- Keep assembly fixtures separate from the compile-pass and rejection fixture
+  crates, and do not change them for unrelated work.
+- Changes to `absent.rs` or `fixture.rs` need a negative control showing the
+  assertion fails when the asserted behavior is present.
 - User-facing API changes: update a compact source example and its checked-in
   expansion when applicable.
 - Bugs should get a regression test that fails for the old behavior.
@@ -268,16 +562,38 @@ cargo +stable run --locked --example my_text
 ```
 
 The separate testing crate requires nightly. `test_slow` includes `test_fast`,
-compile-fail and `no_std` fixtures, and assembly comparisons. Its temporary
-fixtures use offline Cargo and require cached dependencies; some use stable.
-Assembly checks require `nm` and `objdump`. For changes to the crate's `nightly`
-feature, also run `cargo +nightly test --locked --lib --features nightly`.
+the host fixture crates, and host assembly comparisons, including opt-level z
+(`test_slow_z`); it needs no extra rustup target. A fixture crate holds many
+cases, one module each, and is checked once (`check`), or built once (`compile`)
+for errors only monomorphization reports, such as a generic target's `Within`
+proof; a rejection must report its expected error inside its own case module,
+and every error there must match it. Fixture crates and their target directories
+live in `typekin_testing/target/typekin-fixtures/`; they use offline Cargo and
+require cached dependencies, and some use stable. `--features test_slow_wasm32`
+adds 32-bit pointer-width fixtures and requires the nightly
+`wasm32-unknown-unknown` target; it fails rather than skips when the target is
+missing. Assembly cases (`asm_case_*.rs`) are the modules of one fixture crate
+per target and opt-level (AArch64 at opt-level z: one per case), built once per
+test run; each test compares its own case's probes symbol by symbol. Host checks
+run that crate and require `nm` and `objdump`; `--features test_slow_aarch64`,
+`test_slow_armv7`, and `test_slow_i686` (together `test_slow_cross`) each
+compile it as an object for `aarch64-unknown-linux-gnu`,
+`armv7-unknown-linux-gnueabihf`, or `i686-unknown-linux-gnu` (nightly targets)
+and read it with `llvm-nm`/`llvm-objdump`. Opt-levels 1, 2, 3, and s must match
+the raw code and level 0 must differ; below level 2 checked float conversions
+compare against the same check behind one `#[inline(always)]` layer, which
+changes instruction selection by itself. Opt-level z is checked only with
+`--features test_slow_z` (part of `test_slow`): size optimizations such as the
+AArch64 machine outliner move sequences repeated anywhere in a crate,
+hand-written code included, into shared functions, which typekin's erasure
+promise does not cover. For changes to the crate's `nightly` feature, also run
+`cargo +nightly test --locked --lib --features nightly`.
 
 Run a relevant example as a smoke test for the changed macro. On stable,
 `my_u32_non_const` exercises `konst = none`, while `my_u32_stable_const`,
-`my_tcp`, `my_text`, and `my_flag` exercise stable defaults without the
-`nightly` Cargo feature. Nightly const settings and other unstable features
-require the corresponding feature gates.
+`my_tcp`, `my_text`, `my_flag`, `my_f64`, `my_unit`, and `my_f32_point` exercise
+stable defaults without the `nightly` Cargo feature. Nightly const settings and
+other unstable features require the corresponding feature gates.
 
 Root `just fmt`, `just test`, `just test-fast`, `just test-slow`, `just all`,
 and example recipes without `-expand` format root `*.md`, including README. Do
@@ -291,8 +607,8 @@ nested testing recipes also run `cargo fmt`.
 - Documentation should be practical, concise, and code-first. Do not write
   advertising copy.
 - Explain catches and deliberate omissions, especially panic-on-invalid
-  operations, trusted friends, const toolchain requirements, and unavailable
-  mutable text APIs.
+  operations, blind-trust (`unsafe`) friends, const toolchain requirements, and
+  unavailable mutable text APIs.
 - Keep configuration examples explicit and compilable.
 - Public generated-API changes require coordinated updates to implementation,
   parser and consumer tests, and source examples and expansions as applicable.

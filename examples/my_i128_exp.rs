@@ -7,1757 +7,1912 @@
 #![feature(const_destruct)]
 #![feature(derive_const)]
 
-#[repr(transparent)]
-#[derive(Copy)]
-#[derive_const(Clone)]
-pub struct MyU128(i128);
+#[doc(hidden)]
+mod __my_u128 {
+    #[repr(transparent)]
+    #[derive(Copy)]
+    #[derive_const(Clone)]
+    pub struct MyU128(i128);
 
-#[allow(dead_code)]
-#[allow(unused_qualifications)]
-#[allow(clippy::unnecessary_cast)]
-const _: () = {
-    const trait Seal {
-        fn conv_my_u128(self) -> i128;
-    }
-    const trait Make: [const] Seal {
-        fn make(self) -> MyU128;
-    }
-    const trait Math: [const] Seal {}
-    const trait Bit: [const] Seal {}
-    const trait Rel: [const] Seal {}
-    #[doc = "# Safety"]
-    #[doc = ""]
-    #[doc = "Implementing this trait asserts that values \
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(dead_code)]
+    #[allow(unused_qualifications)]
+    #[allow(clippy::unnecessary_cast)]
+    const _: () = {
+        const trait Seal {
+            fn conv_my_u128(self) -> i128;
+        }
+        const trait Make: [const] Seal {
+            fn make(self) -> MyU128;
+        }
+        const trait Math: [const] Seal {}
+        const trait Bit: [const] Seal {}
+        const trait Rel: [const] Seal {}
+        #[doc = "# Safety"]
+        #[doc = ""]
+        #[doc = "Implementing this trait asserts that values \
                         produced by the sealed conversion satisfy every \
                         invariant required by the target type."]
-    const unsafe trait Unsafe: [const] Seal {}
-    const impl Seal for MyU128 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return Self::raw(self);
-        }
-    }
-    const impl Make for MyU128 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Rel for MyU128 {}
-    const impl Seal for i128 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Bit for i128 {}
-    const impl Make for i128 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Math for i128 {}
-    const impl Rel for i128 {}
-    const impl Seal for i16 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for i16 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for i32 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for i32 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for i64 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for i64 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for i8 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for i8 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for isize {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for isize {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for u16 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for u16 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for u32 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for u32 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for u64 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for u64 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for u8 {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for u8 {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    const impl Seal for usize {
-        #[inline(always)]
-        fn conv_my_u128(self) -> i128 {
-            return self as i128;
-        }
-    }
-    const impl Make for usize {
-        #[inline(always)]
-        fn make(self) -> MyU128 {
-            let raw = <Self as Seal>::conv_my_u128(self);
-            return MyU128::_unchecked(raw);
-        }
-    }
-    impl AsRef<i128> for MyU128 {
-        #[inline(always)]
-        fn as_ref(&self) -> &i128 {
-            return &self.0;
-        }
-    }
-    impl core::str::FromStr for MyU128 {
-        type Err = ();
-        #[inline(always)]
-        fn from_str(source: &str) -> Result<Self, Self::Err> {
-            let value = match <i128 as core::str::FromStr>::from_str(source) {
-                Ok(value) => value,
-                Err(_) => {
-                    return Err(());
-                }
-            };
-            return Ok(Self(value));
-        }
-    }
-    impl MyU128 {
-        #[doc = r" The number of bits in the wrapped primitive integer."]
-        pub const BITS: u32 = i128::BITS;
-        #[inline(always)]
-        pub const fn count_ones(self) -> u32 {
-            return Self::raw(self).count_ones();
-        }
-        #[inline(always)]
-        pub const fn count_zeros(self) -> u32 {
-            return Self::raw(self).count_zeros();
-        }
-        #[inline(always)]
-        pub const fn leading_zeros(self) -> u32 {
-            return Self::raw(self).leading_zeros();
-        }
-        #[inline(always)]
-        pub const fn trailing_zeros(self) -> u32 {
-            return Self::raw(self).trailing_zeros();
-        }
-        #[inline(always)]
-        pub const fn leading_ones(self) -> u32 {
-            return Self::raw(self).leading_ones();
-        }
-        #[inline(always)]
-        pub const fn trailing_ones(self) -> u32 {
-            return Self::raw(self).trailing_ones();
-        }
-        #[inline(always)]
-        pub const fn highest_one(self) -> Option<u32> {
-            return Self::raw(self).highest_one();
-        }
-        #[inline(always)]
-        pub const fn lowest_one(self) -> Option<u32> {
-            return Self::raw(self).lowest_one();
-        }
-        #[inline(always)]
-        pub const fn ilog(
-            self,
-            base: Self,
-        ) -> u32 {
-            return Self::raw(self).ilog(Self::raw(base));
-        }
-        #[inline(always)]
-        pub const fn ilog2(self) -> u32 {
-            return Self::raw(self).ilog2();
-        }
-        #[inline(always)]
-        pub const fn ilog10(self) -> u32 {
-            return Self::raw(self).ilog10();
-        }
-        #[inline(always)]
-        pub const fn checked_ilog(
-            self,
-            base: Self,
-        ) -> Option<u32> {
-            return Self::raw(self).checked_ilog(Self::raw(base));
-        }
-        #[inline(always)]
-        pub const fn checked_ilog2(self) -> Option<u32> {
-            return Self::raw(self).checked_ilog2();
-        }
-        #[inline(always)]
-        pub const fn checked_ilog10(self) -> Option<u32> {
-            return Self::raw(self).checked_ilog10();
-        }
-        #[inline(always)]
-        pub const fn to_be_bytes(self) -> [u8; size_of::<i128>()] {
-            return Self::raw(self).to_be_bytes();
-        }
-        #[inline(always)]
-        pub const fn to_le_bytes(self) -> [u8; size_of::<i128>()] {
-            return Self::raw(self).to_le_bytes();
-        }
-        #[inline(always)]
-        pub const fn to_ne_bytes(self) -> [u8; size_of::<i128>()] {
-            return Self::raw(self).to_ne_bytes();
-        }
-    }
-    impl MyU128 {
-        #[inline(always)]
-        pub const fn rotate_left(
-            self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).rotate_left(n));
-        }
-        #[inline(always)]
-        pub const fn rotate_right(
-            self,
-            n: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).rotate_right(n));
-        }
-        #[inline(always)]
-        pub const fn swap_bytes(self) -> Self {
-            return Self::_core_int(Self::raw(self).swap_bytes());
-        }
-        #[inline(always)]
-        pub const fn reverse_bits(self) -> Self {
-            return Self::_core_int(Self::raw(self).reverse_bits());
-        }
-        #[inline(always)]
-        pub const fn isolate_highest_one(self) -> Self {
-            return Self::_core_int(Self::raw(self).isolate_highest_one());
-        }
-        #[inline(always)]
-        pub const fn isolate_lowest_one(self) -> Self {
-            return Self::_core_int(Self::raw(self).isolate_lowest_one());
-        }
-        #[inline(always)]
-        pub const fn to_be(self) -> Self {
-            return Self::_core_int(Self::raw(self).to_be());
-        }
-        #[inline(always)]
-        pub const fn to_le(self) -> Self {
-            return Self::_core_int(Self::raw(self).to_le());
-        }
-        #[inline(always)]
-        pub const fn from_be(value: Self) -> Self {
-            return Self::_core_int(i128::from_be(Self::raw(value)));
-        }
-        #[inline(always)]
-        pub const fn from_le(value: Self) -> Self {
-            return Self::_core_int(i128::from_le(Self::raw(value)));
-        }
-        #[inline(always)]
-        pub const fn from_ne_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
-            return Self::_core_int(i128::from_ne_bytes(bytes));
-        }
-        #[inline(always)]
-        pub const fn from_be_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
-            return Self::_core_int(i128::from_be_bytes(bytes));
-        }
-        #[inline(always)]
-        pub const fn from_le_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
-            return Self::_core_int(i128::from_le_bytes(bytes));
-        }
-        #[inline(always)]
-        pub const fn checked_add(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_add(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_sub(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_sub(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_neg(self) -> Option<Self> {
-            return match Self::raw(self).checked_neg() {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_mul(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_mul(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_div(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_div(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_rem(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_rem(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_div_euclid(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_div_euclid(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_rem_euclid(
-            self,
-            rhs: Self,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_rem_euclid(Self::raw(rhs)) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_shl(
-            self,
-            rhs: u32,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_shl(rhs) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_shr(
-            self,
-            rhs: u32,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_shr(rhs) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_pow(
-            self,
-            exp: u32,
-        ) -> Option<Self> {
-            return match Self::raw(self).checked_pow(exp) {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-    }
-    impl MyU128 {
-        #[inline(always)]
-        pub const fn midpoint(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).midpoint(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn unbounded_shl(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).unbounded_shl(rhs));
-        }
-        #[inline(always)]
-        pub const fn unbounded_shr(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).unbounded_shr(rhs));
-        }
-        #[inline(always)]
-        pub const fn saturating_add(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).saturating_add(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn saturating_sub(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).saturating_sub(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn saturating_mul(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).saturating_mul(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn saturating_div(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).saturating_div(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn saturating_pow(
-            self,
-            exp: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).saturating_pow(exp));
-        }
-        #[inline(always)]
-        pub const fn wrapping_add(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_add(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_sub(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_sub(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_neg(self) -> Self {
-            return Self::_core_int(Self::raw(self).wrapping_neg());
-        }
-        #[inline(always)]
-        pub const fn wrapping_mul(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_mul(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_div(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_div(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_rem(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_rem(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_div_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_div_euclid(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_rem_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).wrapping_rem_euclid(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn wrapping_shl(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).wrapping_shl(rhs));
-        }
-        #[inline(always)]
-        pub const fn wrapping_shr(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).wrapping_shr(rhs));
-        }
-        #[inline(always)]
-        pub const fn wrapping_pow(
-            self,
-            exp: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).wrapping_pow(exp));
-        }
-        #[inline(always)]
-        pub const fn pow(
-            self,
-            exp: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).pow(exp));
-        }
-        #[inline(always)]
-        pub const fn isqrt(self) -> Self {
-            return Self::_core_int(Self::raw(self).isqrt());
-        }
-        #[inline(always)]
-        pub const fn div_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).div_euclid(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn rem_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).rem_euclid(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_add(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_add(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_sub(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_sub(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_neg(self) -> Self {
-            return Self::_core_int(Self::raw(self).strict_neg());
-        }
-        #[inline(always)]
-        pub const fn strict_mul(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_mul(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_div(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_div(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_rem(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_rem(Self::raw(rhs)));
-        }
-        #[inline(always)]
-        pub const fn strict_div_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).strict_div_euclid(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn strict_rem_euclid(
-            self,
-            rhs: Self,
-        ) -> Self {
-            return Self::_core_int(
-                Self::raw(self).strict_rem_euclid(Self::raw(rhs)),
-            );
-        }
-        #[inline(always)]
-        pub const fn strict_shl(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_shl(rhs));
-        }
-        #[inline(always)]
-        pub const fn strict_shr(
-            self,
-            rhs: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_shr(rhs));
-        }
-        #[inline(always)]
-        pub const fn strict_pow(
-            self,
-            exp: u32,
-        ) -> Self {
-            return Self::_core_int(Self::raw(self).strict_pow(exp));
-        }
-    }
-    impl MyU128 {
-        #[inline(always)]
-        pub const fn overflowing_add(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_add(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_sub(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_sub(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_neg(self) -> (Self, bool) {
-            let (value, overflowed) = Self::raw(self).overflowing_neg();
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_mul(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_mul(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_div(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_div(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_rem(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_rem(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_div_euclid(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_div_euclid(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_rem_euclid(
-            self,
-            rhs: Self,
-        ) -> (Self, bool) {
-            let (value, overflowed) =
-                Self::raw(self).overflowing_rem_euclid(Self::raw(rhs));
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_shl(
-            self,
-            rhs: u32,
-        ) -> (Self, bool) {
-            let (value, overflowed) = Self::raw(self).overflowing_shl(rhs);
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_shr(
-            self,
-            rhs: u32,
-        ) -> (Self, bool) {
-            let (value, overflowed) = Self::raw(self).overflowing_shr(rhs);
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn overflowing_pow(
-            self,
-            exp: u32,
-        ) -> (Self, bool) {
-            let (value, overflowed) = Self::raw(self).overflowing_pow(exp);
-            return (Self::_core_int(value), overflowed);
-        }
-    }
-    impl MyU128 {
-        #[inline(always)]
-        pub const fn cast_unsigned(self) -> u128 {
-            return Self::raw(self).cast_unsigned();
-        }
-        #[inline(always)]
-        pub const fn abs(self) -> Self {
-            return Self::_core_int(Self::raw(self).abs());
-        }
-        #[inline(always)]
-        pub const fn checked_abs(self) -> Option<Self> {
-            return match Self::raw(self).checked_abs() {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn checked_isqrt(self) -> Option<Self> {
-            return match Self::raw(self).checked_isqrt() {
-                Some(value) => Self::_core_int_checked(value),
-                None => None,
-            };
-        }
-        #[inline(always)]
-        pub const fn strict_abs(self) -> Self {
-            return Self::_core_int(Self::raw(self).strict_abs());
-        }
-        #[inline(always)]
-        pub const fn saturating_neg(self) -> Self {
-            return Self::_core_int(Self::raw(self).saturating_neg());
-        }
-        #[inline(always)]
-        pub const fn saturating_abs(self) -> Self {
-            return Self::_core_int(Self::raw(self).saturating_abs());
-        }
-        #[inline(always)]
-        pub const fn wrapping_abs(self) -> Self {
-            return Self::_core_int(Self::raw(self).wrapping_abs());
-        }
-        #[inline(always)]
-        pub const fn overflowing_abs(self) -> (Self, bool) {
-            let (value, overflowed) = Self::raw(self).overflowing_abs();
-            return (Self::_core_int(value), overflowed);
-        }
-        #[inline(always)]
-        pub const fn unsigned_abs(self) -> u128 {
-            return Self::raw(self).unsigned_abs();
-        }
-        #[inline(always)]
-        pub const fn abs_diff(
-            self,
-            rhs: Self,
-        ) -> u128 {
-            return Self::raw(self).abs_diff(Self::raw(rhs));
-        }
-        #[inline(always)]
-        pub const fn signum(self) -> Self {
-            return Self::_core_int(Self::raw(self).signum());
-        }
-        #[inline(always)]
-        pub const fn is_positive(self) -> bool {
-            return Self::raw(self).is_positive();
-        }
-        #[inline(always)]
-        pub const fn is_negative(self) -> bool {
-            return Self::raw(self).is_negative();
-        }
-    }
-    const impl Into<i128> for MyU128 {
-        #[inline(always)]
-        fn into(self) -> i128 {
-            return Self::into_i128(self);
-        }
-    }
-    const impl TryInto<usize> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<usize, Self::Error> {
-            return Self::try_into_usize(self);
-        }
-    }
-    const impl TryInto<isize> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<isize, Self::Error> {
-            return Self::try_into_isize(self);
-        }
-    }
-    const impl TryInto<u8> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<u8, Self::Error> {
-            return Self::try_into_u8(self);
-        }
-    }
-    const impl TryInto<u16> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<u16, Self::Error> {
-            return Self::try_into_u16(self);
-        }
-    }
-    const impl TryInto<u32> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<u32, Self::Error> {
-            return Self::try_into_u32(self);
-        }
-    }
-    const impl TryInto<u64> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<u64, Self::Error> {
-            return Self::try_into_u64(self);
-        }
-    }
-    const impl TryInto<u128> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<u128, Self::Error> {
-            return Self::try_into_u128(self);
-        }
-    }
-    const impl TryInto<i8> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<i8, Self::Error> {
-            return Self::try_into_i8(self);
-        }
-    }
-    const impl TryInto<i16> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<i16, Self::Error> {
-            return Self::try_into_i16(self);
-        }
-    }
-    const impl TryInto<i32> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<i32, Self::Error> {
-            return Self::try_into_i32(self);
-        }
-    }
-    const impl TryInto<i64> for MyU128 {
-        type Error = ();
-        #[inline(always)]
-        fn try_into(self) -> Result<i64, Self::Error> {
-            return Self::try_into_i64(self);
-        }
-    }
-    const impl core::ops::Shr<usize> for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn shr(
-            self,
-            rhs: usize,
-        ) -> Self::Output {
-            return self._shr(rhs);
-        }
-    }
-    const impl core::ops::Shl<usize> for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn shl(
-            self,
-            rhs: usize,
-        ) -> Self::Output {
-            return self._shl(rhs);
-        }
-    }
-    const impl core::ops::ShrAssign<usize> for MyU128 {
-        #[inline(always)]
-        fn shr_assign(
-            &mut self,
-            other: usize,
-        ) {
-            *self = self._shr(other);
-        }
-    }
-    const impl core::ops::ShlAssign<usize> for MyU128 {
-        #[inline(always)]
-        fn shl_assign(
-            &mut self,
-            other: usize,
-        ) {
-            *self = self._shl(other);
-        }
-    }
-    const impl core::ops::BitAndAssign for MyU128 {
-        #[inline(always)]
-        fn bitand_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._bitand(rhs.0);
-        }
-    }
-    const impl<T> core::ops::BitAndAssign<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn bitand_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._bitand(it);
-        }
-    }
-    const impl core::ops::AddAssign for MyU128 {
-        #[inline(always)]
-        fn add_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._add(rhs.0);
-        }
-    }
-    const impl<T> core::ops::AddAssign<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn add_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._add(it);
-        }
-    }
-    const impl core::ops::SubAssign for MyU128 {
-        #[inline(always)]
-        fn sub_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._sub(rhs.0);
-        }
-    }
-    const impl<T> core::ops::SubAssign<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn sub_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._sub(it);
-        }
-    }
-    const impl core::ops::MulAssign for MyU128 {
-        #[inline(always)]
-        fn mul_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._mul(rhs.0);
-        }
-    }
-    const impl<T> core::ops::MulAssign<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn mul_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._mul(it);
-        }
-    }
-    const impl core::ops::DivAssign for MyU128 {
-        #[inline(always)]
-        fn div_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._div(rhs.0);
-        }
-    }
-    const impl<T> core::ops::DivAssign<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn div_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._div(it);
-        }
-    }
-    const impl core::ops::RemAssign for MyU128 {
-        #[inline(always)]
-        fn rem_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._rem(rhs.0);
-        }
-    }
-    const impl<T> core::ops::RemAssign<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn rem_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._rem(it);
-        }
-    }
-    const impl core::ops::BitOrAssign for MyU128 {
-        #[inline(always)]
-        fn bitor_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._bitor(rhs.0);
-        }
-    }
-    const impl<T> core::ops::BitOrAssign<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn bitor_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._bitor(it);
-        }
-    }
-    impl core::fmt::Debug for MyU128 {
-        fn fmt(
-            &self,
-            f: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            return f.debug_tuple("MyU128").field(&self.0).finish();
-        }
-    }
-    impl core::hash::Hash for MyU128 {
-        #[inline(always)]
-        fn hash<H>(
-            &self,
-            state: &mut H,
-        ) where
-            H: core::hash::Hasher,
-        {
-            return core::hash::Hash::hash(&self.0, state);
-        }
-    }
-    const impl Eq for MyU128 {}
-    const impl Ord for MyU128 {
-        #[inline(always)]
-        fn cmp(
-            &self,
-            other: &Self,
-        ) -> core::cmp::Ordering {
-            return self.partial_cmp(other).unwrap();
-        }
-    }
-    if !(size_of::<MyU128>() == size_of::<i128>()) {
-        core::panic!("invalid integral storage size");
-    };
-    if !(align_of::<MyU128>() == align_of::<i128>()) {
-        core::panic!("invalid integral storage alignment");
-    };
-    const impl core::ops::Add for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn add(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._add(rhs.0);
-        }
-    }
-    const impl<T> core::ops::Add<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn add(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._add(it);
-        }
-    }
-    const impl core::ops::Sub for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn sub(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._sub(rhs.0);
-        }
-    }
-    const impl<T> core::ops::Sub<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn sub(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._sub(it);
-        }
-    }
-    const impl core::ops::Mul for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn mul(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._mul(rhs.0);
-        }
-    }
-    const impl<T> core::ops::Mul<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn mul(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._mul(it);
-        }
-    }
-    const impl core::ops::Div for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn div(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._div(rhs.0);
-        }
-    }
-    const impl<T> core::ops::Div<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn div(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._div(it);
-        }
-    }
-    const impl core::ops::Rem for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn rem(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._rem(rhs.0);
-        }
-    }
-    const impl<T> core::ops::Rem<T> for MyU128
-    where
-        T: Math + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn rem(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._rem(it);
-        }
-    }
-    const impl core::ops::BitAnd for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn bitand(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._bitand(rhs.0);
-        }
-    }
-    const impl<T> core::ops::BitAnd<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn bitand(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._bitand(it);
-        }
-    }
-    const impl core::ops::BitOr for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn bitor(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._bitor(rhs.0);
-        }
-    }
-    const impl<T> core::ops::BitOr<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn bitor(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._bitor(it);
-        }
-    }
-    const impl core::ops::BitXor for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn bitxor(
-            self,
-            rhs: Self,
-        ) -> Self::Output {
-            return self._bitxor(rhs.0);
-        }
-    }
-    const impl core::ops::BitXorAssign for MyU128 {
-        #[inline(always)]
-        fn bitxor_assign(
-            &mut self,
-            rhs: Self,
-        ) {
-            *self = self._bitxor(rhs.0);
-        }
-    }
-    const impl<T> core::ops::BitXor<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        type Output = Self;
-        #[inline(always)]
-        fn bitxor(
-            self,
-            rhs: T,
-        ) -> Self::Output {
-            let it = Seal::conv_my_u128(rhs);
-            return self._bitxor(it);
-        }
-    }
-    const impl<T> core::ops::BitXorAssign<T> for MyU128
-    where
-        T: Bit + [const] Seal + [const] core::marker::Destruct,
-    {
-        #[inline(always)]
-        fn bitxor_assign(
-            &mut self,
-            rhs: T,
-        ) {
-            let it = Seal::conv_my_u128(rhs);
-            *self = self._bitxor(it);
-        }
-    }
-    const impl core::ops::Not for MyU128 {
-        type Output = Self;
-        #[inline(always)]
-        fn not(self) -> Self::Output {
-            return self._not();
-        }
-    }
-    impl core::fmt::Binary for MyU128 {
-        #[inline(always)]
-        fn fmt(
-            &self,
-            f: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            let raw = Self::raw(*self);
-            return core::fmt::Binary::fmt(&raw, f);
-        }
-    }
-    impl core::fmt::Octal for MyU128 {
-        #[inline(always)]
-        fn fmt(
-            &self,
-            f: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            let raw = Self::raw(*self);
-            return core::fmt::Octal::fmt(&raw, f);
-        }
-    }
-    impl core::fmt::LowerHex for MyU128 {
-        #[inline(always)]
-        fn fmt(
-            &self,
-            f: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            let raw = Self::raw(*self);
-            return core::fmt::LowerHex::fmt(&raw, f);
-        }
-    }
-    impl core::fmt::UpperHex for MyU128 {
-        #[inline(always)]
-        fn fmt(
-            &self,
-            f: &mut core::fmt::Formatter<'_>,
-        ) -> core::fmt::Result {
-            let raw = Self::raw(*self);
-            return core::fmt::UpperHex::fmt(&raw, f);
-        }
-    }
-    const impl<T> PartialEq<T> for MyU128
-    where
-        T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
-    {
-        #[inline(always)]
-        fn eq(
-            &self,
-            rhs: &T,
-        ) -> bool {
-            let lhs = Self::raw(*self);
-            let rhs = Seal::conv_my_u128(*rhs);
-            return lhs == rhs;
-        }
-    }
-    const impl<T> PartialOrd<T> for MyU128
-    where
-        T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
-    {
-        #[inline(always)]
-        fn partial_cmp(
-            &self,
-            rhs: &T,
-        ) -> Option<core::cmp::Ordering> {
-            let lhs = Self::raw(*self);
-            let rhs = Seal::conv_my_u128(*rhs);
-            return PartialOrd::partial_cmp(&lhs, &rhs);
-        }
-    }
-    impl MyU128 {
-        #[inline(always)]
-        #[allow(private_bounds)]
-        pub const fn of<T>(it: T) -> MyU128
-        where
-            T: [const] Make + [const] core::marker::Destruct,
-        {
-            return <T as Make>::make(it);
-        }
-        #[inline(always)]
-        pub const fn make(it: i128) -> MyU128 {
-            return MyU128::of(it);
-        }
-        #[must_use]
-        #[inline(always)]
-        pub const fn raw(self) -> i128 {
-            return self.0;
-        }
-        #[must_use]
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn into_i128(self) -> i128 {
-            let it = Self::raw(self);
-            return it as i128;
-        }
-        #[inline(always)]
-        pub const fn try_map<F>(
-            self,
-            function: F,
-        ) -> Result<Self, i128>
-        where
-            F: [const] FnOnce(i128) -> i128 + [const] core::marker::Destruct,
-        {
-            let value = function(Self::raw(self));
-            return Ok(Self(value));
-        }
-        #[inline(always)]
-        #[track_caller]
-        pub const fn map<F>(
-            self,
-            function: F,
-        ) -> Self
-        where
-            F: [const] FnOnce(i128) -> i128 + [const] core::marker::Destruct,
-        {
-            return match self.try_map(function) {
-                Ok(value) => value,
-                Err(_) => {
-                    core::panic!("mapping operation produced an invalid value")
-                }
-            };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i128(self) -> Result<i128, ()> {
-            return Ok(Self::raw(self) as i128);
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_usize(self) -> Result<usize, ()> {
-            let r = Self::raw(self);
-            let t = r as usize;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_isize(self) -> Result<isize, ()> {
-            let r = Self::raw(self);
-            let t = r as isize;
-            let s = t as i128;
-            return if s == r && true { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u8(self) -> Result<u8, ()> {
-            let r = Self::raw(self);
-            let t = r as u8;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u16(self) -> Result<u16, ()> {
-            let r = Self::raw(self);
-            let t = r as u16;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u32(self) -> Result<u32, ()> {
-            let r = Self::raw(self);
-            let t = r as u32;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u64(self) -> Result<u64, ()> {
-            let r = Self::raw(self);
-            let t = r as u64;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_u128(self) -> Result<u128, ()> {
-            let r = Self::raw(self);
-            let t = r as u128;
-            let s = t as i128;
-            return if s == r && r >= 0 { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i8(self) -> Result<i8, ()> {
-            let r = Self::raw(self);
-            let t = r as i8;
-            let s = t as i128;
-            return if s == r && true { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i16(self) -> Result<i16, ()> {
-            let r = Self::raw(self);
-            let t = r as i16;
-            let s = t as i128;
-            return if s == r && true { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i32(self) -> Result<i32, ()> {
-            let r = Self::raw(self);
-            let t = r as i32;
-            let s = t as i128;
-            return if s == r && true { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        #[allow(clippy::unnecessary_cast)]
-        pub const fn try_into_i64(self) -> Result<i64, ()> {
-            let r = Self::raw(self);
-            let t = r as i64;
-            let s = t as i128;
-            return if s == r && true { Ok(t) } else { Err(()) };
-        }
-        #[inline(always)]
-        pub(self) const fn _add(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs + rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _sub(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs - rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _mul(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs * rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _div(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs / rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _rem(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs % rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _bitxor(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs ^ rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _bitand(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs & rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _bitor(
-            &self,
-            rhs: i128,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs | rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _shr(
-            &self,
-            rhs: usize,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs >> rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _shl(
-            &self,
-            rhs: usize,
-        ) -> Self {
-            let lhs = Self::raw(*self);
-            let it = lhs << rhs;
-            return Self::_unchecked(it);
-        }
-        #[inline(always)]
-        pub(self) const fn _not(&self) -> Self {
-            let lhs = Self::raw(*self);
-            let it = !lhs;
-            return Self::_unchecked(it);
-        }
-        #[must_use]
-        #[inline(always)]
-        #[doc(hidden)]
-        pub(self) const fn _eq(
-            self,
-            rhs: i128,
-        ) -> bool {
-            let lhs = Self::raw(self);
-            return lhs == rhs;
-        }
-        #[must_use]
-        #[inline(always)]
-        #[doc(hidden)]
-        pub(self) fn _cmp(
-            self,
-            rhs: i128,
-        ) -> core::cmp::Ordering {
-            let lhs = Self::raw(self);
-            return PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
-        }
-        #[inline(always)]
-        pub const fn try_make(it: i128) -> Result<Self, i128> {
-            return Ok(Self::_unchecked(it));
-        }
-        #[must_use]
-        #[inline(always)]
-        pub(self) const fn _unchecked(it: i128) -> Self {
-            return Self(it);
-        }
-        #[inline(always)]
-        #[track_caller]
-        pub(self) const fn _core_int(value: i128) -> Self {
-            {
-                return Self(value);
+        const unsafe trait Unsafe: [const] Seal {}
+        const impl Seal for MyU128 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return Self::raw(self);
             }
         }
-        #[inline(always)]
-        pub(self) const fn _core_int_checked(value: i128) -> Option<Self> {
-            return Some(Self(value));
+        const impl Make for MyU128 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
         }
-    }
-    #[allow(clippy::unnecessary_cast)]
-    impl MyU128 {}
-};
+        const impl Rel for MyU128 {}
+        const impl Seal for i128 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Bit for i128 {}
+        const impl Make for i128 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Math for i128 {}
+        const impl Rel for i128 {}
+        const impl Seal for i16 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for i16 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for i32 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for i32 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for i64 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for i64 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for i8 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for i8 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for isize {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for isize {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for u16 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for u16 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for u32 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for u32 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for u64 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for u64 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for u8 {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for u8 {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        const impl Seal for usize {
+            #[inline(always)]
+            fn conv_my_u128(self) -> i128 {
+                return self as i128;
+            }
+        }
+        const impl Make for usize {
+            #[inline(always)]
+            fn make(self) -> MyU128 {
+                let raw = <Self as Seal>::conv_my_u128(self);
+                return MyU128::_or_panic(raw);
+            }
+        }
+        impl AsRef<i128> for MyU128 {
+            #[inline(always)]
+            fn as_ref(&self) -> &i128 {
+                return &self.0;
+            }
+        }
+        impl core::str::FromStr for MyU128 {
+            type Err = ();
+            #[inline(always)]
+            fn from_str(source: &str) -> Result<Self, Self::Err> {
+                let value = match <i128 as core::str::FromStr>::from_str(source)
+                {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return Err(());
+                    }
+                };
+                return Ok(Self(value));
+            }
+        }
+        impl MyU128 {
+            #[doc = r" The number of bits in the wrapped primitive integer."]
+            pub const BITS: u32 = i128::BITS;
+        }
+        impl MyU128 {
+            #[inline(always)]
+            pub const fn count_ones(self) -> u32 {
+                return Self::raw(self).count_ones();
+            }
+            #[inline(always)]
+            pub const fn count_zeros(self) -> u32 {
+                return Self::raw(self).count_zeros();
+            }
+            #[inline(always)]
+            pub const fn leading_zeros(self) -> u32 {
+                return Self::raw(self).leading_zeros();
+            }
+            #[inline(always)]
+            pub const fn trailing_zeros(self) -> u32 {
+                return Self::raw(self).trailing_zeros();
+            }
+            #[inline(always)]
+            pub const fn leading_ones(self) -> u32 {
+                return Self::raw(self).leading_ones();
+            }
+            #[inline(always)]
+            pub const fn trailing_ones(self) -> u32 {
+                return Self::raw(self).trailing_ones();
+            }
+            #[inline(always)]
+            pub const fn highest_one(self) -> Option<u32> {
+                return Self::raw(self).highest_one();
+            }
+            #[inline(always)]
+            pub const fn lowest_one(self) -> Option<u32> {
+                return Self::raw(self).lowest_one();
+            }
+            #[inline(always)]
+            pub const fn ilog(
+                self,
+                base: Self,
+            ) -> u32 {
+                return Self::raw(self).ilog(Self::raw(base));
+            }
+            #[inline(always)]
+            pub const fn ilog2(self) -> u32 {
+                return Self::raw(self).ilog2();
+            }
+            #[inline(always)]
+            pub const fn ilog10(self) -> u32 {
+                return Self::raw(self).ilog10();
+            }
+            #[inline(always)]
+            pub const fn checked_ilog(
+                self,
+                base: Self,
+            ) -> Option<u32> {
+                return Self::raw(self).checked_ilog(Self::raw(base));
+            }
+            #[inline(always)]
+            pub const fn checked_ilog2(self) -> Option<u32> {
+                return Self::raw(self).checked_ilog2();
+            }
+            #[inline(always)]
+            pub const fn checked_ilog10(self) -> Option<u32> {
+                return Self::raw(self).checked_ilog10();
+            }
+            #[inline(always)]
+            pub const fn to_be_bytes(self) -> [u8; size_of::<i128>()] {
+                return Self::raw(self).to_be_bytes();
+            }
+            #[inline(always)]
+            pub const fn to_le_bytes(self) -> [u8; size_of::<i128>()] {
+                return Self::raw(self).to_le_bytes();
+            }
+            #[inline(always)]
+            pub const fn to_ne_bytes(self) -> [u8; size_of::<i128>()] {
+                return Self::raw(self).to_ne_bytes();
+            }
+            #[inline(always)]
+            pub const fn rotate_left(
+                self,
+                n: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).rotate_left(n));
+            }
+            #[inline(always)]
+            pub const fn rotate_right(
+                self,
+                n: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).rotate_right(n));
+            }
+            #[inline(always)]
+            pub const fn swap_bytes(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).swap_bytes());
+            }
+            #[inline(always)]
+            pub const fn reverse_bits(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).reverse_bits());
+            }
+            #[inline(always)]
+            pub const fn isolate_highest_one(self) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).isolate_highest_one(),
+                );
+            }
+            #[inline(always)]
+            pub const fn isolate_lowest_one(self) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).isolate_lowest_one(),
+                );
+            }
+            #[inline(always)]
+            pub const fn to_be(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).to_be());
+            }
+            #[inline(always)]
+            pub const fn to_le(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).to_le());
+            }
+            #[inline(always)]
+            pub const fn from_be(value: Self) -> Self {
+                return Self::_result_or_panic(i128::from_be(Self::raw(value)));
+            }
+            #[inline(always)]
+            pub const fn from_le(value: Self) -> Self {
+                return Self::_result_or_panic(i128::from_le(Self::raw(value)));
+            }
+            #[inline(always)]
+            pub const fn from_ne_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
+                return Self::_result_or_panic(i128::from_ne_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn from_be_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
+                return Self::_result_or_panic(i128::from_be_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn from_le_bytes(bytes: [u8; size_of::<i128>()]) -> Self {
+                return Self::_result_or_panic(i128::from_le_bytes(bytes));
+            }
+            #[inline(always)]
+            pub const fn checked_add(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_add(Self::raw(rhs)) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_sub(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_sub(Self::raw(rhs)) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_neg(self) -> Option<Self> {
+                return match Self::raw(self).checked_neg() {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_mul(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_mul(Self::raw(rhs)) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_div(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_div(Self::raw(rhs)) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_rem(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_rem(Self::raw(rhs)) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_div_euclid(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_div_euclid(Self::raw(rhs))
+                {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_rem_euclid(Self::raw(rhs))
+                {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_shl(
+                self,
+                rhs: u32,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_shl(rhs) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_shr(
+                self,
+                rhs: u32,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_shr(rhs) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_pow(
+                self,
+                exp: u32,
+            ) -> Option<Self> {
+                return match Self::raw(self).checked_pow(exp) {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn midpoint(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).midpoint(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn unbounded_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).unbounded_shl(rhs),
+                );
+            }
+            #[inline(always)]
+            pub const fn unbounded_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).unbounded_shr(rhs),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_pow(exp),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_neg(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).wrapping_neg());
+            }
+            #[inline(always)]
+            pub const fn wrapping_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_rem(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_rem(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_shl(rhs),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_shr(rhs),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).wrapping_pow(exp),
+                );
+            }
+            #[inline(always)]
+            pub const fn pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).pow(exp));
+            }
+            #[inline(always)]
+            pub const fn isqrt(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).isqrt());
+            }
+            #[inline(always)]
+            pub const fn div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_add(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_add(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_sub(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_sub(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_neg(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).strict_neg());
+            }
+            #[inline(always)]
+            pub const fn strict_mul(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_mul(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_div(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_div(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_rem(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_rem(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_div_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_div_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).strict_rem_euclid(Self::raw(rhs)),
+                );
+            }
+            #[inline(always)]
+            pub const fn strict_shl(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).strict_shl(rhs));
+            }
+            #[inline(always)]
+            pub const fn strict_shr(
+                self,
+                rhs: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).strict_shr(rhs));
+            }
+            #[inline(always)]
+            pub const fn strict_pow(
+                self,
+                exp: u32,
+            ) -> Self {
+                return Self::_result_or_panic(Self::raw(self).strict_pow(exp));
+            }
+            #[inline(always)]
+            pub const fn overflowing_add(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_add(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_sub(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_sub(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_neg(self) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_neg();
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_mul(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_mul(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_div(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_div(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_rem(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_rem(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_div_euclid(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_div_euclid(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_rem_euclid(
+                self,
+                rhs: Self,
+            ) -> (Self, bool) {
+                let (value, overflowed) =
+                    Self::raw(self).overflowing_rem_euclid(Self::raw(rhs));
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_shl(
+                self,
+                rhs: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_shl(rhs);
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_shr(
+                self,
+                rhs: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_shr(rhs);
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn overflowing_pow(
+                self,
+                exp: u32,
+            ) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_pow(exp);
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn cast_unsigned(self) -> u128 {
+                return Self::raw(self).cast_unsigned();
+            }
+            #[inline(always)]
+            pub const fn abs(self) -> Self {
+                let it = Self::raw(self).abs();
+                return Self::_result_or_panic(it);
+            }
+            #[inline(always)]
+            pub const fn checked_abs(self) -> Option<Self> {
+                return match Self::raw(self).checked_abs() {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn checked_isqrt(self) -> Option<Self> {
+                return match Self::raw(self).checked_isqrt() {
+                    Some(value) => Self::_make(value),
+                    None => None,
+                };
+            }
+            #[inline(always)]
+            pub const fn strict_abs(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).strict_abs());
+            }
+            #[inline(always)]
+            pub const fn saturating_neg(self) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_neg(),
+                );
+            }
+            #[inline(always)]
+            pub const fn saturating_abs(self) -> Self {
+                return Self::_result_or_panic(
+                    Self::raw(self).saturating_abs(),
+                );
+            }
+            #[inline(always)]
+            pub const fn wrapping_abs(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).wrapping_abs());
+            }
+            #[inline(always)]
+            pub const fn overflowing_abs(self) -> (Self, bool) {
+                let (value, overflowed) = Self::raw(self).overflowing_abs();
+                return (Self::_result_or_panic(value), overflowed);
+            }
+            #[inline(always)]
+            pub const fn unsigned_abs(self) -> u128 {
+                return Self::raw(self).unsigned_abs();
+            }
+            #[inline(always)]
+            pub const fn abs_diff(
+                self,
+                rhs: Self,
+            ) -> u128 {
+                return Self::raw(self).abs_diff(Self::raw(rhs));
+            }
+            #[inline(always)]
+            pub const fn signum(self) -> Self {
+                return Self::_result_or_panic(Self::raw(self).signum());
+            }
+            #[inline(always)]
+            pub const fn is_positive(self) -> bool {
+                return Self::raw(self).is_positive();
+            }
+            #[inline(always)]
+            pub const fn is_negative(self) -> bool {
+                return Self::raw(self).is_negative();
+            }
+        }
+        const impl Into<i128> for MyU128 {
+            #[inline(always)]
+            fn into(self) -> i128 {
+                return Self::into_i128(self);
+            }
+        }
+        const impl TryInto<usize> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<usize, Self::Error> {
+                return Self::try_into_usize(self);
+            }
+        }
+        const impl TryInto<isize> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<isize, Self::Error> {
+                return Self::try_into_isize(self);
+            }
+        }
+        const impl TryInto<u8> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<u8, Self::Error> {
+                return Self::try_into_u8(self);
+            }
+        }
+        const impl TryInto<u16> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<u16, Self::Error> {
+                return Self::try_into_u16(self);
+            }
+        }
+        const impl TryInto<u32> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<u32, Self::Error> {
+                return Self::try_into_u32(self);
+            }
+        }
+        const impl TryInto<u64> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<u64, Self::Error> {
+                return Self::try_into_u64(self);
+            }
+        }
+        const impl TryInto<u128> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<u128, Self::Error> {
+                return Self::try_into_u128(self);
+            }
+        }
+        const impl TryInto<i8> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<i8, Self::Error> {
+                return Self::try_into_i8(self);
+            }
+        }
+        const impl TryInto<i16> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<i16, Self::Error> {
+                return Self::try_into_i16(self);
+            }
+        }
+        const impl TryInto<i32> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<i32, Self::Error> {
+                return Self::try_into_i32(self);
+            }
+        }
+        const impl TryInto<i64> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<i64, Self::Error> {
+                return Self::try_into_i64(self);
+            }
+        }
+        const impl TryInto<f32> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<f32, Self::Error> {
+                return Self::try_into_f32(self);
+            }
+        }
+        const impl TryInto<f64> for MyU128 {
+            type Error = ();
+            #[inline(always)]
+            fn try_into(self) -> Result<f64, Self::Error> {
+                return Self::try_into_f64(self);
+            }
+        }
+        const impl core::ops::Shr<usize> for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn shr(
+                self,
+                rhs: usize,
+            ) -> Self::Output {
+                return self._shr(rhs);
+            }
+        }
+        const impl core::ops::Shl<usize> for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn shl(
+                self,
+                rhs: usize,
+            ) -> Self::Output {
+                return self._shl(rhs);
+            }
+        }
+        const impl core::ops::ShrAssign<usize> for MyU128 {
+            #[inline(always)]
+            fn shr_assign(
+                &mut self,
+                that: usize,
+            ) {
+                *self = self._shr(that);
+            }
+        }
+        const impl core::ops::ShlAssign<usize> for MyU128 {
+            #[inline(always)]
+            fn shl_assign(
+                &mut self,
+                that: usize,
+            ) {
+                *self = self._shl(that);
+            }
+        }
+        const impl core::ops::BitAndAssign for MyU128 {
+            #[inline(always)]
+            fn bitand_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._bitand(rhs.0);
+            }
+        }
+        const impl<T> core::ops::BitAndAssign<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn bitand_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._bitand(it);
+            }
+        }
+        const impl core::ops::AddAssign for MyU128 {
+            #[inline(always)]
+            fn add_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._add(rhs.0);
+            }
+        }
+        const impl<T> core::ops::AddAssign<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn add_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._add(it);
+            }
+        }
+        const impl core::ops::SubAssign for MyU128 {
+            #[inline(always)]
+            fn sub_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._sub(rhs.0);
+            }
+        }
+        const impl<T> core::ops::SubAssign<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn sub_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._sub(it);
+            }
+        }
+        const impl core::ops::MulAssign for MyU128 {
+            #[inline(always)]
+            fn mul_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._mul(rhs.0);
+            }
+        }
+        const impl<T> core::ops::MulAssign<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn mul_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._mul(it);
+            }
+        }
+        const impl core::ops::DivAssign for MyU128 {
+            #[inline(always)]
+            fn div_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._div(rhs.0);
+            }
+        }
+        const impl<T> core::ops::DivAssign<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn div_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._div(it);
+            }
+        }
+        const impl core::ops::RemAssign for MyU128 {
+            #[inline(always)]
+            fn rem_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._rem(rhs.0);
+            }
+        }
+        const impl<T> core::ops::RemAssign<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn rem_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._rem(it);
+            }
+        }
+        const impl core::ops::BitOrAssign for MyU128 {
+            #[inline(always)]
+            fn bitor_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._bitor(rhs.0);
+            }
+        }
+        const impl<T> core::ops::BitOrAssign<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn bitor_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._bitor(it);
+            }
+        }
+        impl core::fmt::Debug for MyU128 {
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                return f.debug_tuple("MyU128").field(&self.0).finish();
+            }
+        }
+        impl core::hash::Hash for MyU128 {
+            #[inline(always)]
+            fn hash<H>(
+                &self,
+                state: &mut H,
+            ) where
+                H: core::hash::Hasher,
+            {
+                return core::hash::Hash::hash(&self.0, state);
+            }
+        }
+        const impl Eq for MyU128 {}
+        const impl Ord for MyU128 {
+            #[inline(always)]
+            fn cmp(
+                &self,
+                that: &Self,
+            ) -> core::cmp::Ordering {
+                return self.partial_cmp(that).unwrap();
+            }
+        }
+        if !(size_of::<MyU128>() == size_of::<i128>()) {
+            core::panic!("invalid integral storage size");
+        };
+        if !(align_of::<MyU128>() == align_of::<i128>()) {
+            core::panic!("invalid integral storage alignment");
+        };
+        const impl core::ops::Add for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn add(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._add(rhs.0);
+            }
+        }
+        const impl<T> core::ops::Add<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn add(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._add(it);
+            }
+        }
+        const impl core::ops::Sub for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn sub(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._sub(rhs.0);
+            }
+        }
+        const impl<T> core::ops::Sub<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn sub(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._sub(it);
+            }
+        }
+        const impl core::ops::Mul for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn mul(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._mul(rhs.0);
+            }
+        }
+        const impl<T> core::ops::Mul<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn mul(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._mul(it);
+            }
+        }
+        const impl core::ops::Div for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn div(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._div(rhs.0);
+            }
+        }
+        const impl<T> core::ops::Div<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn div(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._div(it);
+            }
+        }
+        const impl core::ops::Rem for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn rem(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._rem(rhs.0);
+            }
+        }
+        const impl<T> core::ops::Rem<T> for MyU128
+        where
+            T: Math + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn rem(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._rem(it);
+            }
+        }
+        const impl core::ops::BitAnd for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn bitand(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._bitand(rhs.0);
+            }
+        }
+        const impl<T> core::ops::BitAnd<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn bitand(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._bitand(it);
+            }
+        }
+        const impl core::ops::BitOr for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn bitor(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._bitor(rhs.0);
+            }
+        }
+        const impl<T> core::ops::BitOr<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn bitor(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._bitor(it);
+            }
+        }
+        const impl core::ops::BitXor for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn bitxor(
+                self,
+                rhs: Self,
+            ) -> Self::Output {
+                return self._bitxor(rhs.0);
+            }
+        }
+        const impl core::ops::BitXorAssign for MyU128 {
+            #[inline(always)]
+            fn bitxor_assign(
+                &mut self,
+                rhs: Self,
+            ) {
+                *self = self._bitxor(rhs.0);
+            }
+        }
+        const impl<T> core::ops::BitXor<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            type Output = Self;
+            #[inline(always)]
+            fn bitxor(
+                self,
+                rhs: T,
+            ) -> Self::Output {
+                let it = Seal::conv_my_u128(rhs);
+                return self._bitxor(it);
+            }
+        }
+        const impl<T> core::ops::BitXorAssign<T> for MyU128
+        where
+            T: Bit + [const] Seal + [const] core::marker::Destruct,
+        {
+            #[inline(always)]
+            fn bitxor_assign(
+                &mut self,
+                rhs: T,
+            ) {
+                let it = Seal::conv_my_u128(rhs);
+                *self = self._bitxor(it);
+            }
+        }
+        const impl core::ops::Not for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn not(self) -> Self::Output {
+                return self._not();
+            }
+        }
+        const impl core::ops::Neg for MyU128 {
+            type Output = Self;
+            #[inline(always)]
+            fn neg(self) -> Self::Output {
+                return self._neg();
+            }
+        }
+        impl core::fmt::Binary for MyU128 {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                let raw = Self::raw(*self);
+                return core::fmt::Binary::fmt(&raw, f);
+            }
+        }
+        impl core::fmt::Octal for MyU128 {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                let raw = Self::raw(*self);
+                return core::fmt::Octal::fmt(&raw, f);
+            }
+        }
+        impl core::fmt::LowerHex for MyU128 {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                let raw = Self::raw(*self);
+                return core::fmt::LowerHex::fmt(&raw, f);
+            }
+        }
+        impl core::fmt::UpperHex for MyU128 {
+            #[inline(always)]
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                let raw = Self::raw(*self);
+                return core::fmt::UpperHex::fmt(&raw, f);
+            }
+        }
+        const impl<T> PartialEq<T> for MyU128
+        where
+            T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
+        {
+            #[inline(always)]
+            fn eq(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_u128(*rhs);
+                return lhs == rhs;
+            }
+        }
+        const impl<T> PartialOrd<T> for MyU128
+        where
+            T: Rel + [const] Seal + [const] core::marker::Destruct + Copy,
+        {
+            #[inline(always)]
+            fn partial_cmp(
+                &self,
+                rhs: &T,
+            ) -> Option<core::cmp::Ordering> {
+                let lhs = Self::raw(*self);
+                let rhs = Seal::conv_my_u128(*rhs);
+                return PartialOrd::partial_cmp(&lhs, &rhs);
+            }
+            #[inline(always)]
+            fn lt(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                return Self::raw(*self) < Seal::conv_my_u128(*rhs);
+            }
+            #[inline(always)]
+            fn le(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                return Self::raw(*self) <= Seal::conv_my_u128(*rhs);
+            }
+            #[inline(always)]
+            fn gt(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                return Self::raw(*self) > Seal::conv_my_u128(*rhs);
+            }
+            #[inline(always)]
+            fn ge(
+                &self,
+                rhs: &T,
+            ) -> bool {
+                return Self::raw(*self) >= Seal::conv_my_u128(*rhs);
+            }
+        }
+        impl MyU128 {
+            #[inline(always)]
+            #[allow(private_bounds)]
+            pub const fn of<T>(it: T) -> MyU128
+            where
+                T: [const] Make + [const] core::marker::Destruct,
+            {
+                return <T as Make>::make(it);
+            }
+            #[inline(always)]
+            pub const fn make(it: i128) -> MyU128 {
+                return MyU128::of(it);
+            }
+            #[must_use]
+            #[inline(always)]
+            pub const fn raw(self) -> i128 {
+                return self.0;
+            }
+            #[must_use]
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn into_i128(self) -> i128 {
+                let it = Self::raw(self);
+                return it as i128;
+            }
+            #[inline(always)]
+            pub const fn try_map<F>(
+                self,
+                function: F,
+            ) -> Result<Self, i128>
+            where
+                F: [const] FnOnce(i128) -> i128
+                    + [const] core::marker::Destruct,
+            {
+                let value = function(Self::raw(self));
+                return Ok(Self(value));
+            }
+            #[inline(always)]
+            #[track_caller]
+            pub const fn map<F>(
+                self,
+                function: F,
+            ) -> Self
+            where
+                F: [const] FnOnce(i128) -> i128
+                    + [const] core::marker::Destruct,
+            {
+                return match self.try_map(function) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        core::panic!(
+                            "mapping operation produced an invalid value"
+                        )
+                    }
+                };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_i128(self) -> Result<i128, ()> {
+                return Ok(Self::raw(self) as i128);
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_usize(self) -> Result<usize, ()> {
+                let r = Self::raw(self);
+                let t = r as usize;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_isize(self) -> Result<isize, ()> {
+                let r = Self::raw(self);
+                let t = r as isize;
+                let s = t as i128;
+                return if s == r && true { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_u8(self) -> Result<u8, ()> {
+                let r = Self::raw(self);
+                let t = r as u8;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_u16(self) -> Result<u16, ()> {
+                let r = Self::raw(self);
+                let t = r as u16;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_u32(self) -> Result<u32, ()> {
+                let r = Self::raw(self);
+                let t = r as u32;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_u64(self) -> Result<u64, ()> {
+                let r = Self::raw(self);
+                let t = r as u64;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_u128(self) -> Result<u128, ()> {
+                let r = Self::raw(self);
+                let t = r as u128;
+                let s = t as i128;
+                return if s == r && r >= 0 { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_i8(self) -> Result<i8, ()> {
+                let r = Self::raw(self);
+                let t = r as i8;
+                let s = t as i128;
+                return if s == r && true { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_i16(self) -> Result<i16, ()> {
+                let r = Self::raw(self);
+                let t = r as i16;
+                let s = t as i128;
+                return if s == r && true { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_i32(self) -> Result<i32, ()> {
+                let r = Self::raw(self);
+                let t = r as i32;
+                let s = t as i128;
+                return if s == r && true { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_i64(self) -> Result<i64, ()> {
+                let r = Self::raw(self);
+                let t = r as i64;
+                let s = t as i128;
+                return if s == r && true { Ok(t) } else { Err(()) };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_f32(self) -> Result<f32, ()> {
+                let r = Self::raw(self);
+                let t = r as f32;
+                return if t as i128 == r
+                    && t < 170141183460469231731687303715884105728.0
+                {
+                    Ok(t)
+                }
+                else {
+                    Err(())
+                };
+            }
+            #[inline(always)]
+            #[allow(clippy::unnecessary_cast)]
+            pub const fn try_into_f64(self) -> Result<f64, ()> {
+                let r = Self::raw(self);
+                let t = r as f64;
+                return if t as i128 == r
+                    && t < 170141183460469231731687303715884105728.0
+                {
+                    Ok(t)
+                }
+                else {
+                    Err(())
+                };
+            }
+            #[inline(always)]
+            pub(self) const fn _add(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs + rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _sub(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs - rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _mul(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs * rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _div(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs / rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _rem(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs % rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _bitxor(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs ^ rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _bitand(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs & rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _bitor(
+                &self,
+                rhs: i128,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs | rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _shr(
+                &self,
+                rhs: usize,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs >> rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _shl(
+                &self,
+                rhs: usize,
+            ) -> Self {
+                let lhs = Self::raw(*self);
+                let it = lhs << rhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _not(&self) -> Self {
+                let lhs = Self::raw(*self);
+                let it = !lhs;
+                return Self::_or_panic(it);
+            }
+            #[inline(always)]
+            pub(self) const fn _neg(&self) -> Self {
+                let lhs = Self::raw(*self);
+                let it = -lhs;
+                return Self::_or_panic(it);
+            }
+            #[must_use]
+            #[inline(always)]
+            #[doc(hidden)]
+            pub(self) const fn _eq(
+                self,
+                rhs: i128,
+            ) -> bool {
+                let lhs = Self::raw(self);
+                return lhs == rhs;
+            }
+            #[must_use]
+            #[inline(always)]
+            #[doc(hidden)]
+            pub(self) fn _cmp(
+                self,
+                rhs: i128,
+            ) -> core::cmp::Ordering {
+                let lhs = Self::raw(self);
+                return PartialOrd::partial_cmp(&lhs, &rhs).unwrap();
+            }
+            #[inline(always)]
+            pub const fn try_make(it: i128) -> Result<Self, i128> {
+                return Ok(Self::_or_panic(it));
+            }
+            #[must_use]
+            #[inline(always)]
+            pub(self) const fn _or_panic(it: i128) -> Self {
+                return Self(it);
+            }
+            #[doc(hidden)]
+            pub const __TYPEKIN_WITHIN_V1_RAW: (bool, u32) = (true, i128::BITS);
+            #[doc(hidden)]
+            pub const __TYPEKIN_WITHIN_V1_FORM: Option<(
+                u128,
+                &'static [(u128, bool, u128, bool, u128)],
+            )> = Some((
+                1u128,
+                &[
+                    (
+                        0u128,
+                        true,
+                        170141183460469231731687303715884105728u128,
+                        false,
+                        170141183460469231731687303715884105727u128,
+                    ),
+                ],
+            ));
+            #[doc(hidden)]
+            pub const __TYPEKIN_WITHIN_V1_WHY: &'static str = "";
+            #[doc(hidden)]
+            pub const __TYPEKIN_WITHIN_V1_TABLE: Option<[bool; 256]> = None;
+            #[doc(hidden)]
+            #[inline(always)]
+            pub const fn __typekin_within_v1_raw(self) -> i128 {
+                return self.0;
+            }
+            #[inline(always)]
+            #[track_caller]
+            pub(self) const fn _result_or_panic(value: i128) -> Self {
+                {
+                    return Self(value);
+                }
+            }
+            #[inline(always)]
+            pub(self) const fn _make(value: i128) -> Option<Self> {
+                return Some(Self(value));
+            }
+        }
+        #[allow(clippy::unnecessary_cast)]
+        impl MyU128 {}
+    };
+}
+#[allow(unused_imports)]
+pub use __my_u128::MyU128;
 
 fn main() {
     let lhs = 0b1101i128;

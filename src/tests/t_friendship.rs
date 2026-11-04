@@ -1,76 +1,13 @@
 #[cfg(test)]
 mod tests {
     use crate::constructor::Cfg as MakeCfg;
-    use crate::friendship::cfg::Cfg;
-
-    #[test]
-    fn accepts_friend_path() {
-        let it = "
-            friend = crate::convert(crate::source::Source) -> Inspect,
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_friend_and_rel_and_seal() {
-        let it = "
-            relation = u8,
-            friend = crate::convert(crate::source::Source) -> [Inspect, unsafe],
-            seal = Seal
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_rel_and_value_and_friend() {
-        let it = "
-            relation = u8,
-            value = u16,
-            friend = Foo(crate::source::Source) -> Inspect
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_rel_and_friend_and_conv() {
-        let it = "
-            relation = u8,
-            friend = Foo(crate::source::Source) -> [Inspect, unsafe],
-            conversion = into_value
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
+    use crate::friendship::Cfg;
 
     #[test]
     fn accepts_friend_self() {
         let it = "
             friend = _(Foo) -> Inspect,
             relation = u8
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_friends_empty() {
-        let it = "
-            friend = []
-        ";
-        let this = syn::parse_str::<Cfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_friends_multi() {
-        let it = "
-            friend = [
-                into_make(Source) -> Make,
-                into_bit(Source) -> Bit
-            ]
         ";
         let this = syn::parse_str::<Cfg>(it);
         assert!(this.is_ok(), "{it}");
@@ -221,53 +158,6 @@ mod tests {
     }
 
     #[test]
-    fn accepts_constructor_friend_with_neighboring_attributes() {
-        let it = "
-            friend = crate::source::Source,
-            relationship = Self::new,
-            scope = self
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_constructor_friend_with_maker() {
-        let it = "
-            relationship = Self::new,
-            friend = crate::source::Source,
-            maker = from_source,
-            scope = _
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_constructor_friend_with_custom_relationship() {
-        let it = "
-            relationship = crate::construct,
-            maker = from_source,
-            friend = Source,
-            scope = pub(crate) constructors
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn accepts_multiple_constructor_friends() {
-        let it = "
-            relationship = Self::new,
-            friend = [crate::source::Source, Other],
-            maker = from_source,
-            scope = self
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
     fn constructor_friends_are_ordered_and_deduplicated_by_path() {
         let input = "
             relationship = Self::new,
@@ -291,33 +181,18 @@ mod tests {
     }
 
     #[test]
-    fn accepts_empty_constructor_friends() {
-        let it = "
-            relationship = Self::new,
-            friend = [],
-            maker = from_source,
-            scope = _
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
-    }
-
-    #[test]
-    fn constructor_requires_scope() {
-        let it = "
-            relationship = Self::new,
-            friend = Source
-        ";
+    fn rejects_constructor_without_scope() {
+        let it = "relationship = Self::new, friend = Source";
         let this = syn::parse_str::<MakeCfg>(it);
         assert!(this.is_err(), "{it}");
-
-        let it = "
-            relationship = Self::new,
-            friend = Source,
-            scope = self
-        ";
-        let this = syn::parse_str::<MakeCfg>(it);
-        assert!(this.is_ok(), "{it}");
+        let error = this.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "missing required `scope` argument",
+            "{it}",
+        );
+        let span = error.span().start();
+        assert_eq!((span.line, span.column), (1, 0), "{it}");
     }
 
     #[test]

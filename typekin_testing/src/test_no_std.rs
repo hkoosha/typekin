@@ -1,117 +1,71 @@
+use crate::fx_no_std::*;
 use crate::*;
 
 #[cfg(test)]
 #[cfg(feature = "test_slow_only")]
-mod tests {
+mod core_only {
     use super::*;
 
     #[test]
     fn integral_compiles_for_a_no_std_consumer() {
-        const SRC: &str = r#"
-#![no_std]
-
-const fn is_even(value: u8) -> bool {
-    return value % 2 == 0;
-}
-
-#[typekin::integral(valid = is_even)]
-pub struct Even(u8);
-
-pub fn build_even(value: u8) -> Result<Even, u8> {
-    return Even::try_make(value);
-}
-
-pub fn parse_even(value: &str) -> Result<Even, ()> {
-    return value.parse();
-}
-"#;
-
-        assert_crate_compiles("integral", DEP_NONE, SRC)
+        assert_compiles(&CORE_CHECKED, &INTEGRAL);
     }
 
     #[test]
     fn bitflag_compiles_for_a_no_std_consumer() {
-        const SRC: &str = r#"
-#![no_std]
-#![feature(const_clone)]
-#![feature(const_cmp)]
-#![feature(const_convert)]
-#![feature(const_destruct)]
-#![feature(const_iter)]
-#![feature(const_ops)]
-#![feature(const_trait_impl)]
-#![feature(derive_const)]
-
-#[typekin::bitflag(repr = u8)]
-pub enum Permission {
-    Read = 0b001,
-    Write = 0b010,
-}
-
-pub fn build_permission(value: u8) -> PermissionValue {
-    return Permission::from_bits_truncate(value);
-}
-"#;
-
-        assert_crate_compiles("bitflag", DEP_NONE, SRC)
+        assert_compiles(&CORE_CHECKED, &BITFLAG);
     }
+
+    #[test]
+    fn float_compiles_for_a_no_std_consumer() {
+        assert_compiles(&CORE_CHECKED, &FLOAT);
+    }
+
+    #[test]
+    fn validated_float_compiles_for_a_no_std_consumer() {
+        assert_compiles(&CORE_CHECKED, &VALIDATED_FLOAT);
+    }
+
+    #[test]
+    fn float_point_compiles_for_a_no_std_consumer() {
+        assert_compiles(&CORE_CHECKED, &FLOAT_POINT);
+    }
+
+    #[test]
+    fn nightly_math_float_compiles_for_a_no_std_consumer() {
+        assert_compiles(&CORE_CHECKED, &NIGHTLY_MATH_FLOAT);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_slow_only")]
+mod with_alloc {
+    use super::*;
 
     #[test]
     fn text_compiles_for_a_no_std_alloc_consumer() {
-        const SRC: &str = r#"
-#![no_std]
-
-extern crate alloc;
-
-use alloc::string::String;
-
-fn is_slug(value: &str) -> bool {
-    return !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte == b'-');
-}
-
-#[typekin::text(std = false, valid = is_slug)]
-pub struct Slug(String);
-
-pub fn build_slug(value: &str) -> Result<Slug, ()> {
-    return Slug::try_from_str(value);
-}
-"#;
-
-        assert_crate_compiles("text", DEP_NONE, SRC)
+        assert_compiles(&ALLOC_CHECKED, &TEXT);
     }
+}
+
+#[cfg(test)]
+#[cfg(feature = "test_slow_only")]
+mod with_alloc_and_serde {
+    use super::*;
 
     #[test]
     fn serde_compiles_for_a_no_std_alloc_consumer() {
-        const SRC: &str = r#"
-#![no_std]
-
-extern crate alloc;
-
-use alloc::string::String;
-
-const fn is_even(value: u8) -> bool {
-    return value % 2 == 0;
+        assert_compiles(&SERDE_CHECKED, &SERDE_TYPES);
+    }
 }
 
-#[typekin::integral(valid = is_even, with = serde)]
-pub struct Even(u8);
+#[cfg(test)]
+#[cfg(feature = "test_slow_only")]
+mod without_alloc_and_serde_and_stable {
+    use super::*;
 
-#[typekin::text(std = false, with = serde)]
-pub struct Text(String);
-
-#[typekin::bitflag(
-    repr = u8,
-    with = [serde, serde_with_name],
-)]
-pub enum Permission {
-    Read = 0b001,
-    Write = 0b010,
-}
-"#;
-
-        assert_crate_compiles("serde", DEP_SERDE, SRC);
+    #[test]
+    fn generic_integrals_compile_in_no_std_on_stable() {
+        assert_compiles(&STABLE_CHECKED, &GENERIC);
     }
 }

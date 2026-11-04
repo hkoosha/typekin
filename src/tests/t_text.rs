@@ -4,87 +4,6 @@ mod tests {
     use crate::zz_lib::Konsts;
 
     #[test]
-    fn accepts_friend_with_make_capability() {
-        let input = "
-            friend = crate::convert(crate::source::Source) -> Make,
-            konst = none
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn accepts_marker_tree() {
-        let input = "
-            tree = Direction {
-                In,
-                Out,
-            },
-            konst = none
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-        let config = this.unwrap();
-
-        assert!(config.tree.is_some());
-    }
-
-    #[test]
-    fn accepts_friend_with_make_and_unsafe_capabilities() {
-        let input = "
-            konst = none,
-            friend = crate::convert(crate::source::Source) -> [Make, unsafe],
-            valid = is_slug
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn accepts_friend_with_custom_conversion() {
-        let input = "
-            konst = none,
-            valid = is_slug,
-            friend = Foo(crate::source::Source) -> unsafe
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn accepts_self_friend_with_rel_and_unsafe_capabilities() {
-        let input = "
-            konst = none,
-            friend = Foo(Self) -> [Rel, unsafe],
-            with = [display]
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn accepts_multiple_friends() {
-        let input = "
-            konst = none,
-            friend = [convert(Source) -> [Make, unsafe], Foo(Other) -> unsafe],
-            valid = is_slug
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
-    fn accepts_empty_friends() {
-        let input = "
-            konst = none,
-            friend = [],
-            valid = is_slug
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
-    }
-
-    #[test]
     fn rejects_multiple_single_explicit_friends() {
         let input = "
             friend = convert(Source) -> Make,
@@ -121,15 +40,6 @@ mod tests {
         ";
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_err(), "{input}");
-    }
-
-    #[test]
-    fn accepts_friend_without_capabilities_with_default_konst() {
-        let input = "
-            friend = convert(Source)
-        ";
-        let this = syn::parse_str::<Cfg>(input);
-        assert!(this.is_ok(), "{input}");
     }
 
     #[test]
@@ -180,83 +90,6 @@ mod tests {
     }
 
     #[test]
-    fn accepts_callback_validation_and_trusted_make_friend() {
-        let cfg = syn::parse_str::<Cfg>(
-            "konst = none, valid = [is_slug, is_published], friend = [Source::into_string(Source) -> [Make, unsafe]]",
-        )
-        .expect("text configuration should parse");
-
-        assert_eq!(cfg.konst, crate::zz_lib::Konst::None);
-        assert_eq!(cfg.callbacks.len(), 2);
-        assert!(cfg.flags.display);
-    }
-
-    #[test]
-    fn accepts_literal_membership_validation() {
-        let cfg = syn::parse_str::<Cfg>(
-            r#"konst = none, domain = ["draft", "published"]"#,
-        )
-        .expect("literal membership configuration should parse");
-        assert_eq!(cfg.values.as_ref().unwrap().len(), 2);
-    }
-
-    #[test]
-    fn accepts_serde_and_unit_error_configuration() {
-        let cfg =
-            syn::parse_str::<Cfg>("konst = none, error = (), with = [serde]")
-                .expect("new text options should parse");
-
-        assert!(cfg.flags.serde);
-    }
-
-    #[test]
-    fn accepts_disabling_serde() {
-        let cfg = syn::parse_str::<Cfg>("konst = none, without = [serde]")
-            .expect("serde generation should be independently disabled");
-
-        assert!(!cfg.flags.serde);
-    }
-
-    #[test]
-    fn accepts_one_generation_flag_without_brackets() {
-        let input = "konst = none, with = display";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
-        assert!(config.flags.display);
-
-        let input = "konst = none, without = display";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
-        assert!(!config.flags.display);
-    }
-
-    #[test]
-    fn defaults_layout_and_traits_and_allows_disabling_them() {
-        let defaults = syn::parse_str::<Cfg>("konst = none")
-            .expect("default text configuration should parse");
-        assert!(defaults.flags.clone);
-        assert!(defaults.flags.debug);
-        assert!(defaults.flags.hash);
-        assert!(defaults.flags.repr);
-
-        let enabled = syn::parse_str::<Cfg>(
-            "konst = none, with = [clone, debug, hash, repr]",
-        )
-        .expect("layout and traits should be configurable");
-        assert!(enabled.flags.clone);
-        assert!(enabled.flags.debug);
-        assert!(enabled.flags.hash);
-        assert!(enabled.flags.repr);
-
-        let disabled = syn::parse_str::<Cfg>(
-            "konst = none, without = [clone, debug, hash, repr]",
-        )
-        .expect("layout and traits should be configurable");
-        assert!(!disabled.flags.clone);
-        assert!(!disabled.flags.debug);
-        assert!(!disabled.flags.hash);
-        assert!(!disabled.flags.repr);
-    }
-
-    #[test]
     fn rejects_duplicate_error_configuration() {
         let error =
             syn::parse_str::<Cfg>("konst = none, error = (), error = ()")
@@ -277,45 +110,40 @@ mod tests {
     }
 
     #[test]
-    fn accepts_single_callback() {
-        let cfg = syn::parse_str::<Cfg>("konst = none, valid = is_slug")
-            .expect("a single text callback should parse");
-
-        assert_eq!(cfg.callbacks.len(), 1);
-    }
-
-    #[test]
     fn rejects_duplicate_literal_membership() {
-        let input = r#"domain = ["draft", "draft"]"#;
+        let input = r#"domain = {"draft", "draft"}"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_equivalent_duplicate_literal_membership() {
-        let input = r#"domain = ["é", "\u{e9}"]"#;
+        let input = r#"domain = {"é", "\u{e9}"}"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
-    fn defaults_missing_konst_to_crate_default() {
-        let cfg = syn::parse_str::<Cfg>("valid = is_slug")
-            .expect("konst should default to the crate feature");
+    fn defaults_owned_text_konst_to_nightly_feature() {
+        let input = "valid = is_slug";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
 
-        assert_eq!(cfg.konst, crate::zz_lib::Konst::default());
-        assert!(cfg.konst_for(&[Konsts::TextAccess]));
-        assert_eq!(cfg.konst_for(&[Konsts::Text]), cfg!(feature = "nightly"));
+        assert_eq!(config.konst, crate::zz_lib::Konst::default(), "{input}");
+        assert_eq!(
+            config.konst_for(&[Konsts::Text]),
+            cfg!(feature = "nightly"),
+            "{input}",
+        );
     }
 
     #[test]
-    fn accepts_integral_style_konst_modes() {
-        let stable = syn::parse_str::<Cfg>("konst = stable")
-            .expect("stable konst should parse");
-        assert!(stable.konst_for(&[Konsts::TextAccess]));
-        assert!(!stable.konst_for(&[Konsts::Text]));
+    fn stable_konst_keeps_owned_text_operations_non_const() {
+        let input = "konst = stable";
+        let parsed = syn::parse_str::<Cfg>(input);
+        assert!(parsed.is_ok(), "{input}");
+        let config = parsed.unwrap();
 
-        let nightly = syn::parse_str::<Cfg>("konst = nightly")
-            .expect("nightly konst should parse");
-        assert!(nightly.konst_for(&[Konsts::Text]));
+        assert!(!config.konst_for(&[Konsts::Text]), "{input}");
     }
 
     #[test]
@@ -337,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn specific_const_overrides_take_precedence_over_text_families() {
+    fn specific_const_disables_take_precedence_over_text_families() {
         let input = "
             konst = none,
             with = [konst_text, konst_from],
@@ -404,8 +232,45 @@ mod tests {
     }
 
     #[test]
+    fn function_removal_rejects_with() {
+        let input = "with = fn_len";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`fn_len` only removes the generated `len`; write `without = \
+            fn_len`",
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn removing_an_ungenerated_function_reports_its_flag() {
+        let input = "without = [fn_len, fn_floor]";
+        let source = "struct Name(String);";
+        let config = syn::parse_str::<Cfg>(input);
+        assert!(config.is_ok(), "{input}");
+        let item = syn::parse_str::<syn::ItemStruct>(source);
+        assert!(item.is_ok(), "{source}");
+        let expansion = crate::text::ekran(config.unwrap(), item.unwrap());
+        let error = expansion.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`fn_floor` removes nothing: no generated function `floor`",
+            "{input}",
+        );
+        assert_eq!(
+            error.span().start().column,
+            input.find("fn_floor").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
     fn rejects_callbacks_and_literal_membership() {
-        let input = r#"konst = none, valid = is_slug, domain = ["draft"]"#;
+        let input = r#"konst = none, valid = is_slug, domain = {"draft"}"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
@@ -417,7 +282,7 @@ mod tests {
 
     #[test]
     fn rejects_literal_membership_and_callbacks() {
-        let input = r#"konst = none, domain = ["draft"], valid = is_slug"#;
+        let input = r#"konst = none, domain = {"draft"}, valid = is_slug"#;
         assert!(
             syn::parse_str::<Cfg>(input)
                 .expect_err("validation modes must be exclusive")
@@ -428,20 +293,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unbracketed_literal_membership() {
+    fn rejects_unbraced_literal_membership() {
         let input = r#"domain = "draft""#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_expression_literal_membership() {
-        let input = r#"domain = [concat!("dra", "ft")]"#;
+        let input = r#"domain = {concat!("dra", "ft")}"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
     #[test]
     fn rejects_non_string_literal_membership() {
-        let input = r#"domain = ["draft", 1]"#;
+        let input = r#"domain = {"draft", 1}"#;
         assert!(syn::parse_str::<Cfg>(input).is_err(), "{input}");
     }
 
@@ -533,34 +398,6 @@ mod tests {
             "text Make friend requires `conversion(Type) -> Make`",
             "{input}"
         );
-    }
-
-    #[test]
-    fn accepts_self_rel_friend() {
-        let input = "konst = none, friend = [_(Self) -> Rel]";
-        let config = syn::parse_str::<Cfg>(input).expect(input);
-        let friend = config.friends.iter().next().unwrap();
-
-        assert!(friend.ty.path().is_ident("Self"));
-        assert!(friend.conv.is_none());
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
-    }
-
-    #[test]
-    fn accepts_self_rel_and_unsafe_friend_with_trailing_comma() {
-        let input = "
-            konst = none,
-            friend = [into_string(Self,) -> [Rel, unsafe]]
-        ";
-        let parsed = syn::parse_str::<Cfg>(input);
-        assert!(parsed.is_ok(), "{input}");
-        let config = parsed.unwrap();
-        let friend = config.friends.iter().next().unwrap();
-
-        assert!(friend.ty.path().is_ident("Self"));
-        assert!(friend.conv.as_ref().unwrap().is_ident("into_string"));
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Rel)));
-        assert!(friend.capabilities.contains(&syn::parse_quote!(Make)));
     }
 
     #[test]

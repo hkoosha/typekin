@@ -12,23 +12,26 @@ conversion mechanism. If conversion failure is expected, Rust's `TryFrom` or
 `TryInto` is likely better suited.
 
 The generated code adds no runtime dependencies. Optimized assembly comparisons
-for covered integral operations verify that wrapper code matches primitive
-equivalents after inlining. The annotated types are not hidden and remain in
-scope, so additional inherent implementations and derive attributes remain
-available. Currently, Typekin provides:
+for covered integral and float operations verify that wrapper code matches
+primitive equivalents after inlining. The annotated type is re-exported where it
+is declared, so additional inherent implementations and derives remain available
+(see [Hiding](#hiding-hide_in)). Currently, Typekin provides:
 
 - friendship protocols for capability-gated construction and operations;
 - integer newtypes with validation and generated conversions, mathematical
   operations, and bitwise operations;
+- `f32`/`f64` newtypes with the same configuration, NaN-aware validation, and
+  `Eq`/`Ord`/`Hash` when validation rules NaN out;
 - enum-backed bitflags modeled after the
   [`bitflags`](https://crates.io/crates/bitflags) crate;
 - validated `String` newtypes over `std` or `alloc`, which allocate only when
   their underlying `String` operation does;
 - configurable const support. By default, all stable const features are enabled.
   Additional constness for math operations requires `konst = nightly`;
-- allocation-free generated integral and bitflag code: it requires neither `std`
-  nor `alloc` and does not allocate. Allocation in caller-provided callbacks,
-  conversions, or Serde backends is outside Typekin's generated code;
+- allocation-free generated integral, float, and bitflag code: it requires
+  neither `std` nor `alloc` (except float `math = std`) and does not allocate.
+  Allocation in caller-provided callbacks, conversions, or Serde backends is
+  outside Typekin's generated code;
 - individual feature flags for disabling generation of specific features.
 
 Working examples are available in the repository's [examples](./examples)
@@ -41,9 +44,16 @@ The supported public attribute macros are:
 
 - `#[typekin::integral]`: over a one-field tuple struct whose field is a
   primitive integer. Generic declarations require a private value field.
+- `#[typekin::int]`, `#[typekin::sequential]`, `#[typekin::wrapping]`,
+  `#[typekin::circular]`, and `#[typekin::delta]`: `integral` with a fixed
+  profile.
+- `#[typekin::float]`: over a one-field tuple struct whose field is `f32` or
+  `f64`. Generic declarations require a private value field.
+- `#[typekin::point]`: the fixed `point` profile over either an integer or a
+  float field.
 - `#[typekin::bitflag]`: over a non-generic unit enum with an integral `repr`.
-- `#[typekin::text]` over non-generic one-field tuple struct whose field is an
-  unqualified `String`.
+- `#[typekin::text]`: over a non-generic one-field tuple struct whose field is
+  an unqualified `String`.
 - `#[typekin::tree]`: over an empty, non-generic marker trait; it emits branch
   traits and zero-sized marker leaves.
 - `#[typekin::friends]`: over concrete, non-generic structs, enums, or unions.
@@ -77,7 +87,7 @@ to each other and how they interact. For example, if `PageId(u8)`,
 // The friend syntax is: CONVERSION_FN(FRIEND_TYPE) -> [CAPABILITY, ...].
 // With no explicit capability, the default is assumed.
 #[typekin::integral(friend = [
-    id_to_header(PageId) -> [Math, Rel], 
+    id_to_header(PageId) -> [Math, Rel],
     state_to_header(PageState),
     PageData::to_header(PageData),
 ])]
@@ -127,13 +137,12 @@ and `Target::of` passes the resulting relation to `Target::of_parts`. The
 `friend` argument accepts one conversion declaration or a bracketed list:
 
 ```rust
-
 #[typekin::friends(
     // The two types talk to each other over `u8`-typed values.
     relation = u8,
-    // `Source` is a friend of target`, it can participate in `Make` operations
-    // That is, its value can be used to construct new Target instances.
-    // The conversion happens by the function/method Source::into_relation
+    // `Source` is a friend of `Target`; it can participate in `Make`
+    // operations. That is, its value can be used to construct new `Target`
+    // instances. The conversion happens through `Source::into_relation`.
     friend = Source::into_relation(Source) -> Make,
 )]
 struct Target(u8);
@@ -174,30 +183,30 @@ value. To validate only a final result, extract the raw value, do the primitive
 operations (using checked arithmetic when overflow must be handled), and
 reconstruct with `try_make`.
 
-The validations can still incur a runtime cost, hence the validation function
-can be disabled in certain profiles such as release; just as how rust disables
-overflow checks at runtime:
+Validation has a runtime cost on every checked construction and generated
+operation. When the invariant is a development-time diagnostic rather than a
+release guarantee, the validator can compile to a no-op outside debug builds,
+just as Rust disables overflow checks in release:
 
 ```rust
 #[inline(always)]
 const fn is_div_by_3(raw: usize) -> bool {
-    // In debug profile, raw is always validated before creating the type `Foo`:
+    // In debug builds, every checked value must be divisible by 3:
     #[cfg(debug_assertions)] return raw % 3 == 0;
 
-    // Inlines to NO-OP and vanishes in release:
+    // Inlines to a no-op and vanishes in release:
     #[cfg(not(debug_assertions))] return true;
 }
 
-#[derive(Copy, Clone)]
 #[typekin::integral(valid = is_div_by_3)]
 struct Foo(usize);
 
 fn main() {
-    let lhs = Foo::try_make(5).unwrap();
+    let lhs = Foo::try_make(6).unwrap();
     let rhs = Foo::try_make(3).unwrap();
 
-    // Panics: 5 - 3 = 2, which fails `is_div_by_3`:
-    let _: Foo = lhs - rhs;
+    // Panics in debug builds: 6 / 3 = 2, which fails `is_div_by_3`:
+    let _: Foo = lhs / rhs;
 }
 ```
 
@@ -207,37 +216,57 @@ once and intermediate primitive values are not validated. Primitive overflow and
 closure panics retain their normal Rust behavior. Use `without = [map]` to omit
 both methods.
 
-Validation has a runtime cost on every checked construction and generated
-operation. When the invariant is a development-time diagnostic rather than a
-release guarantee, a validator can be enabled only by an opt-in Cargo feature:
+Operations that cannot leave the domain skip the check. For an integral `domain`
+made only of ranges and listed values (no `!{…}` holes, `mul`, functions, or
+`valid` callbacks), typekin decides at expansion, per operation and
+right-hand-side type and at every pointer width, whether every result is valid.
+Proven operations compile to the bare primitive operation and document "Cannot
+fail validation"; the rest keep their check. The `proven` flag runs this
+analysis: it is on by default for `u8` and `i8`, and wider integers opt in with
+`with = [proven]` (`without = [proven]` turns it off for 8-bit types). `prove`
+makes this a contract, implies `proven`, and fails expansion with a
+counterexample:
 
-## Constness Status
+```rust
+#[typekin::integral(domain = ..=100, prove = [math_div, math_rem, midpoint])]
+pub struct Percent(u8);
 
-`integral`, `bitflag`, and `text` default to `konst = stable`. Set
-`konst = none` to disable optional const flags, or `konst = nightly` to enable
-const trait implementations and nightly-only integer operations. For integral
-and bitflag, `stable` enables stable validation and value operations. For text,
-it enables const read-only accessors; `nightly` additionally enables supported
-owned construction and conversion.
+#[typekin::integral(with = [proven], domain = 1..=1023 | 49_152..=65_535)]
+pub struct Port(u16);
+```
+
+```text
+// with `math_add` added to `prove`:
+error: `Percent + Percent` is not closed: 1 + 100 = 101 is outside `..=100`
+```
+
+`Port | Port` is proven here, but `Port | u16` is not, so it keeps its check.
+Without `with = [proven]`, both validate. The runnable
+[proofs example](examples/my_proven.rs) uses both types.
+
+## Friendship
 
 ### Friendship is consuming
 
 Friend capabilities gate construction and operations. Integral automatically
 includes itself and its backing integer for operations, and grants raw/widening
 construction when unvalidated; bitflag registers its enum/value pair. Additional
-friends are declared explicitly. Conversions consume their inputs. Integral and
-text equality and ordering remain same-type operations.
+friends are declared explicitly. Conversions consume their inputs. Text equality
+and ordering remain same-type operations; integral comparisons against another
+type require a `Rel` friend.
 
-### Trusted friend construction
+### Blind-trust friend construction
 
 Friends without `unsafe` are untrusted. Integral and text `of` validate their
 converted values and panic if invalid. `unsafe` implies `Make` and skips only
-that friend-construction validation: the friend author must prove the converted
-value is already valid.
+that friend-construction validation, through the generated `_blind_trust`
+constructor: the friend author must prove the converted value is already valid.
+`with = with_blind_trust` emits `_blind_trust` without an `unsafe` friend, for
+code in the defining module that has already established validity.
 
-`unsafe` does not imply `Math`, `Bit`, or `Rel`. Checked constructors and
+`unsafe` does not imply `Math`, `Bit`, or `Rel`. Validating constructors and
 math/bitwise operation results still validate, including operations with a
-trusted friend as the right-hand operand. Text `unsafe` friends require an
+blind-trust friend as the right-hand operand. Text `unsafe` friends require an
 explicit conversion returning `String`, just like explicit `Make` friends.
 
 Standalone `friends` generates `Self::of` for the relationship and every
@@ -245,6 +274,74 @@ declared friend; targets provide `fn of_parts(relation) -> Self`, and `scope`
 controls where the generated protocol is placed. It has no generated validator
 to bypass: the configured `of_parts` function always runs, including its own
 checks. Relations and friend inputs can both be non-`Copy`.
+
+### Proven friendship (`Within`)
+
+`_(Source) -> Within` implies `Make` and builds the target without validation,
+because rustc proves at compile time that every value of the source lies in the
+target's domain. `of` compiles to a plain cast, and a failed proof is a compile
+error naming the least counterexample:
+
+```rust
+#[typekin::integral(domain = ..=100)]
+pub struct Percent(u8);
+
+#[typekin::integral(
+    domain = ..=255,
+    friend = [_(Percent) -> Within, _(u8) -> Within],
+)]
+pub struct Byte(u16);
+
+// `_(Byte) -> Within` on `domain = 1..` fails with:
+// `Byte` is not within `Positive`: 0 is outside the domain of `Positive`
+```
+
+Sources are integral wrappers, bitflag value types, or primitive integers.
+Wrappers publish hidden constants for the proof unless
+`without = within_source`. `Within` converts through the raw value, so it takes
+no explicit conversion and cannot be combined with `unsafe`. `valid` callbacks
+are opaque to the proof except for 8-bit sources, whose validation table rustc
+checks against the target's own validation. Generic targets prove where they are
+instantiated, so `cargo build`, not `cargo check`, reports their failures.
+
+## Hiding (`hide_in`)
+
+By default, `integral` (and its profile entry points), `float`, `text`, and
+`bitflag` place the annotated type and everything generated for it in a private
+module and re-export the type where the macro was written. The tuple constructor
+and a private value field are then unreachable even from the defining module, so
+the only ways in are the generated, validating constructors.
+
+```rust
+#[typekin::integral(domain = 1..=1023)]
+pub struct Port(u16);
+// expands roughly to:
+//   mod __port { use super::*; pub struct Port(u16); /* impls */ }
+//   pub use __port::Port;
+
+fn main() {
+    let port = Port::try_make(443).unwrap();
+    assert_eq!(port.raw(), 443);
+    // `Port(5)` and `port.0` do not compile, even in this module.
+}
+```
+
+- The module is `__` plus the snake-cased type name (`PageHeader` →
+  `__page_header`); `hide_in = name` picks another. `hide_in = none` keeps the
+  type where it is, exactly as without the option.
+- The module starts with `use super::*`, so callbacks, friend types, and private
+  helpers of the defining module resolve as usual. `self::` and `super::` paths
+  in the configuration and item are adjusted for the extra level; paths inside
+  string literals are not, so a non-doc attribute string starting with `super::`
+  is rejected.
+- `get_raw` and a custom `_or_panic` constructor need direct field access and
+  are rejected while hiding is on.
+- A declaration inside a function body cannot see items declared in that
+  function from the module; move them to module level or use `hide_in = none`.
+- Place additional `derive` attributes below the Typekin attribute. A derive
+  written above it cannot reach the private field.
+
+## Integral - `#[typekin::integral]`
 
 ### Generic integral identities
 
@@ -284,8 +381,8 @@ selection still affects only field zero, and `raw()` returns the primitive even
 with `NonZero` or `Wrapping` storage. Friendship protocols and operator facets
 retain all generic arguments, so a friend of one instantiation is not implicitly
 a friend of another. Non-generic declarations acquire no marker fields. This
-generic support is specific to `integral`, not `text`, standalone `friends`, or
-`bitflag`.
+generic support is specific to `integral` and `float`, not `text`, standalone
+`friends`, or `bitflag`.
 
 ### Validation
 
@@ -315,20 +412,53 @@ An unvalidated integral has raw `make`. Configuring `domain` or `valid`
 suppresses that constructor and exposes `try_make(raw) -> Result<Self, Raw>`
 instead.
 
-`domain` accepts one range or a bracketed, comma-separated list:
-`domain = [2..=4, 8..10]`. Bounds must be integer constants (including primitive
-`MIN`/`MAX` constants), not arbitrary expressions. `domain` and `valid`
-conditions are ANDed; generated construction and enabled mathematical or bitwise
-operations reject values that fail them.
+`domain` is the set of accepted raw values, written as a set expression. Its
+parts are ranges (`2..=4`, `87..`, `..10`), listed values (`{5}`, `{1, 3, 7}`),
+multiples (`mul(3)`), predicates (`is_power_of_two`, `is_positive`,
+`is_negative`), and the values for which a pure integer function lies in a set
+(`abs in ..=1000`, `count_ones in {1}`, `rem_euclid(16) in {3}`) or outside it
+(`abs !in ..=1000`). Combine them with `!` (complement), `&` (intersection), `|`
+(union), and parentheses. One precedence rule applies: `&` binds tighter than
+`|`, as in Rust, so `..5 | 10.. & ..20` is `..5 | (10.. & ..20)`. Wherever else
+two readings are possible, the domain is rejected and asks for parentheses: an
+`in` set is never followed by `|` or `&` (`abs in (..5 | 10..)` or
+`(abs in ..5) | 10..`, not `abs in ..5 | 10..`). `!` takes the set right after
+it, so `!1..5` needs no parentheses. A function's set is excluded with `!in`;
+a leading `!`, as in `!abs in ..3`, is rejected.
 
-When the effective domain excludes zero, the generated private field uses the
-matching `core::num::NonZero*` type. `with = [non_zero]` adds a wrapper-wide
-nonzero constraint and selects that storage even when no `domain` is declared.
+```rust
+// In 1..12 or 87.., but not 10, and not a multiple of 3:
+#[typekin::integral(domain = (1..12 | 87..) & !{10} & !mul(3))]
+struct Code(u32);
+
+fn main() {
+    assert!(Code::try_make(7).is_ok());
+    assert!(Code::try_make(9).is_err());
+    // Zero is outside the domain, so `Code` uses `NonZeroU32` storage:
+    assert_eq!(size_of::<Option<Code>>(), size_of::<Code>());
+}
+```
+
+Constants are integer literals (an optional suffix must match the operand type)
+or the operand type's `MIN`/`MAX`, optionally negated; arithmetic, parenthesized
+constants, other paths, and calls are rejected, so `1..10 - 2` is an error, not
+`1..8`. A single value is a set only in braces: `{5}`. A function's result type
+types its constants: `abs` on `i32` yields `u32`. Divisors must be at least 2.
+Constants outside the type fold away per pointer width, so `-5..10` on `u8`
+checks only `< 10`. Typekin merges and sorts overlapping or adjacent ranges and
+drops redundant exclusions (`!{c}`), never adding a comparison, and rejects a
+domain that admits every value or none. The domain is checked before `valid`
+callbacks; both must accept the value. Generated construction and enabled
+mathematical or bitwise operations reject values that fail them.
+
+When the domain excludes zero, the generated private field uses the matching
+`core::num::NonZero*` type. `with = [non_zero]` adds a wrapper-wide nonzero
+constraint and selects that storage even when no `domain` is declared.
 `without = [non_zero]` opts out of `NonZero*` storage only: it leaves the
 declared domain and its validation unchanged.
 
 ```rust
-#[typekin::integral(domain = [1..=1023, 49_152..=65_535])]
+#[typekin::integral(domain = 1..=1023 | 49_152..=65_535)]
 struct Port(u16);
 
 fn main() {
@@ -357,65 +487,44 @@ fn main() {
 }
 ```
 
-`error = ()` is accepted by `integral`, `text`, and a bitflag's nested
+`error = ()` is accepted by `integral`, `float`, `text`, and a bitflag's nested
 `integral` configuration. Unit is currently the only supported error type; the
 option reserves the configuration surface without changing existing constructor
 error values.
 
-## Text - `#[typekin::text]`
+### Compile-time literals
 
-`text` creates a validated `String` newtype. By default (`std = true`),
-generated paths use `::std::{string::String, vec::Vec}`. Set `std = false` to
-use the corresponding `::alloc` paths. Text needs the allocator crate in scope
-when not using std. Unlike other types, `Display` is generated by default for
-`text`; use `without = [display]` to opt out.
+Every validated `integral`, `float`, and bitflag value type with a const
+`try_make` gets a literal macro named after its snake-cased type (`Port` →
+`port!`, `PermValue` → `perm_value!`). It builds the wrapper from a constant; an
+invalid constant fails the build, including under `cargo check`, and a valid one
+leaves no panic path.
 
 ```rust
-extern crate alloc;
+#[typekin::integral(domain = 1..=1023 | 49_152..=65_535)]
+pub struct Port(u16);
 
-use alloc::string::String;
-
-#[typekin::text(
-    std = false,
-    domain = ["draft", "news", "medical-news"],
-    // `valid = some_fn` is the alternative to literal membership.
-)]
-struct Tag(String);
+const HTTPS: Port = port!(443);
 
 fn main() {
-    let draft = Tag::try_from_str("draft").unwrap();
-    let news = draft
-        .map(|it| it.replace_range(.., "news"))
-        .unwrap();
-    let medical_news = news
-        .clone()
-        .map(|it| it.insert_str(0, "medical-"))
-        .unwrap();
-    assert_eq!(news.as_str(), "news");
-    assert_eq!(medical_news.as_str(), "medical-news");
-
-    let draft_news = news
-        .map(|it| it.insert_str(0, "draft-"));
-    assert!(draft_news.is_err()); // There is no "draft-news" in allow-list.
+    let ssh = port!(22);
+    assert_eq!((HTTPS.raw(), ssh.raw()), (443, 22));
 }
 ```
 
-### Serde
+```text
+error[E0080]: evaluation panicked: 0 is outside the domain of Port
+```
 
-Use `with = serde` on `integral`, `text`, or `bitflag` to generate `Serialize`
-and `Deserialize`. Deserialization applies every configured validator. Typekin
-has no Serde Cargo feature and does not provide Serde as a normal dependency:
-the consuming crate must add `serde` directly and apply any desired `cfg` gating
-to the macro invocation.
-
-Integral wrappers serialize as their raw integer, while text wrappers serialize
-as strings. Do not also derive the same Serde traits on a wrapper using this
-option.
-
-### Configuration
-
-Generation of individual features can be disabled (check integral's
-[cfg](src/integral.rs) and bitflag's [cfg](src/bitflag.rs))
+- `port!(EXPR)` checks `EXPR` in a block-level `const` item. `port!(const EXPR)`
+  uses an inline `const` block, which generic code needs: `packet!(const 1)`
+  infers `Packet<D>`'s arguments, `packet!([Out] 7)` names them. `cargo check`
+  does not report an invalid inline form in a fn body; `cargo build` does.
+- The expansion names the type as written, so import the type beside the macro,
+  or set `lit_path = crate::net::Port` to make the macro self-contained.
+- `lit_name = name` renames the macro; a type whose macro name would be a
+  keyword or shadow a prelude macro (`Ref`, `Line`) must set it.
+  `without = lit_macro` omits the macro.
 
 ### Integral production and profiles
 
@@ -423,11 +532,25 @@ Generation of individual features can be disabled (check integral's
 non-assignment operators:
 
 ```rust
+#[typekin::delta(konst = none)]
+struct Offset(i64);
+
 #[typekin::integral(
     konst = none,
     produce = Point::into_offset(_) -> Offset,
 )]
 struct Point(u32);
+
+impl Point {
+    fn into_offset(self) -> Offset {
+        return Offset::make(self.raw().into());
+    }
+}
+
+fn main() {
+    let difference: Offset = Point::make(7) - Point::make(3);
+    assert_eq!(difference.raw(), 4);
+}
 ```
 
 The callback receives the validated `Point` result exactly once. Its target need
@@ -491,9 +614,10 @@ with `wrapping` uses `Wrapping<NonZeroP>` while `raw()` and all public
 conversion, parsing, and serialization APIs continue to use `P`.
 
 Physical storage rewriting requires a private tuple field. A configured
-`get_raw` accessor must still return `P`. Trusted friends may bypass semantic
-validation but cannot construct zero in `NonZero*` storage. Custom unchecked
-constructors are therefore unavailable when nonzero storage is selected.
+`get_raw` accessor must still return `P`. Blind-trust friends may bypass
+semantic validation but cannot construct zero in `NonZero*` storage. A custom
+`_or_panic` constructor (`without = fn_or_panic`) is therefore unavailable when
+nonzero storage is selected.
 
 `profile` accepts one profile or an ordered list. Resolution starts from the
 default integral profile, then applies each profile's defaults and body in list
@@ -558,17 +682,76 @@ fn main() {
 }
 ```
 
+`precedes` compares the backing bit patterns around the wrapping circle.
+Equality and values exactly half the numeric space apart do not precede each
+other. Use `raw()` for deliberate linear bit-pattern ordering. Matching `In`
+operations work independently; mixing `SeqPoint<Out>` with `SeqOffset<In>` or
+`SeqPoint<In>` does not compile. `Self`-qualified callbacks refer to the LHS
+wrapper even when dispatched through an RHS implementation.
+
 Omitted node visibility inherits its parent; a top-level node inherits the
 seal's visibility. Add a visibility only where it differs, such as
 `pub(crate) In`.
 
+The runnable [TCP sequence example](examples/my_tcp.rs) models directional
+sequence points and offsets, including typed `SND.NXT`, `RCV.NXT`, and `SND.UNA`
+state. Run `cargo +stable run --example my_tcp`. It demonstrates sequence
+arithmetic and stream separation, not a TCP transport.
+
+`precedes` is only valid inside `circular`; it defaults to `true`. `delta`
+always omits it, while `int`, `sequential`, and `wrapping` reject it. Circular
+and delta profiles also reject explicit `ord` or `partial_ord`. Profiles do not
+apply to generated bitflag value types; nested bitflag integral configuration
+supports only the default profile and no `produce`. Bitflag domains must include
+zero, and nested bitflag configuration cannot enable `non_zero`.
+
+### Combined configuration
+
+```rust
+#![feature(const_cmp)]
+#![feature(const_trait_impl)]
+#![feature(const_ops)]
+#![feature(const_convert)]
+#![feature(const_clone)]
+#![feature(const_destruct)]
+#![feature(derive_const)]
+
+struct Foo(u32);
+impl Foo { const fn to_u32(self) -> u32 { self.0 } }
+const fn is_valid(value: u32) -> bool { value != 0 }
+
+#[typekin::integral(
+  konst = nightly,         // Enables all const flags.
+  friend = [
+    self(u16) -> Bit,      // Only bitwise operations, using `Into<u32>`
+    Foo::to_u32(Foo),      // Omitted capabilities default to Math
+  ],
+  without = [fn_conv_raw], // Do not generate the existing accessor below
+  get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
+  hide_in = none,          // `unwrap` reads the field, so the type stays unhidden
+  valid = is_valid,        // Reject invalid raw values in checked construction
+)]
+struct Example(u32);
+
+impl Example {
+    const fn unwrap(self) -> u32 { self.0 }
+}
+```
+
+Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
+and `Math` enables construction, arithmetic, and bitwise operations. `Rel`
+enables `==`, `!=`, `<`, `<=`, `>`, and `>=` against `Copy` friends. `Within`
+grants `Make` without validation once proven (see "Proven friendship"). Integral
+friends with no `->` capability clause default to `Math`; write `-> []` to grant
+no capabilities.
+
 ### Embedded marker trees
 
-`integral`, `bitflag`, and `text` accept `tree = NODE` for one root node or
-`tree = [NODE, ...]` for several. `NODE` uses `tree`'s node grammar. An embedded
-tree creates a private `MarkerTreeRoot` seal in a hidden generated module and
-re-exports its nodes beside the annotated type, so the nodes can be used in the
-rest of the enclosing module while remaining sealed.
+`integral`, `float`, `bitflag`, and `text` accept `tree = NODE` for one root
+node or `tree = [NODE, ...]` for several. `NODE` uses `tree`'s node grammar. An
+embedded tree creates a private `MarkerTreeRoot` seal in a hidden generated
+module and re-exports its nodes beside the annotated type, so the nodes can be
+used in the rest of the enclosing module while remaining sealed.
 
 Omitted root-node visibility inherits the annotated type's visibility; omitted
 descendants inherit their parent. Explicit visibility overrides that rule.
@@ -583,52 +766,109 @@ descendants inherit their parent. Explicit visibility overrides that rule.
 pub struct PacketNumber<D: Direction>(u32);
 ```
 
-`precedes` compares the backing bit patterns around the wrapping circle.
-Equality and values exactly half the numeric space apart do not precede each
-other. Use `raw()` for deliberate linear bit-pattern ordering. Matching `In`
-operations work independently; mixing `SeqPoint<Out>` with `SeqOffset<In>` or
-`SeqPoint<In>` does not compile. `Self`-qualified callbacks refer to the LHS
-wrapper even when dispatched through an RHS implementation.
+## Floats - `#[typekin::float]`
 
-The runnable [TCP sequence example](examples/my_tcp.rs) reproduces the
-directional point/offset model from `arena/TEXT.md`, including typed `SND.NXT`,
-`RCV.NXT`, and `SND.UNA` state. Run `cargo +stable run --example my_tcp`. It
-demonstrates sequence arithmetic and stream separation, not a TCP transport.
-
-`precedes` is only valid inside `circular`; it defaults to `true`. `delta`
-always omits it, while `int`, `sequential`, and `wrapping` reject it. Circular
-and delta profiles also reject explicit `ord` or `partial_ord`. Profiles do not
-apply to generated bitflag value types; nested bitflag integral configuration
-supports only the default profile and no `produce`. Bitflag domains must include
-zero, and nested bitflag configuration cannot enable `non_zero`.
+`float` takes the integral configuration (`konst`, `valid`, `domain`, `error`,
+`friend`, `with`, `without`, `get_raw`, `produce`, `facet`, `tree`, `hide_in`,
+and the `int` or `point` profile), adds `math`, and applies float semantics:
 
 ```rust
-struct Foo(u32);
-impl Foo { fn to_u32(self) -> u32 { self.0 } }
-const fn is_valid(value: u32) -> bool { value != 0 }
+#[typekin::float(konst = none)]
+pub struct Meters(f64);
 
-#[typekin::integral(
-  konst = nightly,         // Enables all const flags.
-  friend = [
-    self(u16) -> Bit,      // Only bitwise operations, using `Into<u32>`
-    Foo::to_u32(Foo),      // Omitted capabilities default to Math
-  ],
-  without = [fn_conv_raw], // Do not generate the existing accessor below
-  get_raw = Self::unwrap,  // Use an existing accessor instead of generated `raw()`
-  valid = is_valid,        // Reject invalid raw values in checked construction
-)]
-struct Example(u32);
+fn main() {
+    let width = Meters::make(2.5);
+    assert_eq!((-width * 2.0).raw(), -5.0);
 
-impl Example {
-    const fn unwrap(self) -> u32 { self.0 }
+    // Checked conversions reject rounding, NaN, and out-of-range values.
+    assert_eq!(Meters::make(4.0).try_into_u8(), Ok(4));
+    assert_eq!(Meters::make(4.5).try_into_u8(), Err(()));
+    assert_eq!(Meters::make(f64::NAN).try_into_i64(), Err(()));
+
+    let total: Meters = [width, width].iter().sum();
+    assert_eq!(format!("{total:e}"), "5e0");
 }
 ```
 
-Capabilities are explicit: `Make` gates `of`, `Bit` gates bitwise operations,
-and `Math` enables construction, arithmetic, and bitwise operations. `Rel`
-enables `==`, `!=`, `<`, `<=`, `>`, and `>=` against `Copy` friends. Integral
-friends with no `->` capability clause default to `Math`; write `-> []` to grant
-no capabilities.
+Ranges, listed values, and multiples in a float `domain` reject NaN; their
+complements admit it (`!{0.5}`). There is no `>`: `0.0.. & !{0.0}` accepts the
+positive values and compiles to `> 0.0`. A domain that rejects NaN makes the
+type totally ordered: with a private value field it gets `Eq`, `Ord`, and `Hash`
+(`-0.0 == 0.0`, and both hash alike).
+
+```rust
+use std::collections::BTreeSet;
+
+#[typekin::float(domain = 0.0..=1.0)]
+pub struct Unit(f64);
+
+fn main() {
+    assert!(Unit::try_make(f64::NAN).is_err());
+
+    let half = Unit::try_make(0.5).unwrap();
+    let set = [half, half].into_iter().collect::<BTreeSet<_>>();
+    assert_eq!(set.len(), 1);
+}
+```
+
+The catches:
+
+- A type that can hold NaN (`domain = !{0.5}`, callbacks alone, no domain) has
+  no `Eq`, `Ord`, or `Hash`; requesting them is an error, as is requesting them
+  with a public value field.
+- `Sum` and `Product` fold raw values like `f64`'s own implementations and
+  validate once, at the end. An empty sum is `-0.0`.
+- There are no bitwise operations, `non_zero` storage, `Step`, or circular,
+  delta, sequential, and wrapping profiles. `Math` friends grant arithmetic and
+  `Make` only. Primitive `Make` friends convert with `as` and may round; `Rel`
+  and `Math` friends must convert exactly.
+- `Neg` and `abs` skip validation when the domain makes the result valid by
+  construction (`-1.0..=1.0` for `Neg`; also `0.0..` for `abs`). Signed integers
+  get `Neg` the same way; unsigned integers have none.
+- Integers convert to floats: `into_f64` where every value is exact,
+  `try_into_f32` (and the like) otherwise, which rejects rounding.
+- `floor`, `sqrt`, and friends are not in stable `core`. `math = std` enables
+  them in domains and as methods through `std`; `math = nightly` uses
+  `core::f64::math` (no_std, `#![feature(core_float_math)]`). Divisors such as
+  `mul(0.25)` must be exactly representable; `mul(0.1)` is an error.
+
+## Text - `#[typekin::text]`
+
+`text` creates a validated `String` newtype. By default (`std = true`),
+generated paths use `::std::{string::String, vec::Vec}`. Set `std = false` to
+use the corresponding `::alloc` paths. Text needs the allocator crate in scope
+when not using std. Unlike other types, `Display` is generated by default for
+`text`; use `without = [display]` to opt out.
+
+```rust
+extern crate alloc;
+
+use alloc::string::String;
+
+#[typekin::text(
+    std = false,
+    domain = {"draft", "news", "medical-news"},
+    // `valid = some_fn` is the alternative to literal membership.
+)]
+struct Tag(String);
+
+fn main() {
+    let draft = Tag::try_from_str("draft").unwrap();
+    let news = draft
+        .map(|it| it.replace_range(.., "news"))
+        .unwrap();
+    let medical_news = news
+        .clone()
+        .map(|it| it.insert_str(0, "medical-"))
+        .unwrap();
+    assert_eq!(news.as_str(), "news");
+    assert_eq!(medical_news.as_str(), "medical-news");
+
+    let draft_news = news
+        .map(|it| it.insert_str(0, "draft-"));
+    assert!(draft_news.is_err()); // There is no "draft-news" in allow-list.
+}
+```
 
 ---
 
@@ -682,7 +922,34 @@ fn main() {
 }
 ```
 
+## Serde
+
+Use `with = serde` on `integral`, `float`, `text`, or `bitflag` to generate
+`Serialize` and `Deserialize`. Deserialization applies every configured
+validator. Typekin has no Serde Cargo feature and does not provide Serde as a
+normal dependency: the consuming crate must add `serde` directly and apply any
+desired `cfg` gating to the macro invocation.
+
+Integral and float wrappers serialize as their raw number, while text wrappers
+serialize as strings. Do not also derive the same Serde traits on a wrapper
+using this option.
+
+## Configuration
+
+Generation of individual features can be disabled with `without`; see the flag
+lists in [integral](src/integral.rs), [bitflag](src/bitflag.rs), and
+[text](src/text.rs).
+
 ## Const mode
+
+`integral`, `float`, `bitflag`, and `text` default to `konst = stable`. Set
+`konst = none` to disable optional const flags, or `konst = nightly` to enable
+const trait implementations and nightly-only integer operations. For integral,
+float, and bitflag, `stable` makes checked construction, raw value access, and
+core integer and float methods const. For text, it enables const read-only
+accessors; `nightly` additionally enables supported owned construction and
+conversion. Enabling Typekin's `nightly` Cargo feature changes the default to
+`konst = nightly`, and `with`/`without` accept individual `konst_*` flags.
 
 Full integral const generation requires `konst = nightly`. Until the relevant
 const features stabilize, it remains nightly-only. These gates are sufficient
@@ -735,6 +1002,6 @@ fn is_valid(it: u32) -> bool {
   return true;
 }
 
-#[typekin::integral(konst = none)]
+#[typekin::integral(konst = none, valid = is_valid)]
 struct Counter(u32);
 ```

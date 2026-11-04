@@ -1,603 +1,303 @@
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::fmt::{
+    Debug,
+    Formatter,
+};
+
 use proc_macro2::{
     Ident,
     TokenStream,
 };
 use quote::{
     ToTokens,
-    format_ident,
     quote,
+};
+use syn::parse::{
+    Parse,
+    ParseStream,
 };
 use syn::{
     Item,
+    Path,
+    Token,
     Type,
 };
 
-pub(crate) use self::cfg::Cfg;
-use crate::friendship::cfg::Friend;
-use crate::zz_lib::Konst;
-use crate::zz_runner::MkErr;
-use crate::zz_value_type::N;
+use crate::zz_friend::{
+    Capability,
+    Friend,
+    parse_capabilities,
+    upsert_friend,
+};
+use crate::zz_lib::{
+    Key,
+    PathIdentity,
+    one_or_list,
+};
+use crate::zz_names::{
+    NameKey,
+    Names,
+    ResolvedNames,
+};
+use crate::zz_runner::{
+    MkErr,
+    ToCollection,
+};
+use crate::zz_values::Num;
 use crate::{
     constructor,
     zz_lib as zz,
     zz_runner,
 };
 
-pub(crate) mod cfg {
-    use std::cmp::Ordering;
-    use std::collections::{
-        BTreeMap,
-        BTreeSet,
-        HashMap,
-    };
-    use std::fmt::{
-        Debug,
-        Formatter,
-    };
+/// A name the `friends` macro generates.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum FriendsName {
+    /// `Seal` unless `seal` names one.
+    Seal,
+    /// `to_{snake}` of the relation's last path segment, or `convert`,
+    /// unless `conversion` names one.
+    Conversion,
+}
 
-    use proc_macro2::Ident;
-    use quote::format_ident;
-    use syn::parse::{
-        Parse,
-        ParseStream,
-    };
-    use syn::{
-        Path,
-        Token,
-        Type,
-        bracketed,
-    };
+impl NameKey for FriendsName {
+    /// The relation's last path segment.
+    type Owner = Option<Ident>;
 
-    use crate::zz_lib::{
-        PathIdentity,
-        arg_or_list,
-        one_or_list,
-    };
-    use crate::zz_runner::{
-        MkErr,
-        ToCollection,
-    };
-    use crate::{
-        constructor,
-        zz_lib as zz,
-    };
-
-    #[derive(Clone)]
-    pub(crate) struct Friend {
-        pub(crate) ty: PathIdentity,
-        pub(crate) capabilities: BTreeSet<Ident>,
-        pub(crate) conv: Option<Path>,
-        pub(crate) make_conv: Option<Path>,
-        pub(crate) capability_conversions: BTreeMap<Ident, Path>,
+    fn default_name(
+        self,
+        relation: &Option<Ident>,
+    ) -> String {
+        return match self {
+            Self::Seal => "Seal".to_string(),
+            Self::Conversion => relation.as_ref().map_or_else(
+                || "convert".to_string(),
+                |relation| {
+                    format!(
+                        "to_{}",
+                        zz_runner::snake_case_of(&relation.to_string())
+                    )
+                },
+            ),
+        };
     }
+}
 
-    impl Parse for Friend {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            return Self::parse_with_defaults(input, &BTreeSet::new());
-        }
-    }
+pub(crate) struct Cfg {
+    relation: Option<Type>,
+    value: Option<Type>,
+    /// `seal` and `conversion`.
+    names: Names<FriendsName>,
+    module: Option<constructor::ModuleCfg>,
+    scope: Option<constructor::Scope>,
+    friends: BTreeSet<Friend>,
+    /// Per friend, the conversion each capability was declared with:
+    /// merged declarations (`[a(T) -> Make, b(T) -> Math]`) keep their own.
+    conversions: BTreeMap<PathIdentity, BTreeMap<Ident, Path>>,
+    extra_caps: BTreeSet<Ident>,
+}
 
-    pub(crate) fn trust_capability() -> Ident {
-        return format_ident!("Unsafe");
-    }
+/// A `friend` entry and the conversion it names (`self` included) for
+/// each capability it grants.
+struct Declared {
+    friend: Friend,
+    conversions: BTreeMap<Ident, Path>,
+}
 
-    pub(crate) fn is_trust_capability(capability: &Ident) -> bool {
-        return capability == &trust_capability()
-            || capability == &format_ident!("FlagUnsafe");
-    }
-
-    struct Capability(Ident);
-
-    impl Parse for Capability {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            if input.peek(Token![unsafe]) {
-                input.parse::<Token![unsafe]>()?;
-                return Ok(Self(trust_capability()));
-            }
-
-            return input.parse::<Ident>().map(Self);
-        }
-    }
-
-    fn parse_capabilities(input: ParseStream) -> syn::Result<BTreeSet<Ident>> {
-        let capabilities = one_or_list::<Capability>(input)?
-            .map(|Capability(capability)| capability)
-            .set();
-        return Ok(capabilities);
-    }
-
-    impl Friend {
-        pub(crate) fn parse_with_defaults(
-            input: ParseStream,
-            capabilities: &BTreeSet<Ident>,
-        ) -> syn::Result<Self> {
-            let implicit = input.peek(Token![_]);
-            let conv = if implicit {
-                input.parse::<Token![_]>()?;
-                None
-            }
-            else {
-                let conv = input.parse::<Path>()?;
-                if conv.is_ident("Self") {
-                    return conv.fail(
-                        "friend implicit conversion is `_(Type)`, not `Self(Type)`",
-                    );
-                }
-                Some(conv)
-            };
-
-            let here = input.span();
-            let mut ty = if implicit {
-                zz::tuple::<Path>(input)?.vec()
-            }
-            else {
-                arg_or_list::<Path>(input)?
-            };
-            let ty =
-                match (ty.pop(), ty) {
-                    (Some(it), rest) if rest.is_empty() => it,
-                    _ => return here.fail(
-                        "friend conversion requires exactly one source type",
-                    ),
-                };
-
-            let mut capabilities = if input.peek(Token![->]) {
-                let _ = input.parse::<Token![->]>()?;
-                parse_capabilities(input)?
-            }
-            else {
-                capabilities.clone()
-            };
-            if capabilities.contains(&trust_capability()) {
-                capabilities.insert(format_ident!("Make"));
-            }
-
-            let capability_conversions = capabilities
-                .iter()
-                .cloned()
-                .filter_map(|capability| {
-                    conv.clone().map(|conv| (capability, conv))
-                })
-                .collect();
-
-            return Ok(Self {
-                conv: conv.clone().filter(|conv| !conv.is_ident("self")),
-                make_conv: capabilities
-                    .contains(&format_ident!("Make"))
-                    .then(|| conv.clone())
-                    .flatten(),
-                capability_conversions,
-                capabilities,
-                ty: PathIdentity::new(ty),
-            });
-        }
-
-        pub(crate) fn parse_with_valid(
-            input: ParseStream,
-            valid: &[Ident],
-            defaults: &BTreeSet<Ident>,
-        ) -> syn::Result<BTreeSet<Friend>> {
-            let mut friends = BTreeSet::new();
-            if input.peek(syn::token::Bracket) {
-                let content;
-                let _ = bracketed!(content in input);
-                while !content.is_empty() {
-                    let friend = Self::parse_with_defaults(&content, defaults)?;
-                    friends.insert(friend);
-
-                    if !content.is_empty() {
-                        let _ = content.parse::<Token![,]>()?;
-                    }
-                }
-            }
-            else {
-                friends.insert(Self::parse_with_defaults(input, defaults)?);
-            }
-
-            for friend in &friends {
-                for capability in &friend.capabilities {
-                    if !valid.contains(capability) {
-                        return capability.fail("unknown capability");
-                    }
-                }
-            }
-
-            return Ok(friends);
-        }
-
-        pub(crate) fn parse_with_expansion(
-            input: ParseStream,
-            valid: &[Ident],
-            defaults: &BTreeSet<Ident>,
-            expansions: &HashMap<Ident, Vec<Ident>>,
-        ) -> syn::Result<BTreeSet<Friend>> {
-            let this = Self::parse_with_valid(input, valid, defaults)?
-                .into_iter()
-                .map(|mut friend| {
-                    for (cap, exp) in expansions {
-                        if friend.capabilities.contains(cap) {
-                            friend.capabilities.extend(exp.clone());
-                        }
-                    }
-                    return friend;
-                })
-                .collect();
-
-            return Ok(this);
-        }
-    }
-
-    impl Eq for Friend {}
-
-    impl PartialOrd for Friend {
-        fn partial_cmp(
-            &self,
-            other: &Self,
-        ) -> Option<Ordering> {
-            return Some(self.cmp(other));
-        }
-    }
-
-    impl PartialEq for Friend {
-        fn eq(
-            &self,
-            other: &Self,
-        ) -> bool {
-            return self.ty == other.ty;
-        }
-    }
-
-    impl Ord for Friend {
-        fn cmp(
-            &self,
-            other: &Self,
-        ) -> Ordering {
-            return self.ty.cmp(&other.ty);
-        }
-    }
-
-    impl From<&Path> for Friend {
-        fn from(it: &Path) -> Self {
-            return Self {
-                ty: PathIdentity::new(it.clone()),
-                conv: None,
-                make_conv: None,
-                capability_conversions: BTreeMap::new(),
-                capabilities: BTreeSet::new(),
-            };
-        }
-    }
-
-    impl ::std::fmt::Debug for Friend {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            return f
-                .debug_struct("Friend")
-                .field("identity", &self.ty.identity())
-                .field("capabilities", &self.capabilities)
-                .finish();
-        }
-    }
-
-    impl From<&Ident> for Friend {
-        fn from(it: &Ident) -> Self {
-            let ty: Path = syn::parse_quote! { #it };
-            return <Self as From<&Path>>::from(&ty);
-        }
-    }
-
-    // =========================================================================
-
-    pub(crate) struct Cfg {
-        pub(super) relation: Option<Type>,
-        pub(super) value: Option<Type>,
-        pub(super) seal: Option<Ident>,
-        pub(super) conversion: Option<Ident>,
-        pub(super) module: Option<constructor::ModuleCfg>,
-        pub(super) scope: Option<constructor::Scope>,
-        pub(super) friends: BTreeSet<Friend>,
-        pub(super) extra_caps: BTreeSet<Ident>,
-    }
-
-    impl Debug for Cfg {
-        fn fmt(
-            &self,
-            f: &mut Formatter<'_>,
-        ) -> std::fmt::Result {
-            return f.debug_struct("Cfg").finish_non_exhaustive();
-        }
-    }
-
-    impl Cfg {
-        pub(super) fn constructor(&self) -> constructor::Cfg {
-            let friends = self
-                .friends
-                .iter()
-                .map(|friend| {
-                    return constructor::Friend {
-                        ty: friend.ty.clone(),
-                    };
-                })
-                .set();
-
-            return constructor::Cfg {
-                relationship: syn::parse_quote! { Self::of_parts },
-                maker: format_ident!("of"),
-                friends,
-                scope: self.scope.clone().unwrap_or(constructor::Scope::Const),
-            };
-        }
-
-        pub(super) fn capabilities(
-            &self,
-            include_constructor: bool,
-        ) -> BTreeSet<Ident> {
-            let mut capabilities = self.extra_caps.clone();
-            capabilities.extend(
-                self.friends
+impl Parse for Declared {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let conversion = match input.peek(Token![_]) {
+            true => None,
+            false => input.fork().parse::<Path>().ok(),
+        };
+        let friend = input.parse::<Friend>()?;
+        let conversions = conversion
+            .map(|conversion| {
+                return friend
+                    .capabilities
                     .iter()
-                    .flat_map(|friend| friend.capabilities.iter().cloned()),
-            );
+                    .map(|capability| (capability.clone(), conversion.clone()))
+                    .collect();
+            })
+            .unwrap_or_default();
 
-            if include_constructor {
-                capabilities.insert(format_ident!("Make"));
-            }
+        return Ok(Self {
+            friend,
+            conversions,
+        });
+    }
+}
 
-            return capabilities;
-        }
+impl Debug for Cfg {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return f.debug_struct("Cfg").finish_non_exhaustive();
+    }
+}
+
+impl Cfg {
+    /// The generated names; the defaults derive from the relation's last
+    /// path segment.
+    fn resolved_names(&self) -> ResolvedNames<FriendsName> {
+        let relation = match &self.relation {
+            Some(Type::Path(path)) if path.qself.is_none() => path
+                .path
+                .segments
+                .last()
+                .map(|segment| segment.ident.clone()),
+            _ => None,
+        };
+        return self.names.clone().resolve(relation, BTreeSet::new());
     }
 
-    impl Parse for Cfg {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let mut this = Self {
-                relation: None,
-                value: None,
-                seal: None,
-                conversion: None,
-                module: None,
-                scope: None,
-                friends: BTreeSet::new(),
-                extra_caps: BTreeSet::new(),
+    fn constructor(&self) -> constructor::Cfg {
+        let friends = self
+            .friends
+            .iter()
+            .map(|friend| {
+                return constructor::Friend {
+                    ty: friend.ty.clone(),
+                };
+            })
+            .set();
+
+        return constructor::Cfg {
+            relationship: syn::parse_quote! { Self::of_parts },
+            names: Names::default(),
+            friends,
+            scope: self.scope.clone().unwrap_or(constructor::Scope::Const),
+        };
+    }
+
+    /// Every capability trait the protocol declares; the constructor
+    /// always adds `Make`.
+    fn capabilities(&self) -> BTreeSet<Ident> {
+        let mut capabilities = self.extra_caps.clone();
+        capabilities.extend(
+            self.friends
+                .iter()
+                .flat_map(|friend| friend.capabilities.iter().cloned()),
+        );
+        capabilities.insert(Capability::Make.ident());
+
+        return capabilities;
+    }
+
+    /// Adds a `friend` entry; a repeated source type merges into its first
+    /// entry when their capabilities are disjoint.
+    fn declare(
+        &mut self,
+        stream: ParseStream,
+        declared: Declared,
+    ) -> syn::Result<()> {
+        let Declared {
+            friend,
+            conversions,
+        } = declared;
+        let friend = match self.friends.take(&friend) {
+            Some(mut existing) => {
+                if !existing.capabilities.is_disjoint(&friend.capabilities) {
+                    return stream
+                        .span()
+                        .fail("friend capabilities overlap for a source type");
+                }
+
+                existing.capabilities.extend(friend.capabilities);
+                existing.conv = friend.conv;
+                existing
+            }
+            None => friend,
+        };
+
+        self.conversions
+            .entry(friend.ty.clone())
+            .or_default()
+            .extend(conversions);
+        self.friends.insert(friend);
+        return Ok(());
+    }
+
+    /// The conversion `friend` calls for `capability`.
+    fn conversion<'a>(
+        &'a self,
+        friend: &'a Friend,
+        capability: &Ident,
+    ) -> &'a Path {
+        return self
+            .conversions
+            .get(&friend.ty)
+            .and_then(|conversions| conversions.get(capability))
+            .or(friend.conv.as_ref())
+            .expect("friend conversion missing");
+    }
+}
+
+impl Parse for Cfg {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut this = Self {
+            relation: None,
+            value: None,
+            names: Names::default(),
+            module: None,
+            scope: None,
+            friends: BTreeSet::new(),
+            conversions: BTreeMap::new(),
+            extra_caps: BTreeSet::new(),
+        };
+
+        zz::parse_inner(input, |attr, stream| {
+            match attr {
+                Key::Relation => this.relation = Some(stream.parse()?),
+                Key::Value => this.value = Some(stream.parse()?),
+                Key::Seal => {
+                    this.names.choose(FriendsName::Seal, stream.parse()?);
+                }
+                Key::Conversion => {
+                    this.names.choose(FriendsName::Conversion, stream.parse()?);
+                }
+                Key::Mod => {
+                    if stream.peek(Token![_]) {
+                        let _: Token![_] = stream.parse()?;
+                    }
+                    else {
+                        this.module = Some(stream.parse()?);
+                    }
+                }
+                Key::Scope => this.scope = Some(stream.parse()?),
+                Key::Friend => {
+                    for declared in one_or_list(stream)? {
+                        this.declare(stream, declared)?;
+                    }
+                }
+                Key::ExtraCaps => this.extra_caps = parse_capabilities(stream)?,
+                _ => return Ok(false),
             };
 
-            zz::parse_inner(input, |attr, stream| {
-                match attr {
-                    "relation" => this.relation = Some(stream.parse()?),
-                    "value" => this.value = Some(stream.parse()?),
-                    "seal" => this.seal = Some(stream.parse()?),
-                    "conversion" => this.conversion = Some(stream.parse()?),
-                    "mod" => {
-                        if stream.peek(Token![_]) {
-                            let _: Token![_] = stream.parse()?;
-                        }
-                        else {
-                            this.module = Some(stream.parse()?);
-                        }
-                    }
-                    "scope" => this.scope = Some(stream.parse()?),
-                    "friend" => {
-                        for friend in one_or_list(stream)? {
-                            if let Some(mut existing) =
-                                this.friends.take(&friend)
-                            {
-                                if !existing
-                                    .capabilities
-                                    .is_disjoint(&friend.capabilities)
-                                {
-                                    return stream.span().fail(
-                                        "friend capabilities overlap for a source type",
-                                    );
-                                }
+            return Ok(true);
+        })?;
 
-                                existing
-                                    .capabilities
-                                    .extend(friend.capabilities);
-                                if friend.make_conv.is_some() {
-                                    existing.make_conv = friend.make_conv;
-                                }
-                                existing
-                                    .capability_conversions
-                                    .extend(friend.capability_conversions);
-                                existing.conv = friend.conv;
-                                this.friends.insert(existing);
-                            }
-                            else {
-                                this.friends.insert(friend);
-                            }
-                        }
-                    }
-                    "extra_caps" => {
-                        this.extra_caps = parse_capabilities(stream)?
-                    }
-                    _ => return Ok(false),
-                };
-
-                return Ok(true);
-            })?;
-
-            if this.module.is_some() && this.scope.is_some() {
-                return input
-                    .span()
-                    .fail("`mod` and `scope` cannot be used together");
-            }
-
-            return Ok(this);
+        if this.module.is_some() && this.scope.is_some() {
+            return input
+                .span()
+                .fail("`mod` and `scope` cannot be used together");
         }
+
+        return Ok(this);
     }
-}
-
-#[derive(Clone)]
-pub(crate) struct ProtocolFriend {
-    pub(crate) ty: Type,
-    pub(crate) capabilities: std::collections::BTreeSet<Ident>,
-    pub(crate) conversion: Option<TokenStream>,
-    pub(crate) seal_cfg: TokenStream,
-    pub(crate) capability_cfgs: std::collections::BTreeMap<Ident, TokenStream>,
-}
-
-pub(crate) struct Construction {
-    pub(crate) make: Ident,
-    pub(crate) trusted: Ident,
-    pub(crate) trusted_constructor: TokenStream,
-    pub(crate) checked: TokenStream,
-}
-
-pub(crate) struct Protocol {
-    pub(crate) target: TokenStream,
-    pub(crate) generics: syn::Generics,
-    pub(crate) relation: Type,
-    pub(crate) seal: Ident,
-    pub(crate) conversion: Ident,
-    pub(crate) capabilities: Vec<Ident>,
-    pub(crate) friends: Vec<ProtocolFriend>,
-    pub(crate) emit_seal: bool,
-    pub(crate) target_conversion: Option<TokenStream>,
-    pub(crate) construction: Option<Construction>,
-    pub(crate) konst: bool,
-}
-
-pub(crate) fn emit_protocol(protocol: Protocol) -> TokenStream {
-    let target = &protocol.target;
-    let relation = &protocol.relation;
-    let seal = &protocol.seal;
-    let conversion = &protocol.conversion;
-    let konst = Konst::konst(protocol.konst);
-    let bonst = Konst::bonst(protocol.konst);
-    let (parameters, arguments, where_clause) =
-        protocol.generics.split_for_impl();
-
-    let seal_declaration = protocol.emit_seal.then(|| {
-        quote! {
-            #konst trait #seal #parameters #where_clause {
-                fn #conversion(self) -> #relation;
-            }
-        }
-    });
-
-    let capability_declarations =
-        protocol.capabilities.iter().map(|capability| {
-            let is_unsafe = cfg::is_trust_capability(capability);
-            let unsafe_ = is_unsafe.then(|| quote! { unsafe });
-            let safety = is_unsafe.then(|| {
-                quote! {
-                    #[doc = "# Safety"]
-                    #[doc = ""]
-                    #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-                }
-            });
-            let method =
-                protocol.construction.as_ref().and_then(|construction| {
-                    (capability == &construction.make).then(|| {
-                        quote! { fn make(self) -> #target; }
-                    })
-                });
-
-            quote! {
-                #safety
-                #konst #unsafe_ trait #capability #parameters:
-                    #bonst #seal #arguments
-                #where_clause {
-                    #method
-                }
-            }
-        });
-
-    let target_seal = protocol.target_conversion.as_ref().map(|body| {
-        quote! {
-            #konst impl #parameters #seal #arguments for #target
-            #where_clause {
-                #[inline(always)]
-                fn #conversion(self) -> #relation {
-                    #body
-                }
-            }
-        }
-    });
-
-    let friend_impls = protocol.friends.iter().map(|friend| {
-        let ty = &friend.ty;
-        let seal_cfg = &friend.seal_cfg;
-        let seal_impl = friend.conversion.as_ref().map(|body| {
-            quote! {
-                #seal_cfg
-                #konst impl #parameters #seal #arguments for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn #conversion(self) -> #relation {
-                        #body
-                    }
-                }
-            }
-        });
-        let capability_impls = friend.capabilities.iter().map(|capability| {
-            let capability_cfg = friend.capability_cfgs.get(capability);
-            let unsafe_ =
-                cfg::is_trust_capability(capability).then(|| quote! { unsafe });
-            let method =
-                protocol.construction.as_ref().and_then(|construction| {
-                    if capability != &construction.make {
-                        return None;
-                    }
-
-                    let constructor = match friend
-                        .capabilities
-                        .contains(&construction.trusted)
-                    {
-                        true => construction.trusted_constructor.clone(),
-                        false => {
-                            let checked = &construction.checked;
-                            quote! { #checked(raw) }
-                        }
-                    };
-
-                    Some(quote! {
-                        #[inline(always)]
-                        fn make(self) -> #target {
-                            let raw = <Self as #seal #arguments>::#conversion(self);
-                            return #constructor;
-                        }
-                    })
-                });
-
-            quote! {
-                #capability_cfg
-                #konst #unsafe_ impl #parameters #capability #arguments for #ty
-                #where_clause {
-                    #method
-                }
-            }
-        });
-
-        quote! {
-            #seal_impl
-            #(#capability_impls)*
-        }
-    });
-
-    return quote! {
-        #seal_declaration
-        #(#capability_declarations)*
-
-        #target_seal
-        #(#friend_impls)*
-    };
 }
 
 pub(crate) fn ekran(
     attr: Cfg,
     item: Item,
-) -> proc_macro::TokenStream {
-    return zz_runner::catching(move || {
-        let constructor = attr.constructor();
-        let scope = constructor.scope.clone();
+) -> syn::Result<TokenStream> {
+    let constructor = attr.constructor();
 
-        return expand(item, attr, Some(constructor), Some(scope));
-    })
-    .into();
+    return expand(item, attr, constructor);
 }
 
 pub(crate) fn expand_with_constructor(
@@ -613,39 +313,76 @@ pub(crate) fn expand_with_constructor(
         );
     }
 
-    let scope = constructor.scope.clone();
-    return expand(item, friendship, Some(constructor), Some(scope));
+    return expand(item, friendship, constructor);
+}
+
+/// `Module(friendship.module)`, else the constructor's scope.
+fn resolve_scope(
+    cfg: &Cfg,
+    scope: &constructor::Scope,
+) -> constructor::Scope {
+    return match &cfg.module {
+        Some(module) => constructor::Scope::Module(module.clone()),
+        None => scope.clone(),
+    };
+}
+
+/// The relation, value and target as the protocol's items name them.
+struct FriendshipTypes {
+    relation: TokenStream,
+    value: TokenStream,
+    target: TokenStream,
+    /// The items sit in a module: outer paths take `super::`.
+    in_module: bool,
+}
+
+impl FriendshipTypes {
+    fn new(
+        cfg: &Cfg,
+        target: &Ident,
+        in_module: bool,
+    ) -> Self {
+        let relation =
+            cfg.relation.as_ref().expect("friendship relation is empty");
+        let relation = match relation {
+            Type::Path(path) if path.qself.is_none() => {
+                outer_path(&path.path, in_module)
+            }
+            _ => quote! { #relation },
+        };
+        let value = cfg
+            .value
+            .as_ref()
+            .map_or_else(|| relation.clone(), |value| quote! { #value });
+        let target = match in_module {
+            true => quote! { super::#target },
+            false => quote! { #target },
+        };
+
+        return Self {
+            relation,
+            value,
+            target,
+            in_module,
+        };
+    }
 }
 
 fn expand(
     mut item: Item,
     mut friendship: Cfg,
-    constructor: Option<constructor::Cfg>,
-    scope: Option<constructor::Scope>,
+    constructor: constructor::Cfg,
 ) -> syn::Result<TokenStream> {
     let (target, visibility, _) = zz::get_concrete_type(&mut item)?;
     let target = target.clone();
     let visibility = visibility.clone();
-    let module = friendship
-        .module
-        .clone()
-        .or_else(|| scope.as_ref().and_then(|scope| scope.module().cloned()));
-    let in_self_scope = module.is_none()
-        && scope.as_ref().is_some_and(|scope| {
-            return matches!(scope, constructor::Scope::Self_);
-        });
+    let scope = resolve_scope(&friendship, &constructor.scope);
 
     if friendship.relation.is_none() {
         return item.fail("missing required argument: `relation`");
     }
 
-    if let Some(constructor) = &constructor {
-        grant_constructor(&mut friendship, constructor, &target)?;
-    }
-
-    if friendship.capabilities(constructor.is_some()).is_empty() {
-        return item.fail("friendship requires at least one friend capability");
-    }
+    grant_constructor(&mut friendship, &constructor, &target)?;
 
     for friend in &friendship.friends {
         if friend.conv.is_none() {
@@ -655,69 +392,22 @@ fn expand(
         }
     }
 
-    let constructor = constructor.map(|constructor| {
-        let relation = friendship
-            .relation
-            .as_ref()
-            .expect("friendship relation is empty");
-        let in_module = module.is_some();
-        let relation = match relation {
-            Type::Path(path) if path.qself.is_none() => {
-                parent_path(&path.path, in_module)
-            }
-            _ => quote! { #relation },
-        };
-        let value = friendship
-            .value
-            .as_ref()
-            .map_or_else(|| relation.clone(), |value| quote! { #value });
-        let target = match in_module {
-            true => quote! { super::#target },
-            false => quote! { #target },
-        };
-        let seal = friendship
-            .seal
-            .clone()
-            .unwrap_or_else(|| format_ident!("Seal"));
-        let conversion = friendship.conversion.clone().unwrap_or_else(|| {
-            let name =
-                friendship.relation.as_ref().and_then(
-                    |relation| match relation {
-                        Type::Path(path) if path.qself.is_none() => path
-                            .path
-                            .segments
-                            .last()
-                            .map(|segment| segment.ident.to_string()),
-                        _ => None,
-                    },
-                );
-
-            name.map(|name| {
-                format_ident!("to_{}", zz_runner::snake_case_of(&name))
-            })
-            .unwrap_or_else(|| format_ident!("convert"))
-        });
-
-        return constructor::expand(
-            &constructor.in_self_scope(),
-            constructor::Protocol {
-                target,
-                visibility: visibility.clone(),
-                relation,
-                value,
-                seal,
-                conversion,
-            },
-        );
-    });
-    let protocol = emit_friendship(
-        &friendship,
-        &target,
-        constructor.is_some(),
-        constructor,
-        module.as_ref(),
-        in_self_scope,
+    let names = friendship.resolved_names();
+    let types =
+        FriendshipTypes::new(&friendship, &target, scope.module().is_some());
+    let constructor = constructor::expand(
+        &constructor.in_self_scope(),
+        constructor::Protocol {
+            target: types.target.clone(),
+            visibility,
+            relation: types.relation.clone(),
+            value: types.value.clone(),
+            seal: names.get(FriendsName::Seal),
+            conversion: names.get(FriendsName::Conversion),
+        },
     );
+    let protocol =
+        emit_friendship(&friendship, &names, &types, constructor, &scope);
 
     return Ok(quote! {
         #item
@@ -752,81 +442,47 @@ fn grant_constructor(
                 )
             })?;
 
-        let mut friend = cfg
-            .friends
-            .take(&friend)
-            .expect("matched friendship not present");
-        friend.capabilities.insert(format_ident!("Make"));
-        cfg.friends.insert(friend);
+        upsert_friend(&mut cfg.friends, friend, |friend| {
+            friend.capabilities.insert(Capability::Make.ident());
+        });
     }
 
     return Ok(());
 }
 
-pub(crate) fn emit_friendship(
+fn emit_friendship(
     cfg: &Cfg,
-    target: &Ident,
-    include_constructor: bool,
-    constructor: Option<TokenStream>,
-    module: Option<&constructor::ModuleCfg>,
-    in_self_scope: bool,
+    names: &ResolvedNames<FriendsName>,
+    types: &FriendshipTypes,
+    constructor: TokenStream,
+    scope: &constructor::Scope,
 ) -> TokenStream {
-    let relation = cfg.relation.as_ref().expect("friendship relation is empty");
-
-    let in_module = module.is_some();
-    let seal = cfg.seal.clone().unwrap_or_else(|| format_ident!("Seal"));
-    let capabilities = cfg.capabilities(include_constructor);
-
-    let relation_value = match relation {
-        Type::Path(path) if path.qself.is_none() => {
-            parent_path(&path.path, in_module)
-        }
-        _ => quote! { #relation },
-    };
-    let value = match &cfg.value {
-        Some(value) => quote! { #value },
-        None => relation_value,
-    };
-
-    let target = match in_module {
-        true => quote! { super::#target },
-        false => quote! { #target },
-    };
-
-    let trait_visibility = match in_module {
+    let seal = names.get(FriendsName::Seal);
+    let conversion = names.get(FriendsName::Conversion);
+    let value = &types.value;
+    let trait_visibility = match types.in_module {
         true => quote! { pub(super) },
         false => TokenStream::new(),
     };
 
-    let conversion = cfg.conversion.clone().unwrap_or_else(|| {
-        let name = match relation {
-            Type::Path(path) if path.qself.is_none() => path
-                .path
-                .segments
-                .last()
-                .map(|segment| segment.ident.to_string()),
-            _ => None,
-        };
+    let friend_impls = cfg
+        .friends
+        .iter()
+        .map(|friend| emit_friend(cfg, friend, &seal, &conversion, types));
 
-        name.map(|name| format_ident!("to_{}", zz_runner::snake_case_of(&name)))
-            .unwrap_or_else(|| format_ident!("convert"))
-    });
+    let capability_declarations =
+        cfg.capabilities().into_iter().map(|capability| {
+            let unsafe_ = (Capability::of(&capability)
+                == Some(Capability::Unsafe))
+            .then(|| quote! { unsafe });
 
-    let friend_impls = cfg.friends.iter().map(|friend| {
-        emit_friend(friend, &seal, &conversion, &value, &target, in_module)
-    });
-
-    let capability_declarations = capabilities.iter().map(|capability| {
-        let unsafe_ =
-            cfg::is_trust_capability(capability).then(|| quote! { unsafe });
-
-        return quote! {
-            #[allow(unused, dead_code)]
-            #trait_visibility #unsafe_ trait #capability: #seal {
-                fn #conversion(self) -> #value;
-            }
-        };
-    });
+            return quote! {
+                #[allow(unused, dead_code)]
+                #trait_visibility #unsafe_ trait #capability: #seal {
+                    fn #conversion(self) -> #value;
+                }
+            };
+        });
 
     let items = quote! {
         #trait_visibility trait #seal {
@@ -839,56 +495,27 @@ pub(crate) fn emit_friendship(
         #constructor
     };
 
-    return match module {
-        None if in_self_scope => quote! {
-            #items
-        },
-        None => quote! {
-            const _: () = {
-                #items
-            };
-        },
-        Some(module) => {
-            let visibility = &module.visibility;
-            let name = &module.name;
-
-            quote! {
-                #visibility mod #name {
-                    #items
-                }
-            }
-        }
-    };
+    return scope.wrap(items);
 }
 
 fn emit_friend(
-    cfg: &Friend,
+    cfg: &Cfg,
+    friend: &Friend,
     seal: &Ident,
     conversion: &Ident,
-    value: &TokenStream,
-    target: &TokenStream,
-    in_module: bool,
+    types: &FriendshipTypes,
 ) -> TokenStream {
-    let ty = match cfg.ty.path().is_ident("Self") {
-        true => target.clone(),
-        false => parent_path(cfg.ty.path(), in_module),
+    let ty = match friend.ty.path().is_ident("Self") {
+        true => types.target.clone(),
+        false => outer_path(friend.ty.path(), types.in_module),
     };
+    let value = &types.value;
 
-    let capabilities = &cfg.capabilities;
-    let capability_impls = capabilities.iter().map(|capability| {
-        let unsafe_ =
-            cfg::is_trust_capability(capability).then(|| quote! { unsafe });
-        let callback = cfg
-            .capability_conversions
-            .get(capability)
-            .or_else(|| {
-                (capability == &format_ident!("Make"))
-                    .then_some(&cfg.make_conv)
-                    .and_then(|conversion| conversion.as_ref())
-            })
-            .or(cfg.conv.as_ref())
-            .expect("friend conversion missing");
-        let callback = parent_path(callback, in_module);
+    let capability_impls = friend.capabilities.iter().map(|capability| {
+        let unsafe_ = (Capability::of(capability) == Some(Capability::Unsafe))
+            .then(|| quote! { unsafe });
+        let callback =
+            outer_path(cfg.conversion(friend, capability), types.in_module);
 
         return quote! {
             #unsafe_ impl #capability for #ty {
@@ -907,12 +534,19 @@ fn emit_friend(
 }
 
 // TODO hm... very hacky
-fn parent_path(
-    path: &syn::Path,
+/// `String` or a primitive number type, which never takes `super::`.
+fn is_primitive_or_string(path: &Path) -> bool {
+    let repr = path.to_token_stream().to_string();
+    return repr == "String" || Num::of(repr).is_some();
+}
+
+/// `path` as seen from the protocol's items: `super::path` inside a module
+/// unless it is explicit (`::`, `crate`, `self`, `super`).
+fn outer_path(
+    path: &Path,
     in_module: bool,
 ) -> TokenStream {
-    let repr = path.to_token_stream().to_string();
-    if repr == "String" || N::of(repr).is_some() {
+    if is_primitive_or_string(path) {
         return quote! { #path };
     }
 
