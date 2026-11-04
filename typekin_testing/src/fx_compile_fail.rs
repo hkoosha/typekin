@@ -37,6 +37,10 @@ pub(crate) static CHECKED: LazyLock<Checked> = LazyLock::new(|| {
             &WITHIN_UNPUBLISHED_SOURCE,
             &WITHIN_OTHER_CRATE,
             &WITHIN_POINTER_WIDTH,
+            &PACKED_FIELD_TOO_WIDE,
+            &PACKED_SIGNED_FIELD_TOO_WIDE,
+            &PACKED_NON_ZERO_UNPROVEN,
+            &PACKED_NON_CONST_FIELD,
         ]),
     );
 });
@@ -421,4 +425,73 @@ pub(crate) const WITHIN_GENERIC_TARGET: Rejection = Rejection {
     name: "within_refutes_a_generic_target_where_instantiated",
     expected: "`Tagged<D>` is not within `Half`: 51 is outside the domain of `Half`",
     source: WITHIN_GENERIC_SOURCE,
+};
+
+// -------------------------------------------------------------------------
+// Packed
+
+pub(crate) const PACKED_FIELD_TOO_WIDE: Rejection = Rejection {
+    name: "packed_refutes_a_field_too_wide_for_its_window",
+    expected: "`Version` does not fit bits 10..16 of `Header`: 64 needs more than 6 bits",
+    source: r#"
+#[typekin::integral(domain = ..=64)]
+pub struct Version(u8);
+
+#[typekin::packed(repr = u16)]
+pub struct Header {
+    #[bits(10..16)]
+    pub version: Version,
+    #[bits(0..8)]
+    pub data: u8,
+}
+"#,
+};
+
+pub(crate) const PACKED_SIGNED_FIELD_TOO_WIDE: Rejection = Rejection {
+    name: "packed_refutes_a_signed_field_too_wide_for_its_window",
+    expected: "`Delta` does not fit bits 0..6 of `Header`: -40 needs more than 6 bits",
+    source: r#"
+#[typekin::integral(domain = -40..=20)]
+pub struct Delta(i8);
+
+#[typekin::packed(repr = u8)]
+pub struct Header {
+    #[bits(0..6)]
+    pub delta: Delta,
+}
+"#,
+};
+
+pub(crate) const PACKED_NON_ZERO_UNPROVEN: Rejection = Rejection {
+    name: "packed_cannot_prove_non_zero_when_every_field_admits_zero",
+    expected: "cannot prove `non_zero` for `Flags`: every field admits zero",
+    source: r#"
+#[typekin::integral(domain = ..8)]
+pub struct Small(u8);
+
+#[typekin::packed(repr = u8, with = non_zero)]
+pub struct Flags {
+    #[bit(0)]
+    pub enabled: bool,
+    #[bits(1..4)]
+    pub small: Small,
+}
+"#,
+};
+
+/// The record's default `konst = stable` validator calls the field's
+/// `try_make`, which `konst = none` leaves non-const.
+pub(crate) const PACKED_NON_CONST_FIELD: Rejection = Rejection {
+    name: "packed_rejects_a_non_const_field_under_stable_konst",
+    expected: "cannot call non-const associated function",
+    source: r#"
+#[typekin::integral(konst = none, domain = 1..)]
+pub struct Id(u8);
+
+#[typekin::packed(repr = u8)]
+pub struct Record {
+    #[bits(0..8)]
+    pub id: Id,
+}
+"#,
 };

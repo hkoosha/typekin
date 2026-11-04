@@ -88,8 +88,13 @@ pub const WITHIN: AsmCase = AsmCase {
     source: include_str!("../asm_case_within.rs"),
 };
 
+pub const PACKED: AsmCase = AsmCase {
+    name: "packed",
+    source: include_str!("../asm_case_packed.rs"),
+};
+
 /// Every case; each build holds all of them.
-const CASES: [&AsmCase; 10] = [
+const CASES: [&AsmCase; 11] = [
     &MY_U32,
     &MY_U64_CONST,
     &MY_SEQUENCE,
@@ -100,6 +105,7 @@ const CASES: [&AsmCase; 10] = [
     &DOMAIN_INT,
     &COMPILE_TIME,
     &WITHIN,
+    &PACKED,
 ];
 
 /// Crate attributes; `my_u64_const` needs the const-trait features.

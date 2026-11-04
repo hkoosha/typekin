@@ -914,12 +914,13 @@ pub(crate) enum Key {
     Valid,
     Value,
     ValueName,
+    ValuesName,
     With,
     Without,
 }
 
 impl Key {
-    const ITEMS: [Self; 32] = [
+    const ITEMS: [Self; 33] = [
         Self::Conversion,
         Self::Domain,
         Self::Error,
@@ -950,6 +951,7 @@ impl Key {
         Self::Valid,
         Self::Value,
         Self::ValueName,
+        Self::ValuesName,
         Self::With,
         Self::Without,
     ];
@@ -986,6 +988,7 @@ impl Key {
             Self::Valid => "valid",
             Self::Value => "value",
             Self::ValueName => "value_name",
+            Self::ValuesName => "values_name",
             Self::With => "with",
             Self::Without => "without",
         };

@@ -101,7 +101,7 @@ gate name: verify (snapshot-check name) examples-check
 gate-phase name: (gate name)
   cargo +nightly test --locked --manifest-path typekin_testing/Cargo.toml --features test_slow
   cargo +nightly test --locked --lib --features nightly
-  for example in my_u32_non_const my_u32_stable_const my_tcp my_text my_flag my_f64 my_unit my_f32_point; do env -u RUSTFLAGS cargo +stable run --locked --quiet --example "$example"; done
+  for example in my_u32_non_const my_u32_stable_const my_tcp my_text my_flag my_f64 my_unit my_f32_point my_packed; do env -u RUSTFLAGS cargo +stable run --locked --quiet --example "$example"; done
 
 # Functions in `src/` longer than `max` lines, longest first.
 [group("z")]
@@ -169,7 +169,7 @@ z-new it file:
     >> justfile
 
 [parallel]
-expandem: u32-expand u16-expand non-expand sequence-expand tcp-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand blind-trust-expand f64-expand unit-expand f32-point-expand lit-expand proven-expand within-expand
+expandem: u32-expand u16-expand non-expand sequence-expand tcp-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand blind-trust-expand f64-expand unit-expand f32-point-expand lit-expand proven-expand within-expand packed-expand
   @just fmt
 
 [group("example")]
@@ -271,3 +271,8 @@ proven: proven-expand fmt
 within-expand: (z-expand 'my_within')
 [group("example")]
 within: within-expand fmt
+
+[group("example")]
+packed-expand: (z-expand 'my_packed')
+[group("example")]
+packed: packed-expand fmt

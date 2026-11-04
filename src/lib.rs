@@ -29,6 +29,7 @@ pub(crate) mod integral_items;
 pub(crate) mod integral_proof;
 pub(crate) mod integral_within;
 pub(crate) mod marker_tree;
+pub(crate) mod packed;
 pub(crate) mod text;
 pub(crate) mod zz_conv;
 pub(crate) mod zz_domain;
@@ -463,6 +464,53 @@ pub fn bitflag(
         item,
         syn::parse2::<bitflag::Cfg>,
         |attr, item: ItemEnum| bitflag::ekran(Box::new(attr), item),
+    );
+}
+
+/// Generates a packed record: a transparent unsigned integer whose fields
+/// are typed bit windows.
+///
+/// # Inputs
+///
+/// - **Required item:** a non-generic struct with named fields, each with
+///   exactly one `#[bits(LO..HI)]`, `#[bits(LO..=HI)]`, or `#[bit(N)]`. Bit 0
+///   is the least significant. Doc comments are the only other field
+///   attributes.
+/// - **Required argument:** `repr = u8 | u16 | u32 | u64 | u128`.
+/// - All other configuration arguments are optional.
+///
+/// # Configuration
+///
+/// - `konst = none | stable | nightly`
+/// - `hide_in = MODULE | none`
+/// - `values_name = Ident` (default `{Type}Values`)
+/// - `with = FLAG | [FLAG, ...]` and `without = FLAG | [FLAG, ...]`: `debug`,
+///   `eq`, `hash`, and `values_struct` (on by default), `non_zero`, `ord`, and
+///   `serde` (off by default)
+///
+/// A field is `bool` (one bit), a fixed-width primitive integer (exactly its
+/// width), or a typekin integer type (an integral wrapper, a bitflag value
+/// type, or another packed record) whose every value fits its window, which
+/// rustc proves at compile time. Windows may not overlap; unclaimed bits are
+/// always zero.
+///
+/// The record gets `make` from the generated values struct, `fields` back
+/// to it, a getter and a `with_{field}` setter per field, and the integral
+/// core: `raw`, `try_make`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Hash`, and
+/// optionally `Ord` and Serde. `make` and the setters never validate; raw
+/// ingress (`try_make`, deserialization) checks every field and the unclaimed
+/// bits. `with = non_zero` selects `NonZero` storage once rustc proves that
+/// some field excludes zero.
+#[proc_macro_attribute]
+pub fn packed(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    return expand_hideable(
+        attr,
+        item,
+        syn::parse2::<packed::Cfg>,
+        |attr, item: packed::PackedItem| packed::ekran(Box::new(attr), item),
     );
 }
 

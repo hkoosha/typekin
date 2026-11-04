@@ -25,6 +25,8 @@ mod t_marker_tree;
 #[cfg(test)]
 mod t_order;
 #[cfg(test)]
+mod t_packed;
+#[cfg(test)]
 mod t_pointer_width;
 #[cfg(test)]
 mod t_proof;

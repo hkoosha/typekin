@@ -561,3 +561,32 @@ pub const WITHIN_CONTROL_OPERATIONS: &[Operation] = &[Operation::new(
     "raw_within_score",
     "wrapped_within_validated",
 )];
+
+/// Packed record accessors: `make`, `with_*`, and proven getters must compile
+/// to the hand-written shifts and masks.
+pub const PACKED_OPERATIONS: &[Operation] = &[
+    Operation::new("packed make", "raw_packed_make", "wrapped_packed_make"),
+    Operation::new(
+        "packed with_state",
+        "raw_packed_with_state",
+        "wrapped_packed_with_state",
+    ),
+    Operation::new(
+        "packed version",
+        "raw_packed_version",
+        "wrapped_packed_version",
+    ),
+    Operation::new("packed data", "raw_packed_data", "wrapped_packed_data"),
+    Operation::new(
+        "packed sealed",
+        "raw_packed_sealed",
+        "wrapped_packed_sealed",
+    ),
+];
+
+/// A getter that re-checks its field's domain: the check stays.
+pub const PACKED_CONTROL_OPERATIONS: &[Operation] = &[Operation::new(
+    "packed id",
+    "raw_packed_id",
+    "wrapped_packed_id",
+)];

@@ -19,14 +19,27 @@ ranges, a generated `Values` struct, and re-checking getters (§9).
 
 `[x]` done and verified, `[~]` in progress, `[ ]` not started.
 
-- [ ] **K0** groundwork (§6)
-- [ ] **K1** entry point, parsing, and layout checks (§3)
-- [ ] **K2** integral configuration and raw validation (§5.1)
-- [ ] **K3** `Values` struct and accessors (§5.2)
-- [ ] **K4** window proofs and `non_zero` (§4)
-- [ ] **K5** `Debug`, `Hash`, `Eq`, Serde (§5.3)
-- [ ] **K6** tests (§7)
-- [ ] **K7** example and documentation (§8)
+- [x] **K0** groundwork (§6). Baseline: root 1007, `test_fast` 817. W4 and W6
+  had landed; the proof message helpers moved to
+  `zz_domain_within::emit_messages`, shared by integral and `packed`, which
+  writes its own window target (the window's range, chosen in the constant
+  from the field's published signedness) around the shared subset check.
+- [x] **K1** entry point, parsing, and layout checks (§3). `konst_*` flags are
+  rejected like integral flags; `bool` also accepts a one-bit `#[bits(..)]`.
+- [x] **K2** integral configuration and raw validation (§5.1). With
+  `non_zero`, validation also rejects zero, so `try_make`'s unchecked
+  `NonZero` construction does not depend on the proof.
+- [x] **K3** `Values` struct and accessors (§5.2). Unsigned wrapper fields
+  are not masked on write (their fit is proven); signed ones are.
+- [x] **K4** window proofs and `non_zero` (§4). Every wrapper field gets a
+  proof constant: whether the window equals the raw width is only known to
+  rustc, which skips the check then. A window wider than the field's raw type
+  is a const-evaluation error (it would break the canonical form).
+- [x] **K5** `Debug`, `Hash`, `Eq`, Serde (§5.3)
+- [x] **K6** tests (§7). After: root 1066, `test_fast` 865; four compile-fail
+  cases; asm `packed` case (five `Match` pairs, `id()` `DiffEach`).
+- [~] **K7** example and documentation (§8): `my_packed`, its expansion, and
+  `AGENTS.md` are done; the README section awaits explicit approval.
 
 ---
 

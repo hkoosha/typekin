@@ -151,3 +151,29 @@ mod within {
         assert_rejected(&BUILT, &WITHIN_GENERIC_TARGET);
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "test_slow_only")]
+mod packed {
+    use super::*;
+
+    #[test]
+    fn packed_refutes_a_field_too_wide_for_its_window() {
+        assert_rejected(&CHECKED, &PACKED_FIELD_TOO_WIDE);
+    }
+
+    #[test]
+    fn packed_refutes_a_signed_field_too_wide_for_its_window() {
+        assert_rejected(&CHECKED, &PACKED_SIGNED_FIELD_TOO_WIDE);
+    }
+
+    #[test]
+    fn packed_cannot_prove_non_zero_when_every_field_admits_zero() {
+        assert_rejected(&CHECKED, &PACKED_NON_ZERO_UNPROVEN);
+    }
+
+    #[test]
+    fn packed_rejects_a_non_const_field_under_stable_konst() {
+        assert_rejected(&CHECKED, &PACKED_NON_CONST_FIELD);
+    }
+}

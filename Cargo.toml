@@ -146,3 +146,9 @@ path = "examples/my_within.rs"
 [[example]]
 name = "my_within_exp"
 path = "examples/my_within_exp.rs"
+[[example]]
+name = "my_packed"
+path = "examples/my_packed.rs"
+[[example]]
+name = "my_packed_exp"
+path = "examples/my_packed_exp.rs"

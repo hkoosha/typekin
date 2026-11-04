@@ -14,6 +14,9 @@ default:
   semantics.
 - `bitflag`: a unit enum plus a generated `{Enum}Value` wrapper for combined or
   unknown bits; the value type's name is configurable.
+- `packed`: a named-field struct as a transparent unsigned integer whose fields
+  are typed bit windows (`#[bits(LO..HI)]`, `#[bit(N)]`), with a generated
+  `{Type}Values` struct for `make` and `fields`.
 - `text`: validated `String` newtypes, using `std` or `alloc` paths as
   configured.
 - `tree`: sealed branch traits and zero-sized marker leaves; trees can also be
@@ -30,17 +33,20 @@ constness, and runtime cost as API behavior.
 ## Repository map
 
 - `src/lib.rs`: proc-macro entry points.
-- `src/{integral,bitflag,text,friendship,constructor}.rs`: parsing and emission
-  for each macro family. `src/integral.rs` holds the integral entry (`ekran`,
-  `ekran_with`), the target and storage model, and the emitter orchestration;
-  its siblings hold the rest: `integral_cfg.rs` (configuration, flags, and
-  resolution), `integral_friend.rs` (friend protocol and facet dispatch),
-  `integral_impls.rs` (trait and operator impls), `integral_items.rs` (inherent
-  items), `integral_forward.rs` (`core_int` forwards), `integral_proof.rs`
-  (closure-proof use and `prove`), and `integral_within.rs` (`Within` friends
-  and the constants sources publish for them). `src/float.rs` holds the
-  float-only `impl Maker` emitters (`core_float`, `float_math`, exponent
-  formatting, `Sum`/`Product`).
+- `src/{integral,bitflag,packed,text,friendship,constructor}.rs`: parsing and
+  emission for each macro family. `src/integral.rs` holds the integral entry
+  (`ekran`, `ekran_with`), the target and storage model, and the emitter
+  orchestration; its siblings hold the rest: `integral_cfg.rs` (configuration,
+  flags, and resolution), `integral_friend.rs` (friend protocol and facet
+  dispatch), `integral_impls.rs` (trait and operator impls),
+  `integral_items.rs` (inherent items), `integral_forward.rs` (`core_int`
+  forwards), `integral_proof.rs` (closure-proof use and `prove`), and
+  `integral_within.rs` (`Within` friends and the constants sources publish for
+  them). `src/float.rs` holds the float-only `impl Maker` emitters
+  (`core_float`, `float_math`, exponent formatting, `Sum`/`Product`).
+  `src/packed.rs` holds the packed record: field windows, the `{Type}Values`
+  struct and accessors, the validation callback it hands
+  `integral::ekran_with`, and the fit and `non_zero` proofs.
 - `src/marker_tree.rs`: standalone and embedded marker-tree generation.
 - `src/zz_runner.rs`: shared parsing, diagnostic, and macro-runner helpers.
 - `src/zz_flags.rs`: typed `with`/`without` flags: the `Flag` trait each
@@ -220,6 +226,26 @@ constness, and runtime cost as API behavior.
   auto uses text for human-readable serializers and raw bits otherwise.
 - Unsupported attributes and combinations must produce a targeted macro
   diagnostic, not be ignored or silently downgraded.
+- `packed` (and `hide_in` on it by default, exporting the record and its
+  values struct) takes a non-generic named-field struct and an unsigned
+  fixed-width `repr` (no `usize`). Fields are typed: `bool` takes one bit, a
+  primitive integer exactly its width, and a typekin integer type (integral
+  wrapper, bitflag value, packed record) any window that provably holds it.
+  Windows are proven, never masked: each wrapper field gets a constant rustc
+  evaluates during `cargo check` that its raw type is at least as wide as the
+  window and, when wider, that its published form (or 8-bit table) lies in
+  the window's range (signed raw types sign-extend on read). Unclaimed bits are
+  zero, so the representation is canonical and raw `Eq`/`Hash` are field
+  equality. `make` and `with_*` never validate: they build through the safe
+  storage path behind a `debug_assert!`, so a wrong proof cannot reach
+  `NonZero::new_unchecked`. Raw ingress (`try_make`, Serde) validates through
+  one generated callback: unclaimed bits, then each wrapper field's `try_make`.
+  Getters re-check through the field's `try_make` with an unreachable `Err`,
+  which LLVM folds when the window implies validity. `with = non_zero` is
+  opt-in: validation also rejects zero, and a constant proves some field
+  excludes zero, so `make` cannot panic. Encodings are typekin built-ins (v1:
+  natural only); no user codecs. Integral keys and flags are rejected with
+  "`packed` does not support `KEY`".
 
 ### Make ownership and capability explicit
 
@@ -591,9 +617,10 @@ promise does not cover. For changes to the crate's `nightly` feature, also run
 
 Run a relevant example as a smoke test for the changed macro. On stable,
 `my_u32_non_const` exercises `konst = none`, while `my_u32_stable_const`,
-`my_tcp`, `my_text`, `my_flag`, `my_f64`, `my_unit`, and `my_f32_point` exercise
-stable defaults without the `nightly` Cargo feature. Nightly const settings and
-other unstable features require the corresponding feature gates.
+`my_tcp`, `my_text`, `my_flag`, `my_f64`, `my_unit`, `my_f32_point`, and
+`my_packed` exercise stable defaults without the `nightly` Cargo feature.
+Nightly const settings and other unstable features require the corresponding
+feature gates.
 
 Root `just fmt`, `just test`, `just test-fast`, `just test-slow`, `just all`,
 and example recipes without `-expand` format root `*.md`, including README. Do

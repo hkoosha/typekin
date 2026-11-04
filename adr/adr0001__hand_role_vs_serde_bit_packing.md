@@ -1,6 +1,6 @@
 # ADR 0001: Hand-rolled bit packing vs a Serde bit-packing format
 
-- Status: Proposed
+- Status: Accepted (implemented)
 - Date: 2026-11-04
 - Related: `PLAN_PACKED.md`
 

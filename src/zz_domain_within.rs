@@ -193,6 +193,35 @@ pub(crate) fn emit_check() -> TokenStream {
         .expect("the shared check is valid Rust");
 }
 
+/// The panicking message helpers of generated proofs, beside
+/// [`emit_check`]: a counterexample between a head and a tail, or a reason
+/// after a head.
+pub(crate) fn emit_messages() -> TokenStream {
+    return quote! {
+        const fn __typekin_within_refute(
+            head: &str,
+            value: __TypekinWithinValue,
+            tail: &str,
+        ) -> ! {
+            let mut text = __TypekinWithinText::new();
+            text.push(head);
+            text.push_value(value);
+            text.push(tail);
+            ::core::panic!("{}", text.as_str());
+        }
+
+        const fn __typekin_within_explain(
+            head: &str,
+            reason: &str,
+        ) -> ! {
+            let mut text = __TypekinWithinText::new();
+            text.push(head);
+            text.push(reason);
+            ::core::panic!("{}", text.as_str());
+        }
+    };
+}
+
 impl ValidationCfg {
     /// The values this validation admits at width `index`: every value
     /// without validation, the resolved domain's form without callbacks.

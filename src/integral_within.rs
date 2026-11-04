@@ -29,6 +29,7 @@ use crate::zz_domain_within::{
     Form,
     Opaque,
     emit_check,
+    emit_messages,
     subset,
 };
 use crate::zz_domain_within_const::{
@@ -512,30 +513,11 @@ impl Maker {
             });
             quote! { #(#proofs)* }
         });
+        let messages = emit_messages();
         return quote! {
             #check
 
-            const fn __typekin_within_refute(
-                head: &str,
-                value: __TypekinWithinValue,
-                tail: &str,
-            ) -> ! {
-                let mut text = __TypekinWithinText::new();
-                text.push(head);
-                text.push_value(value);
-                text.push(tail);
-                ::core::panic!("{}", text.as_str());
-            }
-
-            const fn __typekin_within_explain(
-                head: &str,
-                reason: &str,
-            ) -> ! {
-                let mut text = __TypekinWithinText::new();
-                text.push(head);
-                text.push(reason);
-                ::core::panic!("{}", text.as_str());
-            }
+            #messages
 
             #forced
         };

@@ -804,7 +804,7 @@ impl StoragePlan {
     /// or a domain whose zero probe is false at every width), so the
     /// unchecked constructor is sound there and keeps codegen identical to
     /// the plain check. Unvalidated construction keeps the checked one.
-    fn storage_expression(
+    pub(crate) fn storage_expression(
         &self,
         raw: TokenStream,
         validated: bool,
