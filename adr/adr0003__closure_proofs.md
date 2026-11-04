@@ -4,7 +4,7 @@
 - Date: 2026-11-04
 - Related: `src/zz_domain_closure.rs`, `src/integral_proof.rs`,
   `src/integral_cfg.rs` (`settle_proven`), `src/integral_items.rs` (`_proven`
-  helpers), `src/tests/t_domain_closure.rs`, `examples/my_proven.rs`, README
+  helpers), `../src/unit`, `examples/my_proven.rs`, README
   "The Catch", ADR 0013 (pointer widths), ADR 0024 (`Within`, cross-type proofs)
 
 ## Context

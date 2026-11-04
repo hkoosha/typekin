@@ -2,7 +2,7 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `src/zz_runner.rs` (`TYPEKIN_MACHINERY_DEBUG`, `typekin_catch_panics`, `catching`), `src/lib.rs` (`expand`, `expand_hideable`), `src/tests/t_runner.rs`, AGENTS.md:452 ("Machinery and fixtures are unconditional"), ADR 0016, ADR 0020
+- Related: `src/zz_runner.rs` (`TYPEKIN_MACHINERY_DEBUG`, `typekin_catch_panics`, `catching`), `src/lib.rs` (`expand`, `expand_hideable`), `../src/unit`, AGENTS.md:452 ("Machinery and fixtures are unconditional"), ADR 0016, ADR 0020
 
 ## Context
 Every macro entry point ran its expansion through `catching`. `catching` installs a panic hook, runs the expansion under `catch_unwind`, captures the message and a backtrace, and emits `compile_error!`. The request was to keep this wrapper but switch it off by default, behind something hidden.

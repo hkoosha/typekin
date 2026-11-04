@@ -19,9 +19,17 @@ quote = "1"
 syn = { version = "3", features = ["full", "visit-mut"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 
+[dev-dependencies]
+serde = { version = "1", default-features = false, features = ["alloc"] }
+serde_test = "1"
+
 [lib]
 proc-macro = true
 doctest = false
+
+[[test]]
+name = "e2e"
+path = "src/e2e/mod.rs"
 
 [lints.clippy]
 needless_return = "allow"

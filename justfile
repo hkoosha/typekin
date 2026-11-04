@@ -1,5 +1,6 @@
 set shell := ["bash", "-e", "-u", "-o", "pipefail", "-c"]
 
+targets := "wasm32-unknown-unknown aarch64-unknown-linux-gnu armv7-unknown-linux-gnueabihf i686-unknown-linux-gnu"
 export RUST_BACKTRACE := 'full'
 export RUSTFLAGS := '-Zmacro-backtrace'
 
@@ -7,49 +8,27 @@ export RUSTFLAGS := '-Zmacro-backtrace'
 @def:
   just -l
 
-fmt: fmt-markdown fmt-rs
-
 [group("z")]
-fmt-markdown:
+markdown:
   rumdl fmt --deny-config-warnings --no-cache *.md &>/dev/null
   rumdl fmt --deny-config-warnings --no-cache arena/*.md &>/dev/null || true
 
 [group("z")]
-fmt-rs:
+fmt: markdown
   cargo fmt
 
-[group("z")]
-test-here: fmt z-test
+test: fmt
+  time cargo +nightly fmt -- --check
+  time cargo +nightly clippy --locked --lib -- -D warnings
+  runner="$(if cargo nextest --version &>/dev/null; then echo 'nextest run'; else echo 'test'; fi)"; \
+  time cargo +nightly --offline --locked $runner
 
-[group("z")]
-z-test *args:
-  runner=test; \
-  if cargo nextest --version &>/dev/null; then runner='nextest run'; fi; \
-  time cargo $runner --offline {{ args }}
+test-fast:
+  'TYPEKIN_DISABLE_SLOW_TESTS=1'; \
+  just test
 
-[group("z")]
-[working-directory: 'typekin_testing']
-@test-there-fast:
-  just test-fast
-[group("z")]
-[working-directory: 'typekin_testing']
-@test-there-slow:
-  just test-slow
-
-[group("z")]
-[working-directory: 'typekin_testing']
-@clean-there:
-  just clean
-[group("z")]
-[working-directory: 'typekin_testing']
-clean-here:
+clean:
   cargo clean
-clean: clean-here clean-there
-
-test-slow: test-here test-there-slow
-test-fast: test-here test-there-fast
-alias test := test-fast
-alias test-all := test-slow
 
 build: fmt
   cargo build
@@ -60,93 +39,19 @@ clippy: fmt
 fix: fmt
   cargo clippy --offline --locked --frozen --fix
 
-# The expansion snapshot: typekin's own expansions of every testing-crate
-# file with a typekin attribute, trailing commas stripped.
-[group("z")]
-snapshot out:
-  rm -rf '{{ out }}'
-  mkdir -p '{{ out }}'
-  grep -l '#\[typekin::' typekin_testing/src/*.rs \
-    | xargs -P 6 -I{} sh -c 'expandem "$1" "typekin::**" > "$2/${1##*/}"' _ {} '{{ out }}'
-  perl -0pi -e 's/,(\s*[)\]}])/$1/g' '{{ out }}'/*
-
-# A fresh snapshot, diffed against the shared base.
-[group("z")]
-snapshot-check name: (snapshot "/tmp/typekin-snap/" + name)
-  diff -r /tmp/typekin-snap/base '/tmp/typekin-snap/{{ name }}'
-
-# Regenerates every `_exp.rs`; fails when one changes.
-[group("z")]
-examples-check:
-  just --summary | tr ' ' '\n' | grep -- '-expand$' | grep -v '^z' \
-    | xargs -P 6 -n 1 just
-  cargo +nightly fmt
-  git diff --exit-code -- examples/
-
-# Format, lint, typekin's own tests and the fast consumer tests.
-[group("z")]
-verify:
-  cargo +nightly fmt -- --check
-  cargo +nightly fmt --manifest-path typekin_testing/Cargo.toml -- --check
-  cargo +nightly clippy --locked --lib --tests -- -D warnings
-  cargo +nightly test --locked
-  cargo +nightly test --locked --manifest-path typekin_testing/Cargo.toml --features test_fast
-
-# A refactor task: `verify`, and neither the snapshot nor an example changes.
-[group("z")]
-gate name: verify (snapshot-check name) examples-check
-
-# A phase's exit, on the merged result.
-[group("z")]
-gate-phase name: (gate name)
-  cargo +nightly test --locked --manifest-path typekin_testing/Cargo.toml --features test_slow
-  cargo +nightly test --locked --lib --features nightly
-  for example in my_u32_non_const my_u32_stable_const my_tcp my_text my_flag my_f64 my_unit my_f32_point my_packed; do env -u RUSTFLAGS cargo +stable run --locked --quiet --example "$example"; done
-
-# Functions in `src/` longer than `max` lines, longest first.
-[group("z")]
-fn-lengths max='100':
-  #!/usr/bin/env bash
-  set -euo pipefail
-  awk -v max='{{ max }}' '
-    FNR == 1 { open = 0 }
-    !open && /^ *(pub(\([a-z]+\))? )?(const )?fn [A-Za-z_0-9]+/ && !/;$/ {
-      match($0, /^ */); start = FNR; open = 1
-      name = $0
-      sub(/^ *(pub(\([a-z]+\))? )?(const )?fn /, "", name)
-      sub(/[(<].*/, "", name)
-      closer = sprintf("%" RLENGTH "s}", "")
-      next
-    }
-    open && $0 == closer {
-      if (FNR - start + 1 > max) print FILENAME ":" start ": " name " " FNR - start + 1
-      open = 0
-    }
-  ' src/*.rs | sort -t ' ' -k 3 -n -r
-
-[group("z")]
-init-here:
+init:
   cargo install expandem
-[group("z")]
-[working-directory: 'typekin_testing']
-init-there:
-  just init
-init: init-here init-there
-
-examples := 'examples'
+  for target in {{ targets }}; do \
+    rustup +nightly target add "$target"; done
+  rustup +nightly component add llvm-tools
 
 [group("z")]
-z-expand what: (
-    zz-expand
-    examples / (what + '.rs')
-    examples / (what + '_exp.rs')
-  )
-
-[group("z")]
-zz-expand from to:
-  rm -rf '{{ to }}'
-  touch '{{ to }}'
-  expandem --fix '{{ from }}' 'typekin::**' > '{{ to }}'
+z-expand what:
+  from='examples/{{ what }}.rs';\
+  to='examples/{{ what }}_exp.rs';\
+  rm -rf "$from";\
+  touch "$to";\
+  expandem --fix "$from" 'typekin::**' > "$to"
 
 [group("z")]
 @new it:

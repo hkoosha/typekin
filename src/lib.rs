@@ -48,8 +48,12 @@ pub(crate) mod zz_profile_integral;
 pub(crate) mod zz_runner;
 pub(crate) mod zz_values;
 
+// Never compiled into the library: `src/e2e/mod.rs` is the root of the `e2e`
+// test target (Cargo.toml). The declaration only makes `cargo fmt` reach it.
+#[cfg(any())]
+mod e2e;
 #[cfg(test)]
-mod tests;
+mod unit;
 
 /// Generates a transparent primitive-integer newtype and its configured API.
 ///

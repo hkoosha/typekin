@@ -2,7 +2,7 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `src/integral.rs` (`pointer_width_cfg`, `cast_targets`), `src/zz_values.rs` (`can_safe_cast_to`), `src/integral_items.rs`, `src/integral_friend.rs`, `src/zz_domain_int.rs`, `src/tests/t_pointer_width.rs`, `typekin_testing/src/fx_pointer_width_compile.rs`, `src/lib.rs` cross-compilation docs, `PLAN_WITHIN.md`; ADR 0006 (domain), ADR 0011 (NonZero storage), ADR 0022 (integral API)
+- Related: `src/integral.rs` (`pointer_width_cfg`, `cast_targets`), `src/zz_values.rs` (`can_safe_cast_to`), `src/integral_items.rs`, `src/integral_friend.rs`, `src/zz_domain_int.rs`, `../src/unit`, `typekin_testing/src/fx_pointer_width_compile.rs`, `src/lib.rs` cross-compilation docs, `PLAN_WITHIN.md`; ADR 0006 (domain), ADR 0011 (NonZero storage), ADR 0022 (integral API)
 
 ## Context
 `usize`/`isize` widths depend on the consumer's target, but a proc macro runs on the host. Code like `N::USIZ => usize::BITS` inside the macro baked in the host width: a 64-bit host building for wasm32 produced silently truncating conversions and wrong domain checks.

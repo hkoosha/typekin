@@ -2,13 +2,13 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `typekin_testing/` (`test_*.rs`, `fx_*.rs`, `src/machinery/`), `src/tests/`, `typekin_testing/Cargo.toml`, `typekin_testing/.config/nextest.toml`, root `justfile` (`z-test`), AGENTS.md (test rules), TODO.md; ADR 0019
+- Related: `typekin_testing/` (`test_*.rs`, `fx_*.rs`, `src/machinery/`), `../src/unit`, `typekin_testing/Cargo.toml`, `typekin_testing/.config/nextest.toml`, root `justfile` (`z-test`), AGENTS.md (test rules), TODO.md; ADR 0019
 
 ## Context
 Tests were spread across the root crate, per-test fixture crates and examples. Slow tests built a crate each, some passed on any failure or by skipping, and failures did not say what broke.
 
 ## Decision
-- **Test at the layer where the behavior is observable.** Default: `typekin_testing`, as a downstream consumer. `src/tests/` keeps only diagnostics, crate-private analysis (closure proofs, domain normalization, float query analysis), token details and non-host pointer widths. Separate fixture crates only for what needs rustc to reject code, crate attributes, or another target.
+- **Test at the layer where the behavior is observable.** Default: `typekin_testing`, as a downstream consumer. `../src/unit` keeps only diagnostics, crate-private analysis (closure proofs, domain normalization, float query analysis), token details and non-host pointer widths. Separate fixture crates only for what needs rustc to reject code, crate attributes, or another target.
 - **Absence via macros, not crates:** `assert_not_impl!`, `assert_no_method!`, `assert_no_associated_fn!` (`machinery/absent.rs`). About 45 slow tests became fast. Changes to `absent.rs`/`fixture.rs` need a negative control.
 - **Rejection fixtures match their own message:** a rejection passes only if rustc reports an error inside that case's code and every such error contains the expected text (mapped via `--message-format=json`). Compile-pass and rejection cases never share a crate; remaining fixtures batched into shared crates (~42 s → 8.6 s).
 - **Never pass by skipping.** A missing target or tool fails the test.

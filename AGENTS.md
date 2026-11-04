@@ -76,7 +76,7 @@ constness, and runtime cost as API behavior.
   `Within` proofs, and `src/zz_domain_within_const.rs` holds their subset check,
   which typekin both compiles and emits verbatim, so it stays plain stable
   `const fn` code.
-- `src/tests/`: unit tests of what the public surface cannot show (diagnostics,
+- `src/unit`: unit tests of what the public surface cannot show (diagnostics,
   crate-private analysis, and token details; see "Tests and verification").
 - `typekin_testing/`: a separate unpublished Cargo crate and the default home
   for tests. Its `src/` contains downstream behavior, allocation, compile-time
@@ -445,8 +445,8 @@ constness, and runtime cost as API behavior.
   parent with a suffix (`zz_domain_closure.rs` beside `zz_domain.rs`). Never
   create a new directory, a module file under another module (`src/a/b.rs`), a
   `mod` declared from a non-root module, or a `#[path]` module without the
-  user's explicit permission. The only exceptions are the existing `src/tests/`
-  directory of `t_*.rs` files; `typekin_testing/src/machinery/`, whose `mod.rs`
+  user's explicit permission. The only exceptions are the existing `src/unit`
+  directory of `t_*.rs` files; `typekin_testing/src/machinery/`, whose `unit`
   only declares its helper modules (tests and fixtures stay directly in
   `typekin_testing/src/`); the inline test modules inside `test_*.rs` files; and
   inline `mod name { … }` blocks that `fx_*.rs` files use as scopes for
@@ -469,7 +469,7 @@ Test behavior at the layer where it is observable:
   `assert_no_method!`, or `assert_no_associated_fn!`
   (`typekin_testing/src/machinery/absent.rs`) in the fast modules; a violation
   fails to compile.
-- `src/tests/` holds only what the public surface cannot show: typekin's own
+- `src/unit` holds only what the public surface cannot show: typekin's own
   diagnostics (a typekin rejection fails the consumer's build, and fixture
   crates are reserved for rustc's rejections), crate-private functions and data
   with no consumer-visible effect (closure-proof evaluation and its soundness
@@ -484,7 +484,7 @@ Test behavior at the layer where it is observable:
   crates, toolchains, or targets. Add a case to an existing fixture before
   adding a fixture; compile-pass and rejection cases never share one.
 - Test each behavior at one layer. Do not repeat in a fixture crate what a
-  `src/tests/` test or a fast-module assertion already covers.
+  `src/unit` test or a fast-module assertion already covers.
 - Tests never include or depend on `examples/`; examples are not tests. Declare
   test-specific types in the testing crate instead.
 - Keep fixtures and tests in separate files. A `test_<name>.rs` holds only tests
