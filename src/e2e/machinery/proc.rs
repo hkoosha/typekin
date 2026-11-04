@@ -64,3 +64,20 @@ pub fn render_command(command: &Command) -> String {
     }
     return result;
 }
+
+pub fn has_slow() -> bool {
+    return match std::env::var("TYPEKIN_DISABLE_SLOW_TESTS") {
+        Ok(it) => !it.is_empty() && it != "0" && it != "false",
+        Err(_) => return true,
+    };
+}
+
+macro_rules! slow {
+    () => {
+        if !$crate::has_slow() {
+            return;
+        }
+    };
+}
+
+pub(crate) use slow;

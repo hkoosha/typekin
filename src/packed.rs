@@ -763,11 +763,10 @@ impl Maker {
     }
 
     /// The record built from `raw`, which every field value fits: debug
-    /// builds check it, and storage takes the safe path, so a wrong proof
-    /// cannot reach `NonZero::new_unchecked`.
+    /// builds check it.
     fn construct(&self) -> TokenStream {
         let valid = self.names.get(PackedName::ValidFn);
-        let storage = self.storage.storage_expression(quote! { raw }, false);
+        let storage = self.storage.storage_expression(quote! { raw });
         return quote! {
             ::core::debug_assert!(
                 #valid(raw),
@@ -1271,8 +1270,8 @@ impl FitTexts {
 
 /// The integral core's configuration: `CORE` and the forwarded flags,
 /// validated by the generated callback `valid`, and `NonZero` storage that
-/// validation also checks, so `try_make`'s unchecked construction stays
-/// sound whatever the `non_zero` proof says.
+/// validation also checks, so `try_make` rejects zero whatever the `non_zero`
+/// proof says.
 fn integral_cfg(
     cfg: &Cfg,
     valid: &Ident,

@@ -1,8 +1,9 @@
 //! Domain codegen: `raw_*` is the hand-written *normalized* condition (with
-//! the same `NonZero` storage where typekin infers it),
-//! `written_*` the condition exactly as written, `wrapped_*` typekin's
-//! `try_make`. Optimized `raw_*` and `wrapped_*` must be identical, and
-//! `wrapped_*` never longer than `written_*`.
+//! the same `NonZero` storage where typekin infers it, built as typekin
+//! builds it: the safe constructor, panicking on zero), `written_*` the
+//! condition exactly as written, `wrapped_*` typekin's `try_make`. Optimized
+//! `raw_*` and `wrapped_*` must be identical, and `wrapped_*` never longer
+//! than `written_*`.
 
 #[typekin::integral(domain = (1..12 | 87..) & !{10} & !mul(3))]
 pub struct Code(u32);
@@ -32,8 +33,10 @@ pub extern "C" fn raw_code(it: u32) -> bool {
     // hand-written equivalent builds the same storage.
     let checked: Result<core::num::NonZeroU32, u32> =
         if ((it >= 1 && it < 12) || it >= 87) && it != 10 && it % 3 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -46,8 +49,10 @@ pub extern "C" fn raw_code(it: u32) -> bool {
 pub extern "C" fn written_code(it: u32) -> bool {
     let checked: Result<core::num::NonZeroU32, u32> =
         if ((it >= 1 && it < 12) || it >= 87) && it != 10 && it % 3 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -63,27 +68,13 @@ pub extern "C" fn wrapped_code(raw: u32) -> bool {
 
 #[unsafe(no_mangle)]
 #[inline(never)]
-pub extern "C" fn raw_code64(it: i64) -> bool {
-    // The wrapper stores `NonZeroI64` (the domain excludes zero), so the
-    // hand-written equivalent builds the same storage.
-    let checked: Result<core::num::NonZeroI64, i64> =
-        if ((it >= -5 && it < 12) || it >= 87) && it != 10 && it % 3 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroI64::new_unchecked(it) })
-        }
-        else {
-            Err(it)
-        };
-    return checked.is_ok();
-}
-
-#[unsafe(no_mangle)]
-#[inline(never)]
 pub extern "C" fn written_code64(it: i64) -> bool {
     let checked: Result<core::num::NonZeroI64, i64> =
         if ((it >= -5 && it < 12) || it >= 87) && it != 10 && it % 3 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroI64::new_unchecked(it) })
+            Ok(match core::num::NonZeroI64::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -115,20 +106,27 @@ pub extern "C" fn wrapped_even_or_band(raw: u8) -> bool {
     return EvenOrBand::try_make(raw).is_ok();
 }
 
+/// The normalized check behind one `#[inline(always)]` layer, as in
+/// `try_make`: the zero check left after it compiles differently inline.
+#[inline(always)]
+const fn raw_bounded_body(it: i32) -> Result<core::num::NonZeroI32, i32> {
+    // The wrapper stores `NonZeroI32` (the domain excludes zero), so the
+    // hand-written equivalent builds the same storage.
+    return if it.unsigned_abs() <= 1000 && it % 7 != 0 {
+        Ok(match core::num::NonZeroI32::new(it) {
+            Some(value) => value,
+            None => panic!("zero cannot be stored by this integral type"),
+        })
+    }
+    else {
+        Err(it)
+    };
+}
+
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn raw_bounded(it: i32) -> bool {
-    // The wrapper stores `NonZeroI32` (the domain excludes zero), so the
-    // hand-written equivalent builds the same storage.
-    let checked: Result<core::num::NonZeroI32, i32> =
-        if it.unsigned_abs() <= 1000 && it % 7 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroI32::new_unchecked(it) })
-        }
-        else {
-            Err(it)
-        };
-    return checked.is_ok();
+    return raw_bounded_body(it).is_ok();
 }
 
 #[unsafe(no_mangle)]
@@ -136,8 +134,10 @@ pub extern "C" fn raw_bounded(it: i32) -> bool {
 pub extern "C" fn written_bounded(it: i32) -> bool {
     let checked: Result<core::num::NonZeroI32, i32> =
         if it.unsigned_abs() <= 1000 && it % 7 != 0 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroI32::new_unchecked(it) })
+            Ok(match core::num::NonZeroI32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -158,8 +158,10 @@ pub extern "C" fn raw_bits(it: u32) -> bool {
     // hand-written equivalent builds the same storage.
     let checked: Result<core::num::NonZeroU32, u32> =
         if it.count_ones() == 1 || it.rem_euclid(16) == 3 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -172,8 +174,10 @@ pub extern "C" fn raw_bits(it: u32) -> bool {
 pub extern "C" fn written_bits(it: u32) -> bool {
     let checked: Result<core::num::NonZeroU32, u32> =
         if it.count_ones() == 1 || it.rem_euclid(16) == 3 {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -194,8 +198,10 @@ pub extern "C" fn raw_unsorted(it: u32) -> bool {
     // hand-written equivalent builds the same storage.
     let checked: Result<core::num::NonZeroU32, u32> =
         if (it >= 2 && it <= 4) || (it >= 8 && it < 10) {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -208,8 +214,10 @@ pub extern "C" fn raw_unsorted(it: u32) -> bool {
 pub extern "C" fn written_unsorted(it: u32) -> bool {
     let checked: Result<core::num::NonZeroU32, u32> =
         if (it >= 8 && it < 10) || (it >= 2 && it <= 4) {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -229,8 +237,10 @@ pub extern "C" fn raw_overlapping(it: u32) -> bool {
     // The wrapper stores `NonZeroU32` (the domain excludes zero), so the
     // hand-written equivalent builds the same storage.
     let checked: Result<core::num::NonZeroU32, u32> = if it >= 1 && it < 10 {
-        // SAFETY: the condition rejects zero.
-        Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+        Ok(match core::num::NonZeroU32::new(it) {
+            Some(value) => value,
+            None => panic!("zero cannot be stored by this integral type"),
+        })
     }
     else {
         Err(it)
@@ -243,8 +253,10 @@ pub extern "C" fn raw_overlapping(it: u32) -> bool {
 pub extern "C" fn written_overlapping(it: u32) -> bool {
     let checked: Result<core::num::NonZeroU32, u32> =
         if (it >= 1 && it < 5) || (it >= 3 && it < 10) {
-            // SAFETY: the condition rejects zero.
-            Ok(unsafe { core::num::NonZeroU32::new_unchecked(it) })
+            Ok(match core::num::NonZeroU32::new(it) {
+                Some(value) => value,
+                None => panic!("zero cannot be stored by this integral type"),
+            })
         }
         else {
             Err(it)
@@ -280,7 +292,6 @@ pub fn main() {
 
         let signed = i64::from(value) - 128;
         let wrapped = wrapped_code64(signed);
-        assert_eq!(raw_code64(signed), wrapped);
         assert_eq!(written_code64(signed), wrapped);
 
         let bounded = i32::from(value) * 9 - 1100;

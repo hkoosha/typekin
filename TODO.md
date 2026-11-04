@@ -43,3 +43,23 @@ says what is missing, not how to fix it.
   window narrower than its `repr`, or a `Within` source, the "cannot prove"
   reason names the internal callback
   (`` `Inner`'s `valid = __typekin_packed_valid` is opaque to subdomain proofs ``).
+- **Optimization: unchecked `NonZero` construction.** Generated code calls no
+  `unsafe`, so storing into `NonZero` always goes through `NonZeroX::new(raw)`
+  and panics on zero (`StoragePlan::storage_expression`, `src/integral.rs`).
+  Validated construction (`try_make`, operators, `_proven`) used
+  `new_unchecked`. LLVM drops the new check only where it can derive `raw != 0`
+  from the inlined validation: `Code64` in `src/e2e/asm_case_domain_int.rs`
+  (`domain = (-5..12 | 87..) & !{10} & !mul(3)` on `i64`) keeps a `test`/`je`
+  and a panic block, so its exact comparison against a hand-written probe was
+  dropped from `DOMAIN_INT_OPERATIONS`. `_proven` results have no runtime check
+  at all and keep it whenever the operands' ranges don't show `raw != 0`.
+  Options: route zero into the existing rejection (`Err`, `_or_panic`) instead
+  of a separate panic, or `new_unchecked` behind an opt-in for generated
+  `unsafe`; measure with the `asm_case_*` probes.
+- **Optimization: `AsRef<raw>` on `NonZero` storage.** Borrowing the primitive
+  out of `NonZero` (or `Wrapping<NonZero>`) took an `unsafe` pointer cast, so
+  `Cfg::settle_as_ref` now turns `AsRef<raw>` off for that storage and rejects
+  an explicit `with = as_ref_`; `Step::steps_between` borrows a copy instead
+  (`&start.0.get()`). `impl From<&NonZero<T>> for &T` (`more_from_nonzero`,
+  marked stable in nightly 1.101) can restore `AsRef` without `unsafe` once
+  `rust-version` reaches the release that ships it.

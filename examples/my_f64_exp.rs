@@ -864,8 +864,8 @@ mod __meters {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: f64) -> Meters {
-                return Meters::of(it);
+            pub const fn make(it: f64) -> Meters {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

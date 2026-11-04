@@ -1571,7 +1571,7 @@ mod __my_u128 {
             }
             #[inline(always)]
             pub const fn make(it: i128) -> MyU128 {
-                return MyU128::of(it);
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

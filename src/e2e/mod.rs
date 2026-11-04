@@ -53,26 +53,38 @@ mod fx_text;
 mod fx_within;
 
 mod test_bitflag;
-mod test_compile_fail;
-mod test_compile_pass;
-mod test_compile_time_asm;
-mod test_cross_asm;
 mod test_domain;
-mod test_domain_asm;
 mod test_float;
-mod test_float_asm;
 mod test_friendship;
 mod test_hide;
 mod test_integral;
-mod test_integral_asm;
 mod test_integral_generic;
 mod test_integral_neg;
 mod test_lit;
 mod test_marker_tree;
-mod test_no_std;
 mod test_packed;
-mod test_packed_asm;
-mod test_pointer_width_compile;
 mod test_text;
 mod test_within;
+
+#[cfg(feature = "default")]
+mod test_compile_fail;
+#[cfg(feature = "default")]
+mod test_compile_pass;
+#[cfg(feature = "default")]
+mod test_compile_time_asm;
+#[cfg(feature = "default")]
+mod test_cross_asm;
+#[cfg(feature = "default")]
+mod test_domain_asm;
+#[cfg(feature = "default")]
+mod test_float_asm;
+#[cfg(feature = "default")]
+mod test_integral_asm;
+#[cfg(feature = "default")]
+mod test_no_std;
+#[cfg(feature = "default")]
+mod test_packed_asm;
+#[cfg(feature = "default")]
+mod test_pointer_width_compile;
+#[cfg(feature = "default")]
 mod test_within_asm;

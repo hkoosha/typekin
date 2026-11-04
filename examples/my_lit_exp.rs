@@ -99,12 +99,6 @@ mod __port {
         impl Bit for u16 {}
         impl Math for u16 {}
         impl Rel for u16 {}
-        impl AsRef<u16> for Port {
-            #[inline(always)]
-            fn as_ref(&self) -> &u16 {
-                return unsafe { &*core::ptr::addr_of!(self.0).cast::<u16>() };
-            }
-        }
         impl core::str::FromStr for Port {
             type Err = ();
             #[inline(always)]
@@ -117,8 +111,13 @@ mod __port {
                     }
                 };
                 return if value >= 1 && value <= 1023 || value >= 49_152 {
-                    Ok(Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(value)
+                    Ok(Self(match core::num::NonZeroU16::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -1616,8 +1615,13 @@ mod __port {
             {
                 let value = function(Self::raw(self));
                 return if value >= 1 && value <= 1023 || value >= 49_152 {
-                    Ok(Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(value)
+                    Ok(Self(match core::num::NonZeroU16::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -1853,8 +1857,13 @@ mod __port {
             #[inline(always)]
             pub const fn try_make(it: u16) -> Result<Self, u16> {
                 return if it >= 1 && it <= 1023 || it >= 49_152 {
-                    return Ok(Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(it)
+                    return Ok(Self(match core::num::NonZeroU16::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }));
                 }
                 else {
@@ -1865,8 +1874,13 @@ mod __port {
             #[inline(always)]
             pub(self) fn _or_panic(it: u16) -> Self {
                 if it >= 1 && it <= 1023 || it >= 49_152 {
-                    return Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(it)
+                    return Self(match core::num::NonZeroU16::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     });
                 }
                 else {
@@ -1882,8 +1896,13 @@ mod __port {
                     ((it >= (1)) && (it <= (1023))) || (it >= (49_152)),
                     "typekin closure proof violated",
                 );
-                return Self(unsafe {
-                    core::num::NonZeroU16::new_unchecked(it)
+                return Self(match core::num::NonZeroU16::new(it) {
+                    Some(value) => value,
+                    None => {
+                        core::panic!(
+                            "zero cannot be stored by this integral type"
+                        )
+                    }
                 });
             }
             #[doc(hidden)]
@@ -1912,8 +1931,13 @@ mod __port {
             #[track_caller]
             pub(self) const fn _result_or_panic(value: u16) -> Self {
                 if value >= 1 && value <= 1023 || value >= 49_152 {
-                    return Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(value)
+                    return Self(match core::num::NonZeroU16::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     });
                 }
                 else {
@@ -1923,8 +1947,13 @@ mod __port {
             #[inline(always)]
             pub(self) const fn _make(value: u16) -> Option<Self> {
                 return if value >= 1 && value <= 1023 || value >= 49_152 {
-                    Some(Self(unsafe {
-                        core::num::NonZeroU16::new_unchecked(value)
+                    Some(Self(match core::num::NonZeroU16::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -2084,12 +2113,6 @@ mod __packet {
         impl<D: Direction> Bit<D> for u32 {}
         impl<D: Direction> Math<D> for u32 {}
         impl<D: Direction> Rel<D> for u32 {}
-        impl<D: Direction> AsRef<u32> for Packet<D> {
-            #[inline(always)]
-            fn as_ref(&self) -> &u32 {
-                return unsafe { &*core::ptr::addr_of!(self.0).cast::<u32>() };
-            }
-        }
         impl<D: Direction> core::str::FromStr for Packet<D> {
             type Err = ();
             #[inline(always)]
@@ -2105,8 +2128,13 @@ mod __packet {
                     Ok({
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe {
-                                core::num::NonZeroU32::new_unchecked(value)
+                            match core::num::NonZeroU32::new(value) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
                             },
                             core::marker::PhantomData,
                         )
@@ -3454,8 +3482,13 @@ mod __packet {
                     Ok({
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe {
-                                core::num::NonZeroU32::new_unchecked(value)
+                            match core::num::NonZeroU32::new(value) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
                             },
                             core::marker::PhantomData,
                         )
@@ -3723,7 +3756,14 @@ mod __packet {
                     return Ok({
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe { core::num::NonZeroU32::new_unchecked(it) },
+                            match core::num::NonZeroU32::new(it) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
+                            },
                             core::marker::PhantomData,
                         )
                     });
@@ -3739,7 +3779,14 @@ mod __packet {
                     return {
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe { core::num::NonZeroU32::new_unchecked(it) },
+                            match core::num::NonZeroU32::new(it) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
+                            },
                             core::marker::PhantomData,
                         )
                     };
@@ -3757,7 +3804,14 @@ mod __packet {
                 return {
                     let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                     Self(
-                        unsafe { core::num::NonZeroU32::new_unchecked(it) },
+                        match core::num::NonZeroU32::new(it) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
                         core::marker::PhantomData,
                     )
                 };
@@ -3785,8 +3839,13 @@ mod __packet {
                     return {
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe {
-                                core::num::NonZeroU32::new_unchecked(value)
+                            match core::num::NonZeroU32::new(value) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
                             },
                             core::marker::PhantomData,
                         )
@@ -3802,8 +3861,13 @@ mod __packet {
                     Some({
                         let () = <Packet<D>>::__TYPEKIN_LAYOUT_ASSERT;
                         Self(
-                            unsafe {
-                                core::num::NonZeroU32::new_unchecked(value)
+                            match core::num::NonZeroU32::new(value) {
+                                Some(value) => value,
+                                None => {
+                                    core::panic!(
+                                        "zero cannot be stored by this integral type"
+                                    )
+                                }
                             },
                             core::marker::PhantomData,
                         )

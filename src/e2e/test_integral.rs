@@ -1411,8 +1411,6 @@ mod tests {
         };
 
         let value = NonZeroU32::try_make(7).unwrap();
-        let raw: &u32 = value.as_ref();
-        assert_eq!(*raw, 7);
         assert_eq!(value.into_u64(), 7u64);
         assert_eq!(format!("{value:?}"), "NonZeroU32(7)");
         assert_eq!(format!("{value:b}"), "111");
@@ -1423,6 +1421,11 @@ mod tests {
         let mut raw_hasher = std::collections::hash_map::DefaultHasher::new();
         7u32.hash(&mut raw_hasher);
         assert_eq!(wrapped_hasher.finish(), raw_hasher.finish());
+    }
+
+    #[test]
+    fn non_zero_storage_has_no_as_ref() {
+        assert_not_impl!(NonZeroU32: AsRef<u32>);
     }
 
     #[test]
@@ -3198,6 +3201,11 @@ mod constness {
     #[test]
     fn stable_konst_makes_validation_const() {
         assert_eq!(KONST_STABLE.raw(), 7);
+    }
+
+    #[test]
+    fn unvalidated_make_is_const_without_konst() {
+        assert_eq!(NO_KONST_MADE.raw(), 7);
     }
 }
 

@@ -1601,7 +1601,7 @@ mod __page_header {
             }
             #[inline(always)]
             pub const fn make(it: u32) -> PageHeader {
-                return PageHeader::of(it);
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

@@ -1498,8 +1498,8 @@ mod __my_u16 {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u16) -> MyU16 {
-                return MyU16::of(it);
+            pub const fn make(it: u16) -> MyU16 {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

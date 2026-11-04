@@ -1551,8 +1551,8 @@ mod __my_flag {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u128) -> MyFlags {
-                return MyFlags::of(it);
+            pub const fn make(it: u128) -> MyFlags {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

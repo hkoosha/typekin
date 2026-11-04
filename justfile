@@ -17,15 +17,14 @@ markdown:
 fmt: markdown
   cargo fmt
 
-test: fmt
+test *what: fmt
   time cargo +nightly fmt -- --check
   time cargo +nightly clippy --locked --lib -- -D warnings
   runner="$(if cargo nextest --version &>/dev/null; then echo 'nextest run'; else echo 'test'; fi)"; \
-  time cargo +nightly --offline --locked $runner
+  time cargo +nightly --offline --locked $runner {{ what }}
 
 test-fast:
-  'TYPEKIN_DISABLE_SLOW_TESTS=1'; \
-  just test
+  just test --no-default-features
 
 clean:
   cargo clean

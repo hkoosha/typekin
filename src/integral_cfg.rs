@@ -563,7 +563,7 @@ impl Cfg {
     }
 
     /// Settles what depends on the value type: resolves the domain, then
-    /// `Neg`'s and `proven`'s defaults.
+    /// `Neg`'s, `proven`'s, and `AsRef`'s defaults.
     pub(crate) fn settle(
         &mut self,
         raw: Num,
@@ -571,7 +571,23 @@ impl Cfg {
         self.validation.resolve(raw, self.math)?;
         self.settle_neg(raw)?;
         self.settle_proven(raw)?;
+        self.settle_as_ref()?;
         return Ok(());
+    }
+
+    /// `NonZero` storage cannot lend `&raw` without `unsafe`, so `AsRef`
+    /// defaults off there, and asking for it is an error.
+    fn settle_as_ref(&mut self) -> syn::Result<()> {
+        if !self.requires_non_zero_storage() {
+            return Ok(());
+        }
+        return self.deny_flags(&[IntegralFlag::AsRef], |flag| {
+            let name = flag.name();
+            return format!(
+                "{name} cannot borrow the raw value of NonZero storage; \
+                use `without = non_zero` to store the primitive"
+            );
+        });
     }
 
     /// Closure proofs (`proven`) are on by default for 8-bit integers only;

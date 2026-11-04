@@ -1629,7 +1629,7 @@ mod __my_u32 {
             }
             #[inline(always)]
             pub const fn make(it: u32) -> MyU32 {
-                return MyU32::of(it);
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

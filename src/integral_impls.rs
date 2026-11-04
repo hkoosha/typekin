@@ -160,9 +160,8 @@ impl Maker {
         let where_clause = &self.ctx.where_clause;
         let el = &self.el;
         let konst = Konst::konst(self.ctx.cfg.konst_for(&[Konsts::Iterator]));
-        let start_ref = self.storage.extract_ref(quote! { start.0 });
-        let end_ref = self.storage.extract_ref(quote! { end.0 });
         let start = self.storage.extract(quote! { start.0 });
+        let end = self.storage.extract(quote! { end.0 });
         let forward = self.step_direction("forward", &start);
         let backward = self.step_direction("backward", &start);
 
@@ -174,8 +173,8 @@ impl Maker {
                     end: &Self,
                 ) -> (usize, ::core::option::Option<usize>) {
                     return <#el as ::core::iter::Step>::steps_between(
-                        #start_ref,
-                        #end_ref,
+                        &#start,
+                        &#end,
                     );
                 }
 
@@ -231,29 +230,26 @@ impl Maker {
         };
     }
 
+    /// `AsRef<raw>`, which `NonZero` storage lacks (`Cfg::settle`).
     pub(crate) fn make_as_ref(&self) -> TokenStream {
+        if !self.ctx.cfg.flags.has(IntegralFlag::AsRef) {
+            return TokenStream::new();
+        }
+
         let ty = &self.ctx.ty;
         let impl_generics = &self.ctx.impl_generics;
         let where_clause = &self.ctx.where_clause;
         let el = &self.el;
-        let self_raw_ref = &self.ctx.self_raw_ref;
-
-        let mut stream = TokenStream::new();
-
-        if self.ctx.cfg.flags.has(IntegralFlag::AsRef) {
-            let it = quote! {
-                impl #impl_generics ::core::convert::AsRef<#el> for #ty
-                #where_clause {
-                    #[inline(always)]
-                    fn as_ref(&self) -> &#el {
-                        return #self_raw_ref;
-                    }
+        let self_raw_ref = self.storage.extract_ref(quote! { self.0 });
+        return quote! {
+            impl #impl_generics ::core::convert::AsRef<#el> for #ty
+            #where_clause {
+                #[inline(always)]
+                fn as_ref(&self) -> &#el {
+                    return #self_raw_ref;
                 }
-            };
-            stream.extend(it);
-        }
-
-        return stream;
+            }
+        };
     }
 
     pub(crate) fn make_from_str(&self) -> TokenStream {

@@ -413,8 +413,8 @@ mod __seq_point {
                 return <T as Make<D>>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> SeqPoint<D> {
-                return <SeqPoint<D>>::of(it);
+            pub const fn make(it: u32) -> SeqPoint<D> {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]
@@ -1247,8 +1247,8 @@ mod __seq_offset {
                 return <T as Make<D>>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: i32) -> SeqOffset<D> {
-                return <SeqOffset<D>>::of(it);
+            pub const fn make(it: i32) -> SeqOffset<D> {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

@@ -12,6 +12,7 @@ keywords = ["newtype", "derive", "invariant", "no_std"]
 categories = ["data-structures"]
 
 [features]
+default = []
 nightly = []
 
 [dependencies]
@@ -30,6 +31,7 @@ doctest = false
 [[test]]
 name = "e2e"
 path = "src/e2e/mod.rs"
+doctest = false
 
 [lints.clippy]
 needless_return = "allow"

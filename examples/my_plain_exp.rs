@@ -1554,7 +1554,7 @@ mod __my_plain {
             }
             #[inline(always)]
             pub const fn make(it: i64) -> MyPlain {
-                return MyPlain::of(it);
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

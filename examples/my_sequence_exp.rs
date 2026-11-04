@@ -425,8 +425,8 @@ mod __seq_point {
                 return <T as Make<D>>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> SeqPoint<D> {
-                return <SeqPoint<D>>::of(it);
+            pub const fn make(it: u32) -> SeqPoint<D> {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]
@@ -1237,8 +1237,8 @@ mod __seq_offset {
                 return <T as Make<D>>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: i32) -> SeqOffset<D> {
-                return <SeqOffset<D>>::of(it);
+            pub const fn make(it: i32) -> SeqOffset<D> {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]
@@ -1692,7 +1692,7 @@ mod __wrapping_counter {
         impl AsRef<u32> for WrappingCounter {
             #[inline(always)]
             fn as_ref(&self) -> &u32 {
-                return unsafe { &*core::ptr::addr_of!(self.0).cast::<u32>() };
+                return &self.0.0;
             }
         }
         impl core::str::FromStr for WrappingCounter {
@@ -3119,8 +3119,8 @@ mod __wrapping_counter {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> WrappingCounter {
-                return WrappingCounter::of(it);
+            pub const fn make(it: u32) -> WrappingCounter {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]
@@ -3660,12 +3660,6 @@ mod __non_zero_serial {
         impl Bit for u32 {}
         impl Math for u32 {}
         impl Rel for u32 {}
-        impl AsRef<u32> for NonZeroSerial {
-            #[inline(always)]
-            fn as_ref(&self) -> &u32 {
-                return unsafe { &*core::ptr::addr_of!(self.0).cast::<u32>() };
-            }
-        }
         impl core::str::FromStr for NonZeroSerial {
             type Err = ();
             #[inline(always)]
@@ -3678,9 +3672,16 @@ mod __non_zero_serial {
                     }
                 };
                 return if value >= 1 {
-                    Ok(Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(value)
-                    })))
+                    Ok(Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(value) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    )))
                 }
                 else {
                     Err(())
@@ -5172,9 +5173,16 @@ mod __non_zero_serial {
             {
                 let value = function(Self::raw(self));
                 return if value >= 1 {
-                    Ok(Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(value)
-                    })))
+                    Ok(Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(value) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    )))
                 }
                 else {
                     Err(value)
@@ -5503,9 +5511,16 @@ mod __non_zero_serial {
             #[inline(always)]
             pub fn try_make(it: u32) -> Result<Self, u32> {
                 return if it >= 1 {
-                    return Ok(Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(it)
-                    })));
+                    return Ok(Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(it) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    )));
                 }
                 else {
                     Err(it)
@@ -5515,9 +5530,16 @@ mod __non_zero_serial {
             #[inline(always)]
             pub(self) fn _or_panic(it: u32) -> Self {
                 if it >= 1 {
-                    return Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(it)
-                    }));
+                    return Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(it) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    ));
                 }
                 else {
                     core::panic!("invalid value");
@@ -5529,9 +5551,16 @@ mod __non_zero_serial {
             #[inline(always)]
             pub(self) const fn _proven(it: u32) -> Self {
                 debug_assert!((it >= (1)), "typekin closure proof violated",);
-                return Self(core::num::Wrapping(unsafe {
-                    core::num::NonZeroU32::new_unchecked(it)
-                }));
+                return Self(core::num::Wrapping(
+                    match core::num::NonZeroU32::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
+                    },
+                ));
             }
             #[doc(hidden)]
             pub const __TYPEKIN_WITHIN_V1_RAW: (bool, u32) = (false, u32::BITS);
@@ -5553,9 +5582,16 @@ mod __non_zero_serial {
             #[track_caller]
             pub(self) fn _result_or_panic(value: u32) -> Self {
                 if value >= 1 {
-                    return Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(value)
-                    }));
+                    return Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(value) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    ));
                 }
                 else {
                     core::panic!("operation produced an invalid value");
@@ -5564,9 +5600,16 @@ mod __non_zero_serial {
             #[inline(always)]
             pub(self) fn _make(value: u32) -> Option<Self> {
                 return if value >= 1 {
-                    Some(Self(core::num::Wrapping(unsafe {
-                        core::num::NonZeroU32::new_unchecked(value)
-                    })))
+                    Some(Self(core::num::Wrapping(
+                        match core::num::NonZeroU32::new(value) {
+                            Some(value) => value,
+                            None => {
+                                core::panic!(
+                                    "zero cannot be stored by this integral type"
+                                )
+                            }
+                        },
+                    )))
                 }
                 else {
                     None

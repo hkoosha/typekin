@@ -374,8 +374,8 @@ mod __position {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: f32) -> Position {
-                return Position::of(it);
+            pub const fn make(it: f32) -> Position {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

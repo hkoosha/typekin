@@ -631,7 +631,9 @@ impl IntegralTarget {
         return self.fresh_ident("__TYPEKIN_LAYOUT_ASSERT");
     }
 
-    /// Construction after validation has accepted `raw`.
+    /// `Self` built from `raw`, which validation accepted, a proof showed
+    /// valid, or the caller vouches for (`_blind_trust`). `NonZero` storage
+    /// still rejects zero with a panic.
     pub(crate) fn construct(
         &self,
         storage: &StoragePlan,
@@ -641,22 +643,7 @@ impl IntegralTarget {
     ) -> TokenStream {
         return self.construct_storage(
             constructor,
-            storage.storage_expression(raw, true),
-            assert_layout,
-        );
-    }
-
-    /// Construction without validation (`_blind_trust`).
-    pub(crate) fn construct_blind_trust(
-        &self,
-        storage: &StoragePlan,
-        constructor: TokenStream,
-        raw: TokenStream,
-        assert_layout: bool,
-    ) -> TokenStream {
-        return self.construct_storage(
-            constructor,
-            storage.storage_expression(raw, false),
+            storage.storage_expression(raw),
             assert_layout,
         );
     }
@@ -799,32 +786,24 @@ impl StoragePlan {
         };
     }
 
-    /// `validated`: validation already accepted `raw`. `NonZero` storage is
-    /// only selected when validation excludes zero exactly (`with = non_zero`,
-    /// or a domain whose zero probe is false at every width), so the
-    /// unchecked constructor is sound there and keeps codegen identical to
-    /// the plain check. Unvalidated construction keeps the checked one.
+    /// The storage holding `raw`. `NonZero` storage checks for zero with the
+    /// safe constructor and panics on it, whether or not validation already
+    /// rejected zero: typekin calls no `unsafe` code.
     pub(crate) fn storage_expression(
         &self,
         raw: TokenStream,
-        validated: bool,
     ) -> TokenStream {
         let storage = if self.non_zero {
             let non_zero = format_ident!("{}", self.non_zero_name());
-            match validated {
-                true => quote! {
-                    unsafe { ::core::num::#non_zero::new_unchecked(#raw) }
-                },
-                false => quote! {
-                    match ::core::num::#non_zero::new(#raw) {
-                        ::core::option::Option::Some(value) => value,
-                        ::core::option::Option::None => {
-                            ::core::panic!(
-                                "zero cannot be stored by this integral type"
-                            )
-                        }
+            quote! {
+                match ::core::num::#non_zero::new(#raw) {
+                    ::core::option::Option::Some(value) => value,
+                    ::core::option::Option::None => {
+                        ::core::panic!(
+                            "zero cannot be stored by this integral type"
+                        )
                     }
-                },
+                }
             }
         }
         else {
@@ -858,26 +837,15 @@ impl StoragePlan {
         };
     }
 
+    /// A borrow of the raw value in `storage`. `NonZero` cannot lend one
+    /// without `unsafe`, so `Cfg::settle` turns `AsRef` off for it.
     pub(crate) fn extract_ref(
         &self,
         storage: TokenStream,
     ) -> TokenStream {
-        if !self.rewrites_field() {
-            return quote! { &#storage };
-        }
-
-        let raw = format_ident!("{}", self.raw.rust_name());
-        return quote! {
-            unsafe {
-                // SAFETY: NonZero integers and Wrapping are transparent
-                // over their inner values. Storage construction also ensures
-                // that every NonZero value contains a valid primitive value.
-                &*(
-                    ::core::ptr::addr_of!(#storage)
-                        .cast::<#raw>()
-                )
-            }
-        };
+        assert!(!self.non_zero, "NonZero storage cannot lend its raw value");
+        let raw = self.extract(storage);
+        return quote! { &#raw };
     }
 
     pub(crate) fn layout_assertions(
@@ -1008,7 +976,6 @@ pub(crate) struct Ctx {
     pub(crate) validation: TokenStream,
     pub(crate) rhs_raw: TokenStream,
     pub(crate) self_raw: TokenStream,
-    pub(crate) self_raw_ref: TokenStream,
     pub(crate) output: OperatorOutput,
     pub(crate) get_raw: Path,
     pub(crate) fp_or_panic: Path,
@@ -1044,7 +1011,6 @@ impl Ctx {
         let validation = cfg.validation.emit(&value);
         let rhs_raw = storage.extract(quote! { rhs.0 });
         let self_raw = storage.extract(quote! { self.0 });
-        let self_raw_ref = storage.extract_ref(quote! { self.0 });
         let output = target.operator_output(&cfg.ty_out, false);
 
         return Self {
@@ -1060,7 +1026,6 @@ impl Ctx {
             validation,
             rhs_raw,
             self_raw,
-            self_raw_ref,
             output,
             get_raw,
             fp_or_panic,

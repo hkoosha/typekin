@@ -1346,6 +1346,11 @@ pub(crate) const KONST_STABLE: KonstStable = match KonstStable::try_make(7) {
     Err(_) => panic!("valid value rejected"),
 };
 
+#[typekin::integral(konst = none)]
+pub(crate) struct NoKonstMade(u16);
+
+pub(crate) const NO_KONST_MADE: NoKonstMade = NoKonstMade::make(7);
+
 // ==============================================================================
 
 pub struct QualifiedSource(pub(crate) u8);

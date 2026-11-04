@@ -1537,8 +1537,8 @@ mod __my_blind_trust {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> MyBlindTrust {
-                return MyBlindTrust::of(it);
+            pub const fn make(it: u32) -> MyBlindTrust {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

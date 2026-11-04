@@ -1,5 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use proc_macro2::{
+        Delimiter,
+        TokenTree,
+    };
     use quote::format_ident;
     use syn::parse::Parser as _;
 
@@ -21,6 +25,41 @@ mod tests {
         Int,
         N,
     };
+
+    fn item_expansion(
+        input: &str,
+        source: &str,
+    ) -> proc_macro2::TokenStream {
+        let config = parse_test_config(input);
+        let item = syn::parse_str::<syn::ItemStruct>(source);
+        assert!(item.is_ok(), "{source}");
+        let expansion = ekran(Box::new(config), item.unwrap());
+        assert!(expansion.is_ok(), "{input}: {source}");
+        return expansion.unwrap();
+    }
+
+    /// `unsafe { … }` blocks anywhere in `tokens`.
+    fn unsafe_blocks(tokens: proc_macro2::TokenStream) -> usize {
+        let tokens = tokens.into_iter().collect::<Vec<_>>();
+        let mut count = 0;
+        for (index, token) in tokens.iter().enumerate() {
+            match token {
+                TokenTree::Group(group) => {
+                    count += unsafe_blocks(group.stream())
+                }
+                TokenTree::Ident(ident) if ident == "unsafe" => {
+                    let block = matches!(
+                        tokens.get(index + 1),
+                        Some(TokenTree::Group(next))
+                            if next.delimiter() == Delimiter::Brace
+                    );
+                    count += usize::from(block);
+                }
+                _ => {}
+            }
+        }
+        return count;
+    }
 
     fn expansion_of(input: &str) -> String {
         let config = syn::parse_str::<Cfg>(input);
@@ -128,6 +167,37 @@ mod tests {
             error,
             "integral storage can only rewrite a private tuple field",
         );
+    }
+
+    #[test]
+    fn non_zero_storage_rejects_an_explicit_as_ref() {
+        let input = "domain = 1.., with = as_ref_";
+        let source = "struct Code(u8);";
+        let error = item_error(input, source);
+
+        assert_eq!(
+            error,
+            "as_ref_ cannot borrow the raw value of NonZero storage; use \
+            `without = non_zero` to store the primitive",
+        );
+    }
+
+    #[test]
+    fn non_zero_storage_calls_no_unsafe_code() {
+        let input = "domain = 1.., with = with_blind_trust";
+        let source = "struct Code(u8);";
+        let expansion = item_expansion(input, source);
+
+        assert_eq!(unsafe_blocks(expansion), 0, "{input}");
+    }
+
+    #[test]
+    fn wrapping_storage_calls_no_unsafe_code() {
+        let input = "profile = wrapping {}, with = range";
+        let source = "struct Code(u8);";
+        let expansion = item_expansion(input, source);
+
+        assert_eq!(unsafe_blocks(expansion), 0, "{input}");
     }
 
     #[test]

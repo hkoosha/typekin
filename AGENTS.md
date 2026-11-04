@@ -132,9 +132,10 @@ constness, and runtime cost as API behavior.
   where the value type is known (`integral::ekran`, `ekran_with`,
   `bitflag::Maker::ekran`), folds out-of-range constants per pointer width, and
   normalizes without ever adding a comparison. Domains admitting every value or
-  none are errors. NonZero storage is inferred only from an exact zero probe,
-  which makes the validated `new_unchecked` construction sound; keep the probe
-  and the emitter on the same resolved tree.
+  none are errors. NonZero storage is inferred only from an exact zero probe, so
+  validated construction never reaches the zero panic of the safe
+  `NonZeroX::new` it uses; keep the probe and the emitter on the same resolved
+  tree.
 - Closure proofs (`zz_domain_closure`) decide at expansion time that an
   operation on valid operands always yields a valid result, at every pointer
   width. Only integer domains that are unions of plain intervals, without
@@ -142,13 +143,13 @@ constness, and runtime cost as API behavior.
   `u8`/`i8`, opt-in (`with = proven`) for wider integers, and implied by
   `prove = [...]` (beside `without = proven` it is an error); `Neg`/`abs`'s
   structural proofs don't depend on it. Proven results construct through
-  `_proven`, which reaches `new_unchecked` for `NonZero` storage, so a wrong
-  proof is undefined behavior: keep proofs sound over-approximations, keep the
-  exhaustive `u8`/`i8` soundness tests, and keep `_proven`'s `debug_assert!`. A
-  proof for same-type operands only adds a `_{helper}_proven` sibling for the
-  same-type impls. Proven items carry a generated "Cannot fail validation" doc
-  line; `prove = [...]` fails expansion with a counterexample when a listed
-  operation is not proven.
+  `_proven`, which skips validation in release builds, so a wrong proof stores
+  an invalid value (or panics on zero in `NonZero` storage): keep proofs sound
+  over-approximations, keep the exhaustive `u8`/`i8` soundness tests, and keep
+  `_proven`'s `debug_assert!`. A proof for same-type operands only adds a
+  `_{helper}_proven` sibling for the same-type impls. Proven items carry a
+  generated "Cannot fail validation" doc line; `prove = [...]` fails expansion
+  with a counterexample when a listed operation is not proven.
 - `Within` friends (`_(Source) -> Within`, `zz_domain_within`) construct without
   validation once a proof shows every source value in the target's domain. Every
   integral wrapper, bitflag value types included, publishes hidden versioned
@@ -163,8 +164,7 @@ constness, and runtime cost as API behavior.
   (every raw value with a visible field), a target's only valid ones; keep the
   forms, the tables, and `contains` agreeing and the differential tests
   exhaustive. Proven values construct through `_within`, which keeps a
-  `debug_assert!` and the safe storage path, so a wrong proof can break the
-  domain invariant but never reaches `new_unchecked`.
+  `debug_assert!`, so a wrong proof can break the domain invariant.
 - Every validated integral, float, and bitflag value type with a const
   `try_make` gets a literal macro named after the snake-cased type (`lit_name`
   overrides; `without = lit_macro` removes it). `name!(v)` checks `v` in a
@@ -234,15 +234,15 @@ constness, and runtime cost as API behavior.
   when wider, that its published form (or 8-bit table) lies in the window's
   range (signed raw types sign-extend on read). Unclaimed bits are zero, so the
   representation is canonical and raw `Eq`/`Hash` are field equality. `make` and
-  `with_*` never validate: they build through the safe storage path behind a
-  `debug_assert!`, so a wrong proof cannot reach `NonZero::new_unchecked`. Raw
-  ingress (`try_make`, Serde) validates through one generated callback:
-  unclaimed bits, then each wrapper field's `try_make`. Getters re-check through
-  the field's `try_make` with an unreachable `Err`, which LLVM folds when the
-  window implies validity. `with = non_zero` is opt-in: validation also rejects
-  zero, and a constant proves some field excludes zero, so `make` cannot panic.
-  Encodings are typekin built-ins (v1: natural only); no user codecs. Integral
-  keys and flags are rejected with "`packed` does not support `KEY`".
+  `with_*` never validate: they build behind a `debug_assert!`, through the same
+  safe storage path as every other constructor. Raw ingress (`try_make`, Serde)
+  validates through one generated callback: unclaimed bits, then each wrapper
+  field's `try_make`. Getters re-check through the field's `try_make` with an
+  unreachable `Err`, which LLVM folds when the window implies validity.
+  `with = non_zero` is opt-in: validation also rejects zero, and a constant
+  proves some field excludes zero, so `make` cannot panic. Encodings are typekin
+  built-ins (v1: natural only); no user codecs. Integral keys and flags are
+  rejected with "`packed` does not support `KEY`".
 
 ### Make ownership and capability explicit
 
@@ -281,8 +281,9 @@ constness, and runtime cost as API behavior.
   assignment operators.
 - An integral domain excluding zero selects `NonZero` storage; `wrapping` can
   select `Wrapping` storage. Rewritten storage requires a private field and
-  `raw()` still exposes the primitive. `without = non_zero` suppresses the
-  storage choice, not the declared domain's validation.
+  `raw()` still exposes the primitive; `NonZero` storage has no `AsRef<raw>`
+  (requesting it is an error). `without = non_zero` suppresses the storage
+  choice, not the declared domain's validation.
 - Floats accept only the `int` and `point` profiles (root and facets) and reject
   integer-only flags (`bit_access`, `core_int`, bitwise operators,
   binary/octal/hex formatting, `range`, `non_zero`, `proven`). `point`
@@ -324,6 +325,9 @@ constness, and runtime cost as API behavior.
   imposing extra marker bounds on generated `Copy` or `Clone`.
 - Preserve transparent representation by default and honor `without = repr`.
   Generated wrappers must add no runtime state.
+- Generated code calls no `unsafe` code: `NonZero` storage is built with
+  `NonZeroX::new` and read with `get()`, never `new_unchecked` or a pointer
+  cast. `unsafe` appears only as the blind-trust friend capability.
 - Continue using `#[inline(always)]` on small generated forwarding and
   conversion paths where the existing generators do.
 - Use `::core` in generated code where possible. Text chooses `::std` by default
@@ -358,7 +362,9 @@ constness, and runtime cost as API behavior.
   `konst_*` decide, and rustc reports a non-const call. The validating helpers
   (`_or_panic`, `_add`-style helpers) are `const` iff a const item consumes them
   (any non-stable const flag, or bitflag's named values); unvalidated helpers
-  stay `const`. Keep stable use independent of nightly-only const support.
+  stay `const`, and so do unvalidated `make` and `try_make`, which call
+  `_or_panic` directly rather than through the `Make` friend. Keep stable use
+  independent of nightly-only const support.
 - Names state what happens: `_or_panic` panics, `_make` returns `Option`,
   `try_make` returns `Result`; "checked"/"unchecked" are not used for typekin
   validation. Paths that skip validation carry a warning word (`blind_trust`,

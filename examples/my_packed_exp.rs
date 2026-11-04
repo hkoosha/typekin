@@ -102,12 +102,6 @@ mod __page_id {
         impl Bit for u8 {}
         impl Math for u8 {}
         impl Rel for u8 {}
-        impl AsRef<u8> for PageId {
-            #[inline(always)]
-            fn as_ref(&self) -> &u8 {
-                return unsafe { &*core::ptr::addr_of!(self.0).cast::<u8>() };
-            }
-        }
         impl core::str::FromStr for PageId {
             type Err = ();
             #[inline(always)]
@@ -119,8 +113,13 @@ mod __page_id {
                     }
                 };
                 return if value >= 1 {
-                    Ok(Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(value)
+                    Ok(Self(match core::num::NonZeroU8::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -1629,8 +1628,13 @@ mod __page_id {
             {
                 let value = function(Self::raw(self));
                 return if value >= 1 {
-                    Ok(Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(value)
+                    Ok(Self(match core::num::NonZeroU8::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -1847,8 +1851,13 @@ mod __page_id {
             #[inline(always)]
             pub const fn try_make(it: u8) -> Result<Self, u8> {
                 return if it >= 1 {
-                    return Ok(Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(it)
+                    return Ok(Self(match core::num::NonZeroU8::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }));
                 }
                 else {
@@ -1859,8 +1868,13 @@ mod __page_id {
             #[inline(always)]
             pub(self) fn _or_panic(it: u8) -> Self {
                 if it >= 1 {
-                    return Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(it)
+                    return Self(match core::num::NonZeroU8::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     });
                 }
                 else {
@@ -1873,8 +1887,13 @@ mod __page_id {
             #[inline(always)]
             pub(self) const fn _proven(it: u8) -> Self {
                 debug_assert!((it >= (1)), "typekin closure proof violated",);
-                return Self(unsafe {
-                    core::num::NonZeroU8::new_unchecked(it)
+                return Self(match core::num::NonZeroU8::new(it) {
+                    Some(value) => value,
+                    None => {
+                        core::panic!(
+                            "zero cannot be stored by this integral type"
+                        )
+                    }
                 });
             }
             #[doc(hidden)]
@@ -1906,8 +1925,13 @@ mod __page_id {
             #[track_caller]
             pub(self) const fn _result_or_panic(value: u8) -> Self {
                 if value >= 1 {
-                    return Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(value)
+                    return Self(match core::num::NonZeroU8::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     });
                 }
                 else {
@@ -1917,8 +1941,13 @@ mod __page_id {
             #[inline(always)]
             pub(self) const fn _make(value: u8) -> Option<Self> {
                 return if value >= 1 {
-                    Some(Self(unsafe {
-                        core::num::NonZeroU8::new_unchecked(value)
+                    Some(Self(match core::num::NonZeroU8::new(value) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }))
                 }
                 else {
@@ -5371,8 +5400,8 @@ mod __page_state {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u8) -> PageStateValue {
-                return PageStateValue::of(it);
+            pub const fn make(it: u8) -> PageStateValue {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]
@@ -6528,8 +6557,13 @@ mod __page_header {
             #[inline(always)]
             pub const fn try_make(it: u32) -> Result<Self, u32> {
                 return if it != 0 && __typekin_packed_valid(it) {
-                    return Ok(Self(unsafe {
-                        core::num::NonZeroU32::new_unchecked(it)
+                    return Ok(Self(match core::num::NonZeroU32::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }));
                 }
                 else {
@@ -6540,8 +6574,13 @@ mod __page_header {
             #[inline(always)]
             pub(self) fn _or_panic(it: u32) -> Self {
                 if it != 0 && __typekin_packed_valid(it) {
-                    return Self(unsafe {
-                        core::num::NonZeroU32::new_unchecked(it)
+                    return Self(match core::num::NonZeroU32::new(it) {
+                        Some(value) => value,
+                        None => {
+                            core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     });
                 }
                 else {

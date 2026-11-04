@@ -374,8 +374,7 @@ impl Maker {
     // Target side: emission
 
     /// The constructor of proven sources (`_within`): no validation, which a
-    /// `debug_assert!` still checks, and the safe storage path, so a wrong
-    /// proof cannot reach `NonZero::new_unchecked`.
+    /// `debug_assert!` still checks.
     pub(crate) fn make_within(&self) -> TokenStream {
         if self.within.is_empty() {
             return TokenStream::new();
@@ -393,7 +392,7 @@ impl Maker {
                 );
             }
         });
-        let constructed = self.target.construct_blind_trust(
+        let constructed = self.target.construct(
             &self.storage,
             quote! { Self },
             quote! { raw },

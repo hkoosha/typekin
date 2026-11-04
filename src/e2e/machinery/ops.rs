@@ -88,9 +88,12 @@ pub const GENERIC_SEQUENCE_OPERATIONS: &[Operation] = &[
     ),
 ];
 
+/// `code64` is compared only as written (`DOMAIN_INT_WRITTEN`): its domain
+/// excludes zero through `% 3`, which LLVM does not see, so the safe
+/// `NonZeroI64::new` keeps its zero check and panic, and a hand-written
+/// panic always has another location (TODO.md).
 pub const DOMAIN_INT_OPERATIONS: &[Operation] = &[
     Operation::new("domain code", "raw_code", "wrapped_code"),
-    Operation::new("domain code64", "raw_code64", "wrapped_code64"),
     Operation::new(
         "domain even_or_band",
         "raw_even_or_band",

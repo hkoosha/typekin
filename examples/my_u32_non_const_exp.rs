@@ -1524,8 +1524,8 @@ mod __my_u32 {
                 return <T as Make>::make(it);
             }
             #[inline(always)]
-            pub fn make(it: u32) -> MyU32 {
-                return MyU32::of(it);
+            pub const fn make(it: u32) -> MyU32 {
+                return Self::_or_panic(it);
             }
             #[must_use]
             #[inline(always)]

@@ -7,10 +7,10 @@
 //! sub-intervals gets a sound result hull (exact corners where the operation
 //! is monotone on the pair), the arithmetic policy maps the hull into the
 //! type, and the operation is proven when every hull lies in one domain
-//! interval. A wrong proof reaches `new_unchecked`, so every rule must stay a
-//! sound over-approximation; anything else is "not proven". When the proof
-//! fails, concrete operands near interval endpoints are evaluated exactly to
-//! find a counterexample.
+//! interval. A wrong proof lets release builds store an invalid value, so
+//! every rule must stay a sound over-approximation; anything else is "not
+//! proven". When the proof fails, concrete operands near interval endpoints
+//! are evaluated exactly to find a counterexample.
 
 use proc_macro2::TokenStream;
 

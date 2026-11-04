@@ -8,10 +8,7 @@ use quote::{
     format_ident,
     quote,
 };
-use syn::{
-    LitInt,
-    parse_quote,
-};
+use syn::LitInt;
 
 use crate::integral::{
     Maker,
@@ -374,12 +371,15 @@ impl Maker {
         };
     }
 
+    /// `make(raw)`, which exists only for unvalidated types and only where
+    /// the primitive's `Make` friend does (`without = self_friend_make` or
+    /// validation leave it out). It skips the friend protocol: the friend
+    /// only casts the primitive to itself and builds through an unvalidated
+    /// constructor, so `make` calls `_or_panic` directly, `const` like
+    /// unvalidated `try_make`.
     pub(crate) fn make_auto_of_raw(&self) -> TokenStream {
         let ty = &self.ctx.ty;
         let el = &self.el;
-
-        // `make` constructs through the primitive's `Make` friend, which
-        // `without = self_friend_make` or validation can leave out.
         let el_makes = self
             .ctx
             .cfg
@@ -390,18 +390,12 @@ impl Maker {
             return TokenStream::new();
         }
 
-        let konst = Konst::konst(self.ctx.cfg.konst_for(&[
-            Konsts::Of,
-            Konsts::Conversion,
-        ]));
         let fn_make = self.ctx.names.get(IntegralName::MakeFn);
-        let of = self.ctx.names.get(IntegralName::OfFn);
-        let path = &parse_quote! { Self::#of };
-        let fn_of = self.target.qualify_path(path);
+        let fp_or_panic = &self.ctx.fp_or_panic;
         return quote! {
             #[inline(always)]
-            pub #konst fn #fn_make(it: #el) -> #ty {
-                return #fn_of(it);
+            pub const fn #fn_make(it: #el) -> #ty {
+                return #fp_or_panic(it);
             }
         };
     }
@@ -1021,7 +1015,7 @@ impl Maker {
 
         let el = &self.el;
         let blind_trust = self.ctx.names.get(IntegralName::BlindTrust);
-        let constructed = self.target.construct_blind_trust(
+        let constructed = self.target.construct(
             &self.storage,
             quote! { Self },
             quote! { raw },

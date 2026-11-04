@@ -118,6 +118,14 @@ mod tests {
     }
 
     #[test]
+    fn wrapping_storage_lends_its_raw_value() {
+        let raw = 7;
+        let value = Wrapped::<NotTraits>::make(raw);
+
+        assert_eq!(value.as_ref(), &raw);
+    }
+
+    #[test]
     fn combined_storage_retains_raw_api_and_layout() {
         let value = STABLE_CHECKED;
         let storage: core::num::Wrapping<core::num::NonZeroU32> =
@@ -125,7 +133,6 @@ mod tests {
 
         assert_eq!(storage.0.get(), 4);
         assert_eq!(value.raw(), 4);
-        assert_eq!(*value.as_ref(), 4);
         assert_eq!(size_of_val(&value), size_of::<u32>());
         assert_eq!(align_of_val(&value), align_of::<u32>());
     }
