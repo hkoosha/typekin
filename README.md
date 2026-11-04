@@ -24,14 +24,16 @@ is declared, so additional inherent implementations and derives remain available
   `Eq`/`Ord`/`Hash` when validation rules NaN out;
 - enum-backed bitflags modeled after the
   [`bitflags`](https://crates.io/crates/bitflags) crate;
+- packed records: named-field structs stored as one unsigned integer, each field
+  a typed bit window whose fit rustc proves at compile time;
 - validated `String` newtypes over `std` or `alloc`, which allocate only when
   their underlying `String` operation does;
 - configurable const support. By default, all stable const features are enabled.
   Additional constness for math operations requires `konst = nightly`;
-- allocation-free generated integral, float, and bitflag code: it requires
-  neither `std` nor `alloc` (except float `math = std`) and does not allocate.
-  Allocation in caller-provided callbacks, conversions, or Serde backends is
-  outside Typekin's generated code;
+- allocation-free generated integral, float, bitflag, and packed code: it
+  requires neither `std` nor `alloc` (except float `math = std`) and does not
+  allocate. Allocation in caller-provided callbacks, conversions, or Serde
+  backends is outside Typekin's generated code;
 - individual feature flags for disabling generation of specific features.
 
 Working examples are available in the repository's [examples](./examples)
@@ -52,6 +54,9 @@ The supported public attribute macros are:
 - `#[typekin::point]`: the fixed `point` profile over either an integer or a
   float field.
 - `#[typekin::bitflag]`: over a non-generic unit enum with an integral `repr`.
+- `#[typekin::packed]`: over a non-generic struct with named fields, each
+  carrying one `#[bits(LO..HI)]`, `#[bits(LO..=HI)]`, or `#[bit(N)]`, with
+  `repr = u8 | u16 | u32 | u64 | u128`.
 - `#[typekin::text]`: over a non-generic one-field tuple struct whose field is
   an unqualified `String`.
 - `#[typekin::tree]`: over an empty, non-generic marker trait; it emits branch
@@ -296,8 +301,8 @@ pub struct Byte(u16);
 // `Byte` is not within `Positive`: 0 is outside the domain of `Positive`
 ```
 
-Sources are integral wrappers, bitflag value types, or primitive integers.
-Wrappers publish hidden constants for the proof unless
+Sources are integral wrappers, bitflag value types, packed records, or primitive
+integers. Wrappers publish hidden constants for the proof unless
 `without = within_source`. `Within` converts through the raw value, so it takes
 no explicit conversion and cannot be combined with `unsafe`. `valid` callbacks
 are opaque to the proof except for 8-bit sources, whose validation table rustc
@@ -306,11 +311,12 @@ instantiated, so `cargo build`, not `cargo check`, reports their failures.
 
 ## Hiding (`hide_in`)
 
-By default, `integral` (and its profile entry points), `float`, `text`, and
-`bitflag` place the annotated type and everything generated for it in a private
-module and re-export the type where the macro was written. The tuple constructor
-and a private value field are then unreachable even from the defining module, so
-the only ways in are the generated, validating constructors.
+By default, `integral` (and its profile entry points), `float`, `text`,
+`bitflag`, and `packed` place the annotated type and everything generated for it
+in a private module and re-export the type (and a bitflag's value type or a
+packed record's values struct) where the macro was written. The tuple
+constructor and a private value field are then unreachable even from the
+defining module, so the only ways in are the generated, validating constructors.
 
 ```rust
 #[typekin::integral(domain = 1..=1023)]
@@ -423,8 +429,8 @@ multiples (`mul(3)`), predicates (`is_power_of_two`, `is_positive`,
 two readings are possible, the domain is rejected and asks for parentheses: an
 `in` set is never followed by `|` or `&` (`abs in (..5 | 10..)` or
 `(abs in ..5) | 10..`, not `abs in ..5 | 10..`). `!` takes the set right after
-it, so `!1..5` needs no parentheses. A function's set is excluded with `!in`;
-a leading `!`, as in `!abs in ..3`, is rejected.
+it, so `!1..5` needs no parentheses. A function's set is excluded with `!in`; a
+leading `!`, as in `!abs in ..3`, is rejected.
 
 ```rust
 // In 1..12 or 87.., but not 10, and not a multiple of 3:
@@ -922,34 +928,127 @@ fn main() {
 }
 ```
 
+## Packed records - `#[typekin::packed]`
+
+Apply `packed` to a struct with named fields to store it as one transparent
+unsigned integer. Each field takes a bit window, bit 0 being the least
+significant, and keeps its own type:
+
+```rust
+#[typekin::integral(domain = 1..)]
+pub struct PageId(u8);
+
+#[typekin::integral(domain = ..64)]
+pub struct Version(u8);
+
+#[typekin::bitflag(repr = u8)]
+pub enum PageState {
+    Dirty = 0b01,
+    Pinned = 0b10,
+}
+
+#[typekin::packed(repr = u32, with = non_zero)]
+pub struct PageHeader {
+    /// Page number; 0 is reserved.
+    #[bits(24..32)]
+    pub id: PageId,
+    #[bits(16..24)]
+    pub state: PageStateValue,
+    #[bits(10..16)] // 6 bits: `..64` is proven to fit.
+    pub version: Version,
+    #[bit(9)]
+    pub sealed: bool,
+    // Bit 8 is unclaimed: always zero.
+    #[bits(0..8)]
+    pub data: u8,
+}
+
+fn main() {
+    let id = PageId::try_make(5).unwrap();
+    let version = Version::try_make(42).unwrap();
+
+    // Infallible: no validation.
+    let header = PageHeader::make(PageHeaderValues {
+        id,
+        state: PageState::Dirty.into_value(),
+        version,
+        sealed: false,
+        data: 0xFF,
+    });
+    let header = header.with_state(PageState::Pinned.into_value());
+    let PageHeaderValues { data, .. } = header.fields();
+    assert_eq!(header.id().raw(), 5);
+    assert_eq!(data, 0xFF);
+
+    assert!(PageHeader::try_make(0x0000_00FF).is_err()); // `id` bits are 0.
+    assert!(PageHeader::try_make(0x0100_0100).is_err()); // Bit 8 is set.
+    assert_eq!(size_of::<Option<PageHeader>>(), 4);
+}
+```
+
+A field is `bool` (exactly one bit), a fixed-width primitive integer (exactly
+its own width), or a typekin integer type: an integral wrapper, a bitflag value
+type, or another packed record. The window holds the low bits of the field's raw
+value; signed raw types are sign-extended on read. Windows may not overlap, and
+field docs and visibility carry over to the accessors.
+
+- `make` takes the generated `{Type}Values` struct (`values_name` renames it),
+  `fields` returns it, and every field gets a getter and a `with_{field}`
+  setter. None of them validate: every field value is already valid, and rustc
+  proves during `cargo check` that each wrapper type's values fit its window.
+  Debug builds still `debug_assert!` the record.
+- A type that may not fit is a compile error naming the least counterexample,
+  never a mask: `domain = ..=64` on `Version` above fails with
+  `` `Version` does not fit bits 10..16 of `PageHeader`: 64 needs more than 6 bits ``.
+  A window wider than the field's raw type is an error too.
+- Unclaimed bits are always zero, so the representation is canonical and
+  `PartialEq`, `Eq`, and `Hash` compare the raw value. Raw ingress (`try_make`,
+  Serde) rejects a set unclaimed bit and any field bits the field's `try_make`
+  rejects.
+- Getters re-check through the field's `try_make`. When the window implies the
+  domain (`Version`), optimization removes the check; otherwise (`PageId`'s
+  `1..` in 8 bits) one compare and a cold, unreachable panic remain.
+- `with = non_zero` stores the record as `NonZero` once rustc proves that some
+  field excludes zero. `with = ord` orders by the raw value and `with = serde`
+  (de)serializes it. `without = debug`, `eq`, `hash`, and `values_struct` remove
+  those items.
+- There are no operators or conversions besides `raw`. Integral keys such as
+  `domain`, `valid`, `friend`, and `profile` are rejected.
+- Under the default `konst = stable`, the accessors are `const`, so each wrapper
+  field type needs a const `try_make`; a field declared with `konst = none`
+  needs `konst = none` on the record too.
+
 ## Serde
 
-Use `with = serde` on `integral`, `float`, `text`, or `bitflag` to generate
-`Serialize` and `Deserialize`. Deserialization applies every configured
+Use `with = serde` on `integral`, `float`, `text`, `bitflag`, or `packed` to
+generate `Serialize` and `Deserialize`. Deserialization applies every configured
 validator. Typekin has no Serde Cargo feature and does not provide Serde as a
 normal dependency: the consuming crate must add `serde` directly and apply any
 desired `cfg` gating to the macro invocation.
 
-Integral and float wrappers serialize as their raw number, while text wrappers
-serialize as strings. Do not also derive the same Serde traits on a wrapper
-using this option.
+Integral and float wrappers and packed records serialize as their raw number,
+while text wrappers serialize as strings. Do not also derive the same Serde
+traits on a wrapper using this option.
 
 ## Configuration
 
 Generation of individual features can be disabled with `without`; see the flag
-lists in [integral](src/integral.rs), [bitflag](src/bitflag.rs), and
-[text](src/text.rs).
+lists in [integral](src/integral_cfg.rs), [bitflag](src/bitflag.rs),
+[packed](src/packed.rs), and [text](src/text.rs).
 
 ## Const mode
 
-`integral`, `float`, `bitflag`, and `text` default to `konst = stable`. Set
-`konst = none` to disable optional const flags, or `konst = nightly` to enable
-const trait implementations and nightly-only integer operations. For integral,
-float, and bitflag, `stable` makes checked construction, raw value access, and
-core integer and float methods const. For text, it enables const read-only
-accessors; `nightly` additionally enables supported owned construction and
-conversion. Enabling Typekin's `nightly` Cargo feature changes the default to
-`konst = nightly`, and `with`/`without` accept individual `konst_*` flags.
+`integral`, `float`, `bitflag`, `packed`, and `text` default to
+`konst = stable`. Set `konst = none` to disable optional const flags, or
+`konst = nightly` to enable const trait implementations and nightly-only integer
+operations. For integral, float, and bitflag, `stable` makes checked
+construction, raw value access, and core integer and float methods const. For
+packed records, it also makes `make`, `fields`, the getters, and the setters
+const. For text, it enables const read-only accessors; `nightly` additionally
+enables supported owned construction and conversion. Enabling Typekin's
+`nightly` Cargo feature changes the default to `konst = nightly`, and
+`with`/`without` accept individual `konst_*` flags (except on `packed`, which
+takes `konst` only).
 
 Full integral const generation requires `konst = nightly`. Until the relevant
 const features stabilize, it remains nightly-only. These gates are sufficient

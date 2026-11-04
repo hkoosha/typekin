@@ -1,11 +1,11 @@
 # ADR 0023: packed: design decisions
 
-- Status: Planned (not implemented)
+- Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `PLAN_PACKED.md` (K0–K8 all open; no `src/packed.rs`), ADR 0001 (why hand-rolled packing at all), ADR 0024 (`Within`, which proves field windows), ADR 0006, ADR 0009
+- Related: `PLAN_PACKED.md` (K0–K7 done), `src/packed.rs`, `examples/my_packed.rs`, README "Packed records", ADR 0001 (why hand-rolled packing at all), ADR 0024 (`Within`, which proves field windows), ADR 0006, ADR 0009
 
 ## Context
-ADR 0001 decided to pack records by hand instead of using a Serde format. This ADR records how the planned `packed` record macro looks and which alternatives were rejected while planning it (DK1–DK9, §10, §11 of `PLAN_PACKED.md`).
+ADR 0001 decided to pack records by hand instead of using a Serde format. This ADR records how the `packed` record macro looks, which alternatives were rejected while planning it (DK1–DK9, §10, §11 of `PLAN_PACKED.md`), and where the implementation refined the plan.
 
 ## Decision
 - Named-field struct; each field carries an explicit bit range, bit 0 = LSB (DK1, DK2).
@@ -18,6 +18,11 @@ ADR 0001 decided to pack records by hand instead of using a Serde format. This A
 - `make`/`with_*` skip the validator, use the safe storage path, keep `debug_assert!` (same as ADR 0024 DW3/DW4).
 - Integral keys are rejected on records with "`packed` does not support `KEY`" (DK8).
 - Encodings are a closed built-in set; v1 has natural encoding only (DK9).
+- Every wrapper field gets a fit-proof constant that rustc evaluates during `cargo check`. Only rustc knows whether the window equals the field's raw width, and it skips the check in that case. The proof reuses the `Within` subset check and message helpers (`zz_domain_within::emit_check`, `emit_messages`) against the window's range, which the constant picks from the field's published signedness.
+- A window wider than the field's raw type is a const-evaluation error, because the representation would stop being canonical.
+- With `with = non_zero`, validation also rejects zero. `try_make`'s unchecked `NonZero` construction therefore never depends on the proof; the proof only guarantees that `make` cannot panic.
+- Unsigned wrapper fields are written without a mask, since their fit is proven; signed fields mask off their sign extension. This makes `make` compile to the same code as the hand-written version (asm `packed` case).
+- Only `konst` is accepted; `konst_*` flags are rejected like integral flags. `bool` also accepts a one-bit `#[bits(..)]`.
 
 ## Rejected alternatives
 - **Tuple struct + `field = [...]` list (DK1).** "Loses field docs and per-field visibility."
@@ -38,7 +43,7 @@ ADR 0001 decided to pack records by hand instead of using a Serde format. This A
 - **`scale` now (§11).** Deferred. If added, offset applies before scale. Open issues: wrap collisions, folding the `%s` re-check, the signed definition.
 
 ## Consequences
-- Nothing is implemented. The plan depends on `Within` (ADR 0024) for window proofs.
+- Implemented in `src/packed.rs` on top of `integral::ekran_with`. The window proofs depend on the `Within` source constants (ADR 0024, W4).
 - Getters of fields whose domain the window does not imply keep a branch.
 - Layout is stable under field reordering and domain edits, at the cost of explicit bit ranges.
 

@@ -38,15 +38,14 @@ constness, and runtime cost as API behavior.
   (`ekran`, `ekran_with`), the target and storage model, and the emitter
   orchestration; its siblings hold the rest: `integral_cfg.rs` (configuration,
   flags, and resolution), `integral_friend.rs` (friend protocol and facet
-  dispatch), `integral_impls.rs` (trait and operator impls),
-  `integral_items.rs` (inherent items), `integral_forward.rs` (`core_int`
-  forwards), `integral_proof.rs` (closure-proof use and `prove`), and
-  `integral_within.rs` (`Within` friends and the constants sources publish for
-  them). `src/float.rs` holds the float-only `impl Maker` emitters
-  (`core_float`, `float_math`, exponent formatting, `Sum`/`Product`).
-  `src/packed.rs` holds the packed record: field windows, the `{Type}Values`
-  struct and accessors, the validation callback it hands
-  `integral::ekran_with`, and the fit and `non_zero` proofs.
+  dispatch), `integral_impls.rs` (trait and operator impls), `integral_items.rs`
+  (inherent items), `integral_forward.rs` (`core_int` forwards),
+  `integral_proof.rs` (closure-proof use and `prove`), and `integral_within.rs`
+  (`Within` friends and the constants sources publish for them). `src/float.rs`
+  holds the float-only `impl Maker` emitters (`core_float`, `float_math`,
+  exponent formatting, `Sum`/`Product`). `src/packed.rs` holds the packed
+  record: field windows, the `{Type}Values` struct and accessors, the validation
+  callback it hands `integral::ekran_with`, and the fit and `non_zero` proofs.
 - `src/marker_tree.rs`: standalone and embedded marker-tree generation.
 - `src/zz_runner.rs`: shared parsing, diagnostic, and macro-runner helpers.
 - `src/zz_flags.rs`: typed `with`/`without` flags: the `Flag` trait each
@@ -54,13 +53,13 @@ constness, and runtime cost as API behavior.
   per-level `FlagSettings` with their `konst_*` settings (`KonstFlags`) and
   removals.
 - `src/zz_names.rs`: generated-name tables: the `NameKey` trait each family's
-  key enum implements, the names a user chose (`Names`), and the defaults
-  with today's spans and collision rule (`ResolvedNames`).
+  key enum implements, the names a user chose (`Names`), and the defaults with
+  today's spans and collision rule (`ResolvedNames`).
 - `src/zz_lib.rs`: shared validation, constness, list parsing (`Key`),
   item-shape, `repr`, and function-removal (`Forward`, `Removals`) helpers.
-- `src/zz_friend.rs`: the friend capability model (`Friend`, `Capability`)
-  and protocol emission (`Protocol`, `emit_protocol`) that integral, float,
-  bitflag, text, `friends`, and `constructor` share.
+- `src/zz_friend.rs`: the friend capability model (`Friend`, `Capability`) and
+  protocol emission (`Protocol`, `emit_protocol`) that integral, float, bitflag,
+  text, `friends`, and `constructor` share.
 - `src/zz_profile_integral.rs` and `src/zz_conv.rs`: integral profile/facet
   resolution (`ProfileKind`) and operator-output conversion.
 - `src/zz_values.rs`: primitive integer and float (`F`, `Num`), operator, and
@@ -127,10 +126,10 @@ constness, and runtime cost as API behavior.
 - Integral ANDs its `domain` expression (checked first) with its `valid`
   callbacks; text treats `valid` callbacks and literal `domain` membership as
   alternatives. Only `error = ()` is currently supported.
-- The integral `domain` is a set expression (`(1..12 | 87..) & !{10} &
-  !mul(3)`) with no comparisons and no arithmetic; its EBNF grammar, the source
-  of truth, is the module doc of `zz_domain.rs`. Typekin parses it untyped,
-  resolves it where the value type is known (`integral::ekran`, `ekran_with`,
+- The integral `domain` is a set expression (`(1..12 | 87..) & !{10} & !mul(3)`)
+  with no comparisons and no arithmetic; its EBNF grammar, the source of truth,
+  is the module doc of `zz_domain.rs`. Typekin parses it untyped, resolves it
+  where the value type is known (`integral::ekran`, `ekran_with`,
   `bitflag::Maker::ekran`), folds out-of-range constants per pointer width, and
   normalizes without ever adding a comparison. Domains admitting every value or
   none are errors. NonZero storage is inferred only from an exact zero probe,
@@ -145,8 +144,8 @@ constness, and runtime cost as API behavior.
   structural proofs don't depend on it. Proven results construct through
   `_proven`, which reaches `new_unchecked` for `NonZero` storage, so a wrong
   proof is undefined behavior: keep proofs sound over-approximations, keep the
-  exhaustive `u8`/`i8` soundness tests, and keep `_proven`'s `debug_assert!`.
-  A proof for same-type operands only adds a `_{helper}_proven` sibling for the
+  exhaustive `u8`/`i8` soundness tests, and keep `_proven`'s `debug_assert!`. A
+  proof for same-type operands only adds a `_{helper}_proven` sibling for the
   same-type impls. Proven items carry a generated "Cannot fail validation" doc
   line; `prove = [...]` fails expansion with a counterexample when a listed
   operation is not proven.
@@ -187,8 +186,7 @@ constness, and runtime cost as API behavior.
   divisors must be exact decimals. With a private value field, a `core_float`
   query (`is_nan`, `is_normal`, …) returns a constant when every
   sign-and-`FpCategory` class the domain may admit gives the same answer; keep
-  that analysis a sound over-approximation and keep the sampled soundness
-  tests.
+  that analysis a sound over-approximation and keep the sampled soundness tests.
 - Infallible operators and untrusted friend construction panic on invalid
   results. Integral `try_make` and `try_map` return the rejected raw value;
   `try_map` validates only the final mapped value, while `map` panics on
@@ -226,26 +224,25 @@ constness, and runtime cost as API behavior.
   auto uses text for human-readable serializers and raw bits otherwise.
 - Unsupported attributes and combinations must produce a targeted macro
   diagnostic, not be ignored or silently downgraded.
-- `packed` (and `hide_in` on it by default, exporting the record and its
-  values struct) takes a non-generic named-field struct and an unsigned
-  fixed-width `repr` (no `usize`). Fields are typed: `bool` takes one bit, a
-  primitive integer exactly its width, and a typekin integer type (integral
-  wrapper, bitflag value, packed record) any window that provably holds it.
-  Windows are proven, never masked: each wrapper field gets a constant rustc
-  evaluates during `cargo check` that its raw type is at least as wide as the
-  window and, when wider, that its published form (or 8-bit table) lies in
-  the window's range (signed raw types sign-extend on read). Unclaimed bits are
-  zero, so the representation is canonical and raw `Eq`/`Hash` are field
-  equality. `make` and `with_*` never validate: they build through the safe
-  storage path behind a `debug_assert!`, so a wrong proof cannot reach
-  `NonZero::new_unchecked`. Raw ingress (`try_make`, Serde) validates through
-  one generated callback: unclaimed bits, then each wrapper field's `try_make`.
-  Getters re-check through the field's `try_make` with an unreachable `Err`,
-  which LLVM folds when the window implies validity. `with = non_zero` is
-  opt-in: validation also rejects zero, and a constant proves some field
-  excludes zero, so `make` cannot panic. Encodings are typekin built-ins (v1:
-  natural only); no user codecs. Integral keys and flags are rejected with
-  "`packed` does not support `KEY`".
+- `packed` (and `hide_in` on it by default, exporting the record and its values
+  struct) takes a non-generic named-field struct and an unsigned fixed-width
+  `repr` (no `usize`). Fields are typed: `bool` takes one bit, a primitive
+  integer exactly its width, and a typekin integer type (integral wrapper,
+  bitflag value, packed record) any window that provably holds it. Windows are
+  proven, never masked: each wrapper field gets a constant rustc evaluates
+  during `cargo check` that its raw type is at least as wide as the window and,
+  when wider, that its published form (or 8-bit table) lies in the window's
+  range (signed raw types sign-extend on read). Unclaimed bits are zero, so the
+  representation is canonical and raw `Eq`/`Hash` are field equality. `make` and
+  `with_*` never validate: they build through the safe storage path behind a
+  `debug_assert!`, so a wrong proof cannot reach `NonZero::new_unchecked`. Raw
+  ingress (`try_make`, Serde) validates through one generated callback:
+  unclaimed bits, then each wrapper field's `try_make`. Getters re-check through
+  the field's `try_make` with an unreachable `Err`, which LLVM folds when the
+  window implies validity. `with = non_zero` is opt-in: validation also rejects
+  zero, and a constant proves some field excludes zero, so `make` cannot panic.
+  Encodings are typekin built-ins (v1: natural only); no user codecs. Integral
+  keys and flags are rejected with "`packed` does not support `KEY`".
 
 ### Make ownership and capability explicit
 
@@ -419,20 +416,20 @@ constness, and runtime cost as API behavior.
   `crate`, `Self`), and data tables that are themselves the single boundary
   table (zz_lit's keyword lists, float constants).
 - Generated names come from the family's names table (`zz_names`; key enums
-  `IntegralName`, `BitflagName`, `TextName`, `FriendsName`,
-  `ConstructorName`): an emitter that spells a generated public name, or one
-  a user can choose, writes `let seal = names.get(IntegralName::SealTrait);`
-  rather than `format_ident!` or `fresh_ident`. The table keeps today's
-  defaults, spans, and generic-parameter collision rule, and no logic
-  compares a generated name; decisions use the key.
+  `IntegralName`, `BitflagName`, `TextName`, `FriendsName`, `ConstructorName`):
+  an emitter that spells a generated public name, or one a user can choose,
+  writes `let seal = names.get(IntegralName::SealTrait);` rather than
+  `format_ident!` or `fresh_ident`. The table keeps today's defaults, spans, and
+  generic-parameter collision rule, and no logic compares a generated name;
+  decisions use the key.
 - Every macro emits the annotated item first; every generated module, type,
   trait, impl, function, macro, constant, and re-export follows it. Under
   `hide_in`, the private module comes first and the item is its first item.
 - Follow the family-local entry-point shape: parse configuration and item,
   validate them, and emit the item and generated code through existing
   machinery. Integral may rewrite storage and append marker fields.
-- An emitter is a `&self` method that returns one generated trait or impl
-  group, with its flag check as an early return. The orchestrators (integral's
+- An emitter is a `&self` method that returns one generated trait or impl group,
+  with its flag check as an early return. The orchestrators (integral's
   `ekran_impls`, `ekran_items` and their slices `impls_head`, `impls_body`,
   `item_fns`, `forward_items`; text's and bitflag's `ekran`) are only ordered
   lists of calls, and that order is part of the public output. Keep logic
