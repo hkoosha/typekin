@@ -134,7 +134,7 @@ separate mapping operation. Its fallible form returns the rejected final raw
 value; its infallible form panics. This does not weaken ordinary operator
 semantics.
 
-Validation moves to compile time where the compiler can carry it, never by
+Validation moves to compile time when the compiler can carry it, never by
 weakening it:
 
 - A literal macro (`port!(443)`) evaluates the ordinary validating constructor
@@ -290,7 +290,7 @@ NaN is a diagnostic, not a silently weaker `Ord` that panics or lies.
 
 Where the raw type has no equivalent operation, such as checked float-to-integer
 conversion or a total order, the generated code is compared against the best
-correct hand-written raw code and must be identical or better.
+correct handwritten raw code and must be identical or better.
 
 ## Zero-Cost and `no_std` Are Core Constraints
 
