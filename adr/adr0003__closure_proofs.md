@@ -4,8 +4,8 @@
 - Date: 2026-11-04
 - Related: `src/zz_domain_closure.rs`, `src/integral_proof.rs`,
   `src/integral_cfg.rs` (`settle_proven`), `src/integral_items.rs` (`_proven`
-  helpers), `../src/unit`, `examples/my_proven.rs`, README
-  "The Catch", ADR 0013 (pointer widths), ADR 0024 (`Within`, cross-type proofs)
+  helpers), `../src/unit`, `examples/my_proven.rs`, README "The Catch", ADR 0013
+  (pointer widths), ADR 0024 (`Within`, cross-type proofs)
 
 ## Context
 
@@ -17,24 +17,25 @@ can never leave the domain, yet the asm still had a redundant
 ## Decision
 
 - typekin proves closure itself at expansion time: interval arithmetic over the
-  resolved domain (`zz_domain_closure.rs`). A proven operation calls a
-  `_proven` helper that skips validation and documents it.
-- `_proven` keeps `::core::debug_assert!(validation, "typekin closure proof
-  violated")` and builds through the normal storage path. Free in release.
+  resolved domain (`zz_domain_closure.rs`). A proven operation calls a `_proven`
+  helper that skips validation and documents it.
+- `_proven` keeps
+  `::core::debug_assert!(validation, "typekin closure proof violated")` and
+  builds through the normal storage path. Free in release.
 - Overflow policy per operation (`closure_policy`): checked profiles and
   `checked_*`/`strict_*` → `Checked`; `saturating_*` → `Saturating`; plain
-  `+ - *` (may panic in debug or wrap in release), `wrapping_*`, bitwise ops
-  and `!` → `Wrapping`, so the proof covers the wrapped results too. This is
-  why `Percent + Percent` is never proven under the `int` profile.
-- A proof must hold at **every pointer width**, and is made **per right-hand
-  side**: `Rhs::SameDomain` vs `Rhs::Full` (raw/friend). `Port | Port` is
-  proven, `Port | u16` is not (README:243).
-- Scope: integer wrappers only ("closure proofs support integer wrappers
-  only"), domains that are unions of plain intervals, at most 16 intervals per
-  operand (`MAX_INTERVALS`); above that, no proof. Opaque atoms (`!=`, `%`
-  /`mul`, lenses), `valid` callbacks and `with = non_zero` (adds an opaque
-  `!= 0`; write `1..` instead) block proofs. Not proven: `<<` (`Shl` has no
-  `ClosureOp`; `Shr`/`UnboundedShr` do), `pow`, `ilog*`.
+  `+ - *` (may panic in debug or wrap in release), `wrapping_*`, bitwise ops and
+  `!` → `Wrapping`, so the proof covers the wrapped results too. This is why
+  `Percent + Percent` is never proven under the `int` profile.
+- A proof must hold at **every pointer width**, and is made
+  **per right-hand side**: `Rhs::SameDomain` vs `Rhs::Full` (raw/friend).
+  `Port | Port` is proven, `Port | u16` is not (README:243).
+- Scope: integer wrappers only ("closure proofs support integer wrappers only"),
+  domains that are unions of plain intervals, at most 16 intervals per operand
+  (`MAX_INTERVALS`); above that, no proof. Opaque atoms (`!=`, `%` /`mul`,
+  lenses), `valid` callbacks and `with = non_zero` (adds an opaque `!= 0`; write
+  `1..` instead) block proofs. Not proven: `<<` (`Shl` has no `ClosureOp`;
+  `Shr`/`UnboundedShr` do), `pow`, `ilog*`.
 - `prove = [...]` is a checked contract: it fails expansion with a
   counterexample and names a blocking atom. It **only checks**: emission never
   consults it, so `prove` cannot change which `_proven` paths exist (PLAN.md).
@@ -57,9 +58,9 @@ can never leave the domain, yet the asm still had a redundant
 
 - **`core::hint::assert_unchecked(valid(raw))` on every field read**, letting
   LLVM find closure. Lost to "generated `unsafe` on every access, possible
-  pessimization of unrelated code, and correctness invisible to typekin's
-  tests" (556c009 §5). Same idea was already rejected for float `raw()` hints
-  (unsound with safe in-module construction).
+  pessimization of unrelated code, and correctness invisible to typekin's tests"
+  (556c009 §5). Same idea was already rejected for float `raw()` hints (unsound
+  with safe in-module construction).
 - **Always validating** (no proofs). Leaves the measured redundant
   compare-and-panic on operations that cannot fail.
 - **Dropping the check entirely on proven paths.** Kept `debug_assert!` as a
@@ -67,17 +68,16 @@ can never leave the domain, yet the asm still had a redundant
   free in release" (DB2). With `NonZero` storage a wrong proof reaches
   `new_unchecked`, i.e. UB, so proof code is held "to the same bar as the zero
   probe". `Within` chose a safe storage path instead (PLAN_WITHIN DW3).
-- **One proof per operator / per single width.** Per RHS because "`Percent /
-  Percent` may be proven while `Percent / u8` is not" (DB4); every width as the
-  "same rule as domain folding and zero probes" (DB3).
-- **Proofs on by default for every integer** (DB1: "Proofs apply
-  automatically; `prove` only adds the requirement", reason "unobservable except
-  removed impossible panics"). Reversed by `5d14cb7`; reason not recorded.
+- **One proof per operator / per single width.** Per RHS because
+  "`Percent / Percent` may be proven while `Percent / u8` is not" (DB4); every
+  width as the "same rule as domain folding and zero probes" (DB3).
+- **Proofs on by default for every integer** (DB1: "Proofs apply automatically;
+  `prove` only adds the requirement", reason "unobservable except removed
+  impossible panics"). Reversed by `5d14cb7`; reason not recorded.
 - **Float proofs.** "Rounding, NaN, and signed zeros need directed-rounding
-  interval arithmetic; separate design"; `prove`/`proven` on floats is an
-  error.
-- **Cross-type proofs in the macro** ("the macro sees one type"). Done later
-  by `Within` with rustc-evaluated const proofs (ADR 0024).
+  interval arithmetic; separate design"; `prove`/`proven` on floats is an error.
+- **Cross-type proofs in the macro** ("the macro sees one type"). Done later by
+  `Within` with rustc-evaluated const proofs (ADR 0024).
 
 ## Consequences
 
@@ -86,8 +86,8 @@ can never leave the domain, yet the asm still had a redundant
 - Xor's friend `BitXorAssign` now uses `binary_op`'s proof doc (PLAN.md P6.4),
   but no accepted domain proves xor for a raw right-hand side, so that doc is
   unreachable and untested.
-- Three fast proof tests (proven division, proven core-int method, unproven
-  add keeps validation) were deleted as covered by asm tests that only run under
+- Three fast proof tests (proven division, proven core-int method, unproven add
+  keeps validation) were deleted as covered by asm tests that only run under
   `test_slow`; not restored.
 
 ## Sources
@@ -96,5 +96,6 @@ can never leave the domain, yet the asm still had a redundant
 - commit `5d14cb7` ("proven: closure proofs default on for u8/i8, opt-in for
   wider integers")
 - `PLAN_WITHIN.md` §1.2, §10, DW3; `PLAN.md` P6.4
-- `a03de93:PLAN_TODO.md`; omp sessions 01a1a37f (2026-11-03), 01a1a64e (2026-11-04);
-  `66ecab3:float-plan.md`, `a2c7f6c:PLAN.md`, `8d41b61:PLAN.md`, `ceaa744:PLAN_REFACTOR.md`
+- `a03de93:PLAN_TODO.md`; omp sessions 01a1a37f (2026-11-03), 01a1a64e
+  (2026-11-04); `66ecab3:float-plan.md`, `a2c7f6c:PLAN.md`, `8d41b61:PLAN.md`,
+  `ceaa744:PLAN_REFACTOR.md`

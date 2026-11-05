@@ -4,8 +4,8 @@
 - Date: 2026-11-04
 - Related: `src/integral_impls.rs` (`make_partial_ord`, `make_eq`,
   `make_debug`), `src/text.rs`, `src/bitflag.rs`, `src/integral_cfg.rs` /
-  `text.rs` / `bitflag.rs` `DEFAULT_ON`, ADR 0004 (float `Eq`/`Ord`/`Hash`),
-  ADR 0019 (asm verification), ADR 0015 (`konst`)
+  `text.rs` / `bitflag.rs` `DEFAULT_ON`, ADR 0004 (float `Eq`/`Ord`/`Hash`), ADR
+  0019 (asm verification), ADR 0015 (`konst`)
 
 ## Context
 
@@ -22,10 +22,10 @@ choices look like simplifiable boilerplate; this records why they are not.
   emit `const impl` under `konst`, and it would bound the generic parameters"
   (`integral_impls.rs:600`).
 - **`#[inline(always)]`** on generated helpers, methods and trait methods,
-  including `Binary`/`Octal`/`LowerHex`/`UpperHex` `fmt`. **Exception:
-  integral `Debug::fmt`** has no inline attribute ("Except for debug, inline
-  fmt"; no reason recorded). Current deviations: text `Debug::fmt` is
-  `#[inline(always)]`; bitflag's value `Display::fmt` is `#[inline]`; the
+  including `Binary`/`Octal`/`LowerHex`/`UpperHex` `fmt`.
+  **Exception: integral `Debug::fmt`** has no inline attribute ("Except for
+  debug, inline fmt"; no reason recorded). Current deviations: text `Debug::fmt`
+  is `#[inline(always)]`; bitflag's value `Display::fmt` is `#[inline]`; the
   bitflag enum uses `#[derive(Debug)]`.
 - **`Debug` prints the type name**: `Foo(42)`, `Foo("abc")` (`debug_tuple`).
   User rule: "a `Foo(42)` must not only print `42` it must print `Foo(42)`."
@@ -35,17 +35,17 @@ choices look like simplifiable boilerplate; this records why they are not.
   `hash`, `repr` (`repr` governs the value wrapper; the enum's integer repr is
   required user input). Debug/Hash default on "same way copy is implemented";
   Clone/Copy/repr were unconditional before and became opt-out flags.
-- **Display**: off by default for integral, float and bitflag (`with =
-  display`); **on by default for text** (README:840). Bitflag enum displays its
-  flag name. Bitflag value displays set flag names joined by ` | `, then
-  leftover bits in hex: `"Read | Write | 0x8"` (README:918,
+- **Display**: off by default for integral, float and bitflag
+  (`with = display`); **on by default for text** (README:840). Bitflag enum
+  displays its flag name. Bitflag value displays set flag names joined by ` | `,
+  then leftover bits in hex: `"Read | Write | 0x8"` (README:918,
   `flag_format_body`), and `FromStr` parses the same form.
 
 ## Rejected alternatives
 
-- **Default `PartialOrd` methods through `partial_cmp`.** Default `ge` costs
-  3→8 insns on aarch64 and 8→15 on armv7 at O1/Os/Oz (embedded/`no_std`
-  levels); explicit forwarding is identical to raw on all four targets
+- **Default `PartialOrd` methods through `partial_cmp`.** Default `ge` costs 3→8
+  insns on aarch64 and 8→15 on armv7 at O1/Os/Oz (embedded/`no_std` levels);
+  explicit forwarding is identical to raw on all four targets
   (`66ecab3:float-plan.md` §2.2, D5).
 - **Explicit methods for floats only.** "One shape; protects ints from future
   LLVM changes" (D5).
@@ -55,9 +55,9 @@ choices look like simplifiable boilerplate; this records why they are not.
 - **Display opt-in for text too.** Text flipped to default-on with an opt-out
   (session 01a11d13); no further reason recorded.
 - **Bitflag value Display "EXACTLY as the underlying type"** (padding, `#x`,
-  `b`, `o`, checked on all 12 reprs; user request in 01a0fb72). **Reversed
-  later**: values now display flag names plus hex leftovers, tests were updated
-  to match. No reason recorded for the reversal.
+  `b`, `o`, checked on all 12 reprs; user request in 01a0fb72).
+  **Reversed later**: values now display flag names plus hex leftovers, tests
+  were updated to match. No reason recorded for the reversal.
 
 ## Consequences
 

@@ -7,9 +7,9 @@
 
 ## Context
 
-A validated wrapper needs a way to write a constant whose validity is checked
-at compile time: `Port` with `domain = 1..=1023 | 49_152..=65_535` should
-accept `443` and reject `0` in the build, not at runtime. `try_make` is already
+A validated wrapper needs a way to write a constant whose validity is checked at
+compile time: `Port` with `domain = 1..=1023 | 49_152..=65_535` should accept
+`443` and reject `0` in the build, not at runtime. `try_make` is already
 `const`, so the check itself is const evaluation of `try_make(v)` and a panic on
 `Err`; the question is the spelling and the expansion shape.
 
@@ -19,8 +19,8 @@ Options:
   `const fn lit<const RAW: u16>() -> Self` whose body evaluates `try_make(RAW)`
   in an inline `const` block.
 - **B. A typekin-exported macro**: `typekin::lit!(Port, 443)`.
-- **C. A generated per-type macro**: `port!(443)`, named after the
-  snake-cased type, expanding to a block-level `const` item.
+- **C. A generated per-type macro**: `port!(443)`, named after the snake-cased
+  type, expanding to a block-level `const` item.
 
 ## Decision
 
@@ -48,8 +48,8 @@ fn first<D: Direction>() -> Packet<D> {
 
 ## Evidence
 
-Probes from 2026-10-31 used a `macro_rules!` stand-in with the planned
-expansion against real typekin types:
+Probes from 2026-10-31 used a `macro_rules!` stand-in with the planned expansion
+against real typekin types:
 
 | Probe                                | Inline `const { }`     | Block-item `const VALUE: T` |
 |--------------------------------------|------------------------|-----------------------------|
@@ -75,9 +75,9 @@ Why option A was rejected:
   panicked: 0 is outside the domain of Port").
 - **`cargo check` misses it in function bodies.** Option A needs an inline
   `const` block (a const generic cannot reach a block-level item), and
-  `cargo check`, editor flycheck, and the testing crate's compile harness do
-  not evaluate inline `const` blocks in function bodies. Only `cargo build`
-  reports the bad literal.
+  `cargo check`, editor flycheck, and the testing crate's compile harness do not
+  evaluate inline `const` blocks in function bodies. Only `cargo build` reports
+  the bad literal.
 
 Why option B was rejected: typekin is a proc-macro crate and only generates
 code. It cannot export a `macro_rules!` for consumers, and a function-like proc
@@ -93,11 +93,11 @@ conflicts with the naming and `hide_in` rules.
 - The block-level form cannot name generic parameters of the enclosing function
   (E0401); `name!(const v)` covers that case, at the price of being checked only
   by `cargo build` and at instantiation.
-- Only types where a literal adds something get one. By default the macro
-  exists when `try_make` is const and the type validates: unvalidated wrappers
-  already have an infallible const `make`, bitflag enum variants are already
-  constants (only the value type gets a macro), and `text` gets none because
-  owned `String` construction is not const on stable. With `konst = none` (or
+- Only types where a literal adds something get one. By default the macro exists
+  when `try_make` is const and the type validates: unvalidated wrappers already
+  have an infallible const `make`, bitflag enum variants are already constants
+  (only the value type gets a macro), and `text` gets none because owned
+  `String` construction is not const on stable. With `konst = none` (or
   `without = konst_try_make`) the macro is silently omitted; an explicit
   `with = lit_macro` then fails at expansion ("`lit_macro` needs a const
   `try_make`; …"), as do `lit_name` and `lit_path` without the macro.
@@ -113,9 +113,9 @@ conflicts with the naming and `hide_in` rules.
 - Below `pub` the macro is a `macro_rules!` made path-addressable by a `use`;
   `pub` types export it with `#[macro_export]` under a mangled name and
   re-export it beside the type, because rustc rejects absolute paths to
-  macro-expanded exports. The mangling hash is FNV-1a over the type name and
-  its source location, so same-named `pub` types in different modules don't
-  collide at the crate root.
+  macro-expanded exports. The mangling hash is FNV-1a over the type name and its
+  source location, so same-named `pub` types in different modules don't collide
+  at the crate root.
 - Without a macro, `try_make` in a `const` item stays available:
 
   ```rust

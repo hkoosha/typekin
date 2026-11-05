@@ -11,6 +11,7 @@ export RUSTFLAGS := '-Zmacro-backtrace'
 [group("z")]
 markdown:
   rumdl fmt --deny-config-warnings --no-cache *.md &>/dev/null
+  rumdl fmt --deny-config-warnings --no-cache adr/*.md &>/dev/null
   rumdl fmt --deny-config-warnings --no-cache arena/*.md &>/dev/null || true
 
 [group("z")]

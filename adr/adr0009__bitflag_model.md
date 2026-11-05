@@ -2,14 +2,18 @@
 
 - Status: Accepted (implemented), except the `Neg` rejection (planned)
 - Date: 2026-11-04
-- Related: `src/bitflag.rs`, `src/zz_friend.rs` (`BITFLAG_ROOT`, `ProtocolCapability`), PLAN.md §6.1–6.3 and §7, PHILOSOPHY.md "Bitflags Follow an Established Text Model", ADR 0008, 0015, 0018, 0021, 0022, 0025
+- Related: `src/bitflag.rs`, `src/zz_friend.rs` (`BITFLAG_ROOT`,
+  `ProtocolCapability`), PLAN.md §6.1–6.3 and §7, PHILOSOPHY.md "Bitflags Follow
+  an Established Text Model", ADR 0008, 0015, 0018, 0021, 0022, 0025
 
 ## Context
+
 `#[typekin::bitflag]` turns a unit enum into a flag set. It has to decide the
 type shape, how the integer width is chosen, which friendship and integral
 features apply to flags, and how values print, parse and serialize.
 
 ## Decision
+
 - **Shape:** the user's unit enum holds the flags; a separate `{Enum}Value`
   wrapper (suffix configurable, `value_name = ".."`) holds the set. The value
   type gets one named `const` per variant, built through `_or_panic`.
@@ -38,6 +42,7 @@ features apply to flags, and how values print, parse and serialize.
   `serde_with_value`, mutually exclusive; see ADR 0025.
 
 ## Rejected alternatives
+
 - **`bitflags`-style struct with associated consts.** A `bitflags!` reference
   expansion (`my_thingy`, `ef7c6e9`, removed in `455cb27`) was compared; the
   enum + `{Enum}Value` design was chosen. No reason recorded.
@@ -48,8 +53,8 @@ features apply to flags, and how values print, parse and serialize.
 - **Root `Make`/`Math`/`Cmp`/`unsafe`.** "Root Make, Math, Cmp and unsafe only
   implemented private marker traits that nothing bounds on" (`10abfea`); a test
   even pinned that root `unsafe` grants nothing. Before `404be48` an unknown
-  root capability (`-> Inspector`) and `without = friend` were accepted and
-  then failed in rustc.
+  root capability (`-> Inspector`) and `without = friend` were accepted and then
+  failed in rustc.
 - **Name-based `unsafe` detection (`is_blind_trust_capability`).** It misread
   two inputs: a generic parameter named `Unsafe` renamed the trait to
   `__TypekinUnsafe`, which lost `unsafe` while `make` still called
@@ -63,6 +68,7 @@ features apply to flags, and how values print, parse and serialize.
   hex rather than inventing another text format.
 
 ## Consequences
+
 - Signed-repr bitflags without `integral = [..]` now gain `Neg`. PLAN.md asked
   to ship the `Neg` rejection ("two's-complement negation has no set meaning;
   the meaningful complement is `Not`") in the same release; it is not
@@ -72,10 +78,13 @@ features apply to flags, and how values print, parse and serialize.
   Typekin's.
 
 ## Sources
+
 - `ceaa744:PLAN_REFACTOR.md` §6.1–6.3, C.3
 - omp session 01a15048 (2026-10-18)
 - omp session 01a0b451 (2026-09-18)
 - omp session 01a0f766 (2026-10-01)
-- omp session 01a14b3f (2026-10-17); `my_thingy`: arena git commits `ef7c6e9`, `455cb27`
+- omp session 01a14b3f (2026-10-17); `my_thingy`: arena git commits `ef7c6e9`,
+  `455cb27`
 - commits `10abfea`, `404be48`
-- PLAN.md §6.1–6.3; `src/bitflag.rs` `resolve_repr`, `parse_integral`, `complemented`
+- PLAN.md §6.1–6.3; `src/bitflag.rs` `resolve_repr`, `parse_integral`,
+  `complemented`
