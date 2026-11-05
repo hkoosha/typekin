@@ -1020,12 +1020,33 @@ mod tests {
     }
 
     #[test]
-    fn rejects_facet_assignment_requests() {
+    fn rejects_shift_assignment_in_a_facet() {
         let input = "
             konst = none,
             facet = [
                 int {
                     friend = convert(Source) -> Math,
+                    with = assign_shl,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "attribute is wrapper-wide or has no operand slot and cannot be configured inside a facet",
+        );
+    }
+
+    #[test]
+    fn rejects_facet_assignment_of_a_non_self_output() {
+        let input = "
+            konst = none,
+            facet = [
+                int {
+                    friend = convert(Source) -> Math,
+                    produce = into_other(_) -> Other,
                     with = assign_add,
                 },
             ]
@@ -1035,7 +1056,49 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "facets do not support assignment operators",
+            "produce cannot generate assignment operators",
+        );
+    }
+
+    #[test]
+    fn rejects_facet_assignment_without_its_operator_slot() {
+        let input = "
+            konst = none,
+            facet = [
+                int {
+                    friend = convert(Source) -> Math,
+                    without = math_add,
+                    with = assign_add,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`assign_add` needs a `math_add` slot to assign through",
+        );
+    }
+
+    #[test]
+    fn rejects_const_facet_assignment_of_a_non_const_operator() {
+        let input = "
+            konst = nightly,
+            with = konst_add_assign,
+            without = konst_add,
+            facet = [
+                int {
+                    friend = convert(Source) -> Math,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "a facet assignment forwards to its operator and can be const only when the operator is",
         );
     }
 

@@ -85,8 +85,11 @@ mod unit;
 /// or `nominal`. A profile body accepts `with` and `without`; only `circular`
 /// also accepts `precedes = bool`. `FACET` is one profile other than `nominal`
 /// with an optional body that accepts `with`, `without`, `friend`, and
-/// `produce`. `TREE` uses the [`tree`] node grammar, and a bracketed list also
-/// takes the tree's `without`. Its private `MarkerTreeRoot` seal stays
+/// `produce`. A facet slot whose output is `Self` also gets its assignment
+/// operator (`+=` for a `math_add` slot) while its facet has the `assign_*`
+/// flag on; facets inherit the root's, and shift assignments stay
+/// wrapper-wide. `TREE` uses the [`tree`] node grammar, and a bracketed list
+/// also takes the tree's `without`. Its private `MarkerTreeRoot` seal stays
 /// generated, while its nodes are re-exported beside the annotated item.
 ///
 /// By default the item and its generated code live in a private module named

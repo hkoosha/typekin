@@ -765,28 +765,16 @@ impl Maker {
         rhs: OpRhs,
         form: OpForm,
     ) -> OpImpl {
-        let [
-            operator_flag,
-            family_flag,
-        ] = operator.is_konst_flags();
         let (trait_name, method, is_konst) = match form {
             OpForm::Value => (
                 format_ident!("{}", operator.name()),
                 format_ident!("{}", operator.method_name()),
-                self.ctx.cfg.konst_for(&[
-                    operator_flag,
-                    family_flag,
-                ]),
+                self.ctx.cfg.konst_for(&operator.is_konst_flags()),
             ),
             OpForm::Assign => (
                 format_ident!("{}Assign", operator.name()),
                 format_ident!("{}_assign", operator.method_name()),
-                self.ctx.cfg.konst_for(&[
-                    operator.assign_konst(),
-                    operator_flag,
-                    Konsts::Assign,
-                    family_flag,
-                ]),
+                self.ctx.cfg.konst_for(&operator.assign_konst_flags()),
             ),
         };
         let helper = match operator.arithmetic_op() {

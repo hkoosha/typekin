@@ -235,6 +235,15 @@ mod __seq_point {
                 return <T as SubRhs<D>>::sub(self, rhs);
             }
         }
+        impl<D: Direction> core::ops::AddAssign<SeqOffset<D>> for SeqPoint<D> {
+            #[inline(always)]
+            fn add_assign(
+                &mut self,
+                rhs: SeqOffset<D>,
+            ) {
+                *self = <SeqOffset<D> as AddRhs<D>>::add(*self, rhs);
+            }
+        }
         impl<D: Direction> AsRef<u32> for SeqPoint<D> {
             #[inline(always)]
             fn as_ref(&self) -> &u32 {
@@ -5545,7 +5554,8 @@ fn directional_sequence<D: Direction>() {
     assert!(maximum.precedes(zero));
     assert!(!zero.precedes(SeqPoint::make(1 << 31)));
 
-    let wrapped = maximum + SeqOffset::<D>::make(1);
+    let mut wrapped = maximum;
+    wrapped += SeqOffset::<D>::make(1);
     assert_eq!(wrapped.raw(), 0);
 
     let offset = SeqOffset::<D>::make(i32::MAX) + SeqOffset::<D>::make(1);

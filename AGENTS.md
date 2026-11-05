@@ -278,8 +278,11 @@ constness, and runtime cost as API behavior.
   not accept `profile`; only `circular` accepts `precedes` directly.
 - Facets inherit root settings and dispatch by operator and exact RHS type.
   Explicit slots cannot overlap; even `facet = []` enables facet dispatch.
-  Constness, `non_zero`, and `precedes` are wrapper-wide, and a facet cannot
-  enable assignment operators.
+  Constness, `non_zero`, and `precedes` are wrapper-wide. A slot whose output
+  is `Self` gets a concrete `{Op}Assign<Rhs>` forwarding to its `{Op}Rhs` impl
+  while its owner (facet or root) has the `assign_*` flag on; never a blanket
+  impl. An explicit `assign_*` needs a `Self` output and an owned slot of its
+  operator, and a const assignment needs a const operator.
 - `produce = callback(_) -> Type` calls the callback once on an already
   validated operator result. A non-`Self` output disables incompatible
   assignment operators.

@@ -894,6 +894,21 @@ impl Operator {
             ],
         };
     }
+
+    /// The `konst_*` flags of the assignment operator, first decisive:
+    /// `[XAssign, X, Assign, family]`.
+    pub(crate) fn assign_konst_flags(&self) -> [Konsts; 4] {
+        let [
+            operator,
+            family,
+        ] = self.is_konst_flags();
+        return [
+            self.assign_konst(),
+            operator,
+            Konsts::Assign,
+            family,
+        ];
+    }
 }
 
 // =============================================================================

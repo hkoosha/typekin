@@ -456,11 +456,21 @@ impl Maker {
         let operator_impls = operators.iter().map(|operator| {
             return self.facet_operator_impl(*operator, &target, &generics);
         });
+        let assign_impls = self
+            .ctx
+            .cfg
+            .facet_slots
+            .iter()
+            .filter(|(_, slot)| slot.assign)
+            .map(|(key, slot)| {
+                return self.facet_assign_impl(key, slot, &target, &generics);
+            });
 
         return quote! {
             #(#traits)*
             #(#implementations)*
             #(#operator_impls)*
+            #(#assign_impls)*
         };
     }
 
@@ -498,6 +508,32 @@ impl Maker {
         };
     }
 
+    /// The type a slot's right-hand side is: the friend's, else the target.
+    fn facet_rhs_ty(
+        &self,
+        slot: &FacetSlot,
+        target: &TokenStream,
+    ) -> TokenStream {
+        return slot.rhs.as_ref().map_or_else(
+            || target.clone(),
+            |rhs| self.target.external_type(&parse_quote! { #rhs }),
+        );
+    }
+
+    /// Whether a slot's result is proven valid: for every operand of a
+    /// friend slot, or for same-type operands of the `Self` slot.
+    fn facet_proven(
+        &self,
+        key: &FacetSlotKey,
+        slot: &FacetSlot,
+    ) -> bool {
+        let proof = self.operator_proof_with(key.operator, slot.arithmetic);
+        return match slot.rhs {
+            Some(_) => proof.full,
+            None => proof.same,
+        };
+    }
+
     fn facet_rhs_impl(
         &self,
         key: &FacetSlotKey,
@@ -509,10 +545,7 @@ impl Maker {
         let operator = key.operator;
         let trait_name = self.facet_rhs_trait(operator);
         let method = format_ident!("{}", operator.method_name());
-        let rhs_ty = slot.rhs.as_ref().map_or_else(
-            || target.clone(),
-            |rhs| self.target.external_type(&parse_quote! { #rhs }),
-        );
+        let rhs_ty = self.facet_rhs_ty(slot, target);
         let get_raw = self.target.qualify_path(&self.ctx.get_raw);
         let rhs = match &slot.rhs {
             Some(rhs) => self.friend_conversion_expression(
@@ -522,11 +555,7 @@ impl Maker {
             ),
             None => quote! { #get_raw(rhs) },
         };
-        let proof = self.operator_proof_with(operator, slot.arithmetic);
-        let proven = match slot.rhs {
-            Some(_) => proof.full,
-            None => proof.same,
-        };
+        let proven = self.facet_proven(key, slot);
         let path = match proven {
             true => parse_quote! { Self::_proven },
             false => self.ctx.fp_or_panic.clone(),
@@ -594,6 +623,45 @@ impl Maker {
                     rhs: #rhs,
                 ) -> Self::Output {
                     return <#rhs as #trait_name #arguments>::#method(self, rhs);
+                }
+            }
+        };
+    }
+
+    /// `core::ops::{Op}Assign<Rhs> for Target` of a slot whose output is
+    /// `Self`, forwarding to the slot's `{Op}Rhs` impl.
+    fn facet_assign_impl(
+        &self,
+        key: &FacetSlotKey,
+        slot: &FacetSlot,
+        target: &TokenStream,
+        generics: &Generics,
+    ) -> TokenStream {
+        let (parameters, arguments, where_clause) = generics.split_for_impl();
+        let operator = key.operator;
+        let trait_name = self.facet_rhs_trait(operator);
+        let method = format_ident!("{}", operator.method_name());
+        let assign_trait = format_ident!("{}Assign", operator.name());
+        let assign_method = format_ident!("{}_assign", operator.method_name());
+        let rhs_ty = self.facet_rhs_ty(slot, target);
+        let doc = self.proof_doc(self.facet_proven(key, slot));
+        let is_konst = self.ctx.cfg.konst_for(&operator.assign_konst_flags());
+        let konst = Konst::konst(is_konst);
+
+        return quote! {
+            #konst impl #parameters ::core::ops::#assign_trait<#rhs_ty>
+                for #target
+            #where_clause {
+                #doc
+                #[inline(always)]
+                fn #assign_method(
+                    &mut self,
+                    rhs: #rhs_ty,
+                ) {
+                    *self = <#rhs_ty as #trait_name #arguments>::#method(
+                        *self,
+                        rhs,
+                    );
                 }
             }
         };

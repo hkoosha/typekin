@@ -586,6 +586,9 @@ pub(crate) struct FacetSlot {
     pub(crate) conversion: Option<Path>,
     pub(crate) arithmetic: Arithmetic,
     pub(crate) ty_out: SelfConverter,
+    /// Whether the slot also gets `{Op}Assign`: its owner has `assign_*`
+    /// on and its output is `Self`.
+    pub(crate) assign: bool,
     pub(crate) owner: FacetOwner,
     pub(crate) span: Span,
 }
@@ -610,6 +613,7 @@ impl Debug for FacetSlot {
             )
             .field("arithmetic", &self.arithmetic)
             .field("ty_out", &!self.ty_out.is_self())
+            .field("assign", &self.assign)
             .field("owner", &self.owner)
             .finish_non_exhaustive();
     }

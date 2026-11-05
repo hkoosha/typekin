@@ -3,7 +3,8 @@
 - Status: Accepted (implemented)
 - Date: 2026-11-04
 - Related: `src/integral_friend.rs` (`make_facet_dispatch`,
-  `facet_rhs_trait_decl`, `facet_rhs_impl`, `facet_operator_impl`),
+  `facet_rhs_trait_decl`, `facet_rhs_impl`, `facet_operator_impl`,
+  `facet_assign_impl`),
   `src/integral_cfg.rs` (`FacetSlotKey`, `resolve_facets`), `src/integral.rs`
   (`with_global_operators`), README §facets, AGENTS.md "Preserve profiles,
   facets, and storage", ADR 0008, ADR 0011, ADR 0012, ADR 0015
@@ -39,7 +40,13 @@ and output conversion.
   anonymous expansion scope.
 - A facet's result is validated by the left-hand wrapper before the output
   conversion runs.
-- Facets do not generate assignment operators.
+- A slot whose output is `Self` gets a concrete `{Op}Assign<Rhs>` impl while
+  its owner has the `assign_*` flag on, forwarding to the slot's `{Op}Rhs`
+  impl. Facets inherit the root's flags, so the root's assignments survive
+  turning facets on. An explicit `assign_*` needs a `Self` output and an owned
+  slot of its operator; shift assignments stay wrapper-wide. The assignment is
+  const only with its operator, and an explicit `konst_*` splitting them is an
+  error. (Amended: assignments were first rejected; see below.)
 - Constness (`konst`), `non_zero`, `precedes` and removals are wrapper-wide and
   cannot be set per facet. One exception: a `wrapping` profile on any facet
   switches the whole wrapper to `Wrapping` storage (ADR 0011), and each slot
@@ -74,8 +81,12 @@ and output conversion.
   the same, at resolution time it goes into default facet." Public syntax stays
   unchanged; root config becomes the implicit default facet during resolution
   (omp session 01a173b7, 2026-10-25).
-- **Assignment operators on facets.** "A dispatcher may return a different
-  associated type, so a blanket `AddAssign<T>` is not sound."
+- **Blanket assignment operators on facets.** "A dispatcher may return a
+  different associated type, so a blanket `AddAssign<T>` is not sound." Facets
+  first generated no assignments at all, which also dropped the root's `+=`
+  once facets were on, and users wrote `AddAssign` by hand. Concrete per-slot
+  impls, emitted only where the output is known to be `Self`, avoid both the
+  unsoundness and blanket overlap.
 - **Converting before validation.** Validating first is intentional: "a result
   rejected by the left-hand wrapper's validator cannot be converted into an
   otherwise valid target." A consumer test shows `2+3=5` rejected through the

@@ -10,7 +10,7 @@ trait MakerSeal {}
     profile = [circular, point],
     produce = Self::into_offset(_) -> SeqOffset<D>,
     facet = circular {
-        with = math_add,
+        with = [math_add, assign_add],
         friend = Self::offset_raw(SeqOffset<D>) -> Math,
         produce = Self,
     },
@@ -53,7 +53,8 @@ fn directional_sequence<D: Direction>() {
     assert!(maximum.precedes(zero));
     assert!(!zero.precedes(SeqPoint::make(1 << 31)));
 
-    let wrapped = maximum + SeqOffset::<D>::make(1);
+    let mut wrapped = maximum;
+    wrapped += SeqOffset::<D>::make(1);
     assert_eq!(wrapped.raw(), 0);
 
     let offset = SeqOffset::<D>::make(i32::MAX) + SeqOffset::<D>::make(1);

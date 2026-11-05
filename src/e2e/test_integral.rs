@@ -250,6 +250,11 @@ mod tests {
     }
 
     #[test]
+    fn const_facet_assignment_forwards_to_its_const_operator() {
+        assert_eq!(FACET_CONST_ASSIGNED.raw(), 5);
+    }
+
+    #[test]
     fn output_type_maps_every_non_assignment_operator_once() {
         OPERATOR_OUTPUT_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
 
@@ -3140,17 +3145,31 @@ mod facets {
     }
 
     #[test]
-    fn facets_dispatch_root_and_facet_friends_without_assignments() {
+    fn facets_dispatch_root_and_facet_friends_with_their_assignments() {
         let maximum = FacetDispatchOperators::make(u8::MAX);
         let by_facet = maximum + FacetWrapping(1);
         let by_root = maximum + FacetOffset(1);
         let by_self = maximum + FacetDispatchOperators::make(1);
+        let mut assigned = maximum;
+        assigned += FacetWrapping(1);
+        assigned += FacetOffset(1);
+        assigned += FacetDispatchOperators::make(1);
 
         assert_eq!(by_facet.raw(), 0);
         assert_eq!(by_root.raw(), 0);
         assert_eq!(by_self.raw(), 0);
+        assert_eq!(assigned.raw(), 2);
+    }
+
+    #[test]
+    fn facet_producing_self_assigns_only_what_it_asks_for() {
+        let mut point = FacetAssignedPoint::make(u8::MAX);
+        point += FacetOffset(2);
+
+        assert_eq!(point.raw(), 1);
+        assert_not_impl!(FacetAssignedPoint: core::ops::SubAssign<FacetOffset>);
         assert_not_impl!(
-            FacetDispatchOperators: core::ops::AddAssign<FacetDispatchOperators>
+            FacetAssignedPoint: core::ops::AddAssign<FacetAssignedPoint>
         );
     }
 

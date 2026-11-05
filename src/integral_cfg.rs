@@ -208,22 +208,16 @@ impl Cfg {
             );
         }
 
-        for (flag, enabled, span) in settings.flags_by_name() {
+        for (flag, _, span) in settings.flags_by_name() {
             if flag == IntegralFlag::NonZero {
                 return span.fail(
                     "`non_zero` is wrapper-wide and cannot be configured inside a facet",
                 );
             }
 
-            if IntegralFlag::ASSIGN_FLAGS.contains(&flag) {
-                if enabled {
-                    return span
-                        .fail("facets do not support assignment operators");
-                }
-                continue;
-            }
-
-            if !IntegralFlag::FACET_OPERANDS.contains(&flag) {
+            if !IntegralFlag::FACET_OPERANDS.contains(&flag)
+                && !IntegralFlag::FACET_ASSIGNMENTS.contains(&flag)
+            {
                 return span.fail(
                     "attribute is wrapper-wide or has no operand \
                     slot and cannot be configured inside a facet",
@@ -311,6 +305,9 @@ impl Cfg {
                 conversion: conversion.cloned(),
                 arithmetic: source.arithmetic,
                 ty_out: source.ty_out.clone(),
+                assign: source.ty_out.is_self()
+                    && IntegralFlag::assign(operator)
+                        .is_some_and(|flag| source.flags.has(flag)),
                 owner: source.owner,
                 span,
             };
@@ -413,6 +410,9 @@ impl Cfg {
                 self_slot(IntegralFlag::SelfMath),
                 self_slot(IntegralFlag::SelfBit),
             )?;
+            Self::check_facet_assignments(&slots, &source, |flag| {
+                return facet.explicit_flag(flag);
+            })?;
         }
 
         let source = SlotSource {
@@ -429,8 +429,76 @@ impl Cfg {
             self_slot(IntegralFlag::SelfMath),
             self_slot(IntegralFlag::SelfBit),
         )?;
+        Self::check_facet_assignments(&slots, &source, |flag| {
+            return self.explicit_flag(flag);
+        })?;
 
         self.facet_slots = slots;
+        return self.check_facet_assignment_konst();
+    }
+
+    /// Each assignment flag a facet level explicitly enables assigns through
+    /// that level's slots of its operator, which must output `Self`.
+    fn check_facet_assignments(
+        slots: &BTreeMap<FacetSlotKey, FacetSlot>,
+        source: &SlotSource,
+        explicit: impl Fn(IntegralFlag) -> Option<(bool, Span)>,
+    ) -> syn::Result<()> {
+        let operators = FACET_OPERATORS
+            .iter()
+            .flat_map(|(_, operators)| operators().iter().copied());
+        for operator in operators {
+            let Some(flag) = IntegralFlag::assign(operator)
+            else {
+                continue;
+            };
+            let Some((true, span)) = explicit(flag)
+            else {
+                continue;
+            };
+            if !source.ty_out.is_self() {
+                return span
+                    .fail("produce cannot generate assignment operators");
+            }
+            let owned = slots.iter().any(|(key, slot)| {
+                return key.operator == operator && slot.owner == source.owner;
+            });
+            if !owned {
+                let math = IntegralFlag::math(operator).name();
+                return span.fail(format!(
+                    "`{}` needs a `{math}` slot to assign through",
+                    flag.name(),
+                ));
+            }
+        }
+        return Ok(());
+    }
+
+    /// A facet assignment forwards to its operator's dispatch, so it can be
+    /// const only when that dispatch is. Only explicit `konst_*` settings
+    /// can split them; the first one deciding the assignment is reported.
+    fn check_facet_assignment_konst(&self) -> syn::Result<()> {
+        for key in self
+            .facet_slots
+            .iter()
+            .filter(|(_, slot)| slot.assign)
+            .map(|(key, _)| key)
+        {
+            let assign = key.operator.assign_konst_flags();
+            if !self.konst_for(&assign)
+                || self.konst_for(&key.operator.is_konst_flags())
+            {
+                continue;
+            }
+            let span = assign
+                .iter()
+                .find_map(|flag| self.konst_flags.get(*flag))
+                .map_or_else(Span::call_site, |(_, span)| span);
+            return span.fail(
+                "a facet assignment forwards to its operator and can be \
+                const only when the operator is",
+            );
+        }
         return Ok(());
     }
 
@@ -1194,6 +1262,18 @@ impl IntegralFlag {
         Self::MathXor,
         Self::SelfMath,
         Self::SelfBit,
+    ];
+
+    /// The assignment flags a facet may set: those of its operand operators
+    /// (`BitXor` has none; shifts are wrapper-wide).
+    pub(crate) const FACET_ASSIGNMENTS: &'static [Self] = &[
+        Self::AssignAdd,
+        Self::AssignSub,
+        Self::AssignMul,
+        Self::AssignDiv,
+        Self::AssignRem,
+        Self::AssignAnd,
+        Self::AssignOr,
     ];
 
     /// The flag that generates `op`'s operator.

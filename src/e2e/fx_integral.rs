@@ -808,6 +808,12 @@ pub(crate) const fn facet_const_point_storage(
 pub(crate) const FACET_CONST_RESULT: FacetConstPoint =
     FacetConstPoint::make(2) + FacetConstOffset(3);
 
+pub(crate) const FACET_CONST_ASSIGNED: FacetConstPoint = {
+    let mut point = FacetConstPoint::make(2);
+    point += FacetConstOffset(3);
+    point
+};
+
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct FacetValidatedResult(pub(crate) u8);
 
@@ -1223,6 +1229,26 @@ pub struct DistinctFacetOperations(u8);
     ],
 )]
 pub struct FacetDispatchOperators(u8);
+
+/// The root produces another type, so it has no assignments to pass down;
+/// its `produce = Self` facet asks for `+=` alone.
+#[typekin::integral(
+    konst = none,
+    profile = circular {},
+    produce = Self::into_offset(_) -> FacetOffset,
+    facet = circular {
+        friend = facet_offset_raw(FacetOffset) -> Math,
+        with = assign_add,
+        produce = Self,
+    },
+)]
+pub struct FacetAssignedPoint(u8);
+
+impl FacetAssignedPoint {
+    fn into_offset(self) -> FacetOffset {
+        return FacetOffset(self.raw());
+    }
+}
 
 #[typekin::integral(
     konst = none,
