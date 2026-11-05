@@ -63,3 +63,5 @@ says what is missing, not how to fix it.
   (`&start.0.get()`). `impl From<&NonZero<T>> for &T` (`more_from_nonzero`,
   marked stable in nightly 1.101) can restore `AsRef` without `unsafe` once
   `rust-version` reaches the release that ships it.
+
+- swap max with 0, zero it fits on Option
