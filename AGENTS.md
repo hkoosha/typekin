@@ -7,8 +7,8 @@ capability protocols, and marker hierarchies. Wrappers are transparent by
 default:
 
 - `integral` and its fixed-profile entry points `int`, `circular`, `delta`,
-  `sequential`, `wrapping`, and `point`: integer newtypes, validation,
-  conversions, math, and bitwise operations.
+  `sequential`, `wrapping`, `point`, and `nominal`: integer newtypes,
+  validation, conversions, math, and bitwise operations.
 - `float` (and `point` on an `f32`/`f64` field): float newtypes sharing the
   integral configuration, with float-correct NaN, totality, and conversion
   semantics.
@@ -269,9 +269,10 @@ constness, and runtime cost as API behavior.
 
 - Integral profiles resolve in order, then root `with`/`without` settings apply.
   `sequential` uses checked arithmetic; `circular` and `delta` wrap; `wrapping`
-  uses `Wrapping` storage. `point` preserves the previously selected arithmetic
-  policy. Fixed-profile entry points do not accept `profile`; only `circular`
-  accepts `precedes` directly.
+  uses `Wrapping` storage. `point` and `nominal` preserve the previously
+  selected arithmetic policy; `nominal` keeps only identity (construction,
+  `raw()`, `Eq`, `Hash`) and cannot be a facet. Fixed-profile entry points do
+  not accept `profile`; only `circular` accepts `precedes` directly.
 - Facets inherit root settings and dispatch by operator and exact RHS type.
   Explicit slots cannot overlap; even `facet = []` enables facet dispatch.
   Constness, `non_zero`, and `precedes` are wrapper-wide, and a facet cannot

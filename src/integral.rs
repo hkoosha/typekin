@@ -326,7 +326,10 @@ fn manual_copy_clone(
             quote! { self.0 },
             cfg.flags.has(IntegralFlag::Assertions),
         );
+        // A derive would bound the generic parameters by `Clone`; clippy
+        // still asks for one whenever they are `Copy`.
         quote! {
+            #[allow(clippy::expl_impl_clone_on_copy)]
             #konst impl #impl_generics ::core::clone::Clone for #target_ty
             #where_clause
             {

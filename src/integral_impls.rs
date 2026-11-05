@@ -61,17 +61,17 @@ struct OpImpl {
 }
 
 /// A shift operator: its helper operation, trait, flags and `konst_*` flags.
-struct Shift {
-    operation: ArithmeticOp,
+pub(crate) struct Shift {
+    pub(crate) operation: ArithmeticOp,
     trait_name: &'static str,
-    math: IntegralFlag,
-    assign: IntegralFlag,
+    pub(crate) math: IntegralFlag,
+    pub(crate) assign: IntegralFlag,
     konst: Konsts,
     konst_assign: Konsts,
 }
 
 /// The shifts, in output order.
-const SHIFTS: [Shift; 2] = [
+pub(crate) const SHIFTS: [Shift; 2] = [
     Shift {
         operation: ArithmeticOp::Shr,
         trait_name: "Shr",

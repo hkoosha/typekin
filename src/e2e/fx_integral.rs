@@ -688,6 +688,27 @@ impl SurfaceFacetPoint {
     }
 }
 
+#[typekin::nominal]
+pub(crate) struct NominalCode(u16);
+
+pub(crate) const NOMINAL_CODE: NominalCode = NominalCode::make(443);
+
+#[typekin::nominal(konst = none)]
+pub(crate) struct NominalSigned(i16);
+
+#[typekin::nominal(konst = none, with = display)]
+pub(crate) struct NominalDisplayed(u16);
+
+#[typekin::nominal(domain = 5..=15)]
+pub(crate) struct NominalWords(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = [circular, nominal],
+    with = math_sub,
+)]
+pub(crate) struct NominalCircular(u8);
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct FacetResult(pub(crate) u8);
 

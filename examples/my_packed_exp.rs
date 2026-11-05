@@ -63,6 +63,7 @@ mod __page_id {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_page_id(self) -> u8;
@@ -73,12 +74,6 @@ mod __page_id {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for PageId {
             #[inline(always)]
             fn conv_page_id(self) -> u8 {
@@ -2033,6 +2028,7 @@ mod __version {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_version(self) -> u8;
@@ -2043,12 +2039,6 @@ mod __version {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Version {
             #[inline(always)]
             fn conv_version(self) -> u8 {
@@ -3957,6 +3947,7 @@ mod __page_state {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_page_state_value(self) -> u8;
@@ -3967,12 +3958,6 @@ mod __page_state {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for PageStateValue {
             #[inline(always)]
             fn conv_page_state_value(self) -> u8 {
@@ -5691,12 +5676,6 @@ mod __page_state {
                 let it = lhs << rhs;
                 return Self::_or_panic(it);
             }
-            #[inline(always)]
-            pub(self) const fn _not(&self) -> Self {
-                let lhs = Self::raw(*self);
-                let it = !lhs;
-                return Self::_or_panic(it);
-            }
             #[must_use]
             #[inline(always)]
             #[doc(hidden)]
@@ -6498,17 +6477,12 @@ mod __page_header {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_page_header(self) -> u32;
         }
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for PageHeader {
             #[inline(always)]
             fn conv_page_header(self) -> u32 {

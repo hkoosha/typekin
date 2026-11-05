@@ -61,6 +61,7 @@ mod __percent {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_percent(self) -> u8;
@@ -71,12 +72,6 @@ mod __percent {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Percent {
             #[inline(always)]
             fn conv_percent(self) -> u8 {
@@ -2015,6 +2010,7 @@ mod __port {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_port(self) -> u16;
@@ -2025,12 +2021,6 @@ mod __port {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Port {
             #[inline(always)]
             fn conv_port(self) -> u16 {
@@ -4014,6 +4004,7 @@ mod __byte {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_byte(self) -> u16;
@@ -4024,12 +4015,6 @@ mod __byte {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Byte {
             #[inline(always)]
             fn conv_byte(self) -> u16 {
@@ -6425,6 +6410,7 @@ mod __positive {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_positive(self) -> u16;
@@ -6435,12 +6421,6 @@ mod __positive {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Positive {
             #[inline(always)]
             fn conv_positive(self) -> u16 {

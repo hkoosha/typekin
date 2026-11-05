@@ -81,12 +81,13 @@ mod unit;
 /// - `tree = NODE | [NODE, ...]`
 /// - `hide_in = MODULE | none`
 ///
-/// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, or
-/// `point`. A profile body accepts `with` and `without`; only `circular` also
-/// accepts `precedes = bool`. `FACET` is one profile with an optional body that
-/// accepts `with`, `without`, `friend`, and `produce`. `TREE` uses the
-/// [`tree`] node grammar. Its private `MarkerTreeRoot` seal stays generated,
-/// while its nodes are re-exported beside the annotated item.
+/// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, `point`,
+/// or `nominal`. A profile body accepts `with` and `without`; only `circular`
+/// also accepts `precedes = bool`. `FACET` is one profile other than `nominal`
+/// with an optional body that accepts `with`, `without`, `friend`, and
+/// `produce`. `TREE` uses the [`tree`] node grammar. Its private
+/// `MarkerTreeRoot` seal stays generated, while its nodes are re-exported
+/// beside the annotated item.
 ///
 /// By default the item and its generated code live in a private module named
 /// `__` plus the snake-cased type name (`hide_in = MODULE` picks the name) and
@@ -394,6 +395,43 @@ pub fn point(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     return profiled_integral(ProfileKind::Point, attr, item);
+}
+
+/// Generates an integral newtype with the fixed `nominal` profile: a value
+/// that is only told apart from others, such as an identifier, a port, or a
+/// header field.
+///
+/// # Inputs
+///
+/// - **Required item:** the same primitive-integer tuple struct accepted by
+///   [`integral`].
+/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
+///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
+///   `tree`, and `hide_in`.
+///
+/// This is equivalent to `#[typekin::integral(profile = nominal, ...)]`; it
+/// does not accept `profile` or `precedes`. A nominal value keeps
+/// construction, `raw()`, `Eq`, `Hash`, `Debug`, `Copy`, and `Clone`, and
+/// drops every operator, linear ordering, conversion, radix formatting,
+/// `AsRef`, `FromStr`, `map`, and its `Within` source constants. Like `point`
+/// it selects no arithmetic, so `profile = [circular, nominal]` keeps
+/// circular arithmetic and `precedes` for the operators `with` re-enables.
+///
+/// ```
+/// #[typekin::nominal(with = display)]
+/// struct Port(u16);
+///
+/// let http = Port::make(80);
+/// assert_eq!(http, Port::make(80));
+/// assert_eq!(http.raw(), 80);
+/// assert_eq!(http.to_string(), "80");
+/// ```
+#[proc_macro_attribute]
+pub fn nominal(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    return profiled_integral(ProfileKind::Nominal, attr, item);
 }
 
 /// Generates a sealed hierarchy of marker traits and zero-sized leaf structs.

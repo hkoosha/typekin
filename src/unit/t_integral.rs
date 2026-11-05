@@ -122,6 +122,32 @@ mod tests {
     }
 
     #[test]
+    fn nominal_facet_is_rejected() {
+        let input = "facet = nominal { friend = raw(Source) -> Math }";
+        let this = syn::parse_str::<Cfg>(input);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "a nominal facet has no operators to select",
+        );
+    }
+
+    #[test]
+    fn nominal_profile_rejects_a_float_field() {
+        let source = "struct Ratio(f64);";
+        let tokens = source.parse::<proc_macro2::TokenStream>();
+        assert!(tokens.is_ok(), "{source}");
+        let this = crate::profile_kind(ProfileKind::Nominal, &tokens.unwrap());
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "the nominal profile requires an integer value field",
+        );
+    }
+
+    #[test]
     fn non_zero_storage_rejects_a_custom_or_panic_constructor() {
         let input = "
             konst = none,
@@ -248,6 +274,60 @@ mod tests {
             "{input}: {expansion}"
         );
         assert!(expansion.contains("const fn _add"), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn disabled_operator_emits_no_helper() {
+        let input = "without = [math_mul, assign_mul]";
+        let expansion = expansion_of(input);
+
+        assert!(!expansion.contains("fn _mul ("), "{input}: {expansion}");
+        assert!(expansion.contains("fn _add ("), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn assignment_alone_keeps_its_helper() {
+        let input = "without = math_mul";
+        let expansion = expansion_of(input);
+
+        assert!(expansion.contains("fn _mul ("), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn facet_dispatch_emits_no_binary_helpers() {
+        let input = "facet = []";
+        let expansion = expansion_of(input);
+
+        assert!(!expansion.contains("fn _add ("), "{input}: {expansion}");
+        assert!(!expansion.contains("fn _bitxor ("), "{input}: {expansion}");
+        assert!(expansion.contains("fn _shl ("), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn disabled_unary_operator_emits_no_helper() {
+        let input = "without = math_not";
+        let expansion = expansion_of(input);
+
+        assert!(!expansion.contains("fn _not ("), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn restricted_profile_emits_only_its_operator_helpers() {
+        let input = "profile = circular";
+        let expansion = expansion_of(input);
+
+        assert!(expansion.contains("fn _sub ("), "{input}: {expansion}");
+        assert!(!expansion.contains("fn _mul ("), "{input}: {expansion}");
+        assert!(!expansion.contains("fn _shl ("), "{input}: {expansion}");
+        assert!(!expansion.contains("fn _bitand ("), "{input}: {expansion}");
+    }
+
+    #[test]
+    fn safe_friends_declare_no_unsafe_capability() {
+        let input = "friend = source_bits(Source) -> Make";
+        let expansion = expansion_of(input);
+
+        assert!(!expansion.contains("unsafe trait"), "{input}: {expansion}");
     }
 
     #[test]

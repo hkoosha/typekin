@@ -392,6 +392,9 @@ pub(crate) enum ScopeLint {
     DeadCode,
     UnusedQualifications,
     UnnecessaryCast,
+    /// Domain checks compare bounds explicitly: `RangeInclusive::contains`
+    /// is not `const`.
+    ManualRangeContains,
 }
 
 impl ScopeLint {
@@ -400,6 +403,9 @@ impl ScopeLint {
             Self::DeadCode => quote! { dead_code },
             Self::UnusedQualifications => quote! { unused_qualifications },
             Self::UnnecessaryCast => quote! { clippy::unnecessary_cast },
+            Self::ManualRangeContains => {
+                quote! { clippy::manual_range_contains }
+            }
         };
     }
 }
@@ -409,6 +415,7 @@ pub(crate) const NUMERIC_LINTS: &[ScopeLint] = &[
     ScopeLint::DeadCode,
     ScopeLint::UnusedQualifications,
     ScopeLint::UnnecessaryCast,
+    ScopeLint::ManualRangeContains,
 ];
 
 /// The scope lints of text.

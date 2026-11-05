@@ -19,6 +19,7 @@ mod __my_plain {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         const trait Seal {
             fn conv_my_plain(self) -> i64;
@@ -29,12 +30,6 @@ mod __my_plain {
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Rel: [const] Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        const unsafe trait Unsafe: [const] Seal {}
         const impl Seal for MyPlain {
             #[inline(always)]
             fn conv_my_plain(self) -> i64 {

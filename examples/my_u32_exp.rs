@@ -19,6 +19,7 @@ mod __my_u32 {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         {
             let __typekin_callback = MyFriend::my_conv;
@@ -42,12 +43,6 @@ mod __my_u32 {
         const trait Math: [const] Seal {}
         const trait Bit: [const] Seal {}
         const trait Rel: [const] Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        const unsafe trait Unsafe: [const] Seal {}
         const impl Seal for MyU32 {
             #[inline(always)]
             fn conv_my_u32(self) -> u32 {

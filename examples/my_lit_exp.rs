@@ -60,6 +60,7 @@ mod __port {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_port(self) -> u16;
@@ -70,12 +71,6 @@ mod __port {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Port {
             #[inline(always)]
             fn conv_port(self) -> u16 {
@@ -2055,6 +2050,7 @@ mod __packet {
     #[allow(unused_imports)]
     pub use __typekin_packet_8b71a21cb91fb41a as packet;
     impl<D: Direction> Copy for Packet<D> {}
+    #[allow(clippy::expl_impl_clone_on_copy)]
     impl<D: Direction> Clone for Packet<D> {
         #[inline(always)]
         fn clone(&self) -> Self {
@@ -2072,6 +2068,7 @@ mod __packet {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal<D: Direction> {
             fn conv_packet(self) -> u32;
@@ -2082,12 +2079,6 @@ mod __packet {
         trait Math<D: Direction>: Seal<D> {}
         trait Bit<D: Direction>: Seal<D> {}
         trait Rel<D: Direction>: Seal<D> {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe<D: Direction>: Seal<D> {}
         impl<D: Direction> Seal<D> for Packet<D> {
             #[inline(always)]
             fn conv_packet(self) -> u32 {

@@ -18,6 +18,7 @@ mod __seq_point {
     #[allow(unused_imports)]
     use super::*;
     impl<D: Direction> Copy for SeqPoint<D> {}
+    #[allow(clippy::expl_impl_clone_on_copy)]
     impl<D: Direction> Clone for SeqPoint<D> {
         #[inline(always)]
         fn clone(&self) -> Self {
@@ -30,6 +31,7 @@ mod __seq_point {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal<D: Direction> {
             fn conv_seq_point(self) -> u32;
@@ -38,12 +40,6 @@ mod __seq_point {
             fn make(self) -> SeqPoint<D>;
         }
         trait Rel<D: Direction>: Seal<D> {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe<D: Direction>: Seal<D> {}
         impl<D: Direction> Seal<D> for SeqPoint<D> {
             #[inline(always)]
             fn conv_seq_point(self) -> u32 {
@@ -644,102 +640,6 @@ mod __seq_point {
                     Err(())
                 };
             }
-            #[inline(always)]
-            pub(self) const fn _add(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_add(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _sub(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_sub(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _mul(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_mul(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _div(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_div(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _rem(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_rem(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitxor(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs ^ rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitand(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs & rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitor(
-                &self,
-                rhs: u32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs | rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _shr(
-                &self,
-                rhs: usize,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_shr(rhs as u32);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _shl(
-                &self,
-                rhs: usize,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_shl(rhs as u32);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _not(&self) -> Self {
-                let lhs = Self::raw(*self);
-                let it = !lhs;
-                return Self::_or_panic(it);
-            }
             #[must_use]
             #[inline(always)]
             pub fn precedes(
@@ -819,6 +719,7 @@ mod __seq_offset {
     #[allow(unused_imports)]
     use super::*;
     impl<D: Direction> Copy for SeqOffset<D> {}
+    #[allow(clippy::expl_impl_clone_on_copy)]
     impl<D: Direction> Clone for SeqOffset<D> {
         #[inline(always)]
         fn clone(&self) -> Self {
@@ -831,6 +732,7 @@ mod __seq_offset {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal<D: Direction> {
             fn conv_seq_offset(self) -> i32;
@@ -841,12 +743,6 @@ mod __seq_offset {
         trait Math<D: Direction>: Seal<D> {}
         trait Bit<D: Direction>: Seal<D> {}
         trait Rel<D: Direction>: Seal<D> {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe<D: Direction>: Seal<D> {}
         impl<D: Direction> Seal<D> for SeqOffset<D> {
             #[inline(always)]
             fn conv_seq_offset(self) -> i32 {
@@ -1449,84 +1345,6 @@ mod __seq_offset {
                 return Self::_or_panic(it);
             }
             #[inline(always)]
-            pub(self) const fn _mul(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_mul(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _div(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_div(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _rem(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_rem(rhs);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitxor(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs ^ rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitand(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs & rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _bitor(
-                &self,
-                rhs: i32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs | rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _shr(
-                &self,
-                rhs: usize,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_shr(rhs as u32);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _shl(
-                &self,
-                rhs: usize,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs.wrapping_shl(rhs as u32);
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _not(&self) -> Self {
-                let lhs = Self::raw(*self);
-                let it = !lhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
             pub(self) const fn _neg(&self) -> Self {
                 let lhs = Self::raw(*self);
                 let it = lhs.wrapping_neg();
@@ -1602,6 +1420,7 @@ mod __wrapping_counter {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_wrapping_counter(self) -> u32;
@@ -1612,12 +1431,6 @@ mod __wrapping_counter {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for WrappingCounter {
             #[inline(always)]
             fn conv_wrapping_counter(self) -> u32 {
@@ -3621,6 +3434,7 @@ mod __non_zero_serial {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_non_zero_serial(self) -> u32;
@@ -3631,12 +3445,6 @@ mod __non_zero_serial {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for NonZeroSerial {
             #[inline(always)]
             fn conv_non_zero_serial(self) -> u32 {

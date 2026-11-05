@@ -18,6 +18,7 @@ use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
 };
+use crate::integral_impls::SHIFTS;
 use crate::integral_proof::OperatorProof;
 use crate::zz_friend::{
     Capability,
@@ -229,12 +230,16 @@ impl Maker {
         );
     }
 
-    /// The enabled `FN_MATH_HELPERS`, in table order.
+    /// The enabled `FN_MATH_HELPERS` an emitted operator calls, in table
+    /// order.
     fn make_fn_math_helpers(&self) -> TokenStream {
         let el = &self.el;
         return FN_MATH_HELPERS
             .into_iter()
-            .filter(|(flag, _)| self.ctx.cfg.flags.has(*flag))
+            .filter(|(flag, helper)| {
+                return self.ctx.cfg.flags.has(*flag)
+                    && self.calls_math_helper(*helper);
+            })
             .map(|(_, helper)| {
                 return match helper {
                     MathHelper::Arithmetic(
@@ -250,6 +255,34 @@ impl Maker {
                 };
             })
             .merged();
+    }
+
+    /// Whether an emitted operator impl calls `helper`. Shifts by an amount
+    /// are emitted with or without facets; the other binary operators and
+    /// their assignments only without, since facet dispatch inlines its
+    /// arithmetic.
+    fn calls_math_helper(
+        &self,
+        helper: MathHelper,
+    ) -> bool {
+        let flags = &self.ctx.cfg.flags;
+        let operator = match helper {
+            MathHelper::Arithmetic(operation) => {
+                if let Some(shift) =
+                    SHIFTS.iter().find(|shift| shift.operation == operation)
+                {
+                    return flags.has(shift.math) || flags.has(shift.assign);
+                }
+                operation
+                    .operator()
+                    .expect("non-shift arithmetic has a binary operator")
+            }
+            MathHelper::Bitwise(operator) => operator,
+        };
+        let assign =
+            IntegralFlag::assign(operator).is_some_and(|flag| flags.has(flag));
+        return self.with_global_operators()
+            && (flags.has(IntegralFlag::math(operator)) || assign);
     }
 
     pub(crate) fn ekran_bit_access_items(&self) -> TokenStream {
@@ -735,8 +768,12 @@ impl Maker {
         return bounds;
     }
 
+    /// `_not`, which only the `Not` impl calls.
     pub(crate) fn make_fn_math_not(&self) -> TokenStream {
-        if !self.ctx.cfg.flags.has(IntegralFlag::FnMathNot) {
+        let flags = &self.ctx.cfg.flags;
+        if !flags.has(IntegralFlag::FnMathNot)
+            || !flags.has(IntegralFlag::MathNot)
+        {
             return TokenStream::new();
         }
 
@@ -747,10 +784,14 @@ impl Maker {
         );
     }
 
-    /// Floats and `Primitive` integers negate like the raw type; the other
-    /// integer policies wrap or check like their binary operators.
+    /// `_neg`, which only the `Neg` impl calls. Floats and `Primitive`
+    /// integers negate like the raw type; the other integer policies wrap or
+    /// check like their binary operators.
     pub(crate) fn make_fn_math_neg(&self) -> TokenStream {
-        if !self.ctx.cfg.flags.has(IntegralFlag::FnMathNeg) {
+        let flags = &self.ctx.cfg.flags;
+        if !flags.has(IntegralFlag::FnMathNeg)
+            || !flags.has(IntegralFlag::MathNeg)
+        {
             return TokenStream::new();
         }
 

@@ -34,6 +34,7 @@ use crate::zz_friend::{
     Protocol,
     ProtocolCapability,
     ProtocolFriend,
+    any_friend_has,
     emit_protocol,
     upsert_friend,
 };
@@ -638,9 +639,13 @@ impl Maker {
         };
     }
 
-    /// The capability traits the protocol declares, in declaration order.
+    /// The capability traits the protocol declares, in declaration order;
+    /// `Unsafe` only when a friend is blind-trusted, since only that friend's
+    /// impl names it.
     fn protocol_capabilities(&self) -> Vec<ProtocolCapability> {
         let flags = &self.ctx.cfg.flags;
+        let blind_trust =
+            any_friend_has(&self.ctx.cfg.friends, Capability::Unsafe);
         return [
             (
                 flags.has(IntegralFlag::FriendzoneFriendMake),
@@ -658,7 +663,7 @@ impl Maker {
                 flags.has(IntegralFlag::FriendzoneFriendRel),
                 Capability::Rel,
             ),
-            (true, Capability::Unsafe),
+            (blind_trust, Capability::Unsafe),
         ]
         .into_iter()
         .filter_map(|(enabled, capability)| enabled.then_some(capability))

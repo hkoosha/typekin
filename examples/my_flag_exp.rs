@@ -31,6 +31,7 @@ mod __my_flag {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_my_flags(self) -> u128;
@@ -41,12 +42,6 @@ mod __my_flag {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for MyFlags {
             #[inline(always)]
             fn conv_my_flags(self) -> u128 {
@@ -1802,12 +1797,6 @@ mod __my_flag {
             ) -> Self {
                 let lhs = Self::raw(*self);
                 let it = lhs << rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _not(&self) -> Self {
-                let lhs = Self::raw(*self);
-                let it = !lhs;
                 return Self::_or_panic(it);
             }
             #[must_use]

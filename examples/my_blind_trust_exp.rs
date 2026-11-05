@@ -9,6 +9,7 @@ mod __my_blind_trust {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_my_blind_trust(self) -> u32;

@@ -9,6 +9,7 @@ mod __meters {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_meters(self) -> f64;
@@ -18,12 +19,6 @@ mod __meters {
         }
         trait Math: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Meters {
             #[inline(always)]
             fn conv_meters(self) -> f64 {

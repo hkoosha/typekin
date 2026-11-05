@@ -193,6 +193,11 @@ pub(crate) struct Point {
     settings: FlagSettings<IntegralFlag>,
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct Nominal {
+    settings: FlagSettings<IntegralFlag>,
+}
+
 /// A profile name: `profile = NAME`, a facet, or a fixed-profile macro.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProfileKind {
@@ -202,16 +207,18 @@ pub(crate) enum ProfileKind {
     Sequential,
     Wrapping,
     Point,
+    Nominal,
 }
 
 impl ProfileKind {
-    const ITEMS: [Self; 6] = [
+    const ITEMS: [Self; 7] = [
         Self::Int,
         Self::Circular,
         Self::Delta,
         Self::Sequential,
         Self::Wrapping,
         Self::Point,
+        Self::Nominal,
     ];
 
     pub(crate) fn name(self) -> &'static str {
@@ -222,6 +229,7 @@ impl ProfileKind {
             Self::Sequential => "sequential",
             Self::Wrapping => "wrapping",
             Self::Point => "point",
+            Self::Nominal => "nominal",
         };
     }
 
@@ -248,6 +256,7 @@ pub(crate) enum Profile {
     Sequential(Sequential),
     Wrapping(Wrapping),
     Point(Point),
+    Nominal(Nominal),
 }
 
 impl Profile {
@@ -259,6 +268,7 @@ impl Profile {
             ProfileKind::Sequential => Self::Sequential(Sequential::default()),
             ProfileKind::Wrapping => Self::Wrapping(Wrapping::default()),
             ProfileKind::Point => Self::Point(Point::default()),
+            ProfileKind::Nominal => Self::Nominal(Nominal::default()),
         };
     }
 
@@ -291,7 +301,7 @@ impl Profile {
             }
             Self::Sequential { .. } => Some(Arithmetic::Checked),
             Self::Wrapping { .. } => Some(Arithmetic::WrapperWrapping),
-            Self::Point { .. } => None,
+            Self::Point { .. } | Self::Nominal { .. } => None,
         };
     }
 
@@ -310,7 +320,8 @@ impl Profile {
             | Self::Delta(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
             | Self::Wrapping(Wrapping { settings, .. })
-            | Self::Point(Point { settings, .. }) => settings,
+            | Self::Point(Point { settings, .. })
+            | Self::Nominal(Nominal { settings, .. }) => settings,
         };
     }
 
@@ -321,7 +332,8 @@ impl Profile {
             | Self::Delta(Circular { settings, .. })
             | Self::Sequential(Sequential { settings, .. })
             | Self::Wrapping(Wrapping { settings, .. })
-            | Self::Point(Point { settings, .. }) => settings,
+            | Self::Point(Point { settings, .. })
+            | Self::Nominal(Nominal { settings, .. }) => settings,
         };
     }
 
@@ -338,6 +350,11 @@ impl Profile {
             Self::Point(_) => &[
                 IntegralFlag::RESTRICTED_MATH_FLAGS,
                 IntegralFlag::POINT_OFF,
+            ],
+            Self::Nominal(_) => &[
+                IntegralFlag::RESTRICTED_MATH_FLAGS,
+                IntegralFlag::ORDERING,
+                IntegralFlag::NOMINAL_OFF,
             ],
         };
     }
@@ -495,7 +512,12 @@ impl Debug for FacetCfg {
 
 impl Parse for FacetCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut profile = Profile::from_name(input.parse()?);
+        let span = input.span();
+        let kind = input.parse::<ProfileKind>()?;
+        if kind == ProfileKind::Nominal {
+            return span.fail("a nominal facet has no operators to select");
+        }
+        let mut profile = Profile::from_name(kind);
         let mut friends = BTreeSet::new();
         let mut ty_out = None;
         let mut precedes_span = None;

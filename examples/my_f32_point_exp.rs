@@ -10,6 +10,7 @@ mod __position {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         trait Seal {
             fn conv_position(self) -> f32;
@@ -19,12 +20,6 @@ mod __position {
         }
         trait Math: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for Position {
             #[inline(always)]
             fn conv_position(self) -> f32 {
@@ -606,48 +601,12 @@ mod __position {
                 };
             }
             #[inline(always)]
-            pub(self) const fn _add(
-                &self,
-                rhs: f32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs + rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
             pub(self) const fn _sub(
                 &self,
                 rhs: f32,
             ) -> Self {
                 let lhs = Self::raw(*self);
                 let it = lhs - rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _mul(
-                &self,
-                rhs: f32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs * rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _div(
-                &self,
-                rhs: f32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs / rhs;
-                return Self::_or_panic(it);
-            }
-            #[inline(always)]
-            pub(self) const fn _rem(
-                &self,
-                rhs: f32,
-            ) -> Self {
-                let lhs = Self::raw(*self);
-                let it = lhs % rhs;
                 return Self::_or_panic(it);
             }
             #[must_use]

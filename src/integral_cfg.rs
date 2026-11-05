@@ -1154,6 +1154,34 @@ impl IntegralFlag {
         Self::Product,
     ];
 
+    /// What the `nominal` preset turns off beyond the restricted math and
+    /// linear ordering: a nominal value is only told apart from others, so
+    /// it has no operator left and none of the surface that reads it as a
+    /// quantity (conversions, radix formatting, `AsRef`, `FromStr`, `map`,
+    /// and the `Within` source constants). `raw()` stays.
+    pub(crate) const NOMINAL_OFF: &'static [Self] = &[
+        Self::MathAdd,
+        Self::MathSub,
+        Self::AssignAdd,
+        Self::AssignSub,
+        Self::MathNeg,
+        Self::FnMathNeg,
+        Self::FnOpCmp,
+        Self::FmtBinary,
+        Self::FmtOctal,
+        Self::FmtHexLower,
+        Self::FmtHexUpper,
+        Self::AsRef,
+        Self::FromStr,
+        Self::Map,
+        Self::Into,
+        Self::TryInto,
+        Self::FnConvInto,
+        Self::FnConvTryIntoLossy,
+        Self::FnConvTryIntoLossless,
+        Self::WithinSource,
+    ];
+
     /// The flags a facet may set: its operand slots.
     pub(crate) const FACET_OPERANDS: &'static [Self] = &[
         Self::MathAdd,

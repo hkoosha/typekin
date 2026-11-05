@@ -46,12 +46,12 @@ init:
   rustup +nightly component add llvm-tools
 
 [group("z")]
-z-expand what:
-  from='examples/{{ what }}.rs';\
-  to='examples/{{ what }}_exp.rs';\
-  rm -rf "$from";\
+z-expand it:
+  from='examples/{{ it }}.rs';\
+  to='examples/{{ it }}_exp.rs';\
+  rm -rf "$to";\
   touch "$to";\
-  expandem --fix "$from" 'typekin::**' > "$to"
+  if ! expandem --fix "$from" 'typekin::**' >> "$to"; then echo 'failed: {{ it }}'; exit 1; fi
 
 [group("z")]
 @new it:
@@ -74,7 +74,7 @@ z-new it file:
     >> justfile
 
 [parallel]
-expandem: u32-expand u16-expand non-expand sequence-expand tcp-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand blind-trust-expand f64-expand unit-expand f32-point-expand lit-expand proven-expand within-expand packed-expand
+all: u32-expand u16-expand non-expand sequence-expand tcp-expand plain-expand i128-expand flag-expand friend-expand friendship-expand friendships-expand text-expand u32-stable-const-expand blind-trust-expand f64-expand unit-expand f32-point-expand lit-expand proven-expand within-expand packed-expand nominal-expand
   @just fmt
 
 [group("example")]
@@ -181,3 +181,8 @@ within: within-expand fmt
 packed-expand: (z-expand 'my_packed')
 [group("example")]
 packed: packed-expand fmt
+
+[group("example")]
+nominal-expand: (z-expand 'my_nominal')
+[group("example")]
+nominal: nominal-expand fmt

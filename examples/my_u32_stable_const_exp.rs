@@ -9,6 +9,7 @@ mod __my_u32 {
     #[allow(dead_code)]
     #[allow(unused_qualifications)]
     #[allow(clippy::unnecessary_cast)]
+    #[allow(clippy::manual_range_contains)]
     const _: () = {
         let _: fn(MyFriend) -> u32 = MyFriend::my_conv;
         trait Seal {
@@ -20,12 +21,6 @@ mod __my_u32 {
         trait Math: Seal {}
         trait Bit: Seal {}
         trait Rel: Seal {}
-        #[doc = "# Safety"]
-        #[doc = ""]
-        #[doc = "Implementing this trait asserts that values \
-                        produced by the sealed conversion satisfy every \
-                        invariant required by the target type."]
-        unsafe trait Unsafe: Seal {}
         impl Seal for MyU32 {
             #[inline(always)]
             fn conv_my_u32(self) -> u32 {

@@ -162,3 +162,9 @@ path = "examples/my_packed.rs"
 [[example]]
 name = "my_packed_exp"
 path = "examples/my_packed_exp.rs"
+[[example]]
+name = "my_nominal"
+path = "examples/my_nominal.rs"
+[[example]]
+name = "my_nominal_exp"
+path = "examples/my_nominal_exp.rs"

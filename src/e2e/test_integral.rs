@@ -2784,6 +2784,106 @@ mod profiles {
     }
 
     #[test]
+    fn nominal_profile_keeps_construction_equality_and_hash() {
+        let code = NominalCode::make(443);
+        let other = NominalCode::make(80);
+        let codes = std::collections::HashSet::from([
+            code,
+            code,
+            other,
+        ]);
+
+        assert_eq!(code.raw(), 443);
+        assert_eq!(code, NOMINAL_CODE);
+        assert_ne!(code, other);
+        assert_eq!(codes.len(), 2);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_arithmetic_operators() {
+        assert_not_impl!(NominalCode: core::ops::Add<NominalCode>);
+        assert_not_impl!(NominalCode: core::ops::Sub<NominalCode>);
+        assert_not_impl!(NominalCode: core::ops::Mul<NominalCode>);
+        assert_not_impl!(NominalCode: core::ops::Add<u16>);
+        assert_not_impl!(NominalCode: core::ops::AddAssign<NominalCode>);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_bitwise_operators() {
+        assert_not_impl!(NominalCode: core::ops::BitOr<NominalCode>);
+        assert_not_impl!(NominalCode: core::ops::Not);
+        assert_not_impl!(NominalCode: core::ops::Shl<usize>);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_linear_ordering() {
+        assert_not_impl!(NominalCode: core::cmp::PartialOrd);
+        assert_not_impl!(NominalCode: core::cmp::Ord);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_primitive_comparison() {
+        assert_not_impl!(NominalCode: core::cmp::PartialEq<u16>);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_conversions() {
+        assert_not_impl!(NominalCode: core::convert::Into<u32>);
+        assert_not_impl!(NominalCode: core::convert::TryInto<u8>);
+        assert_not_impl!(NominalCode: core::convert::AsRef<u16>);
+        assert_not_impl!(NominalCode: core::str::FromStr);
+        assert_no_method!(NominalCode, into_u32);
+        assert_no_method!(NominalCode, try_into_u8);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_numeric_methods() {
+        assert_no_method!(NominalCode, map);
+        assert_no_method!(NominalCode, count_ones);
+        assert_no_method!(NominalCode, lo8);
+    }
+
+    #[test]
+    fn nominal_profile_has_no_radix_formatting() {
+        assert_not_impl!(NominalCode: core::fmt::LowerHex);
+        assert_not_impl!(NominalCode: core::fmt::Binary);
+        assert_not_impl!(NominalCode: core::fmt::Display);
+    }
+
+    #[test]
+    fn nominal_profile_accepts_display() {
+        let port = NominalDisplayed::make(8080);
+
+        assert_eq!(port.to_string(), "8080");
+    }
+
+    #[test]
+    fn signed_nominal_profile_has_no_neg() {
+        assert_not_impl!(NominalSigned: core::ops::Neg);
+    }
+
+    #[test]
+    fn validated_nominal_profile_validates_construction() {
+        let rejected = NominalWords::try_make(4);
+        let accepted = NominalWords::try_make(5);
+
+        assert_eq!(rejected, Err(4));
+        assert_eq!(accepted, Ok(nominal_words!(5)));
+    }
+
+    #[test]
+    fn nominal_profile_keeps_circular_arithmetic_for_enabled_operators() {
+        let zero = NominalCircular::make(0);
+        let one = NominalCircular::make(1);
+        let difference = zero - one;
+
+        assert_eq!(difference.raw(), u8::MAX);
+        assert!(zero.precedes(one));
+        assert_not_impl!(NominalCircular: core::ops::Add<NominalCircular>);
+        assert_no_method!(NominalCircular, into_u32);
+    }
+
+    #[test]
     fn circular_profile_wraps_subtraction_assignment() {
         let mut assigned = CircularWithoutPrecedes::make(0);
         assigned -= CircularWithoutPrecedes::make(1);
