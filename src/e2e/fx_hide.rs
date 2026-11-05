@@ -144,4 +144,36 @@ pub(crate) mod nested {
     pub(crate) fn relayed_of_source(raw: u8) -> u8 {
         return Relayed::of(super::Source(raw)).raw();
     }
+
+    /// Items restricted by a path that resolves only from `deeper` itself:
+    /// `super::super::nested` is this module, but re-anchored one module
+    /// too many it names a missing `crate::nested`.
+    pub(crate) mod deeper {
+        #[typekin::integral(
+            konst = none,
+            tree = pub(in super::super::nested) Reach {
+                Far,
+            },
+        )]
+        pub(super) struct Reached(u8);
+
+        #[typekin::packed(repr = u8)]
+        pub(super) struct Shelf {
+            #[bits(0..8)]
+            pub(in super::super::nested) item: u8,
+        }
+    }
+
+    fn accepts_reach<T: deeper::Reach>() {}
+
+    /// Names `Far` here, where `Reach`'s restriction reaches.
+    pub(crate) fn far_has_the_reach_visibility() {
+        accepts_reach::<deeper::Far>();
+    }
+
+    /// Stores and reads `raw` through `Shelf`'s field, whose restriction
+    /// reaches here.
+    pub(crate) fn shelf_item(raw: u8) -> u8 {
+        return deeper::Shelf::make(deeper::ShelfValues { item: raw }).item();
+    }
 }

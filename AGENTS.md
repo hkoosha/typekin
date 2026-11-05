@@ -205,8 +205,11 @@ constness, and runtime cost as API behavior.
   re-exports the type (bitflag: enum and value type). A private field is then
   unreachable even from the defining module. The item's visibility is
   re-anchored one level deeper (private → `pub(super)`), never widened.
-  `self::`/`super::` paths in the configuration and item gain one level; string
-  literals are not rewritten, so non-doc `"super::…"` strings are rejected.
+  `self::`/`super::` paths in the configuration and item gain one level, except
+  inside visibilities (`pub(in …)`): those stay as written, and each consumer
+  re-anchors them where its item lands (`inner_visibility`: hidden fields, tree
+  nodes; tree re-exports use them as written). String literals are not
+  rewritten, so non-doc `"super::…"` strings are rejected.
   `get_raw` and a custom `_or_panic` need field access and are rejected while
   hidden. `hide_in = none` restores the unhidden expansion exactly. Fn-local
   declarations cannot see fn-local items from the module; that is rustc's error,
@@ -403,9 +406,20 @@ constness, and runtime cost as API behavior.
 - `facet` accepts one declaration or a bracketed list; profile and facet bodies
   are optional when empty. Standalone `tree` uses a safe, empty, non-generic,
   non-auto root trait without supertraits as a seal. Embedded
-  `tree = NODE | [NODE, ...]` generates a private seal and re-exports its nodes;
-  branches are traits, leaves are zero-sized, and omitted visibility inherits
-  from the parent. Node names must be unique and branches must have children.
+  `tree = NODE | [NODE | without = FLAGS, ...]` generates a private seal and
+  re-exports its nodes; branches are traits, leaves are zero-sized, and omitted
+  visibility inherits from the parent. Node names must be unique and branches
+  must have children. Leaves derive the marker traits (`clone` … `ord`) and
+  top-level branches require them; `without` removes them, and removing a trait
+  another one needs is an error. Nodes accept doc comments only.
+- Tree associated types: branches declare `type N[: BOUNDS]`, leaves bind
+  `type N = T;` for every name their ancestors declare. Undeclared names leaves
+  bind are inferred on their parent, bounded by the deepest common node of the
+  bound leaves (unbounded when a value is not a tree leaf); a name is declared
+  once per path. `type N = A <-> B` is pure sugar: `type N: Branch<N = Self>`
+  plus both leaves. Embedded trees emit their items with the re-anchored
+  declared visibility (E0446 on bindings) and re-anchor binding paths unless
+  `hide_in` already did.
 - Keep emitted names and ordering deterministic. Use the existing primitive
   metadata and naming helpers rather than duplicating type tables.
 - Names are types, not strings. Strongly prefer an enum for a family of names

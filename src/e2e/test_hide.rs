@@ -107,6 +107,19 @@ mod tests {
     }
 
     #[test]
+    fn tree_node_restricted_by_an_ancestor_path_keeps_its_reach() {
+        nested::far_has_the_reach_visibility();
+    }
+
+    #[test]
+    fn field_restricted_by_an_ancestor_path_keeps_its_reach() {
+        let raw = 9;
+        let item = nested::shelf_item(raw);
+
+        assert_eq!(item, raw);
+    }
+
+    #[test]
     fn default_module_is_dunder_snake_case() {
         let header = page_header_in_default_module(1);
         let code = http_code_in_default_module(200);

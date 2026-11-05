@@ -1892,13 +1892,49 @@ pub use __my_u16::MyU16;
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 mod __typekin_marker_tree_for_MyU16 {
+    #[allow(unused_imports)]
+    use super::*;
     trait MarkerTreeRoot {}
     #[allow(private_bounds)]
-    pub trait Unit: MarkerTreeRoot {}
+    pub trait Unit:
+        MarkerTreeRoot
+        + Clone
+        + Copy
+        + core::fmt::Debug
+        + Default
+        + PartialEq
+        + Eq
+        + core::hash::Hash
+        + PartialOrd
+        + Ord
+    {
+    }
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
     pub struct Byte;
 
     impl MarkerTreeRoot for Byte {}
     impl Unit for Byte {}
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
     pub struct Word;
 
     impl MarkerTreeRoot for Word {}

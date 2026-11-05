@@ -699,14 +699,50 @@ use __seq_point::SeqPoint;
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 mod __typekin_marker_tree_for_SeqPoint {
+    #[allow(unused_imports)]
+    use super::*;
     trait MarkerTreeRoot {}
     #[allow(private_bounds)]
-    pub trait Direction: MarkerTreeRoot {}
-    pub struct In;
+    pub(super) trait Direction:
+        MarkerTreeRoot
+        + Clone
+        + Copy
+        + core::fmt::Debug
+        + Default
+        + PartialEq
+        + Eq
+        + core::hash::Hash
+        + PartialOrd
+        + Ord
+    {
+    }
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
+    pub(super) struct In;
 
     impl MarkerTreeRoot for In {}
     impl Direction for In {}
-    pub struct Out;
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
+    pub(super) struct Out;
 
     impl MarkerTreeRoot for Out {}
     impl Direction for Out {}

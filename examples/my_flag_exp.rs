@@ -2815,13 +2815,49 @@ pub use __my_flag::MyFlags;
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 mod __typekin_marker_tree_for_MyFlag {
+    #[allow(unused_imports)]
+    use super::*;
     trait MarkerTreeRoot {}
     #[allow(private_bounds)]
-    pub trait FlagState: MarkerTreeRoot {}
+    pub trait FlagState:
+        MarkerTreeRoot
+        + Clone
+        + Copy
+        + core::fmt::Debug
+        + Default
+        + PartialEq
+        + Eq
+        + core::hash::Hash
+        + PartialOrd
+        + Ord
+    {
+    }
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
     pub struct Enabled;
 
     impl MarkerTreeRoot for Enabled {}
     impl FlagState for Enabled {}
+    #[derive(
+        ::core::clone::Clone,
+        ::core::marker::Copy,
+        ::core::fmt::Debug,
+        ::core::default::Default,
+        ::core::cmp::PartialEq,
+        ::core::cmp::Eq,
+        ::core::hash::Hash,
+        ::core::cmp::PartialOrd,
+        ::core::cmp::Ord,
+    )]
     pub struct Disabled;
 
     impl MarkerTreeRoot for Disabled {}

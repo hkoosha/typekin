@@ -78,16 +78,16 @@ mod unit;
 /// - `produce = CALLBACK(_) -> Type`
 /// - `profile = PROFILE | [PROFILE, ...]`
 /// - `facet = FACET | [FACET, ...]`
-/// - `tree = NODE | [NODE, ...]`
+/// - `tree = NODE | [NODE | without = FLAGS, ...]`
 /// - `hide_in = MODULE | none`
 ///
 /// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, `point`,
 /// or `nominal`. A profile body accepts `with` and `without`; only `circular`
 /// also accepts `precedes = bool`. `FACET` is one profile other than `nominal`
 /// with an optional body that accepts `with`, `without`, `friend`, and
-/// `produce`. `TREE` uses the [`tree`] node grammar. Its private
-/// `MarkerTreeRoot` seal stays generated, while its nodes are re-exported
-/// beside the annotated item.
+/// `produce`. `TREE` uses the [`tree`] node grammar, and a bracketed list also
+/// takes the tree's `without`. Its private `MarkerTreeRoot` seal stays
+/// generated, while its nodes are re-exported beside the annotated item.
 ///
 /// By default the item and its generated code live in a private module named
 /// `__` plus the snake-cased type name (`hide_in = MODULE` picks the name) and
@@ -441,18 +441,49 @@ pub fn nominal(
 /// - **Required item:** a non-generic, safe, empty trait without supertraits.
 ///   It is the root seal.
 /// - **Required attribute:** one or more marker nodes.
+/// - **Optional attribute:** `without = FLAG | [FLAG, ...]`, anywhere among the
+///   nodes.
 ///
-/// A node is `[visibility] Name` for a leaf or `[visibility] Name { CHILDREN }`
-/// for a branch. Omitted visibility inherits from its parent; top-level nodes
-/// inherit the root seal's visibility. Branches extend their parent and the
-/// tree seal, while leaves implement every ancestor trait. Names must be unique
-/// within the tree, and every branch needs at least one child.
+/// A node is `[visibility] Name` for a leaf or `[visibility] Name { ENTRY, ...
+/// }` for a branch, where an entry is a child node or an associated type.
+/// Omitted visibility inherits from its parent; top-level nodes inherit the
+/// root seal's visibility. Branches extend their parent and the tree seal,
+/// while leaves implement every ancestor trait. Names must be unique within
+/// the tree, and every branch needs at least one child. Nodes accept doc
+/// comments and no other attributes.
+///
+/// Leaves derive `Clone`, `Copy`, `Debug`, `Default`, `PartialEq`, `Eq`,
+/// `Hash`, `PartialOrd`, and `Ord`, and top-level branches require them, so
+/// code generic over any branch can copy, compare, or print its markers, and
+/// derives on types generic over them need no extra bounds. `without` removes
+/// any of them: `clone`, `copy`, `debug`, `default`, `partial_eq`, `eq`,
+/// `hash`, `partial_ord`, `ord`. A trait another one needs must be removed with
+/// it (`copy` needs `clone`). These supertraits make branches
+/// non-`dyn`-compatible; removing all but `debug` restores it.
+///
+/// # Associated types
+///
+/// A branch declares `type Name` or `type Name: BOUNDS` among its children.
+/// A leaf binds every type its ancestors declare, impl-style:
+/// `Name { type Kind = Other; }`. A type leaves bind that no ancestor declares
+/// is declared on their parent branch, bounded by the deepest node above every
+/// leaf it is bound to (`Self` is the binding leaf), or unbounded when a bound
+/// type is not a leaf of the tree. A name is declared once along a path.
+///
+/// `type Rev = A <-> B`, or `type Rev = [A <-> B, C <-> C, ...]`, in a branch
+/// is shorthand for `type Rev: Branch<Rev = Self>` and the leaves
+/// `A { type Rev = B; }` and `B { type Rev = A; }`; `C <-> C` declares one
+/// leaf bound to itself. The bound makes `Rev` an involution: generic code
+/// sees `<D::Rev as Branch>::Rev` as `D`. Pair members take a visibility and
+/// doc comments; their leaves bind only `Rev`.
 ///
 /// ```text
 /// #[typekin::tree(
+///     without = [hash, partial_ord, ord],
+///     /// Which way traffic flows.
 ///     pub Direction {
-///         pub In,
-///         pub Out,
+///         /// The opposite direction.
+///         type Rev = pub In <-> pub Out,
 ///     },
 /// )]
 /// trait MakerSeal {}
@@ -488,7 +519,7 @@ pub fn tree(
 /// - `friend = SPEC | [SPEC, ...]`
 /// - `with = FLAG | [FLAG, ...]` and `without = FLAG | [FLAG, ...]`
 /// - `integral = [INTEGRAL_CONFIGURATION]`
-/// - `tree = NODE | [NODE, ...]`
+/// - `tree = NODE | [NODE | without = FLAGS, ...]`
 /// - `hide_in = MODULE | none` (root only; hides the enum and value type)
 ///
 /// `SPEC` uses the friend conversion grammar. The bracketed `integral`
@@ -582,7 +613,7 @@ pub fn packed(
 /// - `error = ()`
 /// - `friend = SPEC | [SPEC, ...]`
 /// - `with = FLAG | [FLAG, ...]` and `without = FLAG | [FLAG, ...]`
-/// - `tree = NODE | [NODE, ...]`
+/// - `tree = NODE | [NODE | without = FLAGS, ...]`
 /// - `hide_in = MODULE | none`
 ///
 /// `valid` and `domain` are mutually exclusive. Text friends accept `Make`,
@@ -770,12 +801,10 @@ where
     };
     let (cfg, item) = match cfg.hide_in().module_for(parsed_item.ident()) {
         None => (cfg, parsed_item),
-        Some(_) => {
-            match zz_hide::reparse(attr, item, parsed_item, parse_attr) {
-                Ok(it) => it,
-                Err(error) => return error.into_compile_error().into(),
-            }
-        }
+        Some(_) => match zz_hide::reparse(attr, item, parse_attr) {
+            Ok(it) => it,
+            Err(error) => return error.into_compile_error().into(),
+        },
     };
     return zz_runner::catching(move || ekran(cfg, item)).into();
 }

@@ -1,7 +1,6 @@
 #[typekin::tree(
     Direction {
-        In,
-        Out,
+        type Rev = In <-> Out,
     },
 )]
 trait MakerSeal {}
@@ -40,6 +39,11 @@ impl<D: Direction> SeqPoint<D> {
     }
 }
 
+/// The acknowledgment of `seq` travels the other way.
+fn acknowledge<D: Direction>(seq: SeqPoint<D>) -> SeqPoint<D::Rev> {
+    return SeqPoint::make(seq.raw());
+}
+
 fn directional_sequence<D: Direction>() {
     let maximum = SeqPoint::<D>::make(u32::MAX);
     let zero = SeqPoint::<D>::make(0);
@@ -54,6 +58,9 @@ fn directional_sequence<D: Direction>() {
 
     let offset = SeqOffset::<D>::make(i32::MAX) + SeqOffset::<D>::make(1);
     assert_eq!(offset.raw(), i32::MIN);
+
+    let echoed: SeqPoint<D> = acknowledge(acknowledge(wrapped));
+    assert_eq!(echoed, wrapped);
 }
 
 fn main() {

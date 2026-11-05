@@ -33,6 +33,10 @@ protected the type's own field.
 - `use super::*` resolves relative names. Paths starting with `self::` or
   `super::` gain one level, in both the configuration and the item. `crate::`
   and `::` paths are not changed.
+- Paths inside visibilities (`pub(in …)`) are not rewritten. A visibility in the
+  configuration may apply at the call site (an embedded tree's re-exports) or one
+  level deeper (its nodes, a hidden item's fields), so each consumer re-anchors
+  its own. Rewriting them up front moved a tree's re-exports one module too high.
 - String literals are not rewritten, because typekin "cannot know which strings
   are paths". A non-doc attribute string starting with `"super::…"` is an error,
   because it would silently resolve one module lower.

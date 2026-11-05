@@ -6,6 +6,7 @@
 use std::collections::BTreeSet;
 
 use proc_macro2::{
+    Delimiter,
     Group,
     Ident,
     TokenStream,
@@ -106,13 +107,18 @@ pub(crate) trait HideCfg {
 
 /// Re-anchors paths for code that moves one module deeper: `self::x` becomes
 /// `super::x` and `super::x` becomes `super::super::x`. Other paths resolve
-/// through the module's `use super::*`. String literals are left alone.
+/// through the module's `use super::*`. String literals are left alone, and
+/// so are visibilities (`pub(in …)`): each consumer re-anchors those for
+/// where its item lands ([`inner_visibility`]).
 pub(crate) fn rewrite_child_paths(tokens: TokenStream) -> TokenStream {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
     let mut result = Vec::with_capacity(tokens.len());
 
     for (index, token) in tokens.iter().enumerate() {
         match token {
+            TokenTree::Group(group) if restricts_visibility(&tokens, index) => {
+                result.push(TokenTree::Group(group.clone()));
+            }
             TokenTree::Group(group) => {
                 let mut rewritten = Group::new(
                     group.delimiter(),
@@ -139,6 +145,25 @@ pub(crate) fn rewrite_child_paths(tokens: TokenStream) -> TokenStream {
     return result.into_iter().collect();
 }
 
+/// `tokens[index]` is a parenthesized group right after `pub`: the
+/// restriction of a visibility.
+fn restricts_visibility(
+    tokens: &[TokenTree],
+    index: usize,
+) -> bool {
+    let parenthesized = matches!(
+        tokens.get(index),
+        Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis
+    );
+    let after_pub = index.checked_sub(1).is_some_and(|before| {
+        return matches!(
+            tokens.get(before),
+            Some(TokenTree::Ident(ident)) if ident == "pub"
+        );
+    });
+    return parenthesized && after_pub;
+}
+
 /// `tokens[index]` is followed by `::` and not preceded by `::`.
 fn starts_path(
     tokens: &[TokenTree],
@@ -155,17 +180,17 @@ fn starts_path(
     return followed && !preceded;
 }
 
-/// `pub(super)` on a field moved one module deeper becomes
-/// `pub(in super::super)`; `pub(in super)` likewise. Multi-segment
-/// `pub(in …)` paths were already re-anchored by [`rewrite_child_paths`].
+/// A field moved one module deeper keeps its reach: restricted visibilities
+/// are re-anchored ([`inner_visibility`]), except `pub(self)`, which stays
+/// private to the hidden module like an unmarked field.
 fn rewrite_field_visibility(fields: &mut Fields) {
     for field in fields.iter_mut() {
         let Visibility::Restricted(restricted) = &field.vis
         else {
             continue;
         };
-        if restricted.path.is_ident("super") {
-            field.vis = parse_quote! { pub(in super::super) };
+        if !restricted.path.is_ident("self") {
+            field.vis = inner_visibility(&field.vis);
         }
     }
 }
@@ -352,10 +377,13 @@ impl Hideable for syn::ItemEnum {
 /// A family's embedded marker tree (`tree = ...`).
 pub(crate) trait EmbeddedTree {
     /// The tree's nodes for `owner`, declared with `visibility`.
+    /// `anchored`: the tree's paths were already re-anchored one module
+    /// deeper, as `hide_in` does.
     fn embed(
         &self,
         owner: &Ident,
         visibility: &Visibility,
+        anchored: bool,
     ) -> syn::Result<TokenStream>;
 }
 
@@ -404,8 +432,9 @@ impl Envelope {
             reject_super_strings(item.attributes())?;
             item.rewrite_nested_visibility();
         }
+        let anchored = self.is_hidden();
         self.tree = tree
-            .map(|tree| tree.embed(item.ident(), &self.declared))
+            .map(|tree| tree.embed(item.ident(), &self.declared, anchored))
             .transpose()?;
         return Ok(());
     }
@@ -468,20 +497,17 @@ impl Envelope {
     }
 }
 
-/// Re-parses attribute and item tokens after re-anchoring their paths. The
-/// item's own visibility is kept as written: it applies to the re-export at
-/// the call site, not inside the module.
+/// Re-parses attribute and item tokens after re-anchoring their paths;
+/// visibilities stay as written ([`rewrite_child_paths`]).
 pub(crate) fn reparse<A, I>(
     attr: TokenStream,
     item: TokenStream,
-    mut original: I,
     parse_attr: impl FnOnce(TokenStream) -> syn::Result<A>,
 ) -> syn::Result<(A, I)>
 where
-    I: Hideable,
+    I: Parse,
 {
     let attr = parse_attr(rewrite_child_paths(attr))?;
-    let mut item = syn::parse2::<I>(rewrite_child_paths(item))?;
-    std::mem::swap(item.visibility_mut(), original.visibility_mut());
+    let item = syn::parse2::<I>(rewrite_child_paths(item))?;
     return Ok((attr, item));
 }

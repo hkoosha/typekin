@@ -138,3 +138,161 @@ pub(crate) fn inbound_has_the_branch_visibility() {
 pub(crate) fn forward_has_the_route_visibility() {
     accepts_route::<embedded_visibility::Forward>();
 }
+
+#[typekin::tree(
+    pub(crate) Side {
+        Left,
+        Right,
+    },
+)]
+trait SideSeal {}
+
+#[typekin::tree(
+    without = [default, hash, partial_ord, ord],
+    pub(crate) Lean {
+        Port,
+        Starboard,
+    },
+)]
+trait LeanSeal {}
+
+#[typekin::integral(
+    konst = none,
+    tree = [
+        without = [
+            clone,
+            copy,
+            debug,
+            default,
+            partial_eq,
+            eq,
+            hash,
+            partial_ord,
+            ord,
+        ],
+        pub(crate) Plain {
+            PlainLeaf,
+        },
+    ],
+)]
+struct TreeWithoutDerives(u8);
+
+/// Copies `marker` and builds a default one through `Side` bounds alone.
+pub(crate) fn copy_and_default_by_branch<T: Side>(marker: T) -> [T; 3] {
+    return [
+        marker,
+        marker,
+        T::default(),
+    ];
+}
+
+/// Copies `marker` through `Lean` bounds alone.
+pub(crate) fn copy_by_lean<T: Lean>(marker: T) -> [T; 2] {
+    return [
+        marker,
+        marker,
+    ];
+}
+
+/// Copies the root tree's `In` leaf through its nested `Direction` branch,
+/// which inherits the marker traits from the top-level `Transport`.
+pub(crate) fn root_in_copies_through_its_nested_branch() {
+    fn copy<T: root_visibility::Direction>(marker: T) -> [T; 2] {
+        return [
+            marker,
+            marker,
+        ];
+    }
+
+    let _ = copy(root_visibility::In);
+}
+
+#[typekin::tree(
+    without = [hash, partial_ord, ord],
+    /// Where traffic flows.
+    pub(crate) Flow {
+        /// The opposite flow.
+        type Rev = Ingress <-> Egress,
+    },
+)]
+trait FlowSeal {}
+
+#[typekin::tree(
+    pub(crate) Turn {
+        type Rev = [Clockwise <-> Counter, Still <-> Still],
+    },
+)]
+trait TurnSeal {}
+
+#[typekin::tree(
+    pub(crate) Hand {
+        LeftHand { type Other = RightHand; type Grip = u8; },
+        RightHand { type Other = LeftHand; type Grip = u8; },
+        BothHands { type Other = Self; type Grip = u16; },
+    },
+)]
+trait HandSeal {}
+
+#[typekin::tree(
+    pub(crate) Network {
+        pub(crate) Lan {
+            Wired { type Peer = Wireless; },
+            Wireless { type Peer = Wired; },
+        },
+    },
+)]
+trait NetworkSeal {}
+
+#[typekin::tree(
+    pub(crate) Unit {
+        type Base: Unit,
+        Meter { type Base = Self; },
+        pub(crate) Derived {
+            Kilometer { type Base = Meter; },
+        },
+    },
+)]
+trait UnitSeal {}
+
+/// Crate-private, as every binding's target may be: the embedded tree keeps
+/// the declared reach.
+#[derive(Debug, PartialEq)]
+pub(crate) struct FastCost;
+
+#[typekin::integral(
+    konst = none,
+    tree = pub(crate) Mode {
+        Fast { type Cost = FastCost; },
+        Slow { type Cost = self::FastCost; },
+    },
+)]
+struct TreeWithCost(u8);
+
+#[typekin::integral(
+    konst = none,
+    hide_in = none,
+    tree = pub(crate) Pace {
+        Quick { type Cost = self::FastCost; },
+    },
+)]
+struct TreeWithCostInPlace(u8);
+
+/// Reverses a flow twice through `Flow` bounds alone: it compiles only when
+/// `Rev` is declared as an involution.
+pub(crate) fn reverse_twice<D: Flow>(
+    flow: <<D as Flow>::Rev as Flow>::Rev
+) -> D {
+    return flow;
+}
+
+/// Uses `Other` through `Hand` bounds alone: it compiles only when the
+/// inferred declaration is bounded by `Hand`.
+pub(crate) fn other_hand<H: Hand>(other: H::Other) -> impl Hand {
+    return other;
+}
+
+/// Uses `Peer` through `Lan` bounds alone: it compiles only when the inferred
+/// declaration is bounded by `Lan`, the branch above both peers.
+pub(crate) fn lan_peer<T: Lan>(peer: T::Peer) -> impl Lan {
+    return peer;
+}

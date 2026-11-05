@@ -1,14 +1,53 @@
 trait MakerSeal {}
 #[allow(private_bounds)]
-trait Direction: MakerSeal {}
+trait Direction:
+    MakerSeal
+    + Clone
+    + Copy
+    + core::fmt::Debug
+    + Default
+    + PartialEq
+    + Eq
+    + core::hash::Hash
+    + PartialOrd
+    + Ord
+{
+    type Rev: Direction<Rev = Self>;
+}
+#[derive(
+    ::core::clone::Clone,
+    ::core::marker::Copy,
+    ::core::fmt::Debug,
+    ::core::default::Default,
+    ::core::cmp::PartialEq,
+    ::core::cmp::Eq,
+    ::core::hash::Hash,
+    ::core::cmp::PartialOrd,
+    ::core::cmp::Ord,
+)]
 struct In;
 
 impl MakerSeal for In {}
-impl Direction for In {}
+impl Direction for In {
+    type Rev = Out;
+}
+#[derive(
+    ::core::clone::Clone,
+    ::core::marker::Copy,
+    ::core::fmt::Debug,
+    ::core::default::Default,
+    ::core::cmp::PartialEq,
+    ::core::cmp::Eq,
+    ::core::hash::Hash,
+    ::core::cmp::PartialOrd,
+    ::core::cmp::Ord,
+)]
 struct Out;
 
 impl MakerSeal for Out {}
-impl Direction for Out {}
+impl Direction for Out {
+    type Rev = In;
+}
 
 #[doc(hidden)]
 mod __seq_point {
@@ -5492,6 +5531,11 @@ impl<D: Direction> SeqPoint<D> {
     }
 }
 
+/// The acknowledgment of `seq` travels the other way.
+fn acknowledge<D: Direction>(seq: SeqPoint<D>) -> SeqPoint<D::Rev> {
+    return SeqPoint::make(seq.raw());
+}
+
 fn directional_sequence<D: Direction>() {
     let maximum = SeqPoint::<D>::make(u32::MAX);
     let zero = SeqPoint::<D>::make(0);
@@ -5506,6 +5550,9 @@ fn directional_sequence<D: Direction>() {
 
     let offset = SeqOffset::<D>::make(i32::MAX) + SeqOffset::<D>::make(1);
     assert_eq!(offset.raw(), i32::MIN);
+
+    let echoed: SeqPoint<D> = acknowledge(acknowledge(wrapped));
+    assert_eq!(echoed, wrapped);
 }
 
 fn main() {
