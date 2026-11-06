@@ -28,6 +28,7 @@ use crate::integral_cfg::{
     GRAMMAR,
     IntegralFlag,
     IntegralFlags,
+    PanicAt,
 };
 use crate::zz_conv::SelfConverter;
 use crate::zz_flags::FlagSettings;
@@ -134,6 +135,100 @@ impl Arithmetic {
                 let symbol = operator.symbol();
                 quote! { lhs #symbol rhs }
             }
+        };
+    }
+
+    /// `operator` on the raw `lhs` and `rhs` as an `Option` of the raw
+    /// result: `None` where `level` reports a failure instead of panicking.
+    /// `sequential` always checks; `int` checks division (zero and
+    /// `MIN / -1`) from `overflow` and everything at `nothing`; the wrapping
+    /// profiles only have division by zero to check. Floats never panic.
+    pub(crate) fn make_fallible_expr(
+        self,
+        operator: Operator,
+        level: PanicAt,
+        float: bool,
+        is_konst: bool,
+    ) -> TokenStream {
+        let some = |value: TokenStream| {
+            return quote! { ::core::option::Option::Some(#value) };
+        };
+        let Some(operation) = operator.arithmetic_op()
+        else {
+            let symbol = operator.symbol();
+            return some(quote! { lhs #symbol rhs });
+        };
+        return self.make_fallible_arithmetic(
+            operation,
+            level,
+            float,
+            is_konst,
+        );
+    }
+
+    /// `make_fallible_expr` of an arithmetic operation, shifts included.
+    pub(crate) fn make_fallible_arithmetic(
+        self,
+        operation: ArithmeticOp,
+        level: PanicAt,
+        float: bool,
+        is_konst: bool,
+    ) -> TokenStream {
+        let some = |value: TokenStream| {
+            return quote! { ::core::option::Option::Some(#value) };
+        };
+        if float {
+            return some(Self::Primitive.make_expr(operation));
+        }
+        let arithmetic = match (self, is_konst) {
+            (Self::WrapperWrapping, true) => Self::PrimitiveWrapping,
+            (arithmetic, _) => arithmetic,
+        };
+        let division =
+            matches!(operation, ArithmeticOp::Div | ArithmeticOp::Rem);
+        let checked = match arithmetic {
+            Self::Checked => true,
+            Self::Primitive => match division {
+                true => level.checks_division(),
+                false => level.checks_overflow(),
+            },
+            Self::PrimitiveWrapping | Self::WrapperWrapping => false,
+        };
+        if checked {
+            return Self::make_checked_option(operation);
+        }
+        let value = arithmetic.make_expr(operation);
+        if division && level.checks_division() {
+            return quote! {
+                if rhs == 0 {
+                    ::core::option::Option::None
+                }
+                else {
+                    ::core::option::Option::Some(#value)
+                }
+            };
+        }
+        return some(value);
+    }
+
+    /// `checked_{operation}` of the raw operands; a shift amount past
+    /// `u32` is `None` rather than truncated.
+    fn make_checked_option(operation: ArithmeticOp) -> TokenStream {
+        let method = format_ident!("checked_{}", operation.name());
+        return match operation {
+            ArithmeticOp::Shl | ArithmeticOp::Shr => quote! {
+                if rhs > u32::MAX as usize {
+                    ::core::option::Option::None
+                }
+                else {
+                    lhs.#method(rhs as u32)
+                }
+            },
+            ArithmeticOp::Add
+            | ArithmeticOp::Sub
+            | ArithmeticOp::Mul
+            | ArithmeticOp::Div
+            | ArithmeticOp::Rem => quote! { lhs.#method(rhs) },
         };
     }
 

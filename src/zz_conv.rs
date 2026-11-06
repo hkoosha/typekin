@@ -82,6 +82,9 @@ pub(crate) struct OperatorOutput {
     cfg: SelfConverter,
     ty: TokenStream,
     conversion: TokenStream,
+    /// The error an operation reports failure with, when it does
+    /// (`panic_at` below `anything`): `Option<Raw>`.
+    failure: Option<TokenStream>,
 }
 
 impl OperatorOutput {
@@ -89,18 +92,30 @@ impl OperatorOutput {
         configuration: &SelfConverter,
         ty: TokenStream,
         conversion: TokenStream,
+        failure: Option<TokenStream>,
     ) -> Self {
         return Self {
             cfg: configuration.clone(),
             ty,
             conversion,
+            failure,
         };
     }
 
+    /// The output type: the produced type, in a `Result` when operations
+    /// report failure.
     pub(crate) fn ty(&self) -> TokenStream {
-        return self.ty.clone();
+        let ty = &self.ty;
+        return match &self.failure {
+            Some(failure) => quote! {
+                ::core::result::Result<#ty, #failure>
+            },
+            None => ty.clone(),
+        };
     }
 
+    /// `value`, the operation's `Self` (or `Result` of one), converted to
+    /// the output.
     pub(crate) fn convert(
         &self,
         value: TokenStream,
@@ -110,7 +125,19 @@ impl OperatorOutput {
         }
 
         let conversion = &self.conversion;
-        return quote! { #conversion(#value) };
+        if self.failure.is_none() {
+            return quote! { #conversion(#value) };
+        }
+        return quote! {
+            match #value {
+                ::core::result::Result::Ok(it) => {
+                    ::core::result::Result::Ok(#conversion(it))
+                }
+                ::core::result::Result::Err(it) => {
+                    ::core::result::Result::Err(it)
+                }
+            }
+        };
     }
 }
 

@@ -569,6 +569,7 @@ impl IntegralTarget {
         &self,
         configuration: &SelfConverter,
         external: bool,
+        failure: Option<&TokenStream>,
     ) -> OperatorOutput {
         let ty = if configuration.is_self() {
             if external {
@@ -591,7 +592,12 @@ impl IntegralTarget {
         else {
             self.qualify_path(&configuration.conversion)
         };
-        return OperatorOutput::of(configuration, ty, conversion);
+        return OperatorOutput::of(
+            configuration,
+            ty,
+            conversion,
+            failure.cloned(),
+        );
     }
 
     pub(crate) fn is_target(
@@ -982,6 +988,9 @@ pub(crate) struct Ctx {
     pub(crate) output: OperatorOutput,
     pub(crate) get_raw: Path,
     pub(crate) fp_or_panic: Path,
+    /// `Option<Raw>`, the error operations report failure with, when
+    /// `panic_at` is below `anything`.
+    pub(crate) failure: Option<TokenStream>,
 }
 
 impl Ctx {
@@ -989,6 +998,7 @@ impl Ctx {
         target: &IntegralTarget,
         cfg: Box<Cfg>,
         storage: &StoragePlan,
+        el: &Ident,
     ) -> Self {
         let names = Names::<IntegralName>::default()
             .resolve(target.ident.clone(), target.occupied_names.clone());
@@ -1014,7 +1024,12 @@ impl Ctx {
         let validation = cfg.validation.emit(&value);
         let rhs_raw = storage.extract(quote! { rhs.0 });
         let self_raw = storage.extract(quote! { self.0 });
-        let output = target.operator_output(&cfg.ty_out, false);
+        let failure = cfg
+            .panic_at
+            .fallible()
+            .then(|| quote! { ::core::option::Option<#el> });
+        let output =
+            target.operator_output(&cfg.ty_out, false, failure.as_ref());
 
         return Self {
             cfg,
@@ -1032,6 +1047,7 @@ impl Ctx {
             output,
             get_raw,
             fp_or_panic,
+            failure,
         };
     }
 }
@@ -1061,7 +1077,7 @@ impl Maker {
                 .fail("nonzero storage does not support a custom or_panic constructor");
         }
 
-        let ctx = Ctx::new(&target, cfg, &storage);
+        let ctx = Ctx::new(&target, cfg, &storage, &el);
         let mut this = Self {
             num: storage.raw,
             storage,

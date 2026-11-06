@@ -98,13 +98,15 @@ impl Maker {
 
     /// Integer wrappers validated by their domain alone can construct
     /// results that a closure proof (`zz_domain_closure`) shows valid
-    /// through `_proven`. Callbacks are opaque to proofs.
+    /// through `_proven`. Callbacks are opaque to proofs, and operations
+    /// that report failure validate every result instead.
     pub(crate) fn proofs_available(&self) -> bool {
         let cfg = &self.ctx.cfg;
         return matches!(self.num, Num::Int(_))
             && cfg.flags.has(IntegralFlag::FnOrPanic)
             && cfg.validation.has_validation()
-            && cfg.validation.callbacks.is_empty();
+            && cfg.validation.callbacks.is_empty()
+            && !cfg.panic_at.fallible();
     }
 
     /// Every result of `op` on valid operands is valid at every width, by a

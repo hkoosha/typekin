@@ -906,6 +906,7 @@ pub(crate) enum Key {
     Maker,
     Math,
     Mod,
+    PanicAt,
     Precedes,
     Produce,
     Profile,
@@ -927,7 +928,7 @@ pub(crate) enum Key {
 }
 
 impl Key {
-    const ITEMS: [Self; 33] = [
+    const ITEMS: [Self; 34] = [
         Self::Conversion,
         Self::Domain,
         Self::Error,
@@ -943,6 +944,7 @@ impl Key {
         Self::Maker,
         Self::Math,
         Self::Mod,
+        Self::PanicAt,
         Self::Precedes,
         Self::Produce,
         Self::Profile,
@@ -980,6 +982,7 @@ impl Key {
             Self::Maker => "maker",
             Self::Math => "math",
             Self::Mod => "mod",
+            Self::PanicAt => "panic_at",
             Self::Precedes => "precedes",
             Self::Produce => "produce",
             Self::Profile => "profile",

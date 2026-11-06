@@ -591,6 +591,10 @@ pub(crate) struct Construction {
     pub(crate) or_panic: TokenStream,
     /// Path of the target's constructor for proven `Within` sources.
     pub(crate) within: TokenStream,
+    /// Path of the target's `_or_err` when construction reports failure:
+    /// `Make` then has `try_make(self) -> Result<Target, Relation>`, the
+    /// relation being the rejected value, instead of `make`.
+    pub(crate) or_err: Option<TokenStream>,
 }
 
 /// A capability trait the protocol declares, under its generated name.
@@ -645,6 +649,15 @@ impl Protocol {
         capability: Capability,
     ) -> bool {
         return self.construction.is_some() && capability == Capability::Make;
+    }
+
+    /// Whether construction reports failure (`try_make`) instead of
+    /// panicking (`make`).
+    fn reports_failure(&self) -> bool {
+        return self
+            .construction
+            .as_ref()
+            .is_some_and(|it| it.or_err.is_some());
     }
 }
 
@@ -730,7 +743,13 @@ fn emit_capability_declaration(
     let safety = blind_trust.then(blind_trust_doc);
     let method = protocol.constructs(capability.capability).then(|| {
         let target = &protocol.target;
-        quote! { fn make(self) -> #target; }
+        let relation = &protocol.relation;
+        return match protocol.reports_failure() {
+            true => quote! {
+                fn try_make(self) -> ::core::result::Result<#target, #relation>;
+            },
+            false => quote! { fn make(self) -> #target; },
+        };
     });
 
     return quote! {
@@ -776,7 +795,8 @@ fn emit_seal_impl(
 
 /// One capability impl of `friend`; `Make` constructs through the proven
 /// constructor for a `Within` friend, the blind-trust one when the friend
-/// also holds `Unsafe`, and the validating one otherwise.
+/// also holds `Unsafe`, and the validating one otherwise. Reporting
+/// failure, every friend validates and returns the rejected raw value.
 fn emit_friend_capability(
     protocol: &Protocol,
     header: &ProtocolHeader,
@@ -799,6 +819,32 @@ fn emit_friend_capability(
         .as_ref()
         .filter(|_| protocol.constructs(capability))
         .map(|construction| {
+            let target = &protocol.target;
+            let seal = &protocol.seal;
+            let conversion = &protocol.conversion;
+            let raw = quote! {
+                let raw = <Self as #seal #arguments>::#conversion(self);
+            };
+            if let Some(or_err) = &construction.or_err {
+                let relation = &protocol.relation;
+                return quote! {
+                    #[inline(always)]
+                    fn try_make(
+                        self,
+                    ) -> ::core::result::Result<#target, #relation> {
+                        #raw
+                        return match #or_err(::core::option::Option::Some(raw)) {
+                            ::core::result::Result::Ok(it) => {
+                                ::core::result::Result::Ok(it)
+                            }
+                            ::core::result::Result::Err(_) => {
+                                ::core::result::Result::Err(raw)
+                            }
+                        };
+                    }
+                };
+            }
+
             let blind_trust = friend
                 .capabilities
                 .values()
@@ -809,18 +855,14 @@ fn emit_friend_capability(
                 (None, false) => &construction.or_panic,
             };
             let doc = &friend.within;
-            let target = &protocol.target;
-            let seal = &protocol.seal;
-            let conversion = &protocol.conversion;
-
-            quote! {
+            return quote! {
                 #doc
                 #[inline(always)]
                 fn make(self) -> #target {
-                    let raw = <Self as #seal #arguments>::#conversion(self);
+                    #raw
                     return #constructor(raw);
                 }
-            }
+            };
         });
 
     return quote! {

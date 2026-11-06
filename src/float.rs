@@ -14,7 +14,10 @@ use syn::{
 };
 
 use crate::integral::Maker;
-use crate::integral_cfg::IntegralFlag;
+use crate::integral_cfg::{
+    IntegralFlag,
+    IntegralName,
+};
 use crate::integral_forward::{
     Param,
     params,
@@ -247,7 +250,8 @@ impl Maker {
         return forwards;
     }
 
-    /// The bit and byte conversions and `total_cmp`.
+    /// The bit and byte conversions and `total_cmp`. Construction that
+    /// reports failure has no `from_*`, whose `Self` would panic.
     fn core_float_bit_forwards(
         &self,
         float: F,
@@ -258,6 +262,7 @@ impl Maker {
         let konst = self.core_konst();
         let bytes = quote! { [u8; ::core::mem::size_of::<#el>()] };
 
+        let fallible = self.ctx.failure.is_some();
         let mut forwards = vec![
             Forward::new(FnName::ToBits, &self.ctx.names, |name| {
                 return quote! {
@@ -268,16 +273,22 @@ impl Maker {
                     }
                 };
             }),
-            Forward::new(FnName::FromBits, &self.ctx.names, |name| {
-                return quote! {
-                    #[inline(always)]
-                    #[track_caller]
-                    pub #konst fn #name(bits: #bits) -> Self {
-                        return Self::_result_or_panic(#el::#name(bits));
-                    }
-                };
-            }),
         ];
+        if !fallible {
+            forwards.push(Forward::new(
+                FnName::FromBits,
+                &self.ctx.names,
+                |name| {
+                    return quote! {
+                        #[inline(always)]
+                        #[track_caller]
+                        pub #konst fn #name(bits: #bits) -> Self {
+                            return Self::_result_or_panic(#el::#name(bits));
+                        }
+                    };
+                },
+            ));
+        }
         for (to, from) in [
             (FnName::ToNeBytes, FnName::FromNeBytes),
             (FnName::ToBeBytes, FnName::FromBeBytes),
@@ -292,6 +303,9 @@ impl Maker {
                     }
                 };
             }));
+            if fallible {
+                continue;
+            }
             forwards.push(Forward::new(from, &self.ctx.names, |name| {
                 return quote! {
                     #[inline(always)]
@@ -322,8 +336,12 @@ impl Maker {
     }
 
     /// The methods returning `Self`, then the selections a type without
-    /// `Ord` gets.
+    /// `Ord` gets. Operations that report failure have none: each `Self`
+    /// is a validated result.
     fn core_float_op_forwards(&self) -> Vec<Forward> {
+        if self.ctx.failure.is_some() {
+            return Vec::new();
+        }
         let get_raw = &self.ctx.get_raw;
         let konst = self.core_konst();
         let selections = match self.ctx.cfg.flags.has(IntegralFlag::Ord) {
@@ -431,6 +449,7 @@ impl Maker {
 
     /// `Sum` and `Product` over values and references: the raw fold of
     /// `core`'s float implementation, then one validation of the result.
+    /// Operations that report failure fold into a `Result` instead.
     pub(crate) fn make_iterator_folds(&self) -> TokenStream {
         let ty = &self.ctx.ty;
         let impl_generics = &self.ctx.impl_generics;
@@ -446,15 +465,75 @@ impl Maker {
 
         let mut stream = TokenStream::new();
 
-        for (flag, name, method) in [
-            (IntegralFlag::Sum, "Sum", "sum"),
-            (IntegralFlag::Product, "Product", "product"),
+        for (flag, name, method, symbol) in [
+            (IntegralFlag::Sum, "Sum", "sum", quote! { + }),
+            (IntegralFlag::Product, "Product", "product", quote! { * }),
         ] {
             if !self.ctx.cfg.flags.has(flag) {
                 continue;
             }
             let fold = format_ident!("{}", name);
             let method = Ident::new(method, Span::call_site());
+            if let Some(failure) = &self.ctx.failure {
+                let or_err = self.ctx.names.get(IntegralName::OrErr);
+                // `Self` is the `Result` here: qualify by the target.
+                let get_raw = self.target.qualify_path(get_raw);
+                let output = quote! {
+                    ::core::result::Result<#ty, #failure>
+                };
+                let body = |item: TokenStream| {
+                    return quote! {
+                        let mut iter = iter;
+                        let mut folded = match iter.next() {
+                            ::core::option::Option::Some(it) => #item,
+                            ::core::option::Option::None => {
+                                let empty = ::core::iter::empty::<#el>();
+                                return <#ty>::#or_err(
+                                    ::core::option::Option::Some(
+                                        empty.#method::<#el>(),
+                                    ),
+                                );
+                            }
+                        };
+                        for it in iter {
+                            let value = #get_raw(folded) #symbol #get_raw(#item);
+                            folded = <#ty>::#or_err(
+                                ::core::option::Option::Some(value),
+                            )?;
+                        }
+                        return ::core::result::Result::Ok(folded);
+                    };
+                };
+                let by_value = body(quote! { it });
+                let by_reference = body(quote! { *it });
+                stream.extend(quote! {
+                    impl #impl_generics ::core::iter::#fold<#ty> for #output
+                    #where_clause {
+                        #[inline(always)]
+                        fn #method<#iterator>(iter: #iterator) -> Self
+                        where
+                            #iterator: ::core::iter::Iterator<Item = #ty>,
+                        {
+                            #by_value
+                        }
+                    }
+
+                    impl #ref_impl_generics ::core::iter::#fold<&#lifetime #ty>
+                        for #output
+                    #ref_where_clause
+                    {
+                        #[inline(always)]
+                        fn #method<#iterator>(iter: #iterator) -> Self
+                        where
+                            #iterator:
+                                ::core::iter::Iterator<Item = &#lifetime #ty>,
+                        {
+                            #by_reference
+                        }
+                    }
+                });
+                continue;
+            }
             stream.extend(quote! {
                 impl #impl_generics ::core::iter::#fold for #ty #where_clause {
                     #[inline(always)]

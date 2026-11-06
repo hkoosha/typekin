@@ -687,7 +687,8 @@ impl Maker {
     }
 
     /// Xor and xor-assign, interleaved: same-type, then friend. The assigns
-    /// need a `Self` output (xor has no assign flag).
+    /// need a `Self` output (xor has no assign flag) and operations that may
+    /// panic.
     pub(crate) fn make_math_xor(&self) -> TokenStream {
         if !self.ctx.cfg.flags.has(IntegralFlag::MathXor)
             || !self.with_global_operators()
@@ -698,7 +699,8 @@ impl Maker {
         let operator = Operator::BitXor;
         let proof = self.operator_proof(operator);
         let friend = OpRhs::Friend(Capability::Bit);
-        let with_assign = self.ctx.cfg.ty_out.is_self();
+        let with_assign =
+            self.ctx.cfg.ty_out.is_self() && self.ctx.failure.is_none();
         let mut stream = TokenStream::new();
 
         if self.with_self_bit() {

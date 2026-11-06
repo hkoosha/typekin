@@ -556,17 +556,33 @@ impl Maker {
             None => quote! { #get_raw(rhs) },
         };
         let proven = self.facet_proven(key, slot);
-        let path = match proven {
-            true => parse_quote! { Self::_proven },
-            false => self.ctx.fp_or_panic.clone(),
+        let path = match (&self.ctx.failure, proven) {
+            (Some(_), _) => {
+                let or_err = self.ctx.names.get(IntegralName::OrErr);
+                parse_quote! { Self::#or_err }
+            }
+            (None, true) => parse_quote! { Self::_proven },
+            (None, false) => self.ctx.fp_or_panic.clone(),
         };
         let constructor = self.target.qualify_path(&path);
         let doc = self.proof_doc(proven);
-        let output = self.target.operator_output(&slot.ty_out, true);
+        let output = self.target.operator_output(
+            &slot.ty_out,
+            true,
+            self.ctx.failure.as_ref(),
+        );
         let output_ty = output.ty();
         let result = output.convert(quote! { value });
         let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
-        let operation = slot.arithmetic.make_operator_expr(operator, is_konst);
+        let operation = match self.ctx.failure {
+            Some(_) => slot.arithmetic.make_fallible_expr(
+                operator,
+                self.ctx.cfg.panic_at,
+                matches!(self.num, Num::Float(_)),
+                is_konst,
+            ),
+            None => slot.arithmetic.make_operator_expr(operator, is_konst),
+        };
         let konst = Konst::konst(is_konst);
 
         return quote! {
@@ -837,10 +853,15 @@ impl Maker {
             .qualify_path(&parse_quote! { Self::#blind_trust });
         let within = self.ctx.names.get(IntegralName::WithinFn);
         let within = self.target.qualify_path(&parse_quote! { Self::#within });
+        let or_err = self.ctx.failure.as_ref().map(|_| {
+            let or_err = self.ctx.names.get(IntegralName::OrErr);
+            return self.target.qualify_path(&parse_quote! { Self::#or_err });
+        });
         return Construction {
             blind_trust,
             or_panic,
             within,
+            or_err,
         };
     }
 }

@@ -59,6 +59,7 @@ const ITEM_EMITTERS: &[fn(&Maker) -> TokenStream] = &[
     Maker::make_fn_op_cmp,
     Maker::make_fn_make_try,
     Maker::make_or_panic,
+    Maker::make_or_err,
     Maker::make_proven,
     Maker::make_blind_trust,
     Maker::make_within,
@@ -129,7 +130,9 @@ impl Maker {
     }
 
     /// `pub(self) #konst fn #name(&self, [rhs: #rhs,]) -> Self`: applies
-    /// `expression` to the raw `lhs` (and `rhs`) and returns `result`.
+    /// `expression` to the raw `lhs` (and `rhs`) and returns `result`. When
+    /// operations report failure, `expression` is an `Option` of the raw
+    /// result and the helper returns `_or_err`'s `Result`.
     fn validating_helper(
         &self,
         konst: &Option<TokenStream>,
@@ -140,12 +143,16 @@ impl Maker {
     ) -> TokenStream {
         let get_raw = &self.ctx.get_raw;
         let rhs = rhs.map(|rhs| quote! { rhs: #rhs, });
+        let output = match &self.ctx.failure {
+            Some(failure) => quote! { ::core::result::Result<Self, #failure> },
+            None => quote! { Self },
+        };
         return quote! {
             #[inline(always)]
             pub(self) #konst fn #name(
                 &self,
                 #rhs
-            ) -> Self {
+            ) -> #output {
                 let lhs = #get_raw(*self);
                 let it = #expression;
                 return #result;
@@ -155,7 +162,8 @@ impl Maker {
 
     /// The validating helper `name` (a proven result skips validation), plus
     /// a `_proven` sibling when only same-type operands are proven
-    /// (`same_type_helper`).
+    /// (`same_type_helper`). Reporting failure, every result goes through
+    /// `_or_err` instead.
     fn proven_helpers(
         &self,
         konst: &Option<TokenStream>,
@@ -164,6 +172,16 @@ impl Maker {
         expression: &TokenStream,
         proof: OperatorProof,
     ) -> TokenStream {
+        if self.ctx.failure.is_some() {
+            let or_err = self.ctx.names.get(IntegralName::OrErr);
+            return self.validating_helper(
+                konst,
+                name,
+                Some(rhs),
+                expression,
+                &quote! { Self::#or_err(it) },
+            );
+        }
         let fp_or_panic = &self.ctx.fp_or_panic;
         let helper = |name: &Ident, proven: bool| {
             let constructor =
@@ -185,6 +203,28 @@ impl Maker {
         return stream;
     }
 
+    /// `operation` on the raw operands: panicking, or an `Option` of the
+    /// result when operations report failure.
+    fn arithmetic_expr(
+        &self,
+        operation: ArithmeticOp,
+        is_konst: bool,
+    ) -> TokenStream {
+        let arithmetic = self.ctx.cfg.profile.arithmetic();
+        if self.ctx.failure.is_some() {
+            return arithmetic.make_fallible_arithmetic(
+                operation,
+                self.ctx.cfg.panic_at,
+                matches!(self.num, Num::Float(_)),
+                is_konst,
+            );
+        }
+        return match is_konst {
+            true => arithmetic.make_const_expr(operation),
+            false => arithmetic.make_expr(operation),
+        };
+    }
+
     /// The validating `_{operation}` helper (and its non-const `_wrapping`
     /// twin for `Wrapping` storage).
     fn ekran_arithmetic_helper(
@@ -198,7 +238,7 @@ impl Maker {
             &Konst::konst(self.ctx.cfg.helper_konst()),
             &self.arithmetic_method_name(operation, true),
             &rhs_type,
-            &arithmetic.make_const_expr(operation),
+            &self.arithmetic_expr(operation, true),
             proof,
         );
         if arithmetic != Arithmetic::WrapperWrapping {
@@ -208,7 +248,7 @@ impl Maker {
             &Konst::konst(false),
             &self.arithmetic_method_name(operation, false),
             &rhs_type,
-            &arithmetic.make_expr(operation),
+            &self.arithmetic_expr(operation, false),
             proof,
         ));
         return stream;
@@ -221,11 +261,15 @@ impl Maker {
     ) -> TokenStream {
         let el = &self.el;
         let symbol = operator.symbol();
+        let expression = match self.ctx.failure {
+            Some(_) => quote! { ::core::option::Option::Some(lhs #symbol rhs) },
+            None => quote! { lhs #symbol rhs },
+        };
         return self.proven_helpers(
             &Konst::konst(self.ctx.cfg.helper_konst()),
             &format_ident!("_{}", operator.method_name()),
             &quote! { #el },
-            &quote! { lhs #symbol rhs },
+            &expression,
             self.operator_proof(operator),
         );
     }
@@ -388,6 +432,23 @@ impl Maker {
         let bound = Konst::bound(is_konst, quote! { #what #arguments });
         let parameter = self.target.fresh_ident("T");
 
+        if self.ctx.failure.is_some() {
+            let el = &self.el;
+            let fn_try_of = self.ctx.names.get(IntegralName::TryOfFn);
+            return quote! {
+                #[inline(always)]
+                #[allow(private_bounds)]
+                pub #konst fn #fn_try_of<#parameter>(
+                    it: #parameter,
+                ) -> ::core::result::Result<#ty, #el>
+                where
+                    #parameter: #bound,
+                {
+                    return <#parameter as #what #arguments>::try_make(it);
+                }
+            };
+        }
+
         let fn_of = self.ctx.names.get(IntegralName::OfFn);
 
         return quote! {
@@ -476,6 +537,8 @@ impl Maker {
             .merged();
     }
 
+    /// `try_map`, and `map` unless construction reports failure: `map`
+    /// would then return what `try_map` does.
     pub(crate) fn make_map(&self) -> TokenStream {
         if !self.ctx.cfg.flags.has(IntegralFlag::Map) {
             return TokenStream::new();
@@ -495,6 +558,28 @@ impl Maker {
             constructed,
             quote! { value },
         );
+        let map = self.ctx.failure.is_none().then(|| {
+            quote! {
+                #[inline(always)]
+                #[track_caller]
+                pub #konst fn map<#callback>(
+                    self,
+                    function: #callback,
+                ) -> Self
+                where
+                    #callback: #bound,
+                {
+                    return match self.try_map(function) {
+                        ::core::result::Result::Ok(value) => value,
+                        ::core::result::Result::Err(_) => {
+                            ::core::panic!(
+                                "mapping operation produced an invalid value"
+                            )
+                        }
+                    };
+                }
+            }
+        });
         return quote! {
             #[inline(always)]
             pub #konst fn try_map<#callback>(
@@ -508,24 +593,7 @@ impl Maker {
                 #result
             }
 
-            #[inline(always)]
-            #[track_caller]
-            pub #konst fn map<#callback>(
-                self,
-                function: #callback,
-            ) -> Self
-            where
-                #callback: #bound,
-            {
-                return match self.try_map(function) {
-                    ::core::result::Result::Ok(value) => value,
-                    ::core::result::Result::Err(_) => {
-                        ::core::panic!(
-                            "mapping operation produced an invalid value"
-                        )
-                    }
-                };
-            }
+            #map
         };
     }
 
@@ -777,9 +845,13 @@ impl Maker {
             return TokenStream::new();
         }
 
+        let some = self.ctx.failure.is_some();
         return self.make_fn_math_unary(
             format_ident!("_not"),
-            quote! { !lhs },
+            match some {
+                true => quote! { ::core::option::Option::Some(!lhs) },
+                false => quote! { !lhs },
+            },
             self.not_proven(),
         );
     }
@@ -795,7 +867,20 @@ impl Maker {
             return TokenStream::new();
         }
 
-        let expression = match (self.num, self.ctx.cfg.profile.arithmetic()) {
+        let expression = match self.ctx.failure {
+            Some(_) => self.fallible_neg(),
+            None => self.panicking_neg(),
+        };
+        return self.make_fn_math_unary(
+            format_ident!("_neg"),
+            expression,
+            self.neg_proven(),
+        );
+    }
+
+    /// `-lhs` under the profile's arithmetic, panicking where it may.
+    fn panicking_neg(&self) -> TokenStream {
+        return match (self.num, self.ctx.cfg.profile.arithmetic()) {
             (Num::Float(_), _) | (Num::Int(_), Arithmetic::Primitive) => {
                 quote! { -lhs }
             }
@@ -812,11 +897,30 @@ impl Maker {
                 }
             },
         };
-        return self.make_fn_math_unary(
-            format_ident!("_neg"),
-            expression,
-            self.neg_proven(),
-        );
+    }
+
+    /// `-lhs` as an `Option`: `sequential` always checks, `int` checks at
+    /// `nothing`, and wrapping or float negation cannot fail.
+    fn fallible_neg(&self) -> TokenStream {
+        let checked = match (self.num, self.ctx.cfg.profile.arithmetic()) {
+            (Num::Float(_), _) => false,
+            (Num::Int(_), Arithmetic::Checked) => true,
+            (Num::Int(_), Arithmetic::Primitive) => {
+                self.ctx.cfg.panic_at.checks_overflow()
+            }
+            (
+                Num::Int(_),
+                Arithmetic::PrimitiveWrapping | Arithmetic::WrapperWrapping,
+            ) => {
+                return quote! {
+                    ::core::option::Option::Some(lhs.wrapping_neg())
+                };
+            }
+        };
+        return match checked {
+            true => quote! { lhs.checked_neg() },
+            false => quote! { ::core::option::Option::Some(-lhs) },
+        };
     }
 
     /// `closed`: the result of `expression` on a valid value is always valid
@@ -827,16 +931,24 @@ impl Maker {
         expression: TokenStream,
         closed: bool,
     ) -> TokenStream {
-        let (konst, result) = match self.closed_result(closed) {
-            Some(constructed) => (Konst::konst(true), constructed),
-            None => {
-                let fp_or_panic = &self.ctx.fp_or_panic;
-                (
-                    Konst::konst(self.ctx.cfg.helper_konst()),
-                    quote! { #fp_or_panic(it) },
-                )
-            }
-        };
+        let (konst, result) =
+            match (&self.ctx.failure, self.closed_result(closed)) {
+                (Some(_), _) => {
+                    let or_err = self.ctx.names.get(IntegralName::OrErr);
+                    (
+                        Konst::konst(self.ctx.cfg.helper_konst()),
+                        quote! { Self::#or_err(it) },
+                    )
+                }
+                (None, Some(constructed)) => (Konst::konst(true), constructed),
+                (None, None) => {
+                    let fp_or_panic = &self.ctx.fp_or_panic;
+                    (
+                        Konst::konst(self.ctx.cfg.helper_konst()),
+                        quote! { #fp_or_panic(it) },
+                    )
+                }
+            };
         return self.validating_helper(
             &konst,
             &name,
@@ -983,9 +1095,13 @@ impl Maker {
         return any_friend_has(&self.ctx.cfg.friends, capability);
     }
 
-    /// The validating, panicking constructor (`_or_panic`).
+    /// The validating, panicking constructor (`_or_panic`). Reporting
+    /// failure, a validated type has none: `_or_err` validates instead.
     fn make_or_panic(&self) -> TokenStream {
-        if !self.ctx.cfg.flags.has(IntegralFlag::FnOrPanic) {
+        if !self.ctx.cfg.flags.has(IntegralFlag::FnOrPanic)
+            || (self.ctx.failure.is_some()
+                && self.ctx.cfg.validation.has_validation())
+        {
             return TokenStream::new();
         }
 
@@ -1015,6 +1131,38 @@ impl Maker {
                 }
                 else {
                     ::core::panic!("invalid value");
+                };
+            }
+        };
+    }
+
+    /// `_or_err`: an operation's `Option` of a raw result, validated. Its
+    /// error is `Some(raw)` for an invalid result and `None` when there is
+    /// none. Only emitted when operations report failure.
+    fn make_or_err(&self) -> TokenStream {
+        let Some(failure) = &self.ctx.failure
+        else {
+            return TokenStream::new();
+        };
+        let el = &self.el;
+        let or_err = self.ctx.names.get(IntegralName::OrErr);
+        let konst = Konst::konst(self.ctx.cfg.helper_konst());
+        let value = quote! { it };
+        let guard = self.ctx.cfg.validation.has_validation().then(|| {
+            let validation = self.ctx.cfg.validation.emit(&value);
+            return quote! { if #validation };
+        });
+        let constructed = self.construct_self(value);
+        return quote! {
+            #[inline(always)]
+            pub(self) #konst fn #or_err(
+                it: ::core::option::Option<#el>,
+            ) -> ::core::result::Result<Self, #failure> {
+                return match it {
+                    ::core::option::Option::Some(it) #guard => {
+                        ::core::result::Result::Ok(#constructed)
+                    }
+                    it => ::core::result::Result::Err(it),
                 };
             }
         };

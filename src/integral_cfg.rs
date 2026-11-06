@@ -101,6 +101,76 @@ pub(crate) enum Kind {
     Float,
 }
 
+/// `panic_at = anything | arithmetic | overflow | nothing`: what generated
+/// code may still panic on. Below `anything`, an operation that could fail
+/// returns `Result<T, Option<Raw>>`: `Some(raw)` for an invalid result,
+/// `None` when there is no result (division by zero, checked overflow).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum PanicAt {
+    /// Validation failures and arithmetic panic.
+    #[default]
+    Anything,
+    /// Only Rust's arithmetic panics: division by zero and overflow.
+    Arithmetic,
+    /// Only Rust's `overflow-checks`, which release builds turn off.
+    Overflow,
+    /// Nothing panics.
+    Nothing,
+}
+
+impl PanicAt {
+    const ITEMS: [Self; 4] = [
+        Self::Anything,
+        Self::Arithmetic,
+        Self::Overflow,
+        Self::Nothing,
+    ];
+
+    pub(crate) fn name(self) -> &'static str {
+        return match self {
+            Self::Anything => "anything",
+            Self::Arithmetic => "arithmetic",
+            Self::Overflow => "overflow",
+            Self::Nothing => "nothing",
+        };
+    }
+
+    /// Whether operations that could fail return `Result` instead of
+    /// panicking.
+    pub(crate) fn fallible(self) -> bool {
+        return self != Self::Anything;
+    }
+
+    /// Whether division and remainder check for a zero divisor and
+    /// `MIN / -1`.
+    pub(crate) fn checks_division(self) -> bool {
+        return matches!(self, Self::Overflow | Self::Nothing);
+    }
+
+    /// Whether overflow is checked rather than left to `overflow-checks`.
+    pub(crate) fn checks_overflow(self) -> bool {
+        return self == Self::Nothing;
+    }
+}
+
+impl Parse for PanicAt {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name: Ident = input.parse()?;
+        return Self::ITEMS
+            .into_iter()
+            .find(|it| name == it.name())
+            .map_or_else(
+                || {
+                    return name.fail(
+                        "expected `anything`, `arithmetic`, `overflow`, or \
+                        `nothing`",
+                    );
+                },
+                Ok,
+            );
+    }
+}
+
 /// Where a configuration is parsed, which decides the keys it accepts.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum CfgSite {
@@ -152,6 +222,8 @@ pub(crate) struct Cfg {
     /// `prove = [...]`: operations that must be proven closed.
     pub(crate) prove: Vec<ProveItem>,
     pub(crate) kind: Kind,
+    /// `panic_at = ...`: what generated code may still panic on.
+    pub(crate) panic_at: PanicAt,
     /// `math = core | std | nightly` (floats only).
     pub(crate) math: MathProvider,
     /// The value field is not private, so code outside the generated API
@@ -410,9 +482,12 @@ impl Cfg {
                 self_slot(IntegralFlag::SelfMath),
                 self_slot(IntegralFlag::SelfBit),
             )?;
-            Self::check_facet_assignments(&slots, &source, |flag| {
-                return facet.explicit_flag(flag);
-            })?;
+            Self::check_facet_assignments(
+                &slots,
+                &source,
+                self.panic_at,
+                |flag| facet.explicit_flag(flag),
+            )?;
         }
 
         let source = SlotSource {
@@ -429,19 +504,24 @@ impl Cfg {
             self_slot(IntegralFlag::SelfMath),
             self_slot(IntegralFlag::SelfBit),
         )?;
-        Self::check_facet_assignments(&slots, &source, |flag| {
-            return self.explicit_flag(flag);
-        })?;
+        Self::check_facet_assignments(
+            &slots,
+            &source,
+            self.panic_at,
+            |flag| self.explicit_flag(flag),
+        )?;
 
         self.facet_slots = slots;
         return self.check_facet_assignment_konst();
     }
 
     /// Each assignment flag a facet level explicitly enables assigns through
-    /// that level's slots of its operator, which must output `Self`.
+    /// that level's slots of its operator, which must output `Self`, and
+    /// only when operations may panic.
     fn check_facet_assignments(
         slots: &BTreeMap<FacetSlotKey, FacetSlot>,
         source: &SlotSource,
+        panic_at: PanicAt,
         explicit: impl Fn(IntegralFlag) -> Option<(bool, Span)>,
     ) -> syn::Result<()> {
         let operators = FACET_OPERATORS
@@ -456,6 +536,14 @@ impl Cfg {
             else {
                 continue;
             };
+            if panic_at.fallible() {
+                return span.fail(format!(
+                    "{} cannot report failure; panic_at = {} removes \
+                    assignment operators",
+                    flag.name(),
+                    panic_at.name(),
+                ));
+            }
             if !source.ty_out.is_self() {
                 return span
                     .fail("produce cannot generate assignment operators");
@@ -665,6 +753,21 @@ impl Cfg {
         &mut self,
         raw: Num,
     ) -> syn::Result<()> {
+        if self.panic_at.fallible() {
+            let level = self.panic_at.name();
+            if let Some(item) = self.prove.first() {
+                return item.name.fail(format!(
+                    "panic_at = {level} validates every result and takes no \
+                    `prove`"
+                ));
+            }
+            return self.deny_flags(&[IntegralFlag::Proven], |_| {
+                return format!(
+                    "panic_at = {level} validates every result and takes no \
+                    closure proofs"
+                );
+            });
+        }
         let Num::Int(int) = raw
         else {
             return Ok(());
@@ -792,7 +895,50 @@ impl Cfg {
             })?;
         }
 
+        if self.panic_at.fallible() {
+            self.settle_panic_at()?;
+        }
+
         return Ok(());
+    }
+
+    /// What `panic_at` below `anything` rules out: assignment operators,
+    /// which cannot report failure, and construction without validation
+    /// (`unsafe` friends, `with_blind_trust`).
+    fn settle_panic_at(&mut self) -> syn::Result<()> {
+        let level = self.panic_at.name();
+        let unsafe_friend = self.friends.iter().find_map(|friend| {
+            return friend.capabilities.iter().find(|it| {
+                return Capability::of(it) == Some(Capability::Unsafe);
+            });
+        });
+        if let Some(capability) = unsafe_friend {
+            return capability.fail(format!(
+                "`unsafe` friends construct without validation, which \
+                panic_at = {level} rules out"
+            ));
+        }
+        self.deny_flags(&[IntegralFlag::WithBlindTrust], |flag| {
+            return format!(
+                "{} constructs without validation, which panic_at = {level} \
+                rules out",
+                flag.name(),
+            );
+        })?;
+        self.deny_flags(&[IntegralFlag::FloatMath], |flag| {
+            return format!(
+                "{} returns `Self` from results it would have to panic on; \
+                panic_at = {level} leaves it out",
+                flag.name(),
+            );
+        })?;
+        return self.deny_flags(IntegralFlag::ASSIGN_FLAGS, |flag| {
+            return format!(
+                "{} cannot report failure; panic_at = {level} removes \
+                assignment operators",
+                flag.name(),
+            );
+        });
     }
 
     /// The default facet's snapshot of the resolved root, the facet slots,
@@ -956,6 +1102,13 @@ impl Cfg {
                         .fail("constness is specified in multiple places");
                 }
                 Key::Error => zz::parse_unit_error(rest)?,
+                Key::PanicAt if outer => self.panic_at = rest.parse()?,
+                Key::PanicAt => {
+                    return rest.span().fail(
+                        "panic_at belongs on integral types, not in \
+                        integral = [..]",
+                    );
+                }
                 Key::With => self.root.parse(rest, true, &GRAMMAR)?,
                 Key::Without => self.root.parse(rest, false, &GRAMMAR)?,
                 Key::Friend => {
@@ -1323,8 +1476,12 @@ pub(crate) enum IntegralName {
     MakeFn,
     /// `of`: the friend constructor.
     OfFn,
+    /// `try_of`: the friend constructor reporting failure.
+    TryOfFn,
     /// `_or_panic`: the validating, panicking constructor.
     OrPanic,
+    /// `_or_err`: validates an operation's `Option` of a raw result.
+    OrErr,
     /// `_blind_trust`: the constructor that skips validation.
     BlindTrust,
     /// `into_{type}`: a lossless conversion.
@@ -1376,7 +1533,9 @@ impl NameKey for IntegralName {
             }
             Self::MakeFn => "make".to_string(),
             Self::OfFn => "of".to_string(),
+            Self::TryOfFn => "try_of".to_string(),
             Self::OrPanic => "_or_panic".to_string(),
+            Self::OrErr => "_or_err".to_string(),
             Self::BlindTrust => "_blind_trust".to_string(),
             Self::Into(target) => format!("into_{}", target.rust_name()),
             Self::TryInto(target) => format!("try_into_{}", target.rust_name()),

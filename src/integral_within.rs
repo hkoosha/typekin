@@ -374,9 +374,10 @@ impl Maker {
     // Target side: emission
 
     /// The constructor of proven sources (`_within`): no validation, which a
-    /// `debug_assert!` still checks.
+    /// `debug_assert!` still checks. Construction that reports failure
+    /// validates every source instead.
     pub(crate) fn make_within(&self) -> TokenStream {
-        if self.within.is_empty() {
+        if self.within.is_empty() || self.ctx.failure.is_some() {
             return TokenStream::new();
         }
 

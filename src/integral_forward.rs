@@ -106,17 +106,43 @@ impl Maker {
         return self.ctx.cfg.flags.has(IntegralFlag::CoreInt)
             && self
                 .core_forward(name)
-                .is_some_and(|it| it.gate.applies(self.ctx.cfg.konst))
+                .is_some_and(|it| self.core_forward_applies(it))
             && !self.ctx.cfg.removals.removes(name);
     }
 
-    /// The row's sign and gate apply to this wrapper.
+    /// The row's sign and gate apply to this wrapper, and it panics no more
+    /// than `panic_at` allows (`core_forward_kept`).
     fn core_forward_applies(
         &self,
         forward: &CoreForward,
     ) -> bool {
         return forward.sign.applies(self.repr().is_signed())
-            && forward.gate.applies(self.ctx.cfg.konst);
+            && forward.gate.applies(self.ctx.cfg.konst)
+            && self.core_forward_kept(forward);
+    }
+
+    /// Below `panic_at = anything`, a forward stays only when its
+    /// signature cannot panic: reads and queries, unless the primitive
+    /// itself panics (`ilog*`) and `panic_at` checks such inputs, and the
+    /// `checked_*` methods. A validated `Self` would have to change its
+    /// return type to report failure, so those forwards are left out.
+    fn core_forward_kept(
+        &self,
+        forward: &CoreForward,
+    ) -> bool {
+        let level = self.ctx.cfg.panic_at;
+        if !level.fallible() {
+            return true;
+        }
+        return match forward.sig {
+            CoreSig::Read(_) | CoreSig::Base(_) | CoreSig::Query(..) => {
+                !forward.core_panics || !level.checks_division()
+            }
+            CoreSig::Method(CoreShape::Checked, _) => true,
+            CoreSig::Method(..) | CoreSig::From(_) | CoreSig::Custom(_) => {
+                false
+            }
+        };
     }
 
     /// One `core_int` forward, named `name`.
@@ -443,6 +469,7 @@ impl Maker {
 
     /// `_result_or_panic` validates an operation's raw result for the
     /// `core_int`, `core_float`, `float_math`, `Sum` and `Product` items.
+    /// Operations that report failure call none of those.
     fn make_result_helpers(&self) -> TokenStream {
         let flags = &self.ctx.cfg.flags;
         let used = [
@@ -454,7 +481,7 @@ impl Maker {
         ]
         .into_iter()
         .any(|it| flags.has(it));
-        if !used {
+        if !used || self.ctx.failure.is_some() {
             return TokenStream::new();
         }
         let el = &self.el;
@@ -623,6 +650,9 @@ pub(crate) struct CoreForward {
     gate: Gate,
     /// The closure-proof question; `None`: never proven.
     pub(crate) proof: Option<(ClosureOp, Policy)>,
+    /// The primitive function itself panics on some inputs, as `ilog2` on
+    /// a non-positive value does.
+    core_panics: bool,
 }
 
 impl CoreForward {
@@ -649,6 +679,7 @@ const fn row(
         sign: Sign::Any,
         gate: Gate::Always,
         proof: None,
+        core_panics: false,
     };
 }
 
@@ -733,6 +764,14 @@ const fn nightly(it: CoreForward) -> CoreForward {
     };
 }
 
+/// The primitive function panics on some inputs.
+const fn core_panics(it: CoreForward) -> CoreForward {
+    return CoreForward {
+        core_panics: true,
+        ..it
+    };
+}
+
 /// The `core_int` forwards, in emission order: the common rows, then the
 /// signed or the unsigned ones. `abs_diff` has a row per sign.
 const CORE_INT_FORWARDS: &[CoreForward] = {
@@ -770,9 +809,9 @@ const CORE_INT_FORWARDS: &[CoreForward] = {
         read(FnName::TrailingOnes, U32),
         read(FnName::HighestOne, OptionU32),
         read(FnName::LowestOne, OptionU32),
-        base(FnName::Ilog, U32),
-        read(FnName::Ilog2, U32),
-        read(FnName::Ilog10, U32),
+        core_panics(base(FnName::Ilog, U32)),
+        core_panics(read(FnName::Ilog2, U32)),
+        core_panics(read(FnName::Ilog10, U32)),
         base(FnName::CheckedIlog, OptionU32),
         read(FnName::CheckedIlog2, OptionU32),
         read(FnName::CheckedIlog10, OptionU32),
