@@ -1103,6 +1103,80 @@ mod tests {
     }
 
     #[test]
+    fn rejects_an_unknown_panic_level() {
+        let input = "panic_at = sometimes";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "expected `anything`, `arithmetic`, `overflow`, or `nothing`",
+        );
+    }
+
+    #[test]
+    fn rejects_assignment_when_operations_report_failure() {
+        let input = "konst = none, panic_at = nothing, with = assign_add";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "assign_add cannot report failure; panic_at = nothing removes assignment operators",
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_friends_when_operations_report_failure() {
+        let input = "
+            konst = none,
+            panic_at = arithmetic,
+            friend = convert(Source) -> unsafe,
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`unsafe` friends construct without validation, which panic_at = arithmetic rules out",
+        );
+    }
+
+    #[test]
+    fn rejects_blind_trust_when_operations_report_failure() {
+        let input =
+            "konst = none, panic_at = overflow, with = with_blind_trust";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "with_blind_trust constructs without validation, which panic_at = overflow rules out",
+        );
+    }
+
+    #[test]
+    fn rejects_facet_assignment_when_operations_report_failure() {
+        let input = "
+            konst = none,
+            panic_at = nothing,
+            facet = [
+                int {
+                    friend = convert(Source) -> Math,
+                    with = assign_add,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "assign_add cannot report failure; panic_at = nothing removes assignment operators",
+        );
+    }
+
+    #[test]
     fn rejects_contradictory_facet_flags() {
         let input = "
             konst = none,

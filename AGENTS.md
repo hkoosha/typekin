@@ -286,6 +286,18 @@ constness, and runtime cost as API behavior.
 - `produce = callback(_) -> Type` calls the callback once on an already
   validated operator result. A non-`Self` output disables incompatible
   assignment operators.
+- `panic_at = anything | arithmetic | overflow | nothing` (wrapper-wide; not
+  in bitflag's `integral = [..]`) names what generated code may still panic
+  on. Below `anything`: operators output `Result<T, Option<Raw>>` through the
+  private `_or_err(Option<Raw>)` (`Some(raw)` invalid, `None` no result);
+  `Arithmetic::make_fallible_*` check `sequential` always, division from
+  `overflow`, overflow at `nothing`. Every result is validated (no proofs,
+  no `_proven`/`_within`, no `_or_panic` on validated types). A function never
+  changes its signature with the level: one that would have to panic is
+  omitted (`of` → `try_of`, `map`, assignments, validated `core_*` and
+  `float_math` forwards, `ilog*` where division is checked), and `Sum`/
+  `Product` are impls on the `Result`. `unsafe` friends, `with_blind_trust`,
+  explicit assignments, `proven`/`prove`, and `float_math` are errors.
 - An integral domain excluding zero selects `NonZero` storage; `wrapping` can
   select `Wrapping` storage. Rewritten storage requires a private field and
   `raw()` still exposes the primitive; `NonZero` storage has no `AsRef<raw>`

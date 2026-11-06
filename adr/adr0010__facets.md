@@ -46,7 +46,9 @@ and output conversion.
   turning facets on. An explicit `assign_*` needs a `Self` output and an owned
   slot of its operator; shift assignments stay wrapper-wide. The assignment is
   const only with its operator, and an explicit `konst_*` splitting them is an
-  error. (Amended: assignments were first rejected; see below.)
+  error. (Amended: assignments were first rejected; see below.) Below
+  `panic_at = anything` (ADR 0028) slots output a `Result` and get no
+  assignments.
 - Constness (`konst`), `non_zero`, `precedes` and removals are wrapper-wide and
   cannot be set per facet. One exception: a `wrapping` profile on any facet
   switches the whole wrapper to `Wrapping` storage (ADR 0011), and each slot

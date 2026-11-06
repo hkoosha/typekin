@@ -80,6 +80,7 @@ mod unit;
 /// - `facet = FACET | [FACET, ...]`
 /// - `tree = NODE | [NODE | without = FLAGS, ...]`
 /// - `hide_in = MODULE | none`
+/// - `panic_at = anything | arithmetic | overflow | nothing`
 ///
 /// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, `point`,
 /// or `nominal`. A profile body accepts `with` and `without`; only `circular`
@@ -97,6 +98,21 @@ mod unit;
 /// are re-exported at the call site, so the tuple constructor and a private
 /// field stay unreachable even from the defining module. `hide_in = none`
 /// disables this; `get_raw` and a custom `_or_panic` require it.
+///
+/// `panic_at` says what generated code may still panic on: `anything` (the
+/// default), `arithmetic` (only Rust's division by zero and overflow),
+/// `overflow` (only Rust's `overflow-checks`, off in release builds), or
+/// `nothing`. Below `anything`, every operator returns
+/// `Result<Output, Option<Raw>>`: `Err(Some(raw))` for a result that fails
+/// validation, `Err(None)` when there is no result (`sequential` overflow;
+/// division by zero and `MIN / -1` from `overflow`; any overflow at
+/// `nothing`). Every result is validated; domain proofs are not used.
+/// Functions keep their signatures, so those that would have to panic are
+/// left out: assignment operators, `of` (`try_of` returns
+/// `Result<Self, Raw>`), `map` (`try_map` remains), and the `core_int`,
+/// `core_float`, and `float_math` functions returning a validated `Self`
+/// (`checked_*` and reads remain). `Sum` and `Product` collect into the
+/// operators' `Result`. `unsafe` friends and `with_blind_trust` are errors.
 ///
 /// `FLAG` is an integral generation, operation, friendship, storage, or
 /// `konst_*` flag. `Math` expands to `Make` and `Bit` for integral friends.
@@ -203,7 +219,8 @@ pub fn integral(
 ///   Generic float structs require that value field to be private.
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `math`, `error`, `friend`, `with`, `without`, `get_raw`, `produce`,
-///   `profile` (`int` or `point`), `facet`, `tree`, and `hide_in`.
+///   `profile` (`int` or `point`), `facet`, `panic_at`, `tree`, and
+///   `hide_in`.
 ///
 /// Floats share the integral configuration. Differences:
 ///
@@ -285,7 +302,7 @@ pub fn float(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`.
+///   `panic_at`, `tree`, and `hide_in`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = int, ...)]`; it does
 /// not accept `profile`.
@@ -305,7 +322,7 @@ pub fn int(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, `hide_in`, and `precedes = bool`.
+///   `panic_at`, `tree`, `hide_in`, and `precedes = bool`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = circular, ...)]`.
 /// `precedes` configures the selected circular profile directly; `profile` is
@@ -326,7 +343,7 @@ pub fn circular(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`.
+///   `panic_at`, `tree`, and `hide_in`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = delta, ...)]`; it does
 /// not accept `profile` or `precedes`.
@@ -346,7 +363,7 @@ pub fn delta(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`.
+///   `panic_at`, `tree`, and `hide_in`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = sequential, ...)]`; it
 /// does not accept `profile` or `precedes`.
@@ -366,7 +383,7 @@ pub fn sequential(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`.
+///   `panic_at`, `tree`, and `hide_in`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = wrapping, ...)]`; it
 /// does not accept `profile` or `precedes`.
@@ -386,7 +403,7 @@ pub fn wrapping(
 ///   [`integral`], or the `f32`/`f64` tuple struct accepted by [`float`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`; float fields also accept `math`.
+///   `panic_at`, `tree`, and `hide_in`; float fields also accept `math`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = point, ...)]` or
 /// `#[typekin::float(profile = point, ...)]`; it does not accept `profile` or
@@ -410,7 +427,7 @@ pub fn point(
 ///   [`integral`].
 /// - All configuration arguments are optional: `konst`, `valid`, `domain`,
 ///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `tree`, and `hide_in`.
+///   `panic_at`, `tree`, and `hide_in`.
 ///
 /// This is equivalent to `#[typekin::integral(profile = nominal, ...)]`; it
 /// does not accept `profile` or `precedes`. A nominal value keeps

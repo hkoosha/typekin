@@ -186,3 +186,8 @@ packed: packed-expand fmt
 nominal-expand: (z-expand 'my_nominal')
 [group("example")]
 nominal: nominal-expand fmt
+
+[group("example")]
+panic-at-expand: (z-expand 'my_panic_at')
+[group("example")]
+panic-at: panic-at-expand fmt

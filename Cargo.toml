@@ -168,3 +168,9 @@ path = "examples/my_nominal.rs"
 [[example]]
 name = "my_nominal_exp"
 path = "examples/my_nominal_exp.rs"
+[[example]]
+name = "my_panic_at"
+path = "examples/my_panic_at.rs"
+[[example]]
+name = "my_panic_at_exp"
+path = "examples/my_panic_at_exp.rs"

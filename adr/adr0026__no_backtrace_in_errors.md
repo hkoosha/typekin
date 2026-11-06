@@ -20,7 +20,8 @@ integral paths that can fail:
 - Serde deserialization, with `with = serde`.
 
 Operators, `make`, `map`, and friend construction panic through `_or_panic` or
-`_result_or_panic` instead of returning an error.
+`_result_or_panic` instead of returning an error, unless `panic_at` is below
+`anything` (ADR 0028), which returns the same `Copy` errors.
 
 ## Decision
 

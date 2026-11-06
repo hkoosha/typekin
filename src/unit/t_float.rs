@@ -1160,6 +1160,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_float_math_when_operations_report_failure() {
+        let input = "math = std, with = float_math, panic_at = nothing";
+        let error = config_error(input);
+
+        assert_eq!(
+            error,
+            "float_math returns `Self` from results it would have to panic on; panic_at = nothing leaves it out",
+        );
+    }
+
+    #[test]
     fn unsigned_integral_math_neg_is_rejected() {
         let input = "with = math_neg";
         let error = integral_expansion(input, N::U032).unwrap_err().to_string();

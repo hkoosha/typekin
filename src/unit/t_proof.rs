@@ -194,6 +194,30 @@ mod tests {
     }
 
     #[test]
+    fn rejects_proofs_when_operations_report_failure() {
+        let input = "panic_at = nothing, with = proven, domain = ..=100";
+        let expansion = expansion_of(input, N::U008);
+        assert!(expansion.is_err(), "{input}");
+
+        assert_eq!(
+            expansion.unwrap_err().to_string(),
+            "panic_at = nothing validates every result and takes no closure proofs"
+        );
+    }
+
+    #[test]
+    fn rejects_prove_when_operations_report_failure() {
+        let input = "panic_at = arithmetic, domain = ..=100, prove = math_rem";
+        let expansion = expansion_of(input, N::U008);
+        assert!(expansion.is_err(), "{input}");
+
+        assert_eq!(
+            expansion.unwrap_err().to_string(),
+            "panic_at = arithmetic validates every result and takes no `prove`"
+        );
+    }
+
+    #[test]
     fn prove_reports_a_counterexample() {
         let input = "domain = ..=100, prove = math_add";
         let expansion = expansion_of(input, N::U008);

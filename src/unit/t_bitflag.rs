@@ -225,6 +225,18 @@ mod tests {
     }
 
     #[test]
+    fn rejects_panic_at_in_nested_integral_configuration() {
+        let it = "integral = [panic_at = nothing]";
+        let this = syn::parse_str::<Cfg>(it);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "panic_at belongs on integral types, not in integral = [..]",
+        );
+    }
+
+    #[test]
     fn rejects_produce_in_integral() {
         let it = "
             integral = [
