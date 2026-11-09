@@ -17,8 +17,13 @@ use crate::integral::{
 use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
+    Translation,
+    translate,
 };
-use crate::integral_proof::OperatorProof;
+use crate::integral_compute::{
+    Body,
+    OpRef,
+};
 use crate::zz_friend::{
     Capability,
     Friend,
@@ -32,43 +37,21 @@ use crate::zz_lib::{
     OnInvalid,
     unwrap_or_panic,
 };
-use crate::zz_profile_integral::Arithmetic;
+use crate::zz_profile_integral::{
+    RhsKind,
+    Slot,
+};
 use crate::zz_runner::Merged;
 use crate::zz_values::{
     F,
     N,
     Num,
     OPS,
-    Op,
     OpKind,
     OpSpec,
     Width,
     by_width_grouped,
 };
-
-/// The inherent items, in output order: conversions, the math helpers,
-/// `precedes`, comparisons, and construction.
-const ITEM_EMITTERS: &[fn(&Maker) -> TokenStream] = &[
-    Maker::make_fn_conv_of,
-    Maker::make_auto_of_raw,
-    Maker::make_fn_conv_raw,
-    Maker::make_fn_conv_into,
-    Maker::make_map,
-    Maker::make_fn_conv_try_into_lossless,
-    Maker::make_fn_conv_try_into_lossy,
-    Maker::make_fn_math_helpers,
-    Maker::make_precedes,
-    Maker::make_fn_op_eq,
-    Maker::make_fn_op_cmp,
-    Maker::make_fn_make_try,
-    Maker::make_or_panic,
-    Maker::make_or_err,
-    Maker::make_proven,
-    Maker::make_blind_trust,
-    Maker::make_within,
-    Maker::make_within_proofs,
-    Maker::make_within_source,
-];
 
 /// Bit-access part types after the halves, in output order.
 const BIT_PARTS: [N; 4] = [
@@ -79,29 +62,30 @@ const BIT_PARTS: [N; 4] = [
 ];
 
 impl Maker {
-    /// The inherent items of `ITEM_EMITTERS`, in output order.
-    pub(crate) fn item_fns(&self) -> TokenStream {
-        return ITEM_EMITTERS.iter().map(|emit| emit(self)).merged();
-    }
-
-    /// `pub(self) #konst fn #name(&self, [rhs: #rhs,]) -> Self`: applies
-    /// `expression` to the raw `lhs` (and `rhs`) and returns `result`. When
-    /// operations report failure, `expression` is an `Option` of the raw
-    /// result and the helper returns `_or_err`'s `Result`.
+    /// `pub(self) #konst fn #name(&self, [rhs: #rhs,])`: binds the raw
+    /// `lhs`, computes `body` from it (and `rhs`) and constructs the
+    /// result. A helper's output is free: where a failure may not panic it
+    /// is `_or_err`'s `Result`.
     fn validating_helper(
         &self,
         konst: &Option<TokenStream>,
         name: &Ident,
         rhs: Option<&TokenStream>,
-        expression: &TokenStream,
-        result: &TokenStream,
+        body: &Body,
     ) -> TokenStream {
+        let panic_at = self.ctx.cfg.wide.panic_at;
+        let Some(translation) = translate(body.fails, panic_at, false)
+        else {
+            return TokenStream::new();
+        };
         let get_raw = &self.ctx.get_raw;
         let rhs = rhs.map(|rhs| quote! { rhs: #rhs, });
-        let output = match &self.ctx.failure {
+        let output = match self.passed_failure(body.fails, translation) {
             Some(failure) => quote! { ::core::result::Result<Self, #failure> },
             None => quote! { Self },
         };
+        let expression = &body.tokens;
+        let result = self.constructed(body.fails, translation, quote! { it });
         return quote! {
             #[inline(always)]
             pub(self) #konst fn #name(
@@ -115,119 +99,79 @@ impl Maker {
         };
     }
 
-    /// The validating helper `name` (a proven result skips validation), plus
-    /// a `_proven` sibling when only same-type operands are proven
-    /// (`same_type_helper`). Reporting failure, every result goes through
-    /// `_or_err` instead.
-    fn proven_helpers(
-        &self,
-        konst: &Option<TokenStream>,
-        name: &Ident,
-        rhs: &TokenStream,
-        expression: &TokenStream,
-        proof: OperatorProof,
-    ) -> TokenStream {
-        if self.ctx.failure.is_some() {
-            let or_err = self.ctx.names.get(IntegralName::OrErr);
-            return self.validating_helper(
-                konst,
-                name,
-                Some(rhs),
-                expression,
-                &quote! { Self::#or_err(it) },
-            );
-        }
-        let fp_or_panic = &self.ctx.fp_or_panic;
-        let helper = |name: &Ident, proven: bool| {
-            let constructor =
-                self.proven_constructor(proven, quote! { #fp_or_panic });
-            let result = quote! { #constructor(it) };
-            return self.validating_helper(
-                konst,
-                name,
-                Some(rhs),
-                expression,
-                &result,
-            );
-        };
-        let mut stream = helper(name, proof.full);
-        let same = Self::same_type_helper(proof, name);
-        if same != *name {
-            stream.extend(helper(&same, true));
-        }
-        return stream;
-    }
-
-    /// `operator` on the raw operands: panicking, or an `Option` of the
-    /// result when operations report failure.
-    fn operator_expr(
-        &self,
-        operator: &OpSpec,
-        is_konst: bool,
-    ) -> TokenStream {
-        let arithmetic = self.ctx.cfg.profile.arithmetic();
-        if self.ctx.failure.is_some() {
-            return arithmetic.make_fallible_expr(
-                operator,
-                self.ctx.cfg.wide.panic_at,
-                matches!(self.num, Num::Float(_)),
-                is_konst,
-            );
-        }
-        return arithmetic.make_operator_expr(operator, is_konst);
-    }
-
-    /// The validating `_{method}` helper of a binary operator, and its
-    /// non-const `_wrapping` twin where it has one. A shift takes its amount
-    /// as `usize`.
+    /// The validating `_{method}` helper of a binary operator: the body of
+    /// every impl of `slot`'s row. A shift takes its amount as `usize`. The
+    /// arithmetic of `Wrapping` adds the non-const `_wrapping` twin, and a
+    /// proof for same-type operands only adds the `_proven` sibling of the
+    /// wrapper's own right-hand side.
     fn make_fn_math_binary(
         &self,
         operator: &OpSpec,
+        slot: &Slot,
     ) -> TokenStream {
         let el = &self.el;
         let rhs_type = match operator.kind == OpKind::Shift {
             true => quote! { usize },
             false => quote! { #el },
         };
-        let proof = self.operator_proof(operator);
-        let mut stream = self.proven_helpers(
-            &Konst::konst(self.ctx.cfg.helper_konst()),
-            &self.arithmetic_method_name(operator, true),
-            &rhs_type,
-            &self.operator_expr(operator, true),
-            proof,
-        );
-        if !self.has_wrapping_helper(operator) {
-            return stream;
+        let same = Slot {
+            rhs: RhsKind::Same,
+            ..slot.clone()
+        };
+        let mut stream = TokenStream::new();
+        for konst in [
+            true,
+            false,
+        ] {
+            if !konst && !self.has_wrapping_helper(operator, slot) {
+                continue;
+            }
+            let row = OpRef::Operator {
+                spec: operator,
+                konst,
+            };
+            let helper_konst =
+                Konst::konst(konst && self.ctx.cfg.helper_konst());
+            let name = self.helper_name(operator, slot, konst);
+            stream.extend(self.validating_helper(
+                &helper_konst,
+                &name,
+                Some(&rhs_type),
+                &self.compute(row, slot),
+            ));
+            let sibling = self.helper_name(operator, &same, konst);
+            if sibling != name {
+                stream.extend(self.validating_helper(
+                    &helper_konst,
+                    &sibling,
+                    Some(&rhs_type),
+                    &self.compute(row, &same),
+                ));
+            }
         }
-        stream.extend(self.proven_helpers(
-            &Konst::konst(false),
-            &self.arithmetic_method_name(operator, false),
-            &rhs_type,
-            &self.operator_expr(operator, false),
-            proof,
-        ));
         return stream;
     }
 
-    /// The enabled validating helpers that an emitted operator or
-    /// assignment impl calls, in `OPS` order.
-    fn make_fn_math_helpers(&self) -> TokenStream {
-        let flags = &self.ctx.cfg.flags;
+    /// The validating helpers that the operator and assignment impls call,
+    /// in `OPS` order: those of each row with its `fn_math_*` flag on whose
+    /// slots call a helper. Any raw value reaches a helper, so its body is
+    /// that of the row's last slot (a friend's, or a shift's amount).
+    pub(crate) fn make_fn_math_helpers(&self) -> TokenStream {
+        let cfg = &self.ctx.cfg;
         return OPS
             .iter()
-            .filter(|operator| {
-                return flags.has(IntegralFlag::of_op(operator.op).helper)
-                    && (self.with_operator(operator)
-                        || self.with_assignment(operator));
-            })
-            .map(|operator| {
-                return match operator.kind {
+            .filter_map(|operator| {
+                let slot = cfg.slots.of(operator.op).last()?;
+                let helper = IntegralFlag::of_op(operator.op).helper;
+                if slot.is_facet() || !cfg.flags.has(helper) {
+                    return None;
+                }
+                return Some(match operator.kind {
                     OpKind::Arith | OpKind::Bitwise | OpKind::Shift => {
-                        self.make_fn_math_binary(operator)
+                        self.make_fn_math_binary(operator, slot)
                     }
-                    OpKind::Unary => self.make_fn_math_unary(operator),
-                };
+                    OpKind::Unary => self.make_fn_math_unary(operator, slot),
+                });
             })
             .merged();
     }
@@ -335,7 +279,9 @@ impl Maker {
         let bound = Konst::bound(is_konst, quote! { #what #arguments });
         let parameter = self.target.fresh_ident("T");
 
-        if self.ctx.failure.is_some() {
+        // `of` returns the type itself: where a friend's invalid value may
+        // not panic, it gives way to `try_of`.
+        if self.fixed_form().is_none() {
             let el = &self.el;
             let fn_try_of = self.ctx.names.get(IntegralName::TryOfFn);
             return quote! {
@@ -440,8 +386,8 @@ impl Maker {
             .merged();
     }
 
-    /// `try_map`, and `map` unless construction reports failure: `map`
-    /// would then return what `try_map` does.
+    /// `try_map`, and `map` where an invalid mapped value may panic: `map`
+    /// returns `Self`, and ingress keeps its own panic message.
     pub(crate) fn make_map(&self) -> TokenStream {
         if !self.ctx.cfg.flags.has(IntegralFlag::Map) {
             return TokenStream::new();
@@ -460,7 +406,7 @@ impl Maker {
             Check::Validate,
             OnInvalid::Err(quote! { value }),
         );
-        let map = self.ctx.failure.is_none().then(|| {
+        let map = self.fixed_form().map(|_| {
             let mapped = unwrap_or_panic(
                 quote! { self.try_map(function) },
                 "mapping operation produced an invalid value",
@@ -729,93 +675,25 @@ impl Maker {
             .collect();
     }
 
-    /// `-lhs` under the profile's arithmetic, panicking where it may.
-    fn panicking_neg(&self) -> TokenStream {
-        return match (self.num, self.ctx.cfg.profile.arithmetic()) {
-            (Num::Float(_), _) | (Num::Int(_), Arithmetic::Primitive) => {
-                quote! { -lhs }
-            }
-            (
-                Num::Int(_),
-                Arithmetic::PrimitiveWrapping | Arithmetic::WrapperWrapping,
-            ) => quote! { lhs.wrapping_neg() },
-            (Num::Int(_), Arithmetic::Checked) => quote! {
-                match lhs.checked_neg() {
-                    ::core::option::Option::Some(value) => value,
-                    ::core::option::Option::None => {
-                        ::core::panic!("operation overflowed");
-                    }
-                }
-            },
-        };
-    }
-
-    /// `-lhs` as an `Option`: `sequential` always checks, `int` checks at
-    /// `nothing`, and wrapping or float negation cannot fail.
-    fn fallible_neg(&self) -> TokenStream {
-        let checked = match (self.num, self.ctx.cfg.profile.arithmetic()) {
-            (Num::Float(_), _) => false,
-            (Num::Int(_), Arithmetic::Checked) => true,
-            (Num::Int(_), Arithmetic::Primitive) => {
-                self.ctx.cfg.wide.panic_at.checks_overflow()
-            }
-            (
-                Num::Int(_),
-                Arithmetic::PrimitiveWrapping | Arithmetic::WrapperWrapping,
-            ) => {
-                return quote! {
-                    ::core::option::Option::Some(lhs.wrapping_neg())
-                };
-            }
-        };
-        return match checked {
-            true => quote! { lhs.checked_neg() },
-            false => quote! { ::core::option::Option::Some(-lhs) },
-        };
-    }
-
     /// The validating `_neg` or `_not` helper, which only its operator impl
-    /// calls. Floats and `Primitive` integers negate like the raw type; the
-    /// other integer policies wrap or check like their binary operators. A
-    /// result the domain proves valid is constructed without the check.
+    /// calls. A result that cannot fail runs no validation, so its helper
+    /// is `const` whatever the configuration.
     fn make_fn_math_unary(
         &self,
         operator: &OpSpec,
+        slot: &Slot,
     ) -> TokenStream {
-        let symbol = operator.token();
-        let expression = match (operator.op, &self.ctx.failure) {
-            (Op::Neg, Some(_)) => self.fallible_neg(),
-            (Op::Neg, None) => self.panicking_neg(),
-            (_, Some(_)) => {
-                quote! { ::core::option::Option::Some(#symbol lhs) }
-            }
-            (_, None) => quote! { #symbol lhs },
+        let row = OpRef::Operator {
+            spec: operator,
+            konst: true,
         };
-        let closed = self.unary_proven(operator);
-        let (konst, result) =
-            match (&self.ctx.failure, self.closed_result(closed)) {
-                (Some(_), _) => {
-                    let or_err = self.ctx.names.get(IntegralName::OrErr);
-                    (
-                        Konst::konst(self.ctx.cfg.helper_konst()),
-                        quote! { Self::#or_err(it) },
-                    )
-                }
-                (None, Some(constructed)) => (Konst::konst(true), constructed),
-                (None, None) => {
-                    let fp_or_panic = &self.ctx.fp_or_panic;
-                    (
-                        Konst::konst(self.ctx.cfg.helper_konst()),
-                        quote! { #fp_or_panic(it) },
-                    )
-                }
-            };
+        let body = self.compute(row, slot);
+        let konst = Konst::konst(!body.fails || self.ctx.cfg.helper_konst());
         return self.validating_helper(
             &konst,
             &format_ident!("_{}", operator.method),
             None,
-            &expression,
-            &result,
+            &body,
         );
     }
 
@@ -953,26 +831,28 @@ impl Maker {
         return any_friend_has(&self.ctx.cfg.friends, capability);
     }
 
-    /// The validating, panicking constructor (`_or_panic`). Reporting
-    /// failure, a validated type has none: `_or_err` validates instead.
-    fn make_or_panic(&self) -> TokenStream {
-        if !self.ctx.cfg.flags.has(IntegralFlag::FnOrPanic)
-            || (self.ctx.failure.is_some()
-                && self.ctx.cfg.validation.has_validation())
-        {
+    /// The constructor a failure panics in (`_or_panic`): it validates and
+    /// panics with the translation's message, or just constructs where
+    /// there is nothing to validate. Its output is fixed, so a validated
+    /// type has none where a failure may not panic: `_or_err` validates
+    /// instead.
+    pub(crate) fn make_or_panic(&self) -> TokenStream {
+        if !self.ctx.cfg.flags.has(IntegralFlag::FnOrPanic) {
             return TokenStream::new();
         }
 
         let el = &self.el;
         let or_panic = self.ctx.names.get(IntegralName::OrPanic);
         let konst = Konst::konst(self.ctx.cfg.helper_konst());
-        let body = match self.ctx.cfg.validation.has_validation() {
-            true => self.construction(
+        let fails = self.ctx.cfg.validation.has_validation();
+        let body = match translate(fails, self.ctx.cfg.wide.panic_at, true) {
+            None => return TokenStream::new(),
+            Some(Translation::Unwrap(message)) => self.construction(
                 quote! { it },
                 Check::Validate,
-                OnInvalid::Panic("invalid value"),
+                OnInvalid::Panic(message),
             ),
-            false => {
+            Some(Translation::Pass) => {
                 let constructed = self.construct_self(quote! { it });
                 quote! { return #constructed; }
             }
@@ -988,8 +868,8 @@ impl Maker {
 
     /// `_or_err`: an operation's `Option` of a raw result, validated. Its
     /// error is `Some(raw)` for an invalid result and `None` when there is
-    /// none. Only emitted when operations report failure.
-    fn make_or_err(&self) -> TokenStream {
+    /// none. Only emitted where a failing operator passes its `Result` on.
+    pub(crate) fn make_or_err(&self) -> TokenStream {
         let Some(failure) = &self.ctx.failure
         else {
             return TokenStream::new();
@@ -1018,7 +898,7 @@ impl Maker {
     }
 
     /// The constructor of results a closure proof shows valid (`_proven`).
-    fn make_proven(&self) -> TokenStream {
+    pub(crate) fn make_proven(&self) -> TokenStream {
         if !self.proofs_available() {
             return TokenStream::new();
         }
@@ -1043,7 +923,7 @@ impl Maker {
 
     /// The unvalidated constructor (`_blind_trust`), for `with_blind_trust`
     /// or an `unsafe` friend.
-    fn make_blind_trust(&self) -> TokenStream {
+    pub(crate) fn make_blind_trust(&self) -> TokenStream {
         let with_blind_trust =
             self.ctx.cfg.flags.has(IntegralFlag::WithBlindTrust);
         if !with_blind_trust && !self.has_friend_with(Capability::Unsafe) {

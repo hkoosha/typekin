@@ -2,12 +2,12 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-06
-- Related: `src/integral_cfg.rs` (`PanicAt`, `settle_panic_at`),
-  `src/zz_profile_integral.rs` (`make_fallible_expr`), `src/integral_items.rs`
+- Related: `src/integral_cfg.rs` (`PanicAt`, `settle_panic_at`, `translate`),
+  `src/integral_compute.rs` (`Maker::compute`), `src/integral_items.rs`
   (`_or_err`, `try_of`), `src/zz_conv.rs` (`OperatorOutput`),
   `src/zz_friend.rs` (`Make::try_make`), `src/integral_forward.rs`
-  (`core_forward_kept`), `src/float.rs` (`Sum`/`Product`),
-  `examples/my_panic_at.rs`, ADR 0010, ADR 0026
+  (the forwards kept below `anything`), `src/float.rs` (`Sum`/`Product`),
+  `examples/my_panic_at.rs`, ADR 0010, ADR 0026, ADR 0033
 
 ## Context
 

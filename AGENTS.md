@@ -37,9 +37,11 @@ constness, and runtime cost as API behavior.
   emission for each macro family. `src/integral.rs` holds the integral entry
   (`ekran`, `ekran_with`), the target and storage model, and the emitter
   orchestration; its siblings hold the rest: `integral_cfg.rs` (configuration,
-  the wrapper-wide settings `WrapperWide`, flags, and resolution),
-  `integral_friend.rs` (friend protocol and facet dispatch),
-  `integral_impls.rs` (trait and operator impls), `integral_items.rs`
+  the wrapper-wide settings `WrapperWide`, flags, resolution, the slot
+  builder, and `translate`), `integral_compute.rs` (`Maker::compute`: the one
+  writer of an operation's computation), `integral_friend.rs` (friend protocol
+  and facet dispatch), `integral_impls.rs` (trait and operator impls),
+  `integral_items.rs`
   (inherent items), `integral_forward.rs` (the emitter of the `core` forwards,
   integer and float, from their rows), `integral_proof.rs` (closure-proof use
   and `prove`), and `integral_within.rs` (`Within` friends and the constants
@@ -303,14 +305,15 @@ constness, and runtime cost as API behavior.
   in bitflag's `integral = [..]`) names what generated code may still panic
   on. Below `anything`: operators output `Result<T, Option<Raw>>` through the
   private `_or_err(Option<Raw>)` (`Some(raw)` invalid, `None` no result);
-  `Arithmetic::make_fallible_*` check `sequential` always, division from
-  `overflow`, overflow at `nothing`. Every result is validated (no proofs,
-  no `_proven`/`_within`, no `_or_panic` on validated types). A function never
+  `Maker::compute` checks `sequential` always, division from `overflow`,
+  overflow at `nothing`. Every result is validated (no proofs, no
+  `_proven`/`_within`, no `_or_panic` on validated types). A function never
   changes its signature with the level: one that would have to panic is
-  omitted (`of` → `try_of`, `map`, assignments, validated `core_*` and
-  `float_math` forwards, `ilog*` where division is checked), and `Sum`/
-  `Product` are impls on the `Result`. `unsafe` friends, `with_blind_trust`,
-  explicit assignments, `proven`/`prove`, and `float_math` are errors.
+  omitted (`translate` returns `None`: `of` → `try_of`, `map`, assignments,
+  validated `core_*` and `float_math` forwards, `ilog*` where division is
+  checked), and `Sum`/`Product` are impls on the `Result`. `unsafe` friends,
+  `with_blind_trust`, explicit assignments, `proven`/`prove`, and `float_math`
+  are errors.
 - An integral domain excluding zero selects `NonZero` storage; `wrapping` can
   select `Wrapping` storage. Rewritten storage requires a private field and
   `raw()` still exposes the primitive; `NonZero` storage has no `AsRef<raw>`
@@ -503,11 +506,28 @@ constness, and runtime cost as API behavior.
   machinery. Integral may rewrite storage and append marker fields.
 - An emitter is a `&self` method that returns one generated trait or impl group,
   with its flag check as an early return. The orchestrators (integral's
-  `ekran_impls`, `ekran_items` and their slices `impls_head`, `impls_body`,
-  `item_fns`, `forward_items`; text's and bitflag's `ekran`) are only ordered
-  lists of calls, and that order is part of the public output. Keep logic
-  functions under about 100 lines: `just fn-lengths` lists only data tables
-  (`FnName::name`) and single straight `quote!` impls (`ekran_iter`).
+  `ekran` with its sections `ekran_declarations`, `ekran_items`, and
+  `ekran_impls`; text's and bitflag's `ekran`) are section lists: after the
+  annotated item come declarations, protocol traits, inherent items, and trait
+  impls. Inside a section the order follows the tables: rows in table order
+  (`OPS`, the forward rows), each row's slots in slot order (same type, then
+  friends or the raw amount; facet claims in declaration order, the default
+  facet last), and each slot's forms in form order (regular, then assignment).
+  That order is deterministic but not part of the public output; only "the
+  annotated item comes first" is promised. Keep logic functions under about
+  100 lines; only data tables and single straight `quote!` impls
+  (`ekran_iter`) are longer.
+- Every generated operation passes through five stages, each with one owner
+  (ADR 0033): the operation is a row (`OpSpec`, `CoreFwd`) or an ingress
+  constructor; its right-hand side is a `Slot` of the wrapper's `Slots`
+  (`RhsKind`, arithmetic, `produce`), built once from the root or the facets;
+  `Maker::compute(row, slot)` alone writes the computation (profile
+  arithmetic, the `panic_at` level, `Step`) and says whether it can fail
+  (`Body`); construction goes through `Maker::construction`; and
+  `integral_cfg::translate(fails, panic_at, fixed_output)` alone decides
+  whether a form exists and whether a failure is passed on or panics. Do not
+  branch on `panic_at`, a proof, or "facets or not" in an emitter; read the
+  slot, the `Body`, and the `Translation`.
 - Match local style. Explicit `return` is intentional
   (`needless_return = "allow"`). rustfmt uses an 80-column limit, vertical
   imports and parameters, and `ClosingNextLine` braces.

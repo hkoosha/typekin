@@ -1,16 +1,18 @@
 # PLAN_0: one operation model for code generation
 
-Status (2026-11-08): design only, nothing implemented. This plan starts after
-PLAN.md is fully implemented (check levels, operation forms, removing checks,
-friends with a typekin domain; recorded in ADRs 0028-0032). It changes how
-typekin is written. Generated code changes only as §5.1 decides: item order
-(D0.1), the `assign_xor` flag (D0.2), diagnostic spans (D0.3), forward
-attributes (D0.6), and bitflag value-type storage where PLAN.md chose
-differently (D0.5). D0.8 changes typekin's own rustdoc.
+Status (2026-11-09): applied to the tree as it stood, before PLAN.md (the
+user's decision); §13 says what landed and what waits for PLAN.md, and ADR
+0033 records the decisions. The text below is the plan as written on
+2026-11-08, when it was meant to start after PLAN.md (check levels, operation
+forms, removing checks, friends with a typekin domain). It changes how typekin
+is written. Generated code changes only as §5.1 decides: item order (D0.1),
+the `assign_xor` flag (D0.2), diagnostic spans (D0.3), forward attributes
+(D0.6), and bitflag value-type storage where PLAN.md chose differently
+(D0.5). D0.8 changes typekin's own rustdoc.
 
 The inventory in §3 comes from a read-only survey of the tree as it was on
 2026-11-08, before PLAN.md. Nothing was built for it. References marked
-"(pre-PLAN)" must be re-mapped in Phase 0 before any change.
+"(pre-PLAN)" describe that tree.
 
 ## 1. Goal
 
@@ -878,10 +880,10 @@ subject exists only in PLAN.md; each such part already has its owner.
 | W3 wrapper-wide keys | done | `WrapperWide { konst, konsts, panic_at }`, `zz_lib::{Site, rejection}`, `parse_inner(stream, site, …)` | `checks`, `unsafe_code`, `validate()` |
 | W4 profile table | done | `Profile { kind, settings, precedes }`, `PROFILES` | the proof policy per level (R7) |
 | W5 `OpSpec` | done | `zz_values::{Op, OpKind, OpSpec, OPS}`, `IntegralFlag::of_op` | prechecks and `try_` names per operator |
-| W6 slots | see below | | `{Op}Rhs` dispatch for non-facet wrappers |
+| W6 slots | done | `zz_profile_integral::{Slot, RhsKind, Slots}`: one slot list per operator for both paths, built once (facet rows in `resolve`, root rows in `settle`); each orchestrator is one section list (P3) | `{Op}Rhs` dispatch for non-facet wrappers (the helpers and the two generated shapes stay until then) |
 | W7 `CoreFwd` rows | done | `zz_forward::{CoreFwd, CORE_INT, CORE_FLOAT, FLOAT_MATH}`, one emitter in `integral_forward.rs` | the `forms` column (`try_`) |
-| W8 `compute()` | see below | | the `lax` guard, `pedantic` prechecks, U3/U4 |
-| W9 `translate()` | see below | | R8 |
+| W8 `compute()` | done | `integral_compute.rs`: `Maker::compute(row: OpRef, slot) -> Body { tokens, fails }` writes the profile arithmetic, `Neg`, `Not`, shifts, the `panic_at` level and `Step`; the old `Arithmetic::make_*` emitters are gone | the `lax` guard, `pedantic` prechecks, U3/U4 |
+| W9 `translate()` | done | `integral_cfg::translate(fails, panic_at, fixed_output) -> Option<Translation>`, read by `of`/`try_of`, `map`, `_or_panic`/`_or_err`, assignments, `Step`, the friend `Make` and the forwards | R8 |
 | W10 construction | done | `zz_lib::{Validation, Check, OnInvalid, unwrap_or_panic}`, `Maker::construction`, `StoragePlan { raw, base, wrapping }` | `Base::Enum`, U1/U2/U5, implied conjuncts (Q31) |
 | W11 removal keys | done | `Removals` keyed by `(Form, FnName)`; text's `Try*` names are `(Try, name)` | `Try` forms of integral forwards |
 | W12 value sets | done | `Width`, `IntTy`, `IntervalSet`, `by_width`, `ResolvedDomain::{values, excludes}` | `hull`, `same_hull` (no consumer yet) |

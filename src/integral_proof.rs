@@ -1,10 +1,11 @@
+use std::cell::RefCell;
+
 use proc_macro2::{
     Ident,
     TokenStream,
 };
 use quote::{
     ToTokens,
-    format_ident,
     quote,
 };
 use syn::Path;
@@ -28,7 +29,11 @@ use crate::zz_lib::{
     Konsts,
     Named as _,
 };
-use crate::zz_profile_integral::Arithmetic;
+use crate::zz_profile_integral::{
+    Arithmetic,
+    RhsKind,
+    Slot,
+};
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     FnName,
@@ -38,6 +43,9 @@ use crate::zz_values::{
     OpKind,
     OpSpec,
 };
+
+/// The closure proofs a `Maker` already ran, each with its answer.
+pub(crate) type ProofMemo = RefCell<Vec<((ClosureOp, Rhs, Policy), bool)>>;
 
 impl Maker {
     /// A unary operator of a valid value is always valid: by a closure
@@ -115,18 +123,29 @@ impl Maker {
     }
 
     /// Every result of `op` on valid operands is valid at every width, by a
-    /// closure proof the `proven` flag enables.
+    /// closure proof the `proven` flag enables. A proof is an analysis of
+    /// the domain that several forms ask for, so each is run once.
     pub(crate) fn proven(
         &self,
         op: ClosureOp,
         rhs: Rhs,
         policy: Policy,
     ) -> bool {
-        return self.proofs_available()
-            && self.ctx.cfg.flags.has(IntegralFlag::Proven)
-            && self.ctx.cfg.validation.resolved().is_some_and(|it| {
-                return it.closure(op, rhs, policy) == Closure::Proven;
-            });
+        if !self.proofs_available()
+            || !self.ctx.cfg.flags.has(IntegralFlag::Proven)
+        {
+            return false;
+        }
+        let key = (op, rhs, policy);
+        let known = self.proofs.borrow().iter().find(|it| it.0 == key).copied();
+        if let Some((_, proven)) = known {
+            return proven;
+        }
+        let proven = self.ctx.cfg.validation.resolved().is_some_and(|it| {
+            return it.closure(op, rhs, policy) == Closure::Proven;
+        });
+        self.proofs.borrow_mut().push((key, proven));
+        return proven;
     }
 
     /// The overflow behavior of an arithmetic policy. A primitive operator
@@ -145,19 +164,31 @@ impl Maker {
         return Self::closure_policy(self.ctx.cfg.profile.arithmetic());
     }
 
-    /// The proof of a binary operator under the root profile, for a raw,
-    /// friend or amount right-hand side and for a same-type one.
-    pub(crate) fn operator_proof(
+    /// Whether `operator`'s result for `slot` is proven valid: for every
+    /// operand of a friend or an amount, for same-type operands of the
+    /// wrapper's own slot, and for a unary operator as `unary_proven` says.
+    pub(crate) fn slot_proven(
         &self,
         operator: &OpSpec,
-    ) -> OperatorProof {
-        return self
-            .operator_proof_with(operator, self.ctx.cfg.profile.arithmetic());
+        slot: &Slot,
+    ) -> bool {
+        if operator.kind == OpKind::Unary {
+            return self.unary_proven(operator);
+        }
+        let proof = self.operator_proof(operator, slot.arithmetic);
+        return match slot.rhs {
+            RhsKind::Same | RhsKind::Facet { ty: None, .. } => proof.same,
+            RhsKind::Amount
+            | RhsKind::Friend(_)
+            | RhsKind::Facet { ty: Some(_), .. }
+            | RhsKind::Unary => proof.full,
+        };
     }
 
-    /// `operator_proof` under a given arithmetic (a facet's). A shift takes
-    /// an amount only, and left shifts are never proven.
-    pub(crate) fn operator_proof_with(
+    /// The proof of a binary operator under `arithmetic`, for a raw, friend
+    /// or amount right-hand side and for a same-type one. A shift takes an
+    /// amount only, and left shifts are never proven.
+    pub(crate) fn operator_proof(
         &self,
         operator: &OpSpec,
         arithmetic: Arithmetic,
@@ -186,18 +217,6 @@ impl Maker {
         return match proven {
             true => quote! { Self::_proven },
             false => fallback,
-        };
-    }
-
-    /// The helper a same-type operand calls: `{helper}_proven` when only the
-    /// same-type form is proven.
-    pub(crate) fn same_type_helper(
-        proof: OperatorProof,
-        helper: &Ident,
-    ) -> Ident {
-        return match proof.same && !proof.full {
-            true => format_ident!("{}_proven", helper),
-            false => helper.clone(),
         };
     }
 

@@ -12,15 +12,12 @@ use proc_macro2::{
     Span,
 };
 use quote::ToTokens;
+use syn::Path;
 use syn::parse::{
     Parse,
     ParseStream,
 };
 use syn::spanned::Spanned as _;
-use syn::{
-    Path,
-    parse_quote,
-};
 
 use crate::integral_proof::ProveItem;
 use crate::zz_conv::SelfConverter;
@@ -60,14 +57,13 @@ use crate::zz_lib::{
 use crate::zz_names::NameKey;
 use crate::zz_profile_integral::{
     Arithmetic,
-    DefaultFacetCfg,
     FacetCfg,
-    FacetOwner,
-    FacetSlot,
-    FacetSlotKey,
     Profile,
     ProfileKind,
     Profiles,
+    RhsKind,
+    Slot,
+    Slots,
 };
 use crate::zz_runner::{
     MkErr,
@@ -80,6 +76,7 @@ use crate::zz_values::{
     OPS,
     Op,
     OpKind,
+    OpSpec,
     Width,
 };
 use crate::{
@@ -168,6 +165,38 @@ impl PanicAt {
     }
 }
 
+/// What a form does with a body that may fail.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Translation {
+    /// The body's value is the form's output: nothing can fail, or the
+    /// form returns the `Result`.
+    Pass,
+    /// A failure panics with this message.
+    Unwrap(&'static str),
+}
+
+/// How a form whose body `fails` (an invalid result, or none) turns it into
+/// its output; `None` when no such form is generated. A failure panics at
+/// `panic_at = anything`. Below it a form returns the `Result`, unless its
+/// output is fixed (an assignment, `of`, `map`, `Step`): a function never
+/// changes its signature with the level, so that form is left out.
+pub(crate) fn translate(
+    fails: bool,
+    panic_at: PanicAt,
+    fixed_output: bool,
+) -> Option<Translation> {
+    if !fails {
+        return Some(Translation::Pass);
+    }
+    if !panic_at.fallible() {
+        return Some(Translation::Unwrap("invalid value"));
+    }
+    return match fixed_output {
+        true => None,
+        false => Some(Translation::Pass),
+    };
+}
+
 /// The settings that hold for a whole wrapper: `konst`, the resolved
 /// `konst_*` settings, and `panic_at`.
 #[derive(Default)]
@@ -220,12 +249,61 @@ impl WrapperWide {
     }
 }
 
-/// The operand source of a facet level's slots.
-struct SlotSource<'a> {
-    flags: &'a IntegralFlags,
+/// Who opens a slot.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Owner {
+    /// The root of a wrapper without facets.
+    Root,
+    /// The root as the default facet: it takes the slots no facet claimed.
+    Default,
+    /// The facet at this index.
+    Facet(usize),
+}
+
+/// A configuration level that opens operator slots: the root, or a facet
+/// over it.
+struct Level<'a> {
+    flags: IntegralFlags,
     arithmetic: Arithmetic,
-    ty_out: &'a SelfConverter,
-    owner: FacetOwner,
+    produce: &'a SelfConverter,
+    owner: Owner,
+}
+
+impl Level<'_> {
+    /// The level's slot of `operator` for `rhs`, with the forms its flags
+    /// turn on; `None` when it opens none. An assignment needs a `Self`
+    /// output. A facet opens a slot only for an operator it has on, while
+    /// the root keeps an assignment whose operator is off.
+    fn slot(
+        &self,
+        operator: &OpSpec,
+        rhs: RhsKind,
+    ) -> Option<Slot> {
+        let flags = IntegralFlag::of_op(operator.op);
+        let root = self.owner == Owner::Root;
+        let regular = self.flags.has(flags.math);
+        let assign = self.produce.is_self()
+            && flags.assign.is_some_and(|flag| self.flags.has(flag));
+        if !regular && !(root && assign) {
+            return None;
+        }
+        return Some(Slot {
+            rhs,
+            arithmetic: self.arithmetic,
+            produce: self.produce.clone(),
+            regular,
+            assign,
+        });
+    }
+}
+
+/// A facet slot while the facets resolve: who claimed it, and where.
+struct Claim {
+    slot: Slot,
+    /// The right-hand type as written; `Self` for the wrapper itself.
+    identity: String,
+    owner: Owner,
+    span: Span,
 }
 
 #[derive(Default)]
@@ -244,8 +322,9 @@ pub(crate) struct Cfg {
     pub(crate) ty_out: SelfConverter,
     pub(crate) profile: Profiles,
     pub(crate) facets: Vec<FacetCfg>,
-    pub(crate) default_facet: Option<DefaultFacetCfg>,
-    pub(crate) facet_slots: BTreeMap<FacetSlotKey, FacetSlot>,
+    /// Every operator's slots: the facets' rows from `resolve`, the root's
+    /// from `settle`.
+    pub(crate) slots: Slots,
     facets_present: bool,
     /// Set by bitflag, whose named values are `const` items built through
     /// `_or_panic`: its validation must stay const-callable.
@@ -358,64 +437,48 @@ impl Cfg {
         return flags;
     }
 
-    fn insert_explicit_slot(
-        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
-        key: FacetSlotKey,
-        slot: FacetSlot,
-    ) -> syn::Result<()> {
-        if let Some(previous) = slots.get(&key) {
-            return slot.fail_combi(
-                "duplicate explicit facet slot",
-                previous.span,
-                "the slot was first claimed here",
-            );
-        }
-
-        slots.insert(key, slot);
-        return Ok(());
-    }
-
-    /// One slot per enabled operator of `kind` for `rhs` (`Self` when
-    /// `None`). An explicit facet rejects a claimed slot; the default facet
-    /// keeps it.
-    fn insert_slots(
-        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
-        source: &SlotSource,
+    /// One slot per operator of `kind` that `level` has on, for the
+    /// right-hand type `ty` (`None`: the wrapper itself). An explicit facet
+    /// rejects a claimed slot; the default facet keeps it.
+    fn claim_slots(
+        claims: &mut BTreeMap<Op, Vec<Claim>>,
+        level: &Level,
         kind: OpKind,
-        rhs: Option<&Path>,
+        ty: Option<&Path>,
         conversion: Option<&Path>,
         span: Span,
     ) -> syn::Result<()> {
-        let identity = rhs.map_or_else(
+        let identity = ty.map_or_else(
             || "Self".to_string(),
-            |rhs| rhs.to_token_stream().to_string(),
+            |ty| ty.to_token_stream().to_string(),
         );
 
         for operator in OPS.iter().filter(|it| it.kind == kind) {
-            let flags = IntegralFlag::of_op(operator.op);
-            if !source.flags.has(flags.math) {
-                continue;
-            }
-            let key = FacetSlotKey {
-                operator: operator.op,
-                rhs: identity.clone(),
-            };
-            let slot = FacetSlot {
-                rhs: rhs.cloned(),
+            let rhs = RhsKind::Facet {
+                ty: ty.cloned(),
                 conversion: conversion.cloned(),
-                arithmetic: source.arithmetic,
-                ty_out: source.ty_out.clone(),
-                assign: source.ty_out.is_self()
-                    && flags.assign.is_some_and(|flag| source.flags.has(flag)),
-                owner: source.owner,
-                span,
             };
-
-            if matches!(source.owner, FacetOwner::Explicit(_)) {
-                Self::insert_explicit_slot(slots, key, slot)?;
-            }
+            let Some(slot) = level.slot(operator, rhs)
             else {
-                slots.entry(key).or_insert(slot);
+                continue;
+            };
+            let row = claims.entry(operator.op).or_default();
+            let previous = row.iter().find(|it| it.identity == identity);
+            match (previous, level.owner) {
+                (Some(previous), Owner::Facet(_)) => {
+                    return span.fail_combi(
+                        "duplicate explicit facet slot",
+                        previous.span,
+                        "the slot was first claimed here",
+                    );
+                }
+                (Some(_), Owner::Root | Owner::Default) => {}
+                (None, owner) => row.push(Claim {
+                    slot,
+                    identity: identity.clone(),
+                    owner,
+                    span,
+                }),
             }
         }
 
@@ -425,9 +488,9 @@ impl Cfg {
     /// A facet level's slots: each friend's capabilities in
     /// `FACET_OPERATORS` order, then `self_math` and `self_bit` at their
     /// spans.
-    fn insert_level_slots(
-        slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
-        source: &SlotSource,
+    fn claim_level_slots(
+        claims: &mut BTreeMap<Op, Vec<Claim>>,
+        level: &Level,
         friends: &BTreeSet<Friend>,
         self_math: Option<Span>,
         self_bit: Option<Span>,
@@ -436,9 +499,9 @@ impl Cfg {
             let span = friend.ty.path().span();
             for (capability, kind) in FACET_OPERATORS {
                 if friend.has(capability) {
-                    Self::insert_slots(
-                        slots,
-                        source,
+                    Self::claim_slots(
+                        claims,
+                        level,
                         kind,
                         Some(friend.ty.path()),
                         friend.conv.as_ref(),
@@ -448,7 +511,6 @@ impl Cfg {
             }
         }
 
-        let conversion: Path = parse_quote! { Self::raw };
         // `FACET_OPERATORS` lists `Math` first.
         let self_slots = [
             self_math,
@@ -456,43 +518,36 @@ impl Cfg {
         ];
         for ((_, kind), span) in FACET_OPERATORS.into_iter().zip(self_slots) {
             if let Some(span) = span {
-                Self::insert_slots(
-                    slots,
-                    source,
-                    kind,
-                    None,
-                    Some(&conversion),
-                    span,
-                )?;
+                Self::claim_slots(claims, level, kind, None, None, span)?;
             }
         }
 
         return Ok(());
     }
 
+    /// The facets' rows of the slot table: each explicit facet's slots in
+    /// declaration order, then, as the default facet, the root's for what
+    /// no facet claimed. In a row the same type comes first; the friends
+    /// follow as claimed, in the order a level's friend set keeps them. A
+    /// wrapper without facets has no such row: its rows come from the root
+    /// once its flags are final (`settle_slots`).
     fn resolve_facets(&mut self) -> syn::Result<()> {
-        self.facet_slots.clear();
-        if !self.facets_present() {
+        self.slots = Slots::new(self.facets_present());
+        if !self.slots.by_facets() {
             return Ok(());
         }
 
-        let default = self
-            .default_facet
-            .as_ref()
-            .expect("facets require a resolved default facet");
-        let mut slots = BTreeMap::new();
-
+        let mut claims = BTreeMap::new();
         for (index, facet) in self.facets.iter().enumerate() {
             Self::validate_facet(facet)?;
 
-            let flags = Self::resolved_facet_flags(&default.flags, facet);
-            let source = SlotSource {
-                flags: &flags,
+            let level = Level {
+                flags: Self::resolved_facet_flags(&self.flags, facet),
                 arithmetic: facet
                     .profile
-                    .arithmetic_or(default.profile.arithmetic()),
-                ty_out: facet.ty_out.as_ref().unwrap_or(&default.ty_out),
-                owner: FacetOwner::Explicit(index),
+                    .arithmetic_or(self.profile.arithmetic()),
+                produce: facet.ty_out.as_ref().unwrap_or(&self.ty_out),
+                owner: Owner::Facet(index),
             };
             let self_slot = |flag| {
                 return match facet.explicit_flag(flag) {
@@ -500,52 +555,112 @@ impl Cfg {
                     _ => None,
                 };
             };
-            Self::insert_level_slots(
-                &mut slots,
-                &source,
+            Self::claim_level_slots(
+                &mut claims,
+                &level,
                 &facet.friends,
                 self_slot(IntegralFlag::SelfMath),
                 self_slot(IntegralFlag::SelfBit),
             )?;
             Self::check_facet_assignments(
-                &slots,
-                &source,
+                &claims,
+                &level,
                 self.wide.panic_at,
                 |flag| facet.explicit_flag(flag),
             )?;
         }
 
-        let source = SlotSource {
-            flags: &default.flags,
-            arithmetic: default.profile.arithmetic(),
-            ty_out: &default.ty_out,
-            owner: FacetOwner::Default,
+        let level = Level {
+            flags: self.flags,
+            arithmetic: self.profile.arithmetic(),
+            produce: &self.ty_out,
+            owner: Owner::Default,
         };
-        let self_slot = |flag| default.flags.has(flag).then(Span::call_site);
-        Self::insert_level_slots(
-            &mut slots,
-            &source,
-            &default.friends,
+        let self_slot = |flag| self.flags.has(flag).then(Span::call_site);
+        Self::claim_level_slots(
+            &mut claims,
+            &level,
+            &self.friends,
             self_slot(IntegralFlag::SelfMath),
             self_slot(IntegralFlag::SelfBit),
         )?;
         Self::check_facet_assignments(
-            &slots,
-            &source,
+            &claims,
+            &level,
             self.wide.panic_at,
             |flag| self.explicit_flag(flag),
         )?;
 
-        self.facet_slots = slots;
+        for (op, mut row) in claims {
+            row.sort_by_key(|claim| {
+                return !matches!(
+                    claim.slot.rhs,
+                    RhsKind::Facet { ty: None, .. }
+                );
+            });
+            let row = row.into_iter().map(|claim| claim.slot).collect();
+            self.slots.set(op, row);
+        }
         return self.check_facet_assignment_konst();
+    }
+
+    /// The root's rows of the slot table, built once its flags are final:
+    /// every operator's in a wrapper without facets, else only those that
+    /// facets do not dispatch (shifts and unary operators). A row is the
+    /// same type (`self_math`, `self_bit`) and then the capability's
+    /// friends, or a shift's amount. A `generic` wrapper has no same-type
+    /// slot: a separate `Self` impl would overlap its friend impl, so it is
+    /// its own `Math` or `Bit` friend instead.
+    fn settle_slots(
+        &mut self,
+        generic: bool,
+    ) {
+        let level = Level {
+            flags: self.flags,
+            arithmetic: self.profile.arithmetic(),
+            produce: &self.ty_out,
+            owner: Owner::Root,
+        };
+        let same = |flag| {
+            return (self.flags.has(flag) && !generic).then_some(RhsKind::Same);
+        };
+        for operator in OPS {
+            if operator.kind.has_operand() && self.slots.by_facets() {
+                continue;
+            }
+            let rhs = match operator.kind {
+                OpKind::Arith => [
+                    same(IntegralFlag::SelfMath),
+                    Some(RhsKind::Friend(Capability::Math)),
+                ],
+                OpKind::Bitwise => [
+                    same(IntegralFlag::SelfBit),
+                    Some(RhsKind::Friend(Capability::Bit)),
+                ],
+                OpKind::Shift => [
+                    None,
+                    Some(RhsKind::Amount),
+                ],
+                OpKind::Unary => [
+                    None,
+                    Some(RhsKind::Unary),
+                ],
+            };
+            let row = rhs
+                .into_iter()
+                .flatten()
+                .filter_map(|rhs| level.slot(operator, rhs))
+                .collect();
+            self.slots.set(operator.op, row);
+        }
     }
 
     /// Each assignment flag a facet level explicitly enables assigns through
     /// that level's slots of its operator, which must output `Self`, and
-    /// only when operations may panic.
+    /// only where a failure may panic: an assignment's output is fixed.
     fn check_facet_assignments(
-        slots: &BTreeMap<FacetSlotKey, FacetSlot>,
-        source: &SlotSource,
+        claims: &BTreeMap<Op, Vec<Claim>>,
+        level: &Level,
         panic_at: PanicAt,
         explicit: impl Fn(IntegralFlag) -> Option<(bool, Span)>,
     ) -> syn::Result<()> {
@@ -559,7 +674,7 @@ impl Cfg {
             else {
                 continue;
             };
-            if panic_at.fallible() {
+            if translate(true, panic_at, true).is_none() {
                 return span.fail(format!(
                     "{} cannot report failure; panic_at = {} removes \
                     assignment operators",
@@ -567,13 +682,12 @@ impl Cfg {
                     panic_at.name(),
                 ));
             }
-            if !source.ty_out.is_self() {
+            if !level.produce.is_self() {
                 return span
                     .fail("produce cannot generate assignment operators");
             }
-            let owned = slots.iter().any(|(key, slot)| {
-                return key.operator == operator.op
-                    && slot.owner == source.owner;
+            let owned = claims.get(&operator.op).is_some_and(|row| {
+                return row.iter().any(|claim| claim.owner == level.owner);
             });
             if !owned {
                 let math = flags.math.name();
@@ -590,13 +704,10 @@ impl Cfg {
     /// const only when that dispatch is. Only explicit `konst_*` settings
     /// can split them; the first one deciding the assignment is reported.
     fn check_facet_assignment_konst(&self) -> syn::Result<()> {
-        for key in self
-            .facet_slots
-            .iter()
-            .filter(|(_, slot)| slot.assign)
-            .map(|(key, _)| key)
-        {
-            let operator = key.operator.spec();
+        for operator in OPS {
+            if !self.slots.of(operator.op).iter().any(|slot| slot.assign) {
+                continue;
+            }
             let assign = operator.assign_konsts();
             if !self.konst_for(&assign) || self.konst_for(&operator.konsts()) {
                 continue;
@@ -740,16 +851,19 @@ impl Cfg {
         });
     }
 
-    /// Settles what depends on the value type: resolves the domain, then
-    /// `Neg`'s, `proven`'s, and `AsRef`'s defaults.
+    /// Settles what depends on the declaration: resolves the domain for
+    /// the value type, then `Neg`'s, `proven`'s, and `AsRef`'s defaults,
+    /// and the root's slots (`generic`: the wrapper has generic parameters).
     pub(crate) fn settle(
         &mut self,
         raw: Num,
+        generic: bool,
     ) -> syn::Result<()> {
         self.validation.resolve(raw, self.math)?;
         self.settle_neg(raw)?;
         self.settle_proven(raw)?;
         self.settle_as_ref()?;
+        self.settle_slots(generic);
         return Ok(());
     }
 
@@ -917,7 +1031,8 @@ impl Cfg {
             })?;
         }
 
-        if self.wide.panic_at.fallible() {
+        // A form whose output is fixed cannot report a failure.
+        if translate(true, self.wide.panic_at, true).is_none() {
             self.settle_panic_at()?;
         }
 
@@ -963,16 +1078,8 @@ impl Cfg {
         });
     }
 
-    /// The default facet's snapshot of the resolved root, the facet slots,
-    /// then the storage the profiles require. Validation turns `auto_of_raw`
-    /// off for the root only, after the snapshot: facets inherit it as set.
+    /// The facets' slots, then the storage the profiles require.
     fn resolve_facet_layer(&mut self) -> syn::Result<()> {
-        self.default_facet = self.facets_present().then(|| DefaultFacetCfg {
-            profile: self.profile.clone(),
-            friends: self.friends.clone(),
-            flags: self.flags,
-            ty_out: self.ty_out.clone(),
-        });
         self.resolve_facets()?;
         if self.validation.has_validation() {
             self.flags.set(IntegralFlag::AutoOfRaw, false);
@@ -1204,7 +1311,7 @@ impl Debug for Cfg {
             .field("ty_out", &!self.ty_out.is_self())
             .field("profile", &self.profile.arithmetic())
             .field("tree", &self.tree.is_some())
-            .field("facet_slots", &self.facet_slots)
+            .field("slots", &self.slots)
             .field("flags", &self.flags)
             .finish_non_exhaustive();
     }

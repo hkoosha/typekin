@@ -20,10 +20,13 @@ mod tests {
     use crate::zz_profile_integral::{
         Arithmetic,
         ProfileKind,
+        RhsKind,
+        Slot,
     };
     use crate::zz_values::{
         Int,
         N,
+        Op,
         Width,
     };
 
@@ -835,12 +838,14 @@ mod tests {
 
     #[test]
     fn wrapping_arithmetic_uses_wrapper_ops_with_a_const_fallback() {
-        let runtime = Arithmetic::WrapperWrapping
-            .make_expr(crate::zz_values::Op::Add.spec())
-            .to_string();
-        let konst = Arithmetic::WrapperWrapping
-            .make_const_expr(crate::zz_values::Op::Add.spec())
-            .to_string();
+        let input = "profile = wrapping";
+        let expansion = expansion_of(input);
+        let helper = |name: &str| {
+            let rest = expansion.split(name).nth(1).unwrap_or_default();
+            return rest.split(" fn ").next().unwrap_or_default().to_owned();
+        };
+        let runtime = helper("fn _add_wrapping (");
+        let konst = helper("fn _add (");
 
         assert!(
             runtime.contains("Wrapping (lhs) + :: core :: num :: Wrapping")
@@ -874,7 +879,9 @@ mod tests {
 
         assert!(config.facets_present());
         assert!(config.facets.is_empty());
-        assert!(config.default_facet.is_some());
+        assert!(config.slots.of(Op::Add).iter().any(|slot| {
+            return matches!(slot.rhs, RhsKind::Facet { ty: None, .. });
+        }));
     }
 
     #[test]
@@ -886,7 +893,7 @@ mod tests {
 
         assert!(!config.facets_present());
         assert!(config.facets.is_empty());
-        assert!(config.default_facet.is_none());
+        assert!(!config.slots.of(Op::Add).iter().any(Slot::is_facet));
     }
 
     #[test]

@@ -34,7 +34,10 @@ use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
     Kind,
+    Translation,
+    translate,
 };
+use crate::integral_proof::ProofMemo;
 use crate::integral_within::WithinProof;
 use crate::zz_conv::{
     OperatorOutput,
@@ -57,7 +60,10 @@ use crate::zz_names::{
     Names,
     ResolvedNames,
 };
-use crate::zz_profile_integral::Arithmetic;
+use crate::zz_profile_integral::{
+    RhsKind,
+    Slot,
+};
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     N,
@@ -92,7 +98,7 @@ pub(crate) fn ekran(
     let field = value_field(&item)?;
     let (raw, el) = value_type(attr.kind, field)?;
     let field_visibility = field.vis.clone();
-    attr.settle(raw)?;
+    attr.settle(raw, target.has_generics())?;
     let storage = StoragePlan::new(
         raw,
         attr.requires_non_zero_storage(),
@@ -341,7 +347,7 @@ pub(crate) fn ekran_with(
     mut cfg: Box<Cfg>,
     storage: StoragePlan,
 ) -> syn::Result<TokenStream> {
-    cfg.settle(storage.raw)?;
+    cfg.settle(storage.raw, false)?;
     return Maker::new_target(
         IntegralTarget::new(ty, Generics::default()),
         el,
@@ -983,11 +989,10 @@ pub(crate) struct Ctx {
     pub(crate) validation: TokenStream,
     pub(crate) rhs_raw: TokenStream,
     pub(crate) self_raw: TokenStream,
-    pub(crate) output: OperatorOutput,
     pub(crate) get_raw: Path,
     pub(crate) fp_or_panic: Path,
-    /// `Option<Raw>`, the error operations report failure with, when
-    /// `panic_at` is below `anything`.
+    /// `Option<Raw>`, the error a failing operator passes on in its
+    /// `Result` where it may not panic (`panic_at` below `anything`).
     pub(crate) failure: Option<TokenStream>,
 }
 
@@ -1020,13 +1025,12 @@ impl Ctx {
             cfg.validation.emit(&quote! { value }).to_token_stream();
         let rhs_raw = storage.extract(quote! { rhs.0 });
         let self_raw = storage.extract(quote! { self.0 });
-        let failure = cfg
-            .wide
-            .panic_at
-            .fallible()
-            .then(|| quote! { ::core::option::Option<#el> });
-        let output =
-            target.operator_output(&cfg.ty_out, false, failure.as_ref());
+        let failure = match translate(true, cfg.wide.panic_at, false) {
+            Some(Translation::Pass) => {
+                Some(quote! { ::core::option::Option<#el> })
+            }
+            Some(Translation::Unwrap(_)) | None => None,
+        };
 
         return Self {
             cfg,
@@ -1040,7 +1044,6 @@ impl Ctx {
             validation,
             rhs_raw,
             self_raw,
-            output,
             get_raw,
             fp_or_panic,
             failure,
@@ -1058,6 +1061,8 @@ pub(crate) struct Maker {
     empty_friend_checks: TokenStream,
     /// The `Within` friends and how each is proven.
     pub(crate) within: Vec<(Friend, WithinProof)>,
+    /// The closure proofs already run.
+    pub(crate) proofs: ProofMemo,
 }
 
 impl Maker {
@@ -1085,6 +1090,7 @@ impl Maker {
             conditional_make: BTreeMap::new(),
             empty_friend_checks: TokenStream::new(),
             within: Vec::new(),
+            proofs: ProofMemo::default(),
         };
 
         // Built-in friendships may add capabilities to an explicit empty list.
@@ -1095,24 +1101,86 @@ impl Maker {
         return Ok(this);
     }
 
-    /// Operators are generated globally unless facets dispatch them.
-    pub(crate) fn with_global_operators(&self) -> bool {
-        return !self.ctx.cfg.facets_present();
+    /// The translation of a form whose output is fixed and whose value may
+    /// be invalid (a friend's, a closure's): `None` where that may not
+    /// panic, so the form is not generated.
+    pub(crate) fn fixed_form(&self) -> Option<Translation> {
+        return translate(true, self.ctx.cfg.wide.panic_at, true);
     }
 
-    /// Same-type arithmetic, unless facets or generics take it over.
-    pub(crate) fn with_self_math(&self) -> bool {
-        return self.ctx.cfg.flags.has(IntegralFlag::SelfMath)
-            && self.with_global_operators()
-            && !self.target.has_generics();
+    /// The error in a form's output: `Option<Raw>` when its body `fails`
+    /// and `translation` passes the `Result` on.
+    pub(crate) fn passed_failure(
+        &self,
+        fails: bool,
+        translation: Translation,
+    ) -> Option<&TokenStream> {
+        return match (translation, fails) {
+            (Translation::Pass, true) => self.ctx.failure.as_ref(),
+            (Translation::Pass, false) | (Translation::Unwrap(_), _) => None,
+        };
     }
 
-    /// Same-type bitwise operations, unless facets or generics take them
-    /// over.
-    pub(crate) fn with_self_bit(&self) -> bool {
-        return self.ctx.cfg.flags.has(IntegralFlag::SelfBit)
-            && self.with_global_operators()
-            && !self.target.has_generics();
+    /// What `slot`'s operator outputs: its produced type, in a `Result`
+    /// when the body's failure is passed on. `external`: named outside an
+    /// impl of the target, where `Self` is another type.
+    pub(crate) fn output_of(
+        &self,
+        slot: &Slot,
+        external: bool,
+        fails: bool,
+        translation: Translation,
+    ) -> OperatorOutput {
+        return self.target.operator_output(
+            &slot.produce,
+            external,
+            self.passed_failure(fails, translation),
+        );
+    }
+
+    /// The constructor a computed raw result goes through. A failure that
+    /// panics does so in `_or_panic`; one that is passed on comes from
+    /// `_or_err`. A result that cannot fail skips validation through
+    /// `_proven` where the type has it; `None` then says to build `Self`
+    /// directly (the shape of a float's domain proves it). An unvalidated
+    /// type has only `_or_panic`, which just constructs.
+    pub(crate) fn constructor(
+        &self,
+        fails: bool,
+        translation: Translation,
+    ) -> Option<Path> {
+        return match (translation, fails) {
+            (Translation::Unwrap(_), _) => Some(self.ctx.fp_or_panic.clone()),
+            (Translation::Pass, true) => {
+                let or_err = self.ctx.names.get(IntegralName::OrErr);
+                Some(parse_quote! { Self::#or_err })
+            }
+            (Translation::Pass, false) => {
+                if !self.ctx.cfg.validation.has_validation() {
+                    Some(self.ctx.fp_or_panic.clone())
+                }
+                else if self.proofs_available() {
+                    Some(parse_quote! { Self::_proven })
+                }
+                else {
+                    None
+                }
+            }
+        };
+    }
+
+    /// `value`, a computed raw result, as `Self` (or as `_or_err`'s
+    /// `Result`): through `constructor`, or built directly.
+    pub(crate) fn constructed(
+        &self,
+        fails: bool,
+        translation: Translation,
+        value: TokenStream,
+    ) -> TokenStream {
+        return match self.constructor(fails, translation) {
+            Some(constructor) => quote! { #constructor(#value) },
+            None => self.construct_self(value),
+        };
     }
 
     /// `#konst impl<..> #path for Ty where .. { #body }`, `const` under
@@ -1206,81 +1274,144 @@ impl Maker {
         });
     }
 
-    /// The validating helper of a binary operator: `_add`, `_bitor`, `_shr`.
-    /// Non-const arithmetic and shifts over `Wrapping` storage call the
-    /// `_wrapping` twin.
-    pub(crate) fn arithmetic_method_name(
+    /// The validating helper `slot`'s impls of a binary operator call:
+    /// `_add`, `_bitor`, `_shr`. A non-const impl calls the `_wrapping`
+    /// twin where there is one, and the wrapper's own right-hand side the
+    /// `_proven` sibling when only same-type operands are proven.
+    pub(crate) fn helper_name(
         &self,
         operator: &OpSpec,
+        slot: &Slot,
         is_konst: bool,
     ) -> Ident {
-        let name = operator.method;
-        return if !is_konst && self.has_wrapping_helper(operator) {
-            format_ident!("_{}_wrapping", name)
-        }
-        else {
-            format_ident!("_{}", name)
-        };
+        let wrapping = !is_konst && self.has_wrapping_helper(operator, slot);
+        let proof = self.operator_proof(operator, slot.arithmetic);
+        let same_only =
+            matches!(slot.rhs, RhsKind::Same) && proof.same && !proof.full;
+        return format_ident!(
+            "_{}{}{}",
+            operator.method,
+            if wrapping { "_wrapping" } else { "" },
+            if same_only { "_proven" } else { "" },
+        );
     }
 
-    /// Whether `operator`'s helper has a non-const `_wrapping` twin: the
-    /// arithmetic and shifts of `Wrapping` storage, whose operators are not
-    /// const.
+    /// Whether `operator`'s helper has a non-const `_wrapping` twin for
+    /// `slot`: the arithmetic and shifts of `Wrapping`, whose own operators
+    /// are not const.
     pub(crate) fn has_wrapping_helper(
         &self,
         operator: &OpSpec,
+        slot: &Slot,
     ) -> bool {
         return operator.kind != OpKind::Bitwise
-            && self.ctx.cfg.profile.arithmetic()
-                == Arithmetic::WrapperWrapping;
+            && slot.arithmetic != slot.arithmetic.konst();
     }
 
-    fn ekran_items(&self) -> TokenStream {
-        let mut stream = self.item_fns();
-        stream.extend(self.forward_items());
-        return stream;
+    /// The checks and constants that are neither a trait nor an impl of
+    /// one: the friend conversion checks, the layout assertions, and the
+    /// `Within` proof machinery.
+    fn ekran_declarations(&self) -> TokenStream {
+        return [
+            self.empty_friend_checks.clone(),
+            self.make_assertions(),
+            self.ekran_within(),
+        ]
+        .into_iter()
+        .collect();
     }
 
-    fn ekran_impls(&self) -> syn::Result<TokenStream> {
-        let mut stream = self.impls_head();
-        stream.extend(self.make_core_int());
-        stream.extend(self.make_core_float());
-        stream.extend(self.make_forwards()?);
-        stream.extend(self.impls_body());
-        stream.extend(self.make_fmt_exp());
-        stream.extend(self.make_iterator_folds());
-        return Ok(stream);
-    }
-
-    fn ekran(&self) -> syn::Result<TokenStream> {
-        self.check_prove()?;
-        let empty_friend_checks = &self.empty_friend_checks;
-        let friends = self.ekran_friendship();
-        let impls = self.ekran_impls()?;
-        let items = self.ekran_items();
+    /// The inherent items: the `core` constants and forwards in their impl
+    /// blocks, the block of everything else, and the bit-access block.
+    fn ekran_items(&self) -> syn::Result<TokenStream> {
+        let core_int = self.make_core_int();
+        let core_float = self.make_core_float();
+        let forwards = self.make_forwards()?;
+        let items = [
+            self.make_fn_conv_of(),
+            self.make_auto_of_raw(),
+            self.make_fn_conv_raw(),
+            self.make_fn_conv_into(),
+            self.make_map(),
+            self.make_fn_conv_try_into_lossless(),
+            self.make_fn_conv_try_into_lossy(),
+            self.make_fn_math_helpers(),
+            self.make_precedes(),
+            self.make_fn_op_eq(),
+            self.make_fn_op_cmp(),
+            self.make_fn_make_try(),
+            self.make_or_panic(),
+            self.make_or_err(),
+            self.make_proven(),
+            self.make_blind_trust(),
+            self.make_within(),
+            self.make_within_proofs(),
+            self.make_within_source(),
+            self.forward_items(),
+        ];
         let bit_access = self.ekran_bit_access_items();
-        let within = self.ekran_within();
 
         let ty = &self.ctx.ty;
-        let (impl_generics, where_clause) = self.target.impl_header(&[], &[]);
-
-        return Ok(quote::quote! {
-            #empty_friend_checks
-
-            #friends
-
-            #impls
+        let impl_generics = &self.ctx.impl_generics;
+        let where_clause = &self.ctx.where_clause;
+        return Ok(quote! {
+            #core_int
+            #core_float
+            #forwards
 
             impl #impl_generics #ty #where_clause {
-                #items
+                #(#items)*
             }
 
             #[allow(clippy::unnecessary_cast)]
             impl #impl_generics #ty #where_clause {
                 #bit_access
             }
+        });
+    }
 
-            #within
+    /// The trait impls. The operators follow `OPS`, each row's slots and
+    /// each slot's forms.
+    fn ekran_impls(&self) -> TokenStream {
+        return [
+            self.make_as_ref(),
+            self.make_from_str(),
+            self.make_serde(),
+            self.make_cast_impls(true),
+            self.make_cast_impls(false),
+            self.make_range(),
+            self.make_debug(),
+            self.make_hash(),
+            self.make_eq(),
+            self.make_ord(),
+            self.make_operators(),
+            self.make_fmt(),
+            self.make_partial_eq(),
+            self.make_partial_ord(),
+            self.make_fmt_exp(),
+            self.make_iterator_folds(),
+        ]
+        .into_iter()
+        .collect();
+    }
+
+    /// Everything generated after the annotated item, by section:
+    /// declarations, protocol traits, inherent items, trait impls.
+    fn ekran(&self) -> syn::Result<TokenStream> {
+        self.check_prove()?;
+        let declarations = self.ekran_declarations();
+        let protocol = self.ekran_friendship();
+        let items = self.ekran_items()?;
+        let impls = self.ekran_impls();
+
+        return Ok(quote! {
+            #declarations
+
+            #protocol
+
+            #items
+
+            #impls
         });
     }
 }

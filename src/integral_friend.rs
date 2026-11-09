@@ -1,7 +1,4 @@
-use std::collections::{
-    BTreeMap,
-    BTreeSet,
-};
+use std::collections::BTreeMap;
 
 use proc_macro2::{
     Ident,
@@ -12,7 +9,6 @@ use quote::{
     quote,
 };
 use syn::{
-    Generics,
     Path,
     parse_quote,
 };
@@ -26,7 +22,9 @@ use crate::integral_cfg::{
     IntegralFlag,
     IntegralFlags,
     IntegralName,
+    Translation,
 };
+use crate::integral_compute::Body;
 use crate::zz_friend::{
     Capability,
     Construction,
@@ -40,8 +38,8 @@ use crate::zz_friend::{
 };
 use crate::zz_lib::Konst;
 use crate::zz_profile_integral::{
-    FacetSlot,
-    FacetSlotKey,
+    RhsKind,
+    Slot,
 };
 use crate::zz_runner::{
     Merged,
@@ -52,6 +50,7 @@ use crate::zz_values::{
     Num,
     OPS,
     Op,
+    OpSpec,
     Width,
 };
 
@@ -214,11 +213,7 @@ impl Maker {
                 continue;
             }
 
-            let default = cfg
-                .default_facet
-                .as_ref()
-                .expect("facets require a resolved default facet");
-            let flags = Cfg::resolved_facet_flags(&default.flags, facet);
+            let flags = Cfg::resolved_facet_flags(&cfg.flags, facet);
             let konst =
                 OPS.iter().filter(|it| it.kind.has_operand()).any(|it| {
                     return flags.has(IntegralFlag::of_op(it.op).math)
@@ -434,46 +429,15 @@ impl Maker {
         return Ok(());
     }
 
-    fn make_facet_dispatch(&self) -> TokenStream {
-        if !self.ctx.cfg.facets_present() {
-            return TokenStream::new();
-        }
-
-        let target = self.target.ty();
-        let generics = self.target.external_generics();
-        let operators = self
-            .ctx
-            .cfg
-            .facet_slots
-            .keys()
-            .map(|slot| slot.operator)
-            .collect::<BTreeSet<_>>();
-        let traits = operators.iter().map(|operator| {
-            return self.facet_rhs_trait_decl(*operator, &target, &generics);
-        });
-        let implementations =
-            self.ctx.cfg.facet_slots.iter().map(|(key, slot)| {
-                return self.facet_rhs_impl(key, slot, &target, &generics);
-            });
-        let operator_impls = operators.iter().map(|operator| {
-            return self.facet_operator_impl(*operator, &target, &generics);
-        });
-        let assign_impls = self
-            .ctx
-            .cfg
-            .facet_slots
+    /// The `{Op}Rhs` traits of the rows that facets dispatch, in `OPS`
+    /// order.
+    fn make_rhs_traits(&self) -> TokenStream {
+        let slots = &self.ctx.cfg.slots;
+        return OPS
             .iter()
-            .filter(|(_, slot)| slot.assign)
-            .map(|(key, slot)| {
-                return self.facet_assign_impl(key, slot, &target, &generics);
-            });
-
-        return quote! {
-            #(#traits)*
-            #(#implementations)*
-            #(#operator_impls)*
-            #(#assign_impls)*
-        };
+            .filter(|operator| slots.of(operator.op).iter().any(Slot::is_facet))
+            .map(|operator| self.facet_rhs_trait_decl(operator))
+            .merged();
     }
 
     /// The `{Op}Rhs` trait a facet operator dispatches through.
@@ -486,13 +450,12 @@ impl Maker {
 
     fn facet_rhs_trait_decl(
         &self,
-        operator: Op,
-        target: &TokenStream,
-        generics: &Generics,
+        operator: &OpSpec,
     ) -> TokenStream {
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
         let (parameters, _, where_clause) = generics.split_for_impl();
-        let trait_name = self.facet_rhs_trait(operator);
-        let operator = operator.spec();
+        let trait_name = self.facet_rhs_trait(operator.op);
         let method = format_ident!("{}", operator.method);
         let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let konst = Konst::konst(is_konst);
@@ -511,83 +474,61 @@ impl Maker {
         };
     }
 
-    /// The type a slot's right-hand side is: the friend's, else the target.
+    /// The type a facet slot's right-hand side is: the friend's, else the
+    /// target.
     fn facet_rhs_ty(
         &self,
-        slot: &FacetSlot,
+        slot: &Slot,
         target: &TokenStream,
     ) -> TokenStream {
-        return slot.rhs.as_ref().map_or_else(
-            || target.clone(),
-            |rhs| self.target.external_type(&parse_quote! { #rhs }),
-        );
-    }
-
-    /// Whether a slot's result is proven valid: for every operand of a
-    /// friend slot, or for same-type operands of the `Self` slot.
-    fn facet_proven(
-        &self,
-        key: &FacetSlotKey,
-        slot: &FacetSlot,
-    ) -> bool {
-        let proof =
-            self.operator_proof_with(key.operator.spec(), slot.arithmetic);
-        return match slot.rhs {
-            Some(_) => proof.full,
-            None => proof.same,
+        return match &slot.rhs {
+            RhsKind::Facet { ty: Some(ty), .. } => {
+                self.target.external_type(&parse_quote! { #ty })
+            }
+            _ => target.clone(),
         };
     }
 
-    fn facet_rhs_impl(
+    /// A facet slot's `{Op}Rhs` impl, its operator's regular form: the raw
+    /// operands, `body`, the construction `translation` asks for, then the
+    /// slot's produced output.
+    pub(crate) fn facet_rhs_impl(
         &self,
-        key: &FacetSlotKey,
-        slot: &FacetSlot,
-        target: &TokenStream,
-        generics: &Generics,
+        operator: &OpSpec,
+        slot: &Slot,
+        translation: Translation,
+        body: &Body,
     ) -> TokenStream {
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
         let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operator = key.operator.spec();
         let trait_name = self.facet_rhs_trait(operator.op);
         let method = format_ident!("{}", operator.method);
-        let rhs_ty = self.facet_rhs_ty(slot, target);
+        let rhs_ty = self.facet_rhs_ty(slot, &target);
         let get_raw = self.target.qualify_path(&self.ctx.get_raw);
         let rhs = match &slot.rhs {
-            Some(rhs) => self.friend_conversion_expression(
-                rhs,
-                slot.conversion.as_ref(),
+            RhsKind::Facet {
+                ty: Some(ty),
+                conversion,
+            } => self.friend_conversion_expression(
+                ty,
+                conversion.as_ref(),
                 quote! { rhs },
             ),
-            None => quote! { #get_raw(rhs) },
+            _ => quote! { #get_raw(rhs) },
         };
-        let proven = self.facet_proven(key, slot);
-        let path = match (&self.ctx.failure, proven) {
-            (Some(_), _) => {
-                let or_err = self.ctx.names.get(IntegralName::OrErr);
-                parse_quote! { Self::#or_err }
-            }
-            (None, true) => parse_quote! { Self::_proven },
-            (None, false) => self.ctx.fp_or_panic.clone(),
-        };
-        let constructor = self.target.qualify_path(&path);
-        let doc = self.proof_doc(proven);
-        let output = self.target.operator_output(
-            &slot.ty_out,
-            true,
-            self.ctx.failure.as_ref(),
-        );
+        // Only `Self` can be built directly: a result that cannot fail but
+        // has no `_proven` to skip validation through is validated.
+        let constructor = self
+            .constructor(body.fails, translation)
+            .unwrap_or_else(|| self.ctx.fp_or_panic.clone());
+        let constructor = self.target.qualify_path(&constructor);
+        let doc = self.proof_doc(self.slot_proven(operator, slot));
+        let output = self.output_of(slot, true, body.fails, translation);
         let output_ty = output.ty();
         let result = output.convert(quote! { value });
-        let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
-        let operation = match self.ctx.failure {
-            Some(_) => slot.arithmetic.make_fallible_expr(
-                operator,
-                self.ctx.cfg.wide.panic_at,
-                matches!(self.num, Num::Float(_)),
-                is_konst,
-            ),
-            None => slot.arithmetic.make_operator_expr(operator, is_konst),
-        };
-        let konst = Konst::konst(is_konst);
+        let operation = &body.tokens;
+        let konst = Konst::konst(self.ctx.cfg.konst_for(&operator.konsts()));
 
         return quote! {
             #konst impl #parameters #trait_name #arguments for #rhs_ty
@@ -610,16 +551,21 @@ impl Maker {
         };
     }
 
-    /// `core::ops::{Op}<T> for Target` forwarding to `T`'s `{Op}Rhs` impl.
-    fn facet_operator_impl(
+    /// `core::ops::{Op}<T> for Target` forwarding to `T`'s `{Op}Rhs` impl,
+    /// for a row that facets dispatch (one whose `slots` are facet slots).
+    pub(crate) fn facet_operator_impl(
         &self,
-        operator: Op,
-        target: &TokenStream,
-        generics: &Generics,
+        operator: &OpSpec,
+        slots: &[Slot],
     ) -> TokenStream {
+        if !slots.iter().any(Slot::is_facet) {
+            return TokenStream::new();
+        }
+
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
         let (_, arguments, _) = generics.split_for_impl();
-        let trait_name = self.facet_rhs_trait(operator);
-        let operator = operator.spec();
+        let trait_name = self.facet_rhs_trait(operator.op);
         let method = format_ident!("{}", operator.method);
         let operation = format_ident!("{}", operator.trait_name);
         let rhs = self.target.fresh_ident("T");
@@ -649,23 +595,22 @@ impl Maker {
         };
     }
 
-    /// `core::ops::{Op}Assign<Rhs> for Target` of a slot whose output is
-    /// `Self`, forwarding to the slot's `{Op}Rhs` impl.
-    fn facet_assign_impl(
+    /// `core::ops::{Op}Assign<Rhs> for Target` of a facet slot whose output
+    /// is `Self`, forwarding to the slot's `{Op}Rhs` impl.
+    pub(crate) fn facet_assign_impl(
         &self,
-        key: &FacetSlotKey,
-        slot: &FacetSlot,
-        target: &TokenStream,
-        generics: &Generics,
+        operator: &OpSpec,
+        slot: &Slot,
     ) -> TokenStream {
+        let target = self.target.ty();
+        let generics = self.target.external_generics();
         let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operator = key.operator.spec();
         let trait_name = self.facet_rhs_trait(operator.op);
         let method = format_ident!("{}", operator.method);
         let assign_trait = format_ident!("{}Assign", operator.trait_name);
         let assign_method = format_ident!("{}_assign", operator.method);
-        let rhs_ty = self.facet_rhs_ty(slot, target);
-        let doc = self.proof_doc(self.facet_proven(key, slot));
+        let rhs_ty = self.facet_rhs_ty(slot, &target);
+        let doc = self.proof_doc(self.slot_proven(operator, slot));
         let is_konst = self.ctx.cfg.konst_for(&operator.assign_konsts());
         let konst = Konst::konst(is_konst);
 
@@ -719,12 +664,12 @@ impl Maker {
             konst: self.ctx.cfg.konst_friendship(),
         });
 
-        let dispatch = self.make_facet_dispatch();
+        let rhs_traits = self.make_rhs_traits();
 
         return quote! {
             #protocol
 
-            #dispatch
+            #rhs_traits
         };
     }
 
@@ -769,7 +714,7 @@ impl Maker {
         &self,
         capability: Capability,
     ) -> Option<Ident> {
-        if (self.ctx.cfg.facets_present() && capability.is_operator())
+        if (self.ctx.cfg.slots.by_facets() && capability.is_operator())
             || capability == Capability::Within
         {
             return None;
@@ -858,7 +803,10 @@ impl Maker {
             .qualify_path(&parse_quote! { Self::#blind_trust });
         let within = self.ctx.names.get(IntegralName::WithinFn);
         let within = self.target.qualify_path(&parse_quote! { Self::#within });
-        let or_err = self.ctx.failure.as_ref().map(|_| {
+        // `make` returns the target itself: where an invalid value may not
+        // panic, `Make` has `try_make` instead, validating through
+        // `_or_err`.
+        let or_err = self.fixed_form().is_none().then(|| {
             let or_err = self.ctx.names.get(IntegralName::OrErr);
             return self.target.qualify_path(&parse_quote! { Self::#or_err });
         });

@@ -12,8 +12,13 @@ use crate::integral::Maker;
 use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
+    Translation,
+    translate,
 };
-use crate::integral_proof::OperatorProof;
+use crate::integral_compute::{
+    Body,
+    OpRef,
+};
 use crate::zz_friend::Capability;
 use crate::zz_lib::{
     Check,
@@ -21,25 +26,16 @@ use crate::zz_lib::{
     Konsts,
     OnInvalid,
 };
+use crate::zz_profile_integral::{
+    RhsKind,
+    Slot,
+};
 use crate::zz_runner::Merged;
 use crate::zz_values::{
     Num,
     OPS,
-    OpKind,
     OpSpec,
 };
-
-/// The right-hand side of a binary operator impl.
-#[derive(Clone, Copy)]
-enum OpRhs {
-    /// `Trait for Ty`, `rhs: Self`, operand `rhs_raw`.
-    Same,
-    /// `Trait<T> for Ty` where `T` has the capability's friend bound and the
-    /// seal bound; the operand is `let it = {conversion}(rhs);`.
-    Friend(Capability),
-    /// `Trait<usize> for Ty`; parameter `rhs` (value) or `that` (assign).
-    Amount,
-}
 
 /// A binary operator impl by value (`type Output`) or as an assignment.
 #[derive(Clone, Copy)]
@@ -62,6 +58,19 @@ struct OpImpl {
     doc: TokenStream,
 }
 
+/// How a binary operator impl that calls a helper takes its right-hand
+/// side.
+struct OpRhs {
+    /// The parameter's type.
+    ty: TokenStream,
+    /// The statement that binds a converted operand, or empty.
+    prelude: TokenStream,
+    /// The operand the helper takes.
+    operand: TokenStream,
+    /// The trait's `<Rhs>`; empty for the wrapper itself.
+    generic: TokenStream,
+}
+
 /// The integral `core::fmt` traits, in output order.
 const FMT_TRAITS: [(IntegralFlag, &str); 5] = [
     (IntegralFlag::Display, "Display"),
@@ -72,32 +81,9 @@ const FMT_TRAITS: [(IntegralFlag, &str); 5] = [
 ];
 
 impl Maker {
-    /// The impls before the `core` forwards: `AsRef`, `FromStr`, serde.
-    pub(crate) fn impls_head(&self) -> TokenStream {
-        let mut stream = TokenStream::new();
-        stream.extend(self.make_as_ref());
-        stream.extend(self.make_from_str());
-        stream.extend(self.make_serde());
-        return stream;
-    }
-
-    /// The impls after the forwards, in output order: conversions, the
-    /// derive-like traits, operators, and formatting.
-    pub(crate) fn impls_body(&self) -> TokenStream {
-        let mut stream = TokenStream::new();
-        stream.extend(self.make_cast_impls(true));
-        stream.extend(self.make_cast_impls(false));
-        stream.extend(self.make_range());
-        stream.extend(self.make_debug());
-        stream.extend(self.make_hash());
-        stream.extend(self.make_eq());
-        stream.extend(self.make_ord());
-        stream.extend(self.make_assertions());
-        stream.extend(self.make_operators());
-        stream.extend(self.make_fmt_traits(&FMT_TRAITS));
-        stream.extend(self.make_partial_eq());
-        stream.extend(self.make_partial_ord());
-        return stream;
+    /// The integral `core::fmt` traits.
+    pub(crate) fn make_fmt(&self) -> TokenStream {
+        return self.make_fmt_traits(&FMT_TRAITS);
     }
 
     /// The seal bound of a friend right-hand side, `[const]` under `is_konst`.
@@ -126,6 +112,7 @@ impl Maker {
         );
     }
 
+    /// `Step`, whose methods step the raw value by a count.
     pub(crate) fn make_range(&self) -> TokenStream {
         if !self.ctx.cfg.flags.has(IntegralFlag::Range) {
             return TokenStream::new();
@@ -135,8 +122,14 @@ impl Maker {
         let is_konst = self.ctx.cfg.konst_for(&[Konsts::Iterator]);
         let start = self.storage.extract(quote! { start.0 });
         let end = self.storage.extract(quote! { end.0 });
-        let forward = self.step_direction("forward", &start);
-        let backward = self.step_direction("backward", &start);
+        let count = Slot::count(self.ctx.cfg.profile.arithmetic());
+        let (Some(forward), Some(backward)) = (
+            self.step_direction("forward", &count),
+            self.step_direction("backward", &count),
+        )
+        else {
+            return TokenStream::new();
+        };
 
         return self.impl_trait(
             is_konst,
@@ -160,29 +153,32 @@ impl Maker {
     }
 
     /// `Step`'s checked and overflowing methods in `direction` (`forward`
-    /// or `backward`), stepping the raw `start`.
+    /// or `backward`), each a step by `count`. `Step` fixes their outputs:
+    /// `None` where a step could fail and may not panic.
     fn step_direction(
         &self,
         direction: &str,
-        start: &TokenStream,
-    ) -> TokenStream {
-        let el = &self.el;
-        let or_panic = &self.ctx.fp_or_panic;
+        count: &Slot,
+    ) -> Option<TokenStream> {
         let checked = format_ident!("{}_checked", direction);
         let overflowing = format_ident!("{}_overflowing", direction);
+        let stepped = self.compute(OpRef::Step(&checked), count);
+        let wrapped = self.compute(OpRef::Step(&overflowing), count);
+        let translation =
+            translate(stepped.fails, self.ctx.cfg.wide.panic_at, true)?;
+        let constructed =
+            self.constructed(stepped.fails, translation, quote! { value });
+        let (stepped, wrapped) = (stepped.tokens, wrapped.tokens);
 
-        return quote! {
+        return Some(quote! {
             #[inline(always)]
             fn #checked(
                 start: Self,
                 count: usize,
             ) -> ::core::option::Option<Self> {
-                return match <#el as ::core::iter::Step>::#checked(
-                    #start,
-                    count,
-                ) {
+                return match #stepped {
                     ::core::option::Option::Some(value) => {
-                        ::core::option::Option::Some(#or_panic(value))
+                        ::core::option::Option::Some(#constructed)
                     }
                     ::core::option::Option::None => {
                         ::core::option::Option::None
@@ -195,14 +191,10 @@ impl Maker {
                 start: Self,
                 count: usize,
             ) -> (Self, bool) {
-                let (value, overflowed) =
-                    <#el as ::core::iter::Step>::#overflowing(
-                        #start,
-                        count,
-                    );
-                return (#or_panic(value), overflowed);
+                let (value, overflowed) = #wrapped;
+                return (#constructed, overflowed);
             }
-        };
+        });
     }
 
     /// `AsRef<raw>`, which `NonZero` storage lacks (`Cfg::settle`).
@@ -537,7 +529,8 @@ impl Maker {
         };
     }
 
-    /// The operator impls, in `OPS` order.
+    /// The operator impls: rows in `OPS` order, each row's slots in slot
+    /// order, each slot's forms in form order.
     pub(crate) fn make_operators(&self) -> TokenStream {
         return OPS
             .iter()
@@ -545,105 +538,89 @@ impl Maker {
             .merged();
     }
 
-    /// `operator`'s impls are generated: its `math_*` flag is on and no
-    /// facet dispatches it instead.
-    pub(crate) fn with_operator(
-        &self,
-        operator: &OpSpec,
-    ) -> bool {
-        let flags = IntegralFlag::of_op(operator.op);
-        return self.ctx.cfg.flags.has(flags.math)
-            && !self.facet_dispatched(operator);
-    }
-
-    /// `operator`'s assignment impls are generated: its `assign_*` flag is
-    /// on and no facet dispatches it instead. Configuration turns the flag
-    /// off for a non-`Self` output and when operations report failure.
-    pub(crate) fn with_assignment(
-        &self,
-        operator: &OpSpec,
-    ) -> bool {
-        let flags = IntegralFlag::of_op(operator.op);
-        return flags
-            .assign
-            .is_some_and(|flag| self.ctx.cfg.flags.has(flag))
-            && !self.facet_dispatched(operator);
-    }
-
-    /// Facets, when present, dispatch the operators that take a right-hand
-    /// value; shifts and unary operators are generated either way.
-    fn facet_dispatched(
-        &self,
-        operator: &OpSpec,
-    ) -> bool {
-        return operator.kind.has_operand() && !self.with_global_operators();
-    }
-
-    /// One operator's impls: for each right-hand side, the operator and
-    /// then its assignment.
+    /// One operator's impls: for each slot, the operator and then its
+    /// assignment. A row that facets dispatch starts with the `core::ops`
+    /// impl forwarding to its `{Op}Rhs` trait.
     fn make_operator(
         &self,
         operator: &OpSpec,
     ) -> TokenStream {
-        if operator.kind == OpKind::Unary {
-            return self.make_math_unary(operator);
-        }
-        let forms = [
-            self.with_operator(operator).then_some(OpForm::Value),
-            self.with_assignment(operator).then_some(OpForm::Assign),
-        ];
-        if forms.iter().all(Option::is_none) {
-            return TokenStream::new();
-        }
-
-        let proof = self.operator_proof(operator);
-        let mut stream = TokenStream::new();
-        for rhs in self.operator_rhs(operator).into_iter().flatten() {
-            for form in forms.into_iter().flatten() {
-                let it = self.binary_op(operator, proof, rhs, form);
-                stream.extend(self.make_op_impl(&it, rhs, form));
+        let slots = self.ctx.cfg.slots.of(operator.op);
+        let row = OpRef::Operator {
+            spec: operator,
+            konst: self.ctx.cfg.konst_for(&operator.konsts()),
+        };
+        let mut stream = self.facet_operator_impl(operator, slots);
+        for slot in slots {
+            let body = self.compute(row, slot);
+            let forms = self.slot_forms(slot, body.fails);
+            for (form, translation) in forms.into_iter().flatten() {
+                stream.extend(self.make_form(
+                    operator,
+                    slot,
+                    form,
+                    translation,
+                    &body,
+                ));
             }
         }
         return stream;
     }
 
-    /// The right-hand sides of a binary operator's impls, in output order:
-    /// the same type (when enabled) and then the capability's friends, or a
-    /// shift amount.
-    fn operator_rhs(
+    /// The forms `slot` gets, in form order, each with what it does with a
+    /// failing body: the operator, whose `Output` is free, then the
+    /// assignment, whose output is fixed.
+    fn slot_forms(
+        &self,
+        slot: &Slot,
+        fails: bool,
+    ) -> [Option<(OpForm, Translation)>; 2] {
+        let panic_at = self.ctx.cfg.wide.panic_at;
+        let form = |on: bool, form: OpForm, fixed_output: bool| {
+            let translation = translate(fails, panic_at, fixed_output)?;
+            return on.then_some((form, translation));
+        };
+        return [
+            form(slot.regular, OpForm::Value, false),
+            form(slot.assign, OpForm::Assign, true),
+        ];
+    }
+
+    /// One form of `operator` for `slot`. A facet slot's `{Op}Rhs` impl
+    /// holds the body and its assignment forwards to that impl; every other
+    /// impl calls the operator's helper, which holds the body.
+    fn make_form(
         &self,
         operator: &OpSpec,
-    ) -> [Option<OpRhs>; 2] {
-        return match operator.kind {
-            OpKind::Arith => [
-                self.with_self_math().then_some(OpRhs::Same),
-                Some(OpRhs::Friend(Capability::Math)),
-            ],
-            OpKind::Bitwise => [
-                self.with_self_bit().then_some(OpRhs::Same),
-                Some(OpRhs::Friend(Capability::Bit)),
-            ],
-            OpKind::Shift => [
-                None,
-                Some(OpRhs::Amount),
-            ],
-            OpKind::Unary => [
-                None,
-                None,
-            ],
+        slot: &Slot,
+        form: OpForm,
+        translation: Translation,
+        body: &Body,
+    ) -> TokenStream {
+        return match (&slot.rhs, form) {
+            (RhsKind::Facet { .. }, OpForm::Value) => {
+                self.facet_rhs_impl(operator, slot, translation, body)
+            }
+            (RhsKind::Facet { .. }, OpForm::Assign) => {
+                self.facet_assign_impl(operator, slot)
+            }
+            (RhsKind::Unary, _) => {
+                self.make_math_unary(operator, slot, translation, body.fails)
+            }
+            (RhsKind::Same | RhsKind::Friend(_) | RhsKind::Amount, _) => {
+                self.make_op_impl(operator, slot, form, translation, body.fails)
+            }
         };
     }
 
-    /// `operator`'s impl in `form` for `rhs`. Its `konst_*` flags are the
+    /// `operator`'s impl in `form` for `slot`. Its `konst_*` flags are the
     /// operator's, with an assignment's as `[XAssign, op, Assign, family]`;
-    /// a same-type operand calls the `_proven` helper when only same-type
-    /// operands are proven. A shift's helper takes any amount, so its doc
-    /// reflects the full proof.
+    /// the helper and the doc follow the slot's proof. A shift's helper
+    /// takes any amount, so its doc reflects the full proof.
     fn binary_op(
         &self,
         operator: &OpSpec,
-        proof: OperatorProof,
-        rhs: OpRhs,
+        slot: &Slot,
         form: OpForm,
     ) -> OpImpl {
         let (trait_name, method, is_konst) = match form {
@@ -658,98 +635,82 @@ impl Maker {
                 self.ctx.cfg.konst_for(&operator.assign_konsts()),
             ),
         };
-        let helper = self.arithmetic_method_name(operator, is_konst);
-        let (helper, proven) = match rhs {
-            OpRhs::Same => (Self::same_type_helper(proof, &helper), proof.same),
-            OpRhs::Friend(_) | OpRhs::Amount => (helper, proof.full),
-        };
         return OpImpl {
             trait_name,
             method,
             is_konst,
-            helper,
-            doc: self.proof_doc(proven),
+            helper: self.helper_name(operator, slot, is_konst),
+            doc: self.proof_doc(self.slot_proven(operator, slot)),
         };
     }
 
-    /// `body` as one binary operator impl: no `<..>` for `Same`, `<T>` with
-    /// the friend and seal bounds for `Friend`, `<usize>` for `Amount`.
-    fn impl_op(
+    /// How the impls of `slot` take the right-hand side named `param`:
+    /// `Trait for Ty` and `rhs: Self` for the wrapper itself; `Trait<T> for
+    /// Ty` for a friend, bound as `it` first; `Trait<usize> for Ty` for a
+    /// shift. `None` for a facet slot, which computes in its `{Op}Rhs`
+    /// impl, and for a unary operator.
+    fn op_rhs(
         &self,
-        it: &OpImpl,
-        rhs: OpRhs,
-        body: TokenStream,
-    ) -> TokenStream {
-        let trait_name = &it.trait_name;
-        return match rhs {
-            OpRhs::Same => self.impl_trait(
-                it.is_konst,
-                quote! { ::core::ops::#trait_name },
-                body,
-            ),
-            OpRhs::Friend(capability) => {
-                let rhs_ty = &self.ctx.rhs_ty;
-                let friend = self.ctx.friends.bound(capability);
-                let seal = self.seal_bound(it.is_konst);
-                self.impl_rhs_trait(
-                    it.is_konst,
-                    quote! { #friend + #seal },
-                    quote! { ::core::ops::#trait_name<#rhs_ty> },
-                    body,
-                )
-            }
-            OpRhs::Amount => self.impl_trait(
-                it.is_konst,
-                quote! { ::core::ops::#trait_name<usize> },
-                body,
-            ),
-        };
-    }
-
-    /// One binary operator impl: `type Output` (value form), the doc, then
-    /// the method, which binds a friend operand as `it` first.
-    fn make_op_impl(
-        &self,
-        it: &OpImpl,
-        rhs: OpRhs,
-        form: OpForm,
-    ) -> TokenStream {
-        let method = &it.method;
-        let helper = &it.helper;
-        let doc = &it.doc;
-        let param = match (rhs, form) {
-            (OpRhs::Amount, OpForm::Assign) => format_ident!("that"),
-            _ => format_ident!("rhs"),
-        };
-        let (param_ty, prelude, call) = match rhs {
-            OpRhs::Same => {
-                let rhs_raw = &self.ctx.rhs_raw;
-                (
-                    quote! { Self },
-                    TokenStream::new(),
-                    quote! { self.#helper(#rhs_raw) },
-                )
-            }
-            OpRhs::Friend(_) => {
+        slot: &Slot,
+        param: &Ident,
+    ) -> Option<OpRhs> {
+        return match &slot.rhs {
+            RhsKind::Same => Some(OpRhs {
+                ty: quote! { Self },
+                prelude: TokenStream::new(),
+                operand: self.ctx.rhs_raw.clone(),
+                generic: TokenStream::new(),
+            }),
+            RhsKind::Friend(_) => {
                 let rhs_ty = &self.ctx.rhs_ty;
                 let conversion = self.ctx.friends.conversion_path();
-                (
-                    quote! { #rhs_ty },
-                    quote! { let it = #conversion(rhs); },
-                    quote! { self.#helper(it) },
-                )
+                Some(OpRhs {
+                    ty: quote! { #rhs_ty },
+                    prelude: quote! { let it = #conversion(rhs); },
+                    operand: quote! { it },
+                    generic: quote! { <#rhs_ty> },
+                })
             }
-            OpRhs::Amount => (
-                quote! { usize },
-                TokenStream::new(),
-                quote! { self.#helper(#param) },
-            ),
+            RhsKind::Amount => Some(OpRhs {
+                ty: quote! { usize },
+                prelude: TokenStream::new(),
+                operand: quote! { #param },
+                generic: quote! { <usize> },
+            }),
+            RhsKind::Facet { .. } | RhsKind::Unary => None,
         };
+    }
+
+    /// One binary operator impl that calls the operator's helper: `type
+    /// Output` (value form), the doc, then the method. A shift's parameter
+    /// is `rhs` (value) or `that` (assignment).
+    fn make_op_impl(
+        &self,
+        operator: &OpSpec,
+        slot: &Slot,
+        form: OpForm,
+        translation: Translation,
+        fails: bool,
+    ) -> TokenStream {
+        let param = match (&slot.rhs, form) {
+            (RhsKind::Amount, OpForm::Assign) => format_ident!("that"),
+            _ => format_ident!("rhs"),
+        };
+        let Some(rhs) = self.op_rhs(slot, &param)
+        else {
+            return TokenStream::new();
+        };
+        let it = self.binary_op(operator, slot, form);
+        let (method, helper, doc) = (&it.method, &it.helper, &it.doc);
+        let (param_ty, prelude, operand) =
+            (&rhs.ty, &rhs.prelude, &rhs.operand);
+        let call = quote! { self.#helper(#operand) };
 
         let body = match form {
             OpForm::Value => {
-                let output_ty = self.ctx.output.ty();
-                let result = self.ctx.output.convert(call);
+                let output = self.output_of(slot, false, fails, translation);
+                let output_ty = output.ty();
+                let result = output.convert(call);
                 quote! {
                     type Output = #output_ty;
 
@@ -776,7 +737,33 @@ impl Maker {
                 }
             },
         };
-        return self.impl_op(it, rhs, body);
+        return self.impl_op(&it, slot, &rhs, body);
+    }
+
+    /// `body` as one binary operator impl; a friend right-hand side adds
+    /// its capability's bound and the seal bound.
+    fn impl_op(
+        &self,
+        it: &OpImpl,
+        slot: &Slot,
+        rhs: &OpRhs,
+        body: TokenStream,
+    ) -> TokenStream {
+        let trait_name = &it.trait_name;
+        let generic = &rhs.generic;
+        let path = quote! { ::core::ops::#trait_name #generic };
+        let RhsKind::Friend(capability) = slot.rhs
+        else {
+            return self.impl_trait(it.is_konst, path, body);
+        };
+        let friend = self.ctx.friends.bound(capability);
+        let seal = self.seal_bound(it.is_konst);
+        return self.impl_rhs_trait(
+            it.is_konst,
+            quote! { #friend + #seal },
+            path,
+            body,
+        );
     }
 
     /// A unary operator trait forwarding to its validating `_{method}`
@@ -784,19 +771,18 @@ impl Maker {
     fn make_math_unary(
         &self,
         operator: &OpSpec,
+        slot: &Slot,
+        translation: Translation,
+        fails: bool,
     ) -> TokenStream {
-        if !self.with_operator(operator) {
-            return TokenStream::new();
-        }
-
-        let output = &self.ctx.output;
+        let output = self.output_of(slot, false, fails, translation);
         let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let output_ty = output.ty();
         let trait_name = format_ident!("{}", operator.trait_name);
         let method = format_ident!("{}", operator.method);
         let helper = format_ident!("_{}", method);
         let result = output.convert(quote! { self.#helper() });
-        let doc = self.proof_doc(self.unary_proven(operator));
+        let doc = self.proof_doc(self.slot_proven(operator, slot));
         return self.impl_trait(
             is_konst,
             quote! { ::core::ops::#trait_name },

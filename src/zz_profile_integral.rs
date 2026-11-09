@@ -1,4 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::fmt::{
     Debug,
     Formatter,
@@ -7,13 +10,8 @@ use std::fmt::{
 use proc_macro2::{
     Ident,
     Span,
-    TokenStream,
 };
-use quote::{
-    ToTokens,
-    format_ident,
-    quote,
-};
+use quote::ToTokens;
 use syn::parse::{
     Parse,
     ParseStream,
@@ -28,11 +26,11 @@ use crate::integral_cfg::{
     GRAMMAR,
     IntegralFlag,
     IntegralFlags,
-    PanicAt,
 };
 use crate::zz_conv::SelfConverter;
 use crate::zz_flags::FlagSettings;
 use crate::zz_friend::{
+    Capability,
     FACET,
     Friend,
 };
@@ -44,14 +42,9 @@ use crate::zz_lib::{
 };
 use crate::zz_runner::{
     MkErr,
-    MySpanned,
     snake_case_of,
 };
-use crate::zz_values::{
-    Op,
-    OpKind,
-    OpSpec,
-};
+use crate::zz_values::Op;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Arithmetic {
@@ -62,159 +55,13 @@ pub(crate) enum Arithmetic {
 }
 
 impl Arithmetic {
-    pub(crate) fn make_expr(
-        self,
-        it: &OpSpec,
-    ) -> TokenStream {
-        let symbol = it.token();
+    /// The arithmetic with the same results that `const` code can call:
+    /// the operators of `Wrapping` are not const, the primitive's
+    /// `wrapping_*` methods are.
+    pub(crate) fn konst(self) -> Self {
         return match self {
-            Arithmetic::Primitive => quote! { lhs #symbol rhs },
-            Arithmetic::PrimitiveWrapping => {
-                let method = format_ident!("wrapping_{}", it.method);
-                let rhs = Self::rhs_for(it);
-                quote! { lhs.#method(#rhs) }
-            }
-            Arithmetic::WrapperWrapping => {
-                let rhs = match it.kind == OpKind::Shift {
-                    true => quote! { rhs },
-                    false => quote! { ::core::num::Wrapping(rhs) },
-                };
-                quote! {
-                    (
-                        ::core::num::Wrapping(lhs)
-                            #symbol #rhs
-                    ).0
-                }
-            }
-            Arithmetic::Checked => {
-                let method = format_ident!("checked_{}", it.method);
-                let rhs = Self::rhs_for(it);
-                quote! {
-                    match lhs.#method(#rhs) {
-                        ::core::option::Option::Some(value) => value,
-                        ::core::option::Option::None => {
-                            ::core::panic!(
-                                "operation overflowed",
-                            );
-                        }
-                    }
-                }
-            }
-        };
-    }
-
-    pub(crate) fn make_const_expr(
-        self,
-        it: &OpSpec,
-    ) -> TokenStream {
-        return match self {
-            Self::WrapperWrapping => Self::PrimitiveWrapping.make_expr(it),
-            _ => self.make_expr(it),
-        };
-    }
-
-    pub(crate) fn make_operator_expr(
-        self,
-        operator: &OpSpec,
-        is_konst: bool,
-    ) -> TokenStream {
-        if operator.kind == OpKind::Bitwise {
-            let symbol = operator.token();
-            return quote! { lhs #symbol rhs };
-        }
-        return match is_konst {
-            true => self.make_const_expr(operator),
-            false => self.make_expr(operator),
-        };
-    }
-
-    /// `operator` on the raw `lhs` and `rhs` as an `Option` of the raw
-    /// result: `None` where `level` reports a failure instead of panicking.
-    /// `sequential` always checks; `int` checks division (zero and
-    /// `MIN / -1`) from `overflow` and everything at `nothing`; the wrapping
-    /// profiles only have division by zero to check. Floats never panic.
-    pub(crate) fn make_fallible_expr(
-        self,
-        operator: &OpSpec,
-        level: PanicAt,
-        float: bool,
-        is_konst: bool,
-    ) -> TokenStream {
-        let some = |value: TokenStream| {
-            return quote! { ::core::option::Option::Some(#value) };
-        };
-        if operator.kind == OpKind::Bitwise {
-            let symbol = operator.token();
-            return some(quote! { lhs #symbol rhs });
-        }
-        return self.make_fallible_arithmetic(operator, level, float, is_konst);
-    }
-
-    /// `make_fallible_expr` of an arithmetic operator or a shift.
-    fn make_fallible_arithmetic(
-        self,
-        operation: &OpSpec,
-        level: PanicAt,
-        float: bool,
-        is_konst: bool,
-    ) -> TokenStream {
-        let some = |value: TokenStream| {
-            return quote! { ::core::option::Option::Some(#value) };
-        };
-        if float {
-            return some(Self::Primitive.make_expr(operation));
-        }
-        let arithmetic = match (self, is_konst) {
-            (Self::WrapperWrapping, true) => Self::PrimitiveWrapping,
-            (arithmetic, _) => arithmetic,
-        };
-        let division = matches!(operation.op, Op::Div | Op::Rem);
-        let checked = match arithmetic {
-            Self::Checked => true,
-            Self::Primitive => match division {
-                true => level.checks_division(),
-                false => level.checks_overflow(),
-            },
-            Self::PrimitiveWrapping | Self::WrapperWrapping => false,
-        };
-        if checked {
-            return Self::make_checked_option(operation);
-        }
-        let value = arithmetic.make_expr(operation);
-        if division && level.checks_division() {
-            return quote! {
-                if rhs == 0 {
-                    ::core::option::Option::None
-                }
-                else {
-                    ::core::option::Option::Some(#value)
-                }
-            };
-        }
-        return some(value);
-    }
-
-    /// `checked_{operation}` of the raw operands; a shift amount past
-    /// `u32` is `None` rather than truncated.
-    fn make_checked_option(operation: &OpSpec) -> TokenStream {
-        let method = format_ident!("checked_{}", operation.method);
-        return match operation.kind == OpKind::Shift {
-            true => quote! {
-                if rhs > u32::MAX as usize {
-                    ::core::option::Option::None
-                }
-                else {
-                    lhs.#method(rhs as u32)
-                }
-            },
-            false => quote! { lhs.#method(rhs) },
-        };
-    }
-
-    fn rhs_for(operation: &OpSpec) -> TokenStream {
-        return match operation.kind == OpKind::Shift {
-            true => quote! { rhs as u32 },
-            false => quote! { rhs },
+            Self::WrapperWrapping => Self::PrimitiveWrapping,
+            Self::Primitive | Self::PrimitiveWrapping | Self::Checked => self,
         };
     }
 }
@@ -652,75 +499,126 @@ impl FacetCfg {
     }
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) struct FacetSlotKey {
-    pub(crate) operator: Op,
-    pub(crate) rhs: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum FacetOwner {
-    Default,
-    Explicit(usize),
-}
-
+/// What stands on an operator's right-hand side.
 #[derive(Clone)]
-pub(crate) struct FacetSlot {
-    pub(crate) rhs: Option<Path>,
-    pub(crate) conversion: Option<Path>,
+pub(crate) enum RhsKind {
+    /// The wrapper itself: `Add for Ty`.
+    Same,
+    /// A raw `usize` amount: a shift's bits, a step's count.
+    Amount,
+    /// Any friend holding the capability, converted by the seal:
+    /// `Add<T> for Ty where T: Math + Seal`.
+    Friend(Capability),
+    /// A facet slot, dispatched through its operator's `{Op}Rhs` trait: one
+    /// right-hand type (`None`: the wrapper itself) and the conversion its
+    /// friend declares.
+    Facet {
+        ty: Option<Path>,
+        conversion: Option<Path>,
+    },
+    /// Nothing: a unary operator.
+    Unary,
+}
+
+/// One right-hand side of an operator: who stands there, the arithmetic
+/// that combines the raw values, and what the result is produced as. Its
+/// owner (the root or a facet) also says which forms it gets.
+#[derive(Clone)]
+pub(crate) struct Slot {
+    pub(crate) rhs: RhsKind,
     pub(crate) arithmetic: Arithmetic,
-    pub(crate) ty_out: SelfConverter,
-    /// Whether the slot also gets `{Op}Assign`: its owner has `assign_*`
-    /// on and its output is `Self`.
+    pub(crate) produce: SelfConverter,
+    /// The operator itself: its owner has the `math_*` flag on.
+    pub(crate) regular: bool,
+    /// `{Op}Assign`: its owner has the `assign_*` flag on and the output
+    /// is `Self`.
     pub(crate) assign: bool,
-    pub(crate) owner: FacetOwner,
-    pub(crate) span: Span,
 }
 
-impl MySpanned for FacetSlot {
-    fn my_span(&self) -> Span {
-        return self.span;
+impl Slot {
+    /// The count a `core::iter::Step` method steps by, under `arithmetic`.
+    pub(crate) fn count(arithmetic: Arithmetic) -> Self {
+        return Self {
+            rhs: RhsKind::Amount,
+            arithmetic,
+            produce: SelfConverter::default(),
+            regular: true,
+            assign: false,
+        };
+    }
+
+    /// Whether the slot dispatches through its operator's `{Op}Rhs` trait
+    /// rather than through the operator's helper.
+    pub(crate) fn is_facet(&self) -> bool {
+        return matches!(self.rhs, RhsKind::Facet { .. });
     }
 }
 
-impl Debug for FacetSlot {
+impl Debug for Slot {
     fn fmt(
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
+        let rhs = match &self.rhs {
+            RhsKind::Same => "Self".to_string(),
+            RhsKind::Amount => "usize".to_string(),
+            RhsKind::Friend(capability) => capability.name().to_string(),
+            RhsKind::Facet { ty: Some(ty), .. } => {
+                format!("facet {}", ty.to_token_stream())
+            }
+            RhsKind::Facet { ty: None, .. } => "facet Self".to_string(),
+            RhsKind::Unary => "none".to_string(),
+        };
         return f
-            .debug_struct("FacetSlot")
-            .field("rhs", &self.rhs.as_ref().map(ToTokens::to_token_stream))
-            .field(
-                "conversion",
-                &self.conversion.as_ref().map(ToTokens::to_token_stream),
-            )
+            .debug_struct("Slot")
+            .field("rhs", &rhs)
             .field("arithmetic", &self.arithmetic)
-            .field("ty_out", &!self.ty_out.is_self())
+            .field("produce", &!self.produce.is_self())
+            .field("regular", &self.regular)
             .field("assign", &self.assign)
-            .field("owner", &self.owner)
-            .finish_non_exhaustive();
+            .finish();
     }
 }
 
-pub(crate) struct DefaultFacetCfg {
-    pub(crate) profile: Profiles,
-    pub(crate) friends: BTreeSet<Friend>,
-    pub(crate) flags: IntegralFlags,
-    pub(crate) ty_out: SelfConverter,
+/// Every operator's right-hand sides: one ordered slot list per operator,
+/// built once from the facets or from the root configuration. Slot order is
+/// the same type first, then friends and facet slots as the configuration
+/// keeps them.
+#[derive(Debug, Default)]
+pub(crate) struct Slots {
+    by_facets: bool,
+    rows: BTreeMap<Op, Vec<Slot>>,
 }
 
-impl Debug for DefaultFacetCfg {
-    fn fmt(
+impl Slots {
+    /// An empty table; `by_facets` says which path the wrapper takes.
+    pub(crate) fn new(by_facets: bool) -> Self {
+        return Self {
+            by_facets,
+            rows: BTreeMap::new(),
+        };
+    }
+
+    /// Whether facets dispatch the operators that take a value, each slot
+    /// through its `{Op}Rhs` impl. Otherwise, and for shifts and unary
+    /// operators always, an impl calls its operator's helper.
+    pub(crate) fn by_facets(&self) -> bool {
+        return self.by_facets;
+    }
+
+    /// `op`'s slots, in slot order; none when nothing generates `op`.
+    pub(crate) fn of(
         &self,
-        f: &mut Formatter<'_>,
-    ) -> std::fmt::Result {
-        return f
-            .debug_struct("DefaultFacetCfg")
-            .field("profile", &self.profile.arithmetic())
-            .field("friends", &self.friends)
-            .field("flags", &self.flags)
-            .field("ty_out", &!self.ty_out.is_self())
-            .finish();
+        op: Op,
+    ) -> &[Slot] {
+        return self.rows.get(&op).map(Vec::as_slice).unwrap_or_default();
+    }
+
+    pub(crate) fn set(
+        &mut self,
+        op: Op,
+        slots: Vec<Slot>,
+    ) {
+        self.rows.insert(op, slots);
     }
 }

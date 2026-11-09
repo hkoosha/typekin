@@ -82,8 +82,8 @@ pub(crate) struct OperatorOutput {
     cfg: SelfConverter,
     ty: TokenStream,
     conversion: TokenStream,
-    /// The error an operation reports failure with, when it does
-    /// (`panic_at` below `anything`): `Option<Raw>`.
+    /// The error in the output when the operator's form passes a failure on
+    /// instead of panicking: `Option<Raw>`.
     failure: Option<TokenStream>,
 }
 

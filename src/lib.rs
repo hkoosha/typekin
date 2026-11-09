@@ -23,6 +23,7 @@ pub(crate) mod float;
 pub(crate) mod friendship;
 pub(crate) mod integral;
 pub(crate) mod integral_cfg;
+pub(crate) mod integral_compute;
 pub(crate) mod integral_forward;
 pub(crate) mod integral_friend;
 pub(crate) mod integral_impls;

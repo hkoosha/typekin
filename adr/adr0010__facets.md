@@ -2,12 +2,12 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `src/integral_friend.rs` (`make_facet_dispatch`,
-  `facet_rhs_trait_decl`, `facet_rhs_impl`, `facet_operator_impl`,
-  `facet_assign_impl`),
-  `src/integral_cfg.rs` (`FacetSlotKey`, `resolve_facets`), `src/integral.rs`
-  (`with_global_operators`), README §facets, AGENTS.md "Preserve profiles,
-  facets, and storage", ADR 0008, ADR 0011, ADR 0012, ADR 0015
+- Related: `src/integral_friend.rs` (`make_rhs_traits`, `facet_rhs_impl`,
+  `facet_operator_impl`, `facet_assign_impl`),
+  `src/integral_cfg.rs` (`resolve_facets`, `claim_slots`),
+  `src/zz_profile_integral.rs` (`Slot`, `Slots`), README §facets, AGENTS.md
+  "Preserve profiles, facets, and storage", ADR 0008, ADR 0011, ADR 0012, ADR
+  0015, ADR 0033
 
 ## Context
 
@@ -28,9 +28,18 @@ and output conversion.
   Two explicit facets claiming the same slot is an error ("duplicate explicit
   facet slot"). Root `Make`/`Rel` stay wrapper-wide.
 - Omitting `facet` and writing `facet = []` mean different things. Omitted uses
-  the global operator path (`with_global_operators()` is `!facets_present()`).
-  An empty list turns on facet dispatch with no explicit facets. A nested
-  integral config inside a bitflag rejects `facet` entirely.
+  the global operator path; an empty list turns on facet dispatch with no
+  explicit facets (`Slots::by_facets()`). A nested integral config inside a
+  bitflag rejects `facet` entirely.
+- One slot list per operator for both paths (ADR 0033, 2026-11-09): the
+  wrapper's `Slots` holds, for each operator, its ordered `Slot`s
+  (`RhsKind`, arithmetic, `produce`, and which forms the owner has on), built
+  once from the facets or from the root (same type, friends, the shift
+  amount). Every operator impl comes from that list, and the computation of a
+  slot from `Maker::compute`. The generated shape of the two paths did not
+  change: only facet wrappers dispatch through `{Op}Rhs`. Facet claims are
+  emitted in declaration order with the default facet last (they used to be
+  ordered by right-hand type).
 - Codegen: one RHS dispatcher trait per operator (`{Op}Rhs`), **one** blanket
   std-operator impl per operator, and one concrete dispatch impl (with an
   associated `Output`) per RHS slot.

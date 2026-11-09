@@ -5,12 +5,13 @@
 - Date: 2026-11-09
 - Related: `PLAN_0.md` (the plan this records), `PLAN.md` (check levels; not
   implemented when this landed), `AGENTS.md` (Implementation conventions),
-  `src/zz_lib.rs` (`Named`, `parse_choice`, `Site`, `rejection`, `Removals`),
-  `src/zz_flags.rs` (`FlagRow`), `src/zz_values.rs` (`OpSpec`, `Width`,
-  `IntTy`, `IntervalSet`), `src/zz_profile_integral.rs` (`PROFILES`),
-  `src/integral_cfg.rs` (`WrapperWide`, `OpFlags`), `src/integral.rs`
-  (`StoragePlan`); ADR 0003, 0009, 0010, 0011, 0016, 0018, 0022, 0024, 0028,
-  0034
+  `src/zz_lib.rs` (`Named`, `parse_choice`, `Site`, `rejection`, `Removals`,
+  `Validation`), `src/zz_flags.rs` (`FlagRow`), `src/zz_values.rs` (`OpSpec`,
+  `Width`, `IntTy`, `IntervalSet`), `src/zz_forward.rs` (`CoreFwd`),
+  `src/zz_profile_integral.rs` (`PROFILES`, `Slot`), `src/integral_cfg.rs`
+  (`WrapperWide`, `OpFlags`, `translate`), `src/integral_compute.rs`
+  (`compute`), `src/integral.rs` (`StoragePlan`); ADR 0003, 0009, 0010, 0011,
+  0016, 0018, 0022, 0024, 0028, 0034
 
 ## Context
 
@@ -35,10 +36,10 @@ first instead, to the tree as it stood with `panic_at` (ADR 0028), so that
 
   | Stage | Owner | Varies by |
   |---|---|---|
-  | Operation | an `OpSpec` row (operators), a forward row (named forms), an ingress constructor | identity, arity, flags, `konst_*` flags, closure op, how it can panic |
-  | Right-hand side | a slot | same type, raw amount, friend, facet slot; arithmetic; `produce` |
-  | Computation | `compute(row, slot) -> Body { tokens, fails }` | profile arithmetic, `panic_at`, proofs |
-  | Construction | the validation conjuncts, `Check`, `OnInvalid`, `StoragePlan` | validate, proven, `Within`; the storage base |
+  | Operation | an `OpSpec` row (operators), a `CoreFwd` row (named forms), an ingress constructor | identity, arity, flags, `konst_*` flags, closure op, how it can panic |
+  | Right-hand side | a `Slot` of the wrapper's `Slots` | same type, raw amount, friend, facet slot; arithmetic; `produce` |
+  | Computation | `Maker::compute(row, slot) -> Body { tokens, fails }` | profile arithmetic, `panic_at`, proofs |
+  | Construction | `Validation` (the conjuncts), `Check`, `OnInvalid`, `StoragePlan` | validate, proven, `Within`; the storage base |
   | Form | `translate(fails, panic_at, fixed_output)` and one form emitter | trait impl or named method, assignment, `Step` |
 
   Constructors are the identity operation: `make`, `try_make` and `map` go
@@ -53,9 +54,10 @@ first instead, to the tree as it stood with `panic_at` (ADR 0028), so that
       single-word value and builds "expected `a`, `b`, or `c`" from the table.
     - `FlagRow { flag, name, on }` per flag enum; `KonstRow { konst, name,
       stable, integral, text }` for the `konst_*` names.
-    - `OpSpec` rows for the twelve operators, with the integral-only flag
-      columns in `IntegralFlag::of_op`.
-    - forward rows shared by the integral and float `core` forwards.
+    - `OpSpec` rows for the twelve operators (`OPS`), with the integral-only
+      flag columns in `IntegralFlag::of_op`.
+    - `CoreFwd` rows (`CORE_INT`, `CORE_FLOAT`, `FLOAT_MATH`) shared by the
+      integral and float `core` forwards and read by `domain` typing.
     - `PROFILES`: one `ProfileSpec` row per profile.
     - `rejection(site, key)`: the keys a configuration site rules out.
   Each table keeps one compile-time assertion that row `i` holds variant `i`.
