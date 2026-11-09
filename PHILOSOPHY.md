@@ -143,13 +143,25 @@ weakening it:
 - An operation whose results the domain provably contains (`Percent / Percent`
   on `..=100`) is statically incapable of creating an invalid value. It skips
   the runtime check, says so in its documentation, and `prove` turns the proof
-  into a checked API contract. A proof is a sound over-approximation; an
+  into a checked requirement. A proof is a sound over-approximation; an
   operation that cannot be proven keeps its check.
 - A `Within` friendship edge (`_(Percent) -> Within` on a `..=255` byte) is the
   same idea across types: rustc proves at compile time that every value the
   source can hold lies in the target's domain, and a failed proof is a compile
   error with a counterexample. It is statically incapable of creating an invalid
   value, not a bypass: nothing is trusted, and the debug check stays.
+
+## Wrapped Values Behave Like Their Raw Values by Default
+
+By default, a wrapper behaves on the surface the way its raw value behaves in
+the language. `a + b` on two wrappers returns a wrapper, just as `a + b` on two
+`u32` values returns a `u32`. A zero divisor panics, as it does in Rust, and
+overflow follows the build's overflow checks. Typekin adds its own validation
+on top of that, but it does not change the shape of everyday operations.
+
+A library whose `a + b` returns a `Result` by default is too painful to use.
+Stricter behavior is a per-type opt-in, never the default: typekin's own checks
+in every build, or operators that return a `Result` and never panic.
 
 ## Panic and Fallibility Are Different Contracts
 
