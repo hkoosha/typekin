@@ -27,6 +27,11 @@ at compile time, so the conversion has no branch and no panic path.
   `__TYPEKIN_WITHIN_BUDGET = 65_536` steps.
 - An exact evaluator handles every lens, value and width; `contains` returns
   `bool` (W1).
+- `ResolvedDomain::values(width) -> Result<Form, Opaque>` is the exact
+  per-width value set (ADR 0033, 2026-11-09): the form is no longer private
+  to `Within`, and widths are a typed `Width` with `IntTy` bounds shared with
+  closure proofs. The emitted subset check (`zz_domain_within_const.rs`) is
+  untouched and knows none of these types.
 - One plain stable `const fn` subset check over sign-magnitude values. Typekin
   compiles it in for primitive sources and emits it verbatim for rustc.
 - Primitive sources are decided at expansion (the macro sees both sides). Errors

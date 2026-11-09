@@ -222,6 +222,12 @@ mod tests {
             error.to_string(),
             "bitflag integral configuration does not support tree",
         );
+        assert_eq!(error.span().start().line, 1, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("tree").unwrap(),
+            "{it}",
+        );
     }
 
     #[test]
@@ -233,6 +239,30 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "panic_at belongs on integral types, not in integral = [..]",
+        );
+        assert_eq!(error.span().start().line, 1, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("panic_at").unwrap(),
+            "{it}",
+        );
+    }
+
+    #[test]
+    fn rejects_konst_in_nested_integral_configuration() {
+        let it = "integral = [konst = stable]";
+        let this = syn::parse_str::<Cfg>(it);
+        let error = this.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "constness is specified in multiple places",
+        );
+        assert_eq!(error.span().start().line, 1, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("konst").unwrap(),
+            "{it}",
         );
     }
 
@@ -343,7 +373,7 @@ mod tests {
         ";
         let config = syn::parse_str::<Cfg>(it)
             .expect("top-level none konst should parse");
-        assert_eq!(config.int.konst, crate::zz_lib::Konst::None);
+        assert_eq!(config.int.wide.konst, crate::zz_lib::Konst::None);
     }
 
     #[test]
@@ -511,7 +541,11 @@ mod tests {
         assert!(this.is_ok(), "{it}");
         let config = this.unwrap();
 
-        assert_eq!(config.int.konst, crate::zz_lib::Konst::default(), "{it}");
+        assert_eq!(
+            config.int.wide.konst,
+            crate::zz_lib::Konst::default(),
+            "{it}"
+        );
         assert_eq!(
             config.int.konst_for(&[Konsts::Math]),
             cfg!(feature = "nightly"),

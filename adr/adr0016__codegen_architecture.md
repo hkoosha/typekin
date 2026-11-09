@@ -1,10 +1,11 @@
 # ADR 0016: Code-generation architecture and conventions
 
 - Status: Accepted (implemented), except the prelude rule (see Consequences)
-- Date: 2026-11-04
+- Date: 2026-11-04 (updated 2026-11-09 by ADR 0033: data rows, `Named` tables,
+  the order rule)
 - Related: `AGENTS.md` (Implementation conventions), `PLAN.md` (D1–D11, App. B,
   G), `src/zz_flags.rs`, `src/zz_names.rs`, `src/zz_values.rs`,
-  `src/zz_friend.rs`, `TODO.md`; ADR 0007, 0018, 0025
+  `src/zz_friend.rs`, `TODO.md`; ADR 0007, 0018, 0025, 0033
 
 ## Context
 
@@ -16,13 +17,14 @@ are organised. Several of them were tried the other way first.
 ## Decision
 
 - **Direct `Maker` + `quote!`, no code-model layer.** Emitters write `quote!`
-  templates. A narrow piece of typed metadata stays: `Operator`, `ArithmeticOp`,
-  `Ctx`, and the `make_*` helpers.
+  templates. Beside them, plain data rows say what to emit (ADR 0033): the
+  name tables, `OpSpec` (operators), the forward rows, `PROFILES`, and the
+  site table of rejected keys. A row is a constant, never a closure.
 - **One macro per family, generating by default, with opt-out flags.**
   `integral`, `bitflag` and `text` generate `repr(transparent)`, `Clone`, `Copy`
   (not text), `Debug` and `Hash` by default.
   `without = clone|copy|hash|debug|repr` turns each one off
-  (`IntegralFlag::DEFAULT_ON`; `src/bitflag.rs` and `src/text.rs` defaults).
+  (the `on` column of each family's `FlagRow` table).
 - **`repr(transparent)` is generated, never required.** The macros check only
   the one-field tuple shape and never inspect caller `repr` attributes. The
   generated code makes no layout assumption (safe construction and field access
@@ -30,7 +32,7 @@ are organised. Several of them were tried the other way first.
   that is the established layout contract (AGENTS: "Preserve transparent
   representation by default and honor `without = repr`").
 - **Names are types.** A family of names that logic compares, matches or looks
-  up is an enum with one name table: `FnName`,
+  up is an enum with one row table (`Named::TABLE`; ADR 0033): `FnName`,
   `IntegralFlag`/`TextFlag`/`BitFlag`, `Konsts`, `Capability`, `ProfileKind`,
   `Key`, `N`/`F`, operators. A name used in only a few places (2–4 when the rule
   was introduced; AGENTS now says "one or two") is a module `const` (`SEAL`,
@@ -39,8 +41,8 @@ are organised. Several of them were tried the other way first.
   tables that are themselves the single boundary. Generated names come from
   `zz_names` key tables.
 - **Flags are hand-written enums over a bitset.** Each family enum implements
-  `Flag`. `Flags<F>` is a `u128` (at most 128 flags per family), parsed by one
-  `FlagSettings<F>::parse`.
+  `Flag` with one `FlagRow { flag, name, on }` table. `Flags<F>` is a `u128`
+  (at most 128 flags per family), parsed by one `FlagSettings<F>::parse`.
 - **Tokens, not re-parsed strings.** Paths and types stay as tokens/`Ident` so
   they keep their spans (`value_name: Option<Ident>`, `lowered_type`). One
   exception is kept on purpose: `FacetSlotKey.rhs: String`
@@ -53,9 +55,12 @@ are organised. Several of them were tried the other way first.
   `zz_*` file never imports a family; one serving a single family carries that
   family's suffix (`zz_profile_integral`).
 - **Emitter shape.** An emitter is a `&self` method returning one trait/impl
-  group, with its flag check as an early return. Orchestrators are ordered lists
-  of calls, and that order is public output. Logic functions stay under about
-  100 lines (`just fn-lengths`).
+  group, with its flag check as an early return. Orchestrators are section
+  lists, and inside a section the order follows the tables. Only "the
+  annotated item comes first" is promised about order; the rest is
+  deterministic but may change between versions (ADR 0033, D0.1; until
+  2026-11-09 the orchestrators' order counted as public output). Logic
+  functions stay under about 100 lines.
 - **Per-kind domain code.** The integer and float normalizers/emitters are
   separate (`zz_domain_int.rs`, `zz_domain_float.rs`). The files are split by
   kind, not by stage. Only identical helpers are shared (`kleene`,

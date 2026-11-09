@@ -39,6 +39,17 @@ use crate::zz_domain::{
     kleene,
     listing,
 };
+use crate::zz_forward::{
+    CORE_FLOAT,
+    CoreFwd,
+    FLOAT_MATH,
+    InDomain,
+    domain_functions,
+};
+use crate::zz_lib::{
+    Named,
+    parse_choice,
+};
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     F,
@@ -57,15 +68,31 @@ pub(crate) enum MathProvider {
     Nightly,
 }
 
+impl Named for MathProvider {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Core, "core"),
+        (Self::Std, "std"),
+        (Self::Nightly, "nightly"),
+    ];
+
+    fn index(self) -> usize {
+        return self as usize;
+    }
+}
+
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = MathProvider::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
 impl Parse for MathProvider {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let name = input.parse::<Ident>()?;
-        return match name.to_string().as_str() {
-            "core" => Ok(Self::Core),
-            "std" => Ok(Self::Std),
-            "nightly" => Ok(Self::Nightly),
-            _ => name.span().fail("expected `core`, `std`, or `nightly`"),
-        };
+        return parse_choice(input);
     }
 }
 
@@ -159,43 +186,13 @@ fn subject() -> Operand {
     };
 }
 
-const CORE_FUNCTIONS: &[FnName] = &[
-    FnName::Abs,
-    FnName::Signum,
-    FnName::Copysign,
-    FnName::Recip,
-    FnName::ToDegrees,
-    FnName::ToRadians,
-];
-const PROVIDER_FUNCTIONS: &[FnName] = &[
-    FnName::Floor,
-    FnName::Ceil,
-    FnName::Round,
-    FnName::RoundTiesEven,
-    FnName::Trunc,
-    FnName::Fract,
-    FnName::MulAdd,
-    FnName::Sqrt,
-    FnName::Cbrt,
-    FnName::RemEuclid,
-    FnName::DivEuclid,
-];
-const PREDICATES: &[FnName] = &[
-    FnName::IsNan,
-    FnName::IsFinite,
-    FnName::IsInfinite,
-    FnName::IsNormal,
-    FnName::IsSubnormal,
-    FnName::IsSignPositive,
-    FnName::IsSignNegative,
-];
-
-fn arity(function: FnName) -> usize {
-    return match function {
-        FnName::Copysign | FnName::RemEuclid | FnName::DivEuclid => 1,
-        FnName::MulAdd => 2,
-        _ => 0,
-    };
+/// The row of `rows` that `lens` names, if a domain uses it as `used`.
+fn domain_row(
+    rows: &'static [CoreFwd],
+    lens: &Lens,
+    used: InDomain,
+) -> Option<&'static CoreFwd> {
+    return CoreFwd::of(rows, lens.function?).filter(|it| it.lens == used);
 }
 
 fn type_lens(
@@ -203,9 +200,10 @@ fn type_lens(
     subject: F,
     math: MathProvider,
 ) -> syn::Result<Operand> {
-    let (function, provided) = float_function(lens, subject, math)?;
+    let (row, provided) = float_function(lens, subject, math)?;
+    let function = row.name;
 
-    let expected = arity(function);
+    let expected = row.args.len();
     if lens.args.len() != expected {
         return lens.name.fail(format!(
             "{} takes {expected} argument{}",
@@ -232,28 +230,25 @@ fn type_lens(
     });
 }
 
-/// The function `lens` names and where it comes from, if a domain may
-/// apply it under `math`.
+/// The row of the function `lens` names and where it comes from, if a
+/// domain may apply it under `math`.
 fn float_function(
     lens: &Lens,
     subject: F,
     math: MathProvider,
-) -> syn::Result<(FnName, Provided)> {
+) -> syn::Result<(&'static CoreFwd, Provided)> {
     let name = lens.name.to_string();
-    let listed = |functions: &[FnName]| {
-        return lens.function.filter(|it| functions.contains(it));
-    };
-    return if let Some(function) = listed(CORE_FUNCTIONS) {
-        Ok((function, Provided::Core))
+    return if let Some(row) = domain_row(CORE_FLOAT, lens, InDomain::Float) {
+        Ok((row, Provided::Core))
     }
-    else if let Some(function) = listed(PROVIDER_FUNCTIONS) {
+    else if let Some(row) = domain_row(FLOAT_MATH, lens, InDomain::Float) {
         if math == MathProvider::Core {
             return lens.name.fail(format!(
                 "{name} needs math = std (std) or math = nightly (no_std, \
                 nightly core_float_math)"
             ));
         }
-        Ok((function, Provided::Provider))
+        Ok((row, Provided::Provider))
     }
     else if lens.function == Some(FnName::Powi) {
         lens.name.fail(
@@ -261,7 +256,7 @@ fn float_function(
             optimizer)",
         )
     }
-    else if listed(PREDICATES).is_some() {
+    else if domain_row(CORE_FLOAT, lens, InDomain::Predicate).is_some() {
         lens.name.fail(format!(
             "{name} is a predicate; use it alone or negated: {name} or !{name}"
         ))
@@ -270,9 +265,9 @@ fn float_function(
         lens.name.fail(format!(
             "unknown domain function {name}; available for {}: {}, and with \
             math = std or nightly: {}",
-            subject.rust_name(),
-            listing(CORE_FUNCTIONS),
-            listing(PROVIDER_FUNCTIONS),
+            subject.name(),
+            listing(&domain_functions(CORE_FLOAT, false)),
+            listing(&domain_functions(FLOAT_MATH, false)),
         ))
     };
 }
@@ -319,10 +314,10 @@ fn float_value(
             suffix,
             negated,
         } => {
-            if !suffix.is_empty() && suffix != subject.rust_name() {
+            if !suffix.is_empty() && suffix != subject.name() {
                 return constant.span.fail(format!(
                     "{suffix} suffix does not match the {} operand",
-                    subject.rust_name()
+                    subject.name()
                 ));
             }
             let value = parse_in(digits, subject).ok_or_else(|| {
@@ -332,7 +327,7 @@ fn float_value(
                 return constant.span.fail(format!(
                     "{} overflows {} to infinity",
                     constant.tokens,
-                    subject.rust_name()
+                    subject.name()
                 ));
             }
             if *negated { -value } else { value }
@@ -347,9 +342,9 @@ fn float_value(
                 return constant.span.fail(format!(
                     "{}::… does not match the {} operand; write {}::… or a \
                     literal",
-                    ty.rust_name(),
-                    subject.rust_name(),
-                    subject.rust_name()
+                    ty.name(),
+                    subject.name(),
+                    subject.name()
                 ));
             }
             let value = match consts {
@@ -359,7 +354,7 @@ fn float_value(
             .ok_or_else(|| {
                 constant.span.errorful(format!(
                     "unknown {} constant {name}",
-                    subject.rust_name()
+                    subject.name()
                 ))
             })?;
             if *negated { -value } else { value }
@@ -472,7 +467,7 @@ fn check_divisor(
         return divisor.span.fail(format!(
             "{digits} is not exactly representable as {} (it is {}); use a \
             divisor such as 0.125",
-            subject.rust_name(),
+            subject.name(),
             exact_decimal(value),
         ));
     }
@@ -562,15 +557,14 @@ impl Domain {
     ) -> syn::Result<ResolvedFloatDomain> {
         let root = normalize(type_node(&self.root, subject, math)?);
         if matches!(root, FNode::Const(false)) {
-            return self.span.fail(format!(
-                "domain admits no {} value",
-                subject.rust_name()
-            ));
+            return self
+                .span
+                .fail(format!("domain admits no {} value", subject.name()));
         }
         if matches!(root, FNode::Const(true)) {
             return self.span.fail(format!(
                 "domain admits every {} value; remove the domain",
-                subject.rust_name()
+                subject.name()
             ));
         }
         return Ok(ResolvedFloatDomain {
@@ -672,17 +666,17 @@ fn type_predicate(
     if !lens.args.is_empty() {
         return lens.name.fail(format!("{name} takes no arguments"));
     }
-    let Some(function) = lens.function.filter(|it| PREDICATES.contains(it))
+    let Some(row) = domain_row(CORE_FLOAT, lens, InDomain::Predicate)
     else {
         return lens.name.fail(format!(
             "unknown domain predicate {name}; available for {}: {}",
-            subject.rust_name(),
-            listing(PREDICATES)
+            subject.name(),
+            listing(&domain_functions(CORE_FLOAT, true))
         ));
     };
     return Ok(FNode::Predicate {
         name: lens.name.clone(),
-        function,
+        function: row.name,
     });
 }
 
@@ -1068,7 +1062,8 @@ fn eval(
     };
 }
 
-/// The `core` query `function` on `value`; typing admits only `PREDICATES`.
+/// The `core` query `function` on `value`; typing admits only the
+/// predicate rows of `CORE_FLOAT`.
 fn predicate(
     function: FnName,
     value: f64,
@@ -1341,7 +1336,7 @@ fn operand_tokens(
     let args = call.args.iter().map(|it| quote! { (#it) });
     return match (call.provided, math) {
         (Provided::Provider, MathProvider::Nightly) => {
-            let ty = format_ident!("{}", subject.rust_name());
+            let ty = format_ident!("{}", subject.name());
             quote! { ::core::#ty::math::#name(#value #(, #args)*) }
         }
         _ => quote! { (#value).#name(#(#args),*) },

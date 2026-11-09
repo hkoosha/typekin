@@ -15,7 +15,6 @@ use syn::parse::{
 
 use crate::integral::Maker;
 use crate::integral_cfg::IntegralFlag;
-use crate::integral_forward::CoreRhs;
 use crate::zz_domain_closure::{
     Closure,
     ClosureOp,
@@ -23,33 +22,39 @@ use crate::zz_domain_closure::{
     Rhs,
 };
 use crate::zz_flags::Flag;
+use crate::zz_forward::Structural;
 use crate::zz_friend::Friend;
-use crate::zz_lib::ValidationCfg;
+use crate::zz_lib::{
+    Konsts,
+    Named as _,
+};
 use crate::zz_profile_integral::Arithmetic;
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
-    ArithmeticOp,
     FnName,
     Num,
-    Operator,
+    OPS,
+    Op,
+    OpKind,
+    OpSpec,
 };
 
 impl Maker {
-    /// `!x` of a valid value is always valid.
-    pub(crate) fn not_proven(&self) -> bool {
-        let (op, policy, rhs) = ProveOp::Not.closure(self.arithmetic_policy());
-        return self.proven(op, rhs.closure(), policy);
-    }
-
-    /// `-x` of a valid value is always valid: by the domain's symmetry, or
-    /// by a closure proof under the profile's arithmetic.
-    pub(crate) fn neg_proven(&self) -> bool {
-        let (op, policy, _) = ProveOp::Neg.closure(self.arithmetic_policy());
-        return self.validated_closed(
-            self.ctx.cfg.validation.neg_closed(),
-            op,
-            policy,
-        );
+    /// A unary operator of a valid value is always valid: by a closure
+    /// proof under the profile's arithmetic, and `-x` also by the domain's
+    /// symmetry.
+    pub(crate) fn unary_proven(
+        &self,
+        operator: &OpSpec,
+    ) -> bool {
+        let Some((op, policy, _)) =
+            op_closure(operator, self.arithmetic_policy())
+        else {
+            return false;
+        };
+        let structural =
+            operator.op == Op::Neg && self.ctx.cfg.validation.neg_closed();
+        return self.validated_closed(structural, op, policy);
     }
 
     /// A unary `op` of a valid value is valid, by the domain's shape
@@ -106,7 +111,7 @@ impl Maker {
             && cfg.flags.has(IntegralFlag::FnOrPanic)
             && cfg.validation.has_validation()
             && cfg.validation.callbacks.is_empty()
-            && !cfg.panic_at.fallible();
+            && !cfg.wide.panic_at.fallible();
     }
 
     /// Every result of `op` on valid operands is valid at every width, by a
@@ -140,47 +145,35 @@ impl Maker {
         return Self::closure_policy(self.ctx.cfg.profile.arithmetic());
     }
 
-    /// The proof of a binary operator under the root profile, for a raw or
-    /// friend right-hand side and for a same-type one.
+    /// The proof of a binary operator under the root profile, for a raw,
+    /// friend or amount right-hand side and for a same-type one.
     pub(crate) fn operator_proof(
         &self,
-        operator: Operator,
+        operator: &OpSpec,
     ) -> OperatorProof {
         return self
             .operator_proof_with(operator, self.ctx.cfg.profile.arithmetic());
     }
 
-    /// `operator_proof` under a given arithmetic (a facet's).
+    /// `operator_proof` under a given arithmetic (a facet's). A shift takes
+    /// an amount only, and left shifts are never proven.
     pub(crate) fn operator_proof_with(
         &self,
-        operator: Operator,
+        operator: &OpSpec,
         arithmetic: Arithmetic,
     ) -> OperatorProof {
-        let (op, policy, _) =
-            ProveOp::Binary(operator).closure(Self::closure_policy(arithmetic));
+        let Some((op, policy, rhs)) =
+            op_closure(operator, Self::closure_policy(arithmetic))
+        else {
+            return OperatorProof::default();
+        };
+        if operator.kind == OpKind::Shift {
+            let full = self.proven(op, rhs, policy);
+            return OperatorProof { full, same: full };
+        }
         let full = self.proven(op, Rhs::Full, policy);
         let same = full || self.proven(op, Rhs::SameDomain, policy);
         return OperatorProof { full, same };
-    }
-
-    /// `operator_proof` for an arithmetic helper; shifts take an amount, and
-    /// left shifts are never proven.
-    pub(crate) fn arithmetic_proof(
-        &self,
-        operation: ArithmeticOp,
-    ) -> OperatorProof {
-        if let Some(operator) = operation.operator() {
-            return self.operator_proof(operator);
-        }
-        return match operation {
-            ArithmeticOp::Shr => {
-                let (op, policy, rhs) =
-                    ProveOp::Shr.closure(self.arithmetic_policy());
-                let full = self.proven(op, rhs.closure(), policy);
-                OperatorProof { full, same: full }
-            }
-            _ => OperatorProof::default(),
-        };
     }
 
     /// The constructor of a raw result: `Self::_proven` when `proven`,
@@ -222,17 +215,6 @@ impl Maker {
             self.ctx.cfg.validation.domain_text(),
         );
         return quote! { #[doc = #doc] };
-    }
-
-    /// Whether a `core_int` method's result is proven; `None` operations
-    /// (shifts left, powers) are never proven.
-    pub(crate) fn core_int_proven(
-        &self,
-        op: Option<ClosureOp>,
-        rhs: CoreRhs,
-        policy: Policy,
-    ) -> bool {
-        return op.is_some_and(|op| self.proven(op, rhs.closure(), policy));
     }
 
     /// `prove = [...]`: every listed operation must be proven closed, or
@@ -302,18 +284,20 @@ impl Maker {
     ) -> Option<ProveTarget> {
         let text = name.to_string();
         let operator = IntegralFlag::of(&text).and_then(|flag| {
-            return PROVE_OPERATORS.iter().find(|(it, _, _)| *it == flag);
+            let operator = OPS
+                .iter()
+                .find(|it| IntegralFlag::of_op(it.op).math == flag)?;
+            let question = op_closure(operator, self.arithmetic_policy())?;
+            return Some((flag, operator, question));
         });
-        if let Some(&(flag, operator, symbol)) = operator {
-            let (op, policy, rhs) = operator.closure(self.arithmetic_policy());
+        if let Some((flag, operator, (op, policy, rhs))) = operator {
             return Some(ProveTarget {
                 op,
                 policy,
                 rhs,
                 enabled: self.ctx.cfg.flags.has(flag),
-                symbol: Some(symbol),
-                structural: matches!(operator, ProveOp::Neg)
-                    .then_some(Structural::Neg),
+                symbol: Some(operator.symbol),
+                structural: (operator.op == Op::Neg).then_some(Structural::Neg),
             });
         }
 
@@ -326,7 +310,7 @@ impl Maker {
             rhs: forward.rhs(),
             enabled: self.forward_generated(function),
             symbol: None,
-            structural: (function == FnName::Abs).then_some(Structural::Abs),
+            structural: forward.structural,
         });
     }
 
@@ -341,9 +325,9 @@ impl Maker {
         let ty = &self.target.ident;
         let Some(path) = &item.rhs
         else {
-            return Ok((target.rhs.closure(), ty.to_string()));
+            return Ok((target.rhs, ty.to_string()));
         };
-        if !matches!(target.rhs, CoreRhs::Same) || target.symbol.is_none() {
+        if !matches!(target.rhs, Rhs::SameDomain) || target.symbol.is_none() {
             return path.fail(format!(
                 "`{}` takes no right-hand side type in `prove`",
                 item.name,
@@ -381,93 +365,31 @@ impl Maker {
     }
 }
 
-/// An operator `prove` accepts.
-#[derive(Clone, Copy)]
-enum ProveOp {
-    Binary(Operator),
-    Shr,
-    Neg,
-    Not,
-}
-
-impl ProveOp {
-    /// The closure question of the operator under the profile's
-    /// `arithmetic` policy, and its right-hand side. Shared by the
-    /// emitters' proofs and `prove`, so both ask the same question.
-    fn closure(
-        self,
-        arithmetic: Policy,
-    ) -> (ClosureOp, Policy, CoreRhs) {
-        return match self {
-            Self::Binary(operator) => {
-                let (op, policy) = match operator {
-                    Operator::Add => (ClosureOp::Add, arithmetic),
-                    Operator::Sub => (ClosureOp::Sub, arithmetic),
-                    Operator::Mul => (ClosureOp::Mul, arithmetic),
-                    Operator::Div => (ClosureOp::Div, arithmetic),
-                    Operator::Rem => (ClosureOp::Rem, arithmetic),
-                    Operator::BitAnd => (ClosureOp::BitAnd, Policy::Wrapping),
-                    Operator::BitOr => (ClosureOp::BitOr, Policy::Wrapping),
-                    Operator::BitXor => (ClosureOp::BitXor, Policy::Wrapping),
-                };
-                (op, policy, CoreRhs::Same)
-            }
-            Self::Shr => (ClosureOp::Shr, arithmetic, CoreRhs::Amount("rhs")),
-            Self::Neg => (ClosureOp::Neg, arithmetic, CoreRhs::Unary),
-            Self::Not => (ClosureOp::Not, Policy::Wrapping, CoreRhs::Unary),
-        };
-    }
-}
-
-/// The flag that generates each `prove` operator, and its symbol.
-const PROVE_OPERATORS: [(IntegralFlag, ProveOp, &str); 11] = [
-    (IntegralFlag::MathAdd, ProveOp::Binary(Operator::Add), "+"),
-    (IntegralFlag::MathSub, ProveOp::Binary(Operator::Sub), "-"),
-    (IntegralFlag::MathMul, ProveOp::Binary(Operator::Mul), "*"),
-    (IntegralFlag::MathDiv, ProveOp::Binary(Operator::Div), "/"),
-    (IntegralFlag::MathRem, ProveOp::Binary(Operator::Rem), "%"),
-    (
-        IntegralFlag::MathAnd,
-        ProveOp::Binary(Operator::BitAnd),
-        "&",
-    ),
-    (IntegralFlag::MathOr, ProveOp::Binary(Operator::BitOr), "|"),
-    (
-        IntegralFlag::MathXor,
-        ProveOp::Binary(Operator::BitXor),
-        "^",
-    ),
-    (IntegralFlag::MathShr, ProveOp::Shr, ">>"),
-    (IntegralFlag::MathNeg, ProveOp::Neg, "-"),
-    (IntegralFlag::MathNot, ProveOp::Not, "!"),
-];
-
-/// A domain shape that makes an operation closed without a closure proof.
-#[derive(Clone, Copy)]
-enum Structural {
-    /// The `-` operator on a symmetric domain.
-    Neg,
-    /// Plain `abs`.
-    Abs,
-}
-
-impl Structural {
-    fn closed(
-        self,
-        validation: &ValidationCfg,
-    ) -> bool {
-        return match self {
-            Self::Neg => validation.neg_closed(),
-            Self::Abs => validation.abs_closed(),
-        };
-    }
+/// The closure question of `operator` under the profile's `arithmetic`
+/// policy, and its right-hand side; none for an operator that is never
+/// proven. Shared by the emitters' proofs and `prove`, so both ask the same
+/// question. Bit operators cannot overflow and are asked as wrapping.
+fn op_closure(
+    operator: &OpSpec,
+    arithmetic: Policy,
+) -> Option<(ClosureOp, Policy, Rhs)> {
+    let policy = match operator.family == Konsts::Bit {
+        true => Policy::Wrapping,
+        false => arithmetic,
+    };
+    let rhs = match operator.kind {
+        OpKind::Arith | OpKind::Bitwise => Rhs::SameDomain,
+        OpKind::Shift => Rhs::Shift,
+        OpKind::Unary => Rhs::Unary,
+    };
+    return Some((operator.closure?, policy, rhs));
 }
 
 /// What `prove` checks for one entry.
 struct ProveTarget {
     op: ClosureOp,
     policy: Policy,
-    rhs: CoreRhs,
+    rhs: Rhs,
     /// The configuration generates the operation.
     enabled: bool,
     /// Operators only.
@@ -484,9 +406,11 @@ fn prove_expression(
     rhs: &str,
 ) -> String {
     return match (target.symbol, target.rhs) {
-        (Some(symbol), CoreRhs::Unary) => format!("{symbol}{ty}"),
-        (Some(symbol), CoreRhs::Amount(_)) => format!("{ty} {symbol} usize"),
-        (Some(symbol), CoreRhs::Same) => format!("{ty} {symbol} {rhs}"),
+        (Some(symbol), Rhs::Unary) => format!("{symbol}{ty}"),
+        (Some(symbol), Rhs::Shift) => format!("{ty} {symbol} usize"),
+        (Some(symbol), Rhs::SameDomain | Rhs::Full) => {
+            format!("{ty} {symbol} {rhs}")
+        }
         (None, _) => format!("{ty}::{name}"),
     };
 }

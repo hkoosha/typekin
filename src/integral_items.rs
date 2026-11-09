@@ -18,7 +18,6 @@ use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
 };
-use crate::integral_impls::SHIFTS;
 use crate::integral_proof::OperatorProof;
 use crate::zz_friend::{
     Capability,
@@ -26,19 +25,25 @@ use crate::zz_friend::{
     any_friend_has,
 };
 use crate::zz_lib::{
+    Check,
     Konst,
     Konsts,
-    validated_result,
+    Named as _,
+    OnInvalid,
+    unwrap_or_panic,
 };
 use crate::zz_profile_integral::Arithmetic;
 use crate::zz_runner::Merged;
 use crate::zz_values::{
-    ArithmeticOp,
     F,
     N,
     Num,
-    Operator,
-    POINTER_WIDTHS,
+    OPS,
+    Op,
+    OpKind,
+    OpSpec,
+    Width,
+    by_width_grouped,
 };
 
 /// The inherent items, in output order: conversions, the math helpers,
@@ -52,8 +57,6 @@ const ITEM_EMITTERS: &[fn(&Maker) -> TokenStream] = &[
     Maker::make_fn_conv_try_into_lossless,
     Maker::make_fn_conv_try_into_lossy,
     Maker::make_fn_math_helpers,
-    Maker::make_fn_math_not,
-    Maker::make_fn_math_neg,
     Maker::make_precedes,
     Maker::make_fn_op_eq,
     Maker::make_fn_op_cmp,
@@ -73,54 +76,6 @@ const BIT_PARTS: [N; 4] = [
     N::U016,
     N::U032,
     N::U064,
-];
-
-/// A validating binary math helper (`make_fn_math_*`).
-#[derive(Clone, Copy)]
-enum MathHelper {
-    Arithmetic(ArithmeticOp),
-    Bitwise(Operator),
-}
-
-/// The binary math helpers, in emission order; Shr/Shl take `usize`.
-const FN_MATH_HELPERS: [(IntegralFlag, MathHelper); 10] = [
-    (
-        IntegralFlag::FnMathAdd,
-        MathHelper::Arithmetic(ArithmeticOp::Add),
-    ),
-    (
-        IntegralFlag::FnMathSub,
-        MathHelper::Arithmetic(ArithmeticOp::Sub),
-    ),
-    (
-        IntegralFlag::FnMathMul,
-        MathHelper::Arithmetic(ArithmeticOp::Mul),
-    ),
-    (
-        IntegralFlag::FnMathDiv,
-        MathHelper::Arithmetic(ArithmeticOp::Div),
-    ),
-    (
-        IntegralFlag::FnMathRem,
-        MathHelper::Arithmetic(ArithmeticOp::Rem),
-    ),
-    (
-        IntegralFlag::FnMathXor,
-        MathHelper::Bitwise(Operator::BitXor),
-    ),
-    (
-        IntegralFlag::FnMathAnd,
-        MathHelper::Bitwise(Operator::BitAnd),
-    ),
-    (IntegralFlag::FnMathOr, MathHelper::Bitwise(Operator::BitOr)),
-    (
-        IntegralFlag::FnMathShr,
-        MathHelper::Arithmetic(ArithmeticOp::Shr),
-    ),
-    (
-        IntegralFlag::FnMathShl,
-        MathHelper::Arithmetic(ArithmeticOp::Shl),
-    ),
 ];
 
 impl Maker {
@@ -203,130 +158,78 @@ impl Maker {
         return stream;
     }
 
-    /// `operation` on the raw operands: panicking, or an `Option` of the
+    /// `operator` on the raw operands: panicking, or an `Option` of the
     /// result when operations report failure.
-    fn arithmetic_expr(
+    fn operator_expr(
         &self,
-        operation: ArithmeticOp,
+        operator: &OpSpec,
         is_konst: bool,
     ) -> TokenStream {
         let arithmetic = self.ctx.cfg.profile.arithmetic();
         if self.ctx.failure.is_some() {
-            return arithmetic.make_fallible_arithmetic(
-                operation,
-                self.ctx.cfg.panic_at,
+            return arithmetic.make_fallible_expr(
+                operator,
+                self.ctx.cfg.wide.panic_at,
                 matches!(self.num, Num::Float(_)),
                 is_konst,
             );
         }
-        return match is_konst {
-            true => arithmetic.make_const_expr(operation),
-            false => arithmetic.make_expr(operation),
-        };
+        return arithmetic.make_operator_expr(operator, is_konst);
     }
 
-    /// The validating `_{operation}` helper (and its non-const `_wrapping`
-    /// twin for `Wrapping` storage).
-    fn ekran_arithmetic_helper(
+    /// The validating `_{method}` helper of a binary operator, and its
+    /// non-const `_wrapping` twin where it has one. A shift takes its amount
+    /// as `usize`.
+    fn make_fn_math_binary(
         &self,
-        operation: ArithmeticOp,
-        rhs_type: TokenStream,
+        operator: &OpSpec,
     ) -> TokenStream {
-        let arithmetic = self.ctx.cfg.profile.arithmetic();
-        let proof = self.arithmetic_proof(operation);
+        let el = &self.el;
+        let rhs_type = match operator.kind == OpKind::Shift {
+            true => quote! { usize },
+            false => quote! { #el },
+        };
+        let proof = self.operator_proof(operator);
         let mut stream = self.proven_helpers(
             &Konst::konst(self.ctx.cfg.helper_konst()),
-            &self.arithmetic_method_name(operation, true),
+            &self.arithmetic_method_name(operator, true),
             &rhs_type,
-            &self.arithmetic_expr(operation, true),
+            &self.operator_expr(operator, true),
             proof,
         );
-        if arithmetic != Arithmetic::WrapperWrapping {
+        if !self.has_wrapping_helper(operator) {
             return stream;
         }
         stream.extend(self.proven_helpers(
             &Konst::konst(false),
-            &self.arithmetic_method_name(operation, false),
+            &self.arithmetic_method_name(operator, false),
             &rhs_type,
-            &self.arithmetic_expr(operation, false),
+            &self.operator_expr(operator, false),
             proof,
         ));
         return stream;
     }
 
-    /// The validating `_bit{and,or,xor}` helper.
-    fn make_fn_math_bitwise(
-        &self,
-        operator: Operator,
-    ) -> TokenStream {
-        let el = &self.el;
-        let symbol = operator.symbol();
-        let expression = match self.ctx.failure {
-            Some(_) => quote! { ::core::option::Option::Some(lhs #symbol rhs) },
-            None => quote! { lhs #symbol rhs },
-        };
-        return self.proven_helpers(
-            &Konst::konst(self.ctx.cfg.helper_konst()),
-            &format_ident!("_{}", operator.method_name()),
-            &quote! { #el },
-            &expression,
-            self.operator_proof(operator),
-        );
-    }
-
-    /// The enabled `FN_MATH_HELPERS` an emitted operator calls, in table
-    /// order.
+    /// The enabled validating helpers that an emitted operator or
+    /// assignment impl calls, in `OPS` order.
     fn make_fn_math_helpers(&self) -> TokenStream {
-        let el = &self.el;
-        return FN_MATH_HELPERS
-            .into_iter()
-            .filter(|(flag, helper)| {
-                return self.ctx.cfg.flags.has(*flag)
-                    && self.calls_math_helper(*helper);
+        let flags = &self.ctx.cfg.flags;
+        return OPS
+            .iter()
+            .filter(|operator| {
+                return flags.has(IntegralFlag::of_op(operator.op).helper)
+                    && (self.with_operator(operator)
+                        || self.with_assignment(operator));
             })
-            .map(|(_, helper)| {
-                return match helper {
-                    MathHelper::Arithmetic(
-                        operation @ (ArithmeticOp::Shr | ArithmeticOp::Shl),
-                    ) => self
-                        .ekran_arithmetic_helper(operation, quote! { usize }),
-                    MathHelper::Arithmetic(operation) => {
-                        self.ekran_arithmetic_helper(operation, quote! { #el })
+            .map(|operator| {
+                return match operator.kind {
+                    OpKind::Arith | OpKind::Bitwise | OpKind::Shift => {
+                        self.make_fn_math_binary(operator)
                     }
-                    MathHelper::Bitwise(operator) => {
-                        self.make_fn_math_bitwise(operator)
-                    }
+                    OpKind::Unary => self.make_fn_math_unary(operator),
                 };
             })
             .merged();
-    }
-
-    /// Whether an emitted operator impl calls `helper`. Shifts by an amount
-    /// are emitted with or without facets; the other binary operators and
-    /// their assignments only without, since facet dispatch inlines its
-    /// arithmetic.
-    fn calls_math_helper(
-        &self,
-        helper: MathHelper,
-    ) -> bool {
-        let flags = &self.ctx.cfg.flags;
-        let operator = match helper {
-            MathHelper::Arithmetic(operation) => {
-                if let Some(shift) =
-                    SHIFTS.iter().find(|shift| shift.operation == operation)
-                {
-                    return flags.has(shift.math) || flags.has(shift.assign);
-                }
-                operation
-                    .operator()
-                    .expect("non-shift arithmetic has a binary operator")
-            }
-            MathHelper::Bitwise(operator) => operator,
-        };
-        let assign =
-            IntegralFlag::assign(operator).is_some_and(|flag| flags.has(flag));
-        return self.with_global_operators()
-            && (flags.has(IntegralFlag::math(operator)) || assign);
     }
 
     pub(crate) fn ekran_bit_access_items(&self) -> TokenStream {
@@ -352,14 +255,14 @@ impl Maker {
         let get_raw = &self.ctx.get_raw;
         let el = &self.el;
         let repr = self.repr();
-        let bits = part.bits_for_pointer_width(64);
-        let ty = format_ident!("{}", part.rust_name());
+        let bits = part.bits_for_pointer_width(Width::W64);
+        let ty = format_ident!("{}", part.name());
         let shift = Literal::usize_unsuffixed(bits);
         let mask = LitInt::new(
             &format!("0x{}", "F".repeat(bits / 4)),
             Span::call_site(),
         );
-        return (0..repr.bits_for_pointer_width(64) / bits)
+        return (0..repr.bits_for_pointer_width(Width::W64) / bits)
             .filter_map(|i| {
                 let cfg = pointer_width_cfg(|width| {
                     return repr.bits_for_pointer_width(width) >= bits * (i + 1);
@@ -383,8 +286,8 @@ impl Maker {
         let repr = self.repr();
         let half = BIT_PARTS.into_iter().find(|part| {
             return repr != N::USIZ
-                && 2 * part.bits_for_pointer_width(64)
-                    == repr.bits_for_pointer_width(64);
+                && 2 * part.bits_for_pointer_width(Width::W64)
+                    == repr.bits_for_pointer_width(Width::W64);
         });
         let Some(half) = half
         else {
@@ -392,7 +295,7 @@ impl Maker {
         };
 
         let names = &self.ctx.names;
-        let ty = format_ident!("{}", half.rust_name());
+        let ty = format_ident!("{}", half.name());
         let low = names.get(IntegralName::LowHalf(half));
         let high = names.get(IntegralName::HighHalf(half));
         let low_part = names.get(IntegralName::BitPart(half, 0));
@@ -521,7 +424,7 @@ impl Maker {
         return self
             .cast_targets(true)
             .map(|(it, cfg)| {
-                let target = format_ident!("{}", it.rust_name());
+                let target = format_ident!("{}", it.name());
                 let conv = self.ctx.names.get(IntegralName::Into(it));
                 return quote! {
                     #cfg
@@ -552,13 +455,16 @@ impl Maker {
         let bound =
             Konst::bound(is_konst, quote! { ::core::ops::FnOnce(#el) -> #el });
         let callback = self.target.fresh_ident("F");
-        let constructed = self.construct_self(quote! { value });
-        let result = validated_result(
-            &self.ctx.validation,
-            constructed,
+        let result = self.construction(
             quote! { value },
+            Check::Validate,
+            OnInvalid::Err(quote! { value }),
         );
         let map = self.ctx.failure.is_none().then(|| {
+            let mapped = unwrap_or_panic(
+                quote! { self.try_map(function) },
+                "mapping operation produced an invalid value",
+            );
             quote! {
                 #[inline(always)]
                 #[track_caller]
@@ -569,14 +475,7 @@ impl Maker {
                 where
                     #callback: #bound,
                 {
-                    return match self.try_map(function) {
-                        ::core::result::Result::Ok(value) => value,
-                        ::core::result::Result::Err(_) => {
-                            ::core::panic!(
-                                "mapping operation produced an invalid value"
-                            )
-                        }
-                    };
+                    return #mapped;
                 }
             }
         });
@@ -605,7 +504,7 @@ impl Maker {
         let get_raw = &self.ctx.get_raw;
         return self.cast_targets(true)
             .map(|(it, cfg)| {
-                let target = format_ident!("{}", it.rust_name());
+                let target = format_ident!("{}", it.name());
                 let conv = self.ctx.names.get(IntegralName::TryInto(it));
                 return quote! {
                     #cfg
@@ -627,10 +526,10 @@ impl Maker {
         }
 
         let get_raw = &self.ctx.get_raw;
-        let source = format_ident!("{}", self.num.rust_name());
+        let source = format_ident!("{}", self.num.name());
         return self.cast_targets(false)
             .flat_map(|(it, cfg)| {
-                let target = format_ident!("{}", it.rust_name());
+                let target = format_ident!("{}", it.name());
                 let name = self.ctx.names.get(IntegralName::TryInto(it));
                 let bodies = self.lossy_bodies(it, cfg, &source, &target);
                 return bodies.into_iter().map(move |(cfg, body)| {
@@ -745,7 +644,7 @@ impl Maker {
         source: &Ident,
         target: &Ident,
     ) -> Vec<(TokenStream, TokenStream)> {
-        let exact = |width: u32| {
+        let exact = |width: Width| {
             return it.magnitude_bits_for_pointer_width(width)
                 <= float.mantissa_digits();
         };
@@ -779,7 +678,7 @@ impl Maker {
         source: &Ident,
         target: &Ident,
     ) -> Vec<(TokenStream, TokenStream)> {
-        let lossy = |width: u32| {
+        let lossy = |width: Width| {
             return !Num::Int(repr).can_safe_cast_to(Num::Float(float), width);
         };
         return Self::upper_bounds(repr, float, lossy)
@@ -803,79 +702,31 @@ impl Maker {
     fn upper_bounds(
         it: N,
         float: F,
-        applies: impl Fn(u32) -> bool,
+        applies: impl Fn(Width) -> bool,
     ) -> Vec<(TokenStream, TokenStream)> {
-        let literal = |width: u32| {
+        let literal = |width: Width| {
             let exponent = it.magnitude_bits_for_pointer_width(width);
             return match (float, exponent) {
                 (F::F032, 128..) => None,
                 _ => Some(crate::zz_values::pow2_literal(exponent)),
             };
         };
-        let mut bounds = Vec::new();
-        let mut seen = Vec::new();
-        for width in POINTER_WIDTHS {
-            if !applies(width) || seen.contains(&literal(width)) {
-                continue;
-            }
-            let value = literal(width);
-            seen.push(value.clone());
-            let cfg = pointer_width_cfg(|other| {
-                return applies(other) && literal(other) == value;
+        let values =
+            Width::ALL.map(|width| applies(width).then(|| literal(width)));
+        return by_width_grouped(values)
+            .into_iter()
+            .filter_map(|(cfg, value)| {
+                let hi = match value? {
+                    Some(value) => {
+                        let value =
+                            syn::LitFloat::new(&value, Span::call_site());
+                        quote! { #value }
+                    }
+                    None => quote! { ::core::primitive::f32::INFINITY },
+                };
+                return Some((cfg, hi));
             })
-            .expect("the width itself matches");
-            let hi = match value {
-                Some(value) => {
-                    let value = syn::LitFloat::new(&value, Span::call_site());
-                    quote! { #value }
-                }
-                None => quote! { ::core::primitive::f32::INFINITY },
-            };
-            bounds.push((cfg, hi));
-        }
-        return bounds;
-    }
-
-    /// `_not`, which only the `Not` impl calls.
-    pub(crate) fn make_fn_math_not(&self) -> TokenStream {
-        let flags = &self.ctx.cfg.flags;
-        if !flags.has(IntegralFlag::FnMathNot)
-            || !flags.has(IntegralFlag::MathNot)
-        {
-            return TokenStream::new();
-        }
-
-        let some = self.ctx.failure.is_some();
-        return self.make_fn_math_unary(
-            format_ident!("_not"),
-            match some {
-                true => quote! { ::core::option::Option::Some(!lhs) },
-                false => quote! { !lhs },
-            },
-            self.not_proven(),
-        );
-    }
-
-    /// `_neg`, which only the `Neg` impl calls. Floats and `Primitive`
-    /// integers negate like the raw type; the other integer policies wrap or
-    /// check like their binary operators.
-    pub(crate) fn make_fn_math_neg(&self) -> TokenStream {
-        let flags = &self.ctx.cfg.flags;
-        if !flags.has(IntegralFlag::FnMathNeg)
-            || !flags.has(IntegralFlag::MathNeg)
-        {
-            return TokenStream::new();
-        }
-
-        let expression = match self.ctx.failure {
-            Some(_) => self.fallible_neg(),
-            None => self.panicking_neg(),
-        };
-        return self.make_fn_math_unary(
-            format_ident!("_neg"),
-            expression,
-            self.neg_proven(),
-        );
+            .collect();
     }
 
     /// `-lhs` under the profile's arithmetic, panicking where it may.
@@ -906,7 +757,7 @@ impl Maker {
             (Num::Float(_), _) => false,
             (Num::Int(_), Arithmetic::Checked) => true,
             (Num::Int(_), Arithmetic::Primitive) => {
-                self.ctx.cfg.panic_at.checks_overflow()
+                self.ctx.cfg.wide.panic_at.checks_overflow()
             }
             (
                 Num::Int(_),
@@ -923,14 +774,24 @@ impl Maker {
         };
     }
 
-    /// `closed`: the result of `expression` on a valid value is always valid
-    /// (proven from the domain), so it is constructed without the check.
+    /// The validating `_neg` or `_not` helper, which only its operator impl
+    /// calls. Floats and `Primitive` integers negate like the raw type; the
+    /// other integer policies wrap or check like their binary operators. A
+    /// result the domain proves valid is constructed without the check.
     fn make_fn_math_unary(
         &self,
-        name: Ident,
-        expression: TokenStream,
-        closed: bool,
+        operator: &OpSpec,
     ) -> TokenStream {
+        let symbol = operator.token();
+        let expression = match (operator.op, &self.ctx.failure) {
+            (Op::Neg, Some(_)) => self.fallible_neg(),
+            (Op::Neg, None) => self.panicking_neg(),
+            (_, Some(_)) => {
+                quote! { ::core::option::Option::Some(#symbol lhs) }
+            }
+            (_, None) => quote! { #symbol lhs },
+        };
+        let closed = self.unary_proven(operator);
         let (konst, result) =
             match (&self.ctx.failure, self.closed_result(closed)) {
                 (Some(_), _) => {
@@ -951,7 +812,7 @@ impl Maker {
             };
         return self.validating_helper(
             &konst,
-            &name,
+            &format_ident!("_{}", operator.method),
             None,
             &expression,
             &result,
@@ -964,7 +825,7 @@ impl Maker {
         }
 
         let get_raw = &self.ctx.get_raw;
-        let unsigned = format_ident!("{}", self.repr().unsigned_rust_name());
+        let unsigned = format_ident!("{}", self.repr().unsigned().name());
         let konst = Konst::konst(self.ctx.cfg.konst_for(&[Konsts::Value]));
         return quote! {
             #[must_use]
@@ -1071,18 +932,15 @@ impl Maker {
         }
 
         let konst = Konst::konst(self.ctx.cfg.konst_for(&[Konsts::TryMake]));
-        let value = quote! { it };
-        let validation = self.ctx.cfg.validation.emit(&value);
-        let constructed = self.construct_self(value);
+        let body = self.construction(
+            quote! { it },
+            Check::Validate,
+            OnInvalid::Err(quote! { it }),
+        );
         return quote! {
             #[inline(always)]
             pub #konst fn try_make(it: #el) -> Result<Self, #el> {
-                return if #validation {
-                    return ::core::result::Result::Ok(#constructed);
-                }
-                else {
-                    ::core::result::Result::Err(it)
-                };
+                #body
             }
         };
     }
@@ -1107,31 +965,23 @@ impl Maker {
 
         let el = &self.el;
         let or_panic = self.ctx.names.get(IntegralName::OrPanic);
-        if !self.ctx.cfg.validation.has_validation() {
-            let constructed = self.construct_self(quote! { it });
-            return quote! {
-                #[must_use]
-                #[inline(always)]
-                pub(self) const fn #or_panic(it: #el) -> Self {
-                    return #constructed;
-                }
-            };
-        }
-
         let konst = Konst::konst(self.ctx.cfg.helper_konst());
-        let value = quote! { it };
-        let validation = self.ctx.cfg.validation.emit(&value);
-        let constructed = self.construct_self(value);
+        let body = match self.ctx.cfg.validation.has_validation() {
+            true => self.construction(
+                quote! { it },
+                Check::Validate,
+                OnInvalid::Panic("invalid value"),
+            ),
+            false => {
+                let constructed = self.construct_self(quote! { it });
+                quote! { return #constructed; }
+            }
+        };
         return quote! {
             #[must_use]
             #[inline(always)]
             pub(self) #konst fn #or_panic(it: #el) -> Self {
-                if #validation {
-                    return #constructed;
-                }
-                else {
-                    ::core::panic!("invalid value");
-                };
+                #body
             }
         };
     }
@@ -1147,23 +997,22 @@ impl Maker {
         let el = &self.el;
         let or_err = self.ctx.names.get(IntegralName::OrErr);
         let konst = Konst::konst(self.ctx.cfg.helper_konst());
-        let value = quote! { it };
-        let guard = self.ctx.cfg.validation.has_validation().then(|| {
-            let validation = self.ctx.cfg.validation.emit(&value);
-            return quote! { if #validation };
-        });
-        let constructed = self.construct_self(value);
+        let none = quote! { ::core::option::Option::None };
+        let body = self.construction(
+            quote! { it },
+            Check::Validate,
+            OnInvalid::Err(quote! { ::core::option::Option::Some(it) }),
+        );
         return quote! {
             #[inline(always)]
             pub(self) #konst fn #or_err(
                 it: ::core::option::Option<#el>,
             ) -> ::core::result::Result<Self, #failure> {
-                return match it {
-                    ::core::option::Option::Some(it) #guard => {
-                        ::core::result::Result::Ok(#constructed)
-                    }
-                    it => ::core::result::Result::Err(it),
+                let ::core::option::Option::Some(it) = it
+                else {
+                    return ::core::result::Result::Err(#none);
                 };
+                #body
             }
         };
     }
@@ -1175,20 +1024,19 @@ impl Maker {
         }
 
         let el = &self.el;
-        let value = quote! { it };
-        let validation = self.ctx.cfg.validation.emit(&value);
-        let constructed = self.construct_self(value);
+        let violated = "typekin closure proof violated";
+        let body = self.construction(
+            quote! { it },
+            Check::DebugOnly(violated),
+            OnInvalid::Panic(violated),
+        );
         return quote! {
             /// Builds a result that an expansion-time closure proof
             /// shows valid; debug builds still check it.
             #[must_use]
             #[inline(always)]
             pub(self) const fn _proven(it: #el) -> Self {
-                ::core::debug_assert!(
-                    #validation,
-                    "typekin closure proof violated",
-                );
-                return #constructed;
+                #body
             }
         };
     }
@@ -1204,12 +1052,7 @@ impl Maker {
 
         let el = &self.el;
         let blind_trust = self.ctx.names.get(IntegralName::BlindTrust);
-        let constructed = self.target.construct(
-            &self.storage,
-            quote! { Self },
-            quote! { raw },
-            self.ctx.cfg.flags.has(IntegralFlag::Assertions),
-        );
+        let constructed = self.construct_self(quote! { raw });
         let visibility = crate::zz_hide::blind_trust_visibility(
             &self.ctx.cfg.hide_in,
             with_blind_trust,

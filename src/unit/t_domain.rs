@@ -6,7 +6,11 @@ mod tests {
         Domain,
         Tri,
     };
-    use crate::zz_values::N;
+    use crate::zz_values::{
+        Int,
+        N,
+        Width,
+    };
 
     fn parse_error(source: &str) -> String {
         let this = syn::parse_str::<Domain>(source);
@@ -592,8 +596,9 @@ mod tests {
         let source = "count_zeros in {16}";
         let resolved = domain(source).resolve(N::USIZ, false);
         assert!(resolved.is_ok(), "{source}");
+        let zero = Int::NonNegative(0);
 
-        assert!(resolved.unwrap().admits_zero(16), "{source}");
+        assert!(resolved.unwrap().contains(zero, Width::W16), "{source}");
     }
 
     #[test]
@@ -628,10 +633,7 @@ mod tests {
 /// width.
 #[cfg(test)]
 mod lens_values {
-    use crate::zz_domain::{
-        Domain,
-        WIDTHS,
-    };
+    use crate::zz_domain::Domain;
     use crate::zz_domain_int::{
         Operand,
         RNode,
@@ -640,14 +642,14 @@ mod lens_values {
     use crate::zz_values::{
         Int,
         N,
+        Width,
     };
 
-    /// The operand of `{lens} in {0}` resolved for `subject` at width
-    /// `index`.
+    /// The operand of `{lens} in {0}` resolved for `subject` at `width`.
     fn operand_of(
         lens: &str,
         subject: N,
-        index: usize,
+        width: Width,
     ) -> Operand {
         let source = format!("{lens} in {{0}}");
         let domain = syn::parse_str::<Domain>(&source);
@@ -655,7 +657,8 @@ mod lens_values {
         let resolved = domain.unwrap().resolve(subject, false);
         assert!(resolved.is_ok(), "{source}: {:?}", resolved.err());
         let resolved = resolved.unwrap();
-        let RNode::Interval { operand, .. } = &resolved.per_width[index]
+        let RNode::Interval { operand, .. } =
+            &resolved.per_width[width.index()]
         else {
             panic!("{source} is not a single interval");
         };
@@ -668,16 +671,16 @@ mod lens_values {
         subject: N,
         real: impl Fn(i128) -> i128,
     ) {
-        let (min, max) = subject.bounds_for_pointer_width(64);
-        for index in 0..WIDTHS {
-            let operand = operand_of(lens, subject, index);
+        let (min, max) = subject.bounds_for_pointer_width(Width::W64);
+        for width in Width::ALL {
+            let operand = operand_of(lens, subject, width);
             for value in min.to_i128()..=max.to_i128() {
                 let it = Int::from_i128(value);
                 let expected = Int::from_i128(real(value));
                 assert_eq!(
-                    lens_value(&operand, it, index),
+                    lens_value(&operand, it, width),
                     expected,
-                    "{lens} of {value}: {subject:?} at width index {index}"
+                    "{lens} of {value}: {subject:?} at {width} bits"
                 );
             }
         }

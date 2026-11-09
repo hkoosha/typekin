@@ -2385,6 +2385,49 @@ mod tests {
     }
 
     #[test]
+    fn bitxor_assignment_is_generated_by_default() {
+        let rhs = XorAssigned::make(0b1010);
+        let mut value = XorAssigned::make(0b1100);
+        value ^= rhs;
+
+        assert_eq!(value.raw(), 0b0110);
+    }
+
+    #[test]
+    fn without_removes_bitxor_assignment_only() {
+        let lhs = WithoutXorAssign::make(0b1100);
+        let rhs = WithoutXorAssign::make(0b1010);
+        let combined = lhs ^ rhs;
+
+        assert_eq!(combined.raw(), 0b0110);
+        assert_not_impl!(
+            WithoutXorAssign: core::ops::BitXorAssign<WithoutXorAssign>
+        );
+    }
+
+    #[test]
+    fn without_bitxor_keeps_its_assignment() {
+        let rhs = WithoutXor::make(0b1010);
+        let mut value = WithoutXor::make(0b1100);
+        value ^= rhs;
+
+        assert_eq!(value.raw(), 0b0110);
+        assert_not_impl!(WithoutXor: core::ops::BitXor<WithoutXor>);
+    }
+
+    #[test]
+    fn restricted_profile_enables_bitxor_without_its_assignment() {
+        let lhs = CircularWithXor::make(0b1100);
+        let rhs = CircularWithXor::make(0b1010);
+        let combined = lhs ^ rhs;
+
+        assert_eq!(combined.raw(), 0b0110);
+        assert_not_impl!(
+            CircularWithXor: core::ops::BitXorAssign<CircularWithXor>
+        );
+    }
+
+    #[test]
     fn point_profile_has_no_point_addition() {
         assert_not_impl!(PointOnly: core::ops::Add<PointOnly>);
     }
@@ -3170,6 +3213,26 @@ mod facets {
         assert_not_impl!(FacetAssignedPoint: core::ops::SubAssign<FacetOffset>);
         assert_not_impl!(
             FacetAssignedPoint: core::ops::AddAssign<FacetAssignedPoint>
+        );
+    }
+
+    #[test]
+    fn facet_bitxor_slot_assigns_while_its_owner_assigns() {
+        let rhs = FacetBits(0b1010);
+        let mut value = FacetXorAssigned::make(0b1100);
+        value ^= rhs;
+
+        assert_eq!(value.raw(), 0b0110);
+    }
+
+    #[test]
+    fn facet_bitxor_slot_loses_its_assignment_with_the_flag() {
+        let rhs = FacetBits(0b1010);
+        let combined = FacetWithoutXorAssign::make(0b1100) ^ rhs;
+
+        assert_eq!(combined.raw(), 0b0110);
+        assert_not_impl!(
+            FacetWithoutXorAssign: core::ops::BitXorAssign<FacetBits>
         );
     }
 

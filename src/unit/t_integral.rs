@@ -24,6 +24,7 @@ mod tests {
     use crate::zz_values::{
         Int,
         N,
+        Width,
     };
 
     fn item_expansion(
@@ -105,11 +106,17 @@ mod tests {
 
     #[test]
     fn fixed_profile_parser_rejects_profile_override() {
-        let input = "profile = wrapping";
+        let input = "konst = none, profile = wrapping";
         let this = profile_config(ProfileKind::Delta, input);
         let error = this.unwrap_err();
 
         assert_eq!(error.to_string(), "profile is selected by this macro");
+        assert_eq!(error.span().start().line, 1, "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("profile").unwrap(),
+            "{input}",
+        );
     }
 
     #[test]
@@ -730,7 +737,7 @@ mod tests {
         let this = syn::parse_str::<Cfg>(input);
         assert!(this.is_ok(), "{input}");
         let cfg = this.unwrap();
-        assert_eq!(cfg.konst, Konst::default());
+        assert_eq!(cfg.wide.konst, Konst::default());
         assert_eq!(
             cfg.konst_for(&[
                 Konsts::Add,
@@ -829,10 +836,10 @@ mod tests {
     #[test]
     fn wrapping_arithmetic_uses_wrapper_ops_with_a_const_fallback() {
         let runtime = Arithmetic::WrapperWrapping
-            .make_expr(crate::zz_values::ArithmeticOp::Add)
+            .make_expr(crate::zz_values::Op::Add.spec())
             .to_string();
         let konst = Arithmetic::WrapperWrapping
-            .make_const_expr(crate::zz_values::ArithmeticOp::Add)
+            .make_const_expr(crate::zz_values::Op::Add.spec())
             .to_string();
 
         assert!(
@@ -980,22 +987,38 @@ mod tests {
     }
 
     #[test]
-    fn rejects_wrapper_wide_precedes_in_a_facet() {
-        let input = "
-            konst = none,
-            facet = [
-                circular {
-                    precedes = false,
-                    friend = convert(Source) -> Math,
-                },
-            ]
-        ";
+    fn circular_facet_rejects_wrapper_wide_precedes_at_the_key() {
+        let input = "konst = none, facet = circular { precedes = false }";
         let parsed = syn::parse_str::<Cfg>(input);
         let error = parsed.unwrap_err();
 
         assert_eq!(
             error.to_string(),
             "`precedes` is wrapper-wide and cannot be configured inside a facet",
+        );
+        assert_eq!(error.span().start().line, 1, "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("precedes").unwrap(),
+            "{input}",
+        );
+    }
+
+    #[test]
+    fn non_circular_facet_rejects_wrapper_wide_precedes_at_the_key() {
+        let input = "konst = none, facet = int { precedes = true }";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`precedes` is wrapper-wide and cannot be configured inside a facet",
+        );
+        assert_eq!(error.span().start().line, 1, "{input}");
+        assert_eq!(
+            error.span().start().column,
+            input.find("precedes").unwrap(),
+            "{input}",
         );
     }
 
@@ -1082,6 +1105,27 @@ mod tests {
     }
 
     #[test]
+    fn rejects_facet_xor_assignment_without_its_operator_slot() {
+        let input = "
+            konst = none,
+            facet = [
+                int {
+                    friend = convert(Source) -> Bit,
+                    without = math_xor,
+                    with = assign_xor,
+                },
+            ]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "`assign_xor` needs a `math_xor` slot to assign through",
+        );
+    }
+
+    #[test]
     fn rejects_const_facet_assignment_of_a_non_const_operator() {
         let input = "
             konst = nightly,
@@ -1123,6 +1167,18 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "assign_add cannot report failure; panic_at = nothing removes assignment operators",
+        );
+    }
+
+    #[test]
+    fn rejects_xor_assignment_when_operations_report_failure() {
+        let input = "konst = none, panic_at = nothing, with = assign_xor";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "assign_xor cannot report failure; panic_at = nothing removes assignment operators",
         );
     }
 
@@ -1346,6 +1402,21 @@ mod tests {
     }
 
     #[test]
+    fn rejects_xor_assignment_override_for_produce() {
+        let input = "
+            produce = Point::into_offset(_) -> Offset,
+            with = [assign_xor]
+        ";
+        let parsed = syn::parse_str::<Cfg>(input);
+        let error = parsed.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "produce cannot generate assignment operators",
+        );
+    }
+
+    #[test]
     fn rejects_duplicate_error_configuration() {
         let error =
             syn::parse_str::<Cfg>("konst = none, error = (), error = ()")
@@ -1381,7 +1452,7 @@ mod tests {
     fn contains_at(
         config: &Cfg,
         value: Int,
-        width: u32,
+        width: Width,
     ) -> bool {
         let resolved = config.validation.resolved();
         assert!(resolved.is_some(), "domain was resolved");
@@ -1408,7 +1479,7 @@ mod tests {
         let config = resolved_config(input, N::ISIZ);
         let minimum = Int::Negative(32_768);
 
-        assert!(!contains_at(&config, minimum, 16), "{input}");
+        assert!(!contains_at(&config, minimum, Width::W16), "{input}");
     }
 
     #[test]
@@ -1418,7 +1489,7 @@ mod tests {
         let config = resolved_config(input, N::ISIZ);
         let minimum = Int::Negative(2_147_483_648);
 
-        assert!(!contains_at(&config, minimum, 32), "{input}");
+        assert!(!contains_at(&config, minimum, Width::W32), "{input}");
     }
 
     #[test]
@@ -1428,7 +1499,7 @@ mod tests {
         let config = resolved_config(input, N::ISIZ);
         let minimum = Int::Negative(2_147_483_648);
 
-        assert!(contains_at(&config, minimum, 32), "{input}");
+        assert!(contains_at(&config, minimum, Width::W32), "{input}");
     }
 
     #[test]
@@ -1532,7 +1603,7 @@ mod tests {
         let config = syn::parse_str::<Cfg>("friend = [Foo(u8) -> Bit]")
             .expect("konst should default to the crate feature");
 
-        assert_eq!(config.konst, Konst::default());
+        assert_eq!(config.wide.konst, Konst::default());
         assert_eq!(
             config.konst_for(&[Konsts::Math]),
             cfg!(feature = "nightly")

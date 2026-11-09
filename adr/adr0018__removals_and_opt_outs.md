@@ -2,11 +2,11 @@
 
 - Status: Accepted (implemented)
 - Date: 2026-11-04
-- Related: `src/zz_lib.rs` (`Forward`, `Removals::keep`),
-  `src/integral_items.rs` (`el_makes`), `src/integral_cfg.rs`
-  (`IntegralFlag::DEFAULT_ON`), AGENTS.md "Every generated function that
-  forwards to a `core` function…", `examples/my_f64.rs`, ADR 0008, ADR 0010, ADR
-  0011, ADR 0016
+- Related: `src/zz_lib.rs` (`Forward`, `Form`, `Removals::keep`),
+  `src/zz_flags.rs` (`FlagGrammar`), `src/integral_items.rs` (`el_makes`),
+  `src/integral_cfg.rs` (`IntegralFlag::ROWS`), AGENTS.md "Every generated
+  function that forwards to a `core` function…", `examples/my_f64.rs`, ADR
+  0008, ADR 0010, ADR 0011, ADR 0016, ADR 0033
 
 ## Context
 
@@ -33,6 +33,12 @@ break code typekin itself generates.
     `integral = [...]`. Rejected in facets.
   - Typekin's own functions (`make`, `map`, …) and constants such as `BITS` are
     not covered. Constants go with their family flag.
+  - A removal is keyed by `(Form, FnName)` with `Form { Regular, Try }` (ADR
+    0033, 2026-11-09): `fn_try_push` is parsed by stripping `fn_`, then
+    `try_`, into the `Try` form of `push`, so a `try_` form needs no `FnName`
+    variant of its own. A family's `FlagGrammar` lists the forms it has: text
+    has both, integral and float only `Regular`. What the user writes and what
+    is generated did not change.
 - **Default-on derives are opt-out flags.** `clone`, `copy`, `hash`, `debug` and
   `repr` (plus `display` for text) are on by default and turned off with
   `without = …`. There is one macro per family.
@@ -70,6 +76,11 @@ break code typekin itself generates.
   and generated impls must not call public forwards.
 - Facets can't remove functions. Use a profile or the root.
 - An unused callback must still have the type the protocol expects.
+- The names share one table and a grammar lists forms, not names, so a known
+  name the type does not generate in that form gets the "removes nothing"
+  error rather than "unknown flag" (`without = fn_push` on a text or an
+  integral). A `try_` removal on a family without `try_` forms (`fn_try_push`
+  on an integral) is an "unknown flag".
 
 ## Sources
 

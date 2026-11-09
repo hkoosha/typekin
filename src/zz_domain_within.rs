@@ -41,12 +41,16 @@ use crate::zz_domain_within_const::{
     __TypekinWithinPiece,
     __typekin_within_subset,
 };
-use crate::zz_lib::ValidationCfg;
+use crate::zz_lib::{
+    Named as _,
+    ValidationCfg,
+};
 use crate::zz_values::{
     FnName,
     Int,
+    IntTy,
     N,
-    POINTER_WIDTHS,
+    Width,
 };
 
 /// Above this modulus a domain has no form: the target-side check walks one
@@ -129,12 +133,12 @@ impl Opaque {
 }
 
 impl Form {
-    /// Every value of `subject` at width `index`.
+    /// Every value of `subject` at `width`.
     pub(crate) fn full(
         subject: N,
-        index: usize,
+        width: Width,
     ) -> Self {
-        let (lo, hi) = subject.bounds_for_pointer_width(POINTER_WIDTHS[index]);
+        let (lo, hi) = subject.bounds_for_pointer_width(width);
         return Self {
             modulus: 1,
             pieces: vec![Piece { residue: 0, lo, hi }],
@@ -223,12 +227,12 @@ pub(crate) fn emit_messages() -> TokenStream {
 }
 
 impl ValidationCfg {
-    /// The values this validation admits at width `index`: every value
-    /// without validation, the resolved domain's form without callbacks.
+    /// The values this validation admits at `width`: every value without
+    /// validation, the resolved domain's form without callbacks.
     pub(crate) fn form(
         &self,
         subject: N,
-        index: usize,
+        width: Width,
     ) -> Result<Form, Opaque> {
         if !self.callbacks.is_empty() {
             let callbacks = self
@@ -242,44 +246,44 @@ impl ValidationCfg {
             }));
         }
         return match self.resolved() {
-            Some(domain) => domain.form(index),
-            None => Ok(Form::full(subject, index)),
+            Some(domain) => domain.values(width),
+            None => Ok(Form::full(subject, width)),
         };
     }
 }
 
 impl ResolvedDomain {
-    /// The domain at width `index` as a form, or why it has none.
-    pub(crate) fn form(
+    /// The values the domain admits at `width` as a form, or why it has
+    /// none.
+    pub(crate) fn values(
         &self,
-        index: usize,
+        width: Width,
     ) -> Result<Form, Opaque> {
-        let (starts, modulus) = self.segments(index)?;
-        let (_, max) =
-            self.subject.bounds_for_pointer_width(POINTER_WIDTHS[index]);
-        return sample(&self.per_width[index], index, (&starts, max), modulus);
+        let (starts, modulus) = self.segments(width)?;
+        let node = &self.per_width[width.index()];
+        let max = self.subject.at(width).max;
+        return sample(node, width, (&starts, max), modulus);
     }
 
-    /// The segment starts at width `index`, from the type's minimum, and
-    /// the modulus every leaf repeats with inside a segment.
+    /// The segment starts at `width`, from the type's minimum, and the
+    /// modulus every leaf repeats with inside a segment.
     pub(crate) fn segments(
         &self,
-        index: usize,
+        width: Width,
     ) -> Result<(Vec<Int>, u128), Opaque> {
+        let ty = self.subject.at(width);
         let mut shape = Shape {
             breakpoints: BTreeSet::new(),
             period: 1,
-            subject: self.subject,
-            index,
+            ty,
+            width,
         };
-        shape.visit(&self.per_width[index])?;
-        let (min, max) =
-            self.subject.bounds_for_pointer_width(POINTER_WIDTHS[index]);
-        let mut starts = vec![min];
+        shape.visit(&self.per_width[width.index()])?;
+        let mut starts = vec![ty.min];
         starts.extend(
             shape
                 .breakpoints
-                .range((Limit::Excluded(min), Limit::Included(max)))
+                .range((Limit::Excluded(ty.min), Limit::Included(ty.max)))
                 .copied(),
         );
         return Ok((starts, shape.period));
@@ -291,18 +295,12 @@ impl ResolvedDomain {
 struct Shape {
     breakpoints: BTreeSet<Int>,
     period: u128,
-    subject: N,
-    index: usize,
+    /// The value type at `width`.
+    ty: IntTy,
+    width: Width,
 }
 
 impl Shape {
-    fn bits(&self) -> u32 {
-        return self
-            .subject
-            .bits_for_pointer_width(POINTER_WIDTHS[self.index])
-            as u32;
-    }
-
     /// A breakpoint; `None` (an overflowing one) lies beyond every value.
     fn at(
         &mut self,
@@ -357,7 +355,7 @@ impl Shape {
     ) {
         let zero = Int::NonNegative(0);
         if function == FnName::IsPowerOfTwo {
-            for exponent in 0..self.bits() {
+            for exponent in 0..self.ty.bits {
                 let power = Int::NonNegative(1 << exponent);
                 self.at(Some(power));
                 self.at(power.successor());
@@ -393,7 +391,7 @@ impl Shape {
                 self.at(zero.successor());
             }
             LensKind::RemEuclid => {
-                self.repeat(operand.arg(self.index).magnitude())?;
+                self.repeat(operand.arg(self.width).magnitude())?;
             }
             LensKind::LeadingZeros | LensKind::LeadingOnes => self.leading(),
             LensKind::TrailingZeros | LensKind::TrailingOnes => {
@@ -426,7 +424,7 @@ impl Shape {
                 // `d | floor(x / k)` depends on `x mod k·d`.
                 LensKind::DivEuclid => {
                     let divisor = operand
-                        .arg(self.index)
+                        .arg(self.width)
                         .magnitude()
                         .saturating_mul(divisor);
                     self.repeat(divisor)
@@ -436,7 +434,7 @@ impl Shape {
             };
         };
         let center = match lens {
-            LensKind::AbsDiff => operand.arg(self.index),
+            LensKind::AbsDiff => operand.arg(self.width),
             _ => Int::NonNegative(0),
         };
         self.at(Some(center));
@@ -451,7 +449,7 @@ impl Shape {
                 }
                 // `x.div_euclid(k) >= c` iff `x >= c * k`.
                 LensKind::DivEuclid => {
-                    self.at(value.checked_mul(operand.arg(self.index)));
+                    self.at(value.checked_mul(operand.arg(self.width)));
                 }
                 // `x.isqrt() >= c` iff `x >= c * c`, for `c >= 0`.
                 _ => self.at(value.checked_mul(value)),
@@ -463,17 +461,15 @@ impl Shape {
     /// `leading_zeros` and `leading_ones` are constant between the
     /// power-of-two boundaries of the bit pattern: `2^j` and `2^bits - 2^j`.
     fn leading(&mut self) {
-        let bits = self.bits();
-        let mask = mask(bits);
-        let signed = self.subject.is_signed();
+        let ty = self.ty;
         self.at(Some(Int::NonNegative(0)));
-        for exponent in 0..bits {
+        for exponent in 0..ty.bits {
             let low = 1u128 << exponent;
             for pattern in [
                 low,
-                mask - (low - 1),
+                ty.mask() - (low - 1),
             ] {
-                self.at(Some(from_pattern(pattern, bits, signed)));
+                self.at(Some(ty.wrap(pattern)));
             }
         }
     }
@@ -487,11 +483,11 @@ impl Shape {
         lens: LensKind,
         node: &RNode,
     ) -> Result<(), Opaque> {
-        let bits = self.bits();
-        let special = match (lens, self.subject.is_signed()) {
+        let bits = self.ty.bits;
+        let special = match (lens, self.ty.signed) {
             (LensKind::TrailingZeros, _) => Int::NonNegative(0),
             (_, true) => Int::Negative(1),
-            (_, false) => Int::NonNegative(mask(bits)),
+            (_, false) => Int::NonNegative(self.ty.mask()),
         };
         self.at(Some(special));
         self.at(special.successor());
@@ -506,12 +502,12 @@ impl Shape {
     }
 }
 
-/// The form of `node` at width `index`, whose values end at `max`: one
+/// The form of `node` at `width`, whose values end at `max`: one
 /// evaluation per segment and residue class decides the class on the
 /// segment, and same-class pieces of adjacent segments merge.
 fn sample(
     node: &RNode,
-    index: usize,
+    width: Width,
     (starts, max): (&[Int], Int),
     modulus: u128,
 ) -> Result<Form, Opaque> {
@@ -532,7 +528,7 @@ fn sample(
             else {
                 continue;
             };
-            if !eval(node, first, index) {
+            if !eval(node, first, width) {
                 continue;
             }
             let last = last_member(end, residue, modulus);
@@ -591,25 +587,6 @@ fn divisor(node: &RNode) -> u128 {
         unreachable!("only `mul(d)` tests are periodic");
     };
     return divisor.magnitude();
-}
-
-fn mask(bits: u32) -> u128 {
-    return match bits {
-        u128::BITS => u128::MAX,
-        bits => (1 << bits) - 1,
-    };
-}
-
-/// The value of a `bits`-bit two's-complement pattern.
-fn from_pattern(
-    pattern: u128,
-    bits: u32,
-    signed: bool,
-) -> Int {
-    if !signed || (pattern >> (bits - 1)) & 1 == 0 {
-        return Int::NonNegative(pattern);
-    }
-    return Int::Negative((!pattern & mask(bits)) + 1);
 }
 
 /// The least member of `residue`'s class from `start`; `None` beyond every

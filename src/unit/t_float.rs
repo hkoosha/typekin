@@ -19,6 +19,7 @@ mod tests {
         IntegralFlag,
     };
     use crate::zz_domain_float::MathProvider;
+    use crate::zz_lib::Named as _;
     use crate::zz_profile_integral::ProfileKind;
     use crate::zz_values::{
         F,
@@ -73,8 +74,9 @@ mod tests {
         input: &str,
         subject: F,
     ) -> String {
-        let config = resolved(input, subject);
-        return config.validation.emit(&quote! { it }).to_string();
+        let validation =
+            resolved(input, subject).validation.emit(&quote! { it });
+        return quote! { #validation }.to_string();
     }
 
     fn expansion_of(
@@ -84,7 +86,7 @@ mod tests {
         let config = config(input);
         let expansion = ekran_with(
             format_ident!("Value"),
-            format_ident!("{}", subject.rust_name()),
+            format_ident!("{}", subject.name()),
             Box::new(config),
             StoragePlan::primitive(subject),
         );
@@ -99,7 +101,7 @@ mod tests {
         let config = config(input);
         let expansion = ekran_with(
             format_ident!("Value"),
-            format_ident!("{}", subject.rust_name()),
+            format_ident!("{}", subject.name()),
             Box::new(config),
             StoragePlan::primitive(subject),
         );
@@ -138,7 +140,7 @@ mod tests {
         assert!(this.is_ok(), "{input}");
         return ekran_with(
             format_ident!("Value"),
-            format_ident!("{}", subject.rust_name()),
+            format_ident!("{}", subject.name()),
             Box::new(this.unwrap()),
             StoragePlan::primitive(subject),
         );
@@ -953,6 +955,14 @@ mod tests {
         let error = config_error(input);
 
         assert!(error.contains("assign_shl requires an integer"), "{error}");
+    }
+
+    #[test]
+    fn assign_xor_is_rejected() {
+        let input = "with = assign_xor";
+        let error = config_error(input);
+
+        assert!(error.contains("assign_xor requires an integer"), "{error}");
     }
 
     #[test]

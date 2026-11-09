@@ -28,6 +28,7 @@ use crate::zz_domain_float::MathProvider;
 use crate::zz_flags::{
     Flag,
     FlagGrammar,
+    FlagRow,
     FlagSettings,
     Flags,
     KonstFlags,
@@ -46,10 +47,14 @@ use crate::zz_hide::{
     HideIn,
 };
 use crate::zz_lib::{
+    Form,
     Key,
     Konst,
+    KonstFamily,
     Konsts,
+    Named,
     Removals,
+    Site,
     ValidationCfg,
 };
 use crate::zz_names::NameKey;
@@ -72,7 +77,10 @@ use crate::zz_values::{
     FnName,
     N,
     Num,
-    Operator,
+    OPS,
+    Op,
+    OpKind,
+    Width,
 };
 use crate::{
     marker_tree,
@@ -81,8 +89,8 @@ use crate::{
 
 /// The `with`/`without` grammar of an integral configuration level.
 pub(crate) const GRAMMAR: FlagGrammar = FlagGrammar {
-    konsts: Konsts::INTEGRAL,
-    removals: true,
+    konsts: Some(KonstFamily::Integral),
+    removals: &[Form::Regular],
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -118,23 +126,30 @@ pub(crate) enum PanicAt {
     Nothing,
 }
 
-impl PanicAt {
-    const ITEMS: [Self; 4] = [
-        Self::Anything,
-        Self::Arithmetic,
-        Self::Overflow,
-        Self::Nothing,
+impl Named for PanicAt {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Anything, "anything"),
+        (Self::Arithmetic, "arithmetic"),
+        (Self::Overflow, "overflow"),
+        (Self::Nothing, "nothing"),
     ];
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Anything => "anything",
-            Self::Arithmetic => "arithmetic",
-            Self::Overflow => "overflow",
-            Self::Nothing => "nothing",
-        };
+    fn index(self) -> usize {
+        return self as usize;
     }
+}
 
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = PanicAt::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
+impl PanicAt {
     /// Whether operations that could fail return `Result` instead of
     /// panicking.
     pub(crate) fn fallible(self) -> bool {
@@ -153,34 +168,56 @@ impl PanicAt {
     }
 }
 
-impl Parse for PanicAt {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let name: Ident = input.parse()?;
-        return Self::ITEMS
-            .into_iter()
-            .find(|it| name == it.name())
-            .map_or_else(
-                || {
-                    return name.fail(
-                        "expected `anything`, `arithmetic`, `overflow`, or \
-                        `nothing`",
-                    );
-                },
-                Ok,
-            );
-    }
+/// The settings that hold for a whole wrapper: `konst`, the resolved
+/// `konst_*` settings, and `panic_at`.
+#[derive(Default)]
+pub(crate) struct WrapperWide {
+    pub(crate) konst: Konst,
+    pub(crate) konsts: KonstFlags,
+    /// `panic_at = ...`: what generated code may still panic on.
+    pub(crate) panic_at: PanicAt,
 }
 
-/// Where a configuration is parsed, which decides the keys it accepts.
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum CfgSite {
-    /// `integral` and `float`.
-    Root,
-    /// A fixed-profile macro (`circular`, `point`, …): no `profile`, but
-    /// `precedes`.
-    FixedProfile,
-    /// Bitflag's `integral = [..]`: no `konst`, `tree`, or `hide_in`.
-    Nested,
+impl WrapperWide {
+    /// Parses the value of a wrapper-wide key; `false` for any other key.
+    fn parse_attr(
+        &mut self,
+        attr: Key,
+        rest: ParseStream,
+    ) -> syn::Result<bool> {
+        match attr {
+            Key::Konst => self.konst = rest.parse()?,
+            Key::PanicAt => self.panic_at = zz::parse_choice(rest)?,
+            _ => return Ok(false),
+        }
+
+        return Ok(true);
+    }
+
+    /// Takes the constness of the `outer` family this wrapper is nested in:
+    /// each `konst_*` flag takes the outer value, and a disagreeing nested
+    /// explicit setting fails at its span. `panic_at` stays: no outer family
+    /// has one. Call after `Cfg::resolve`, which clears the konst flags.
+    pub(crate) fn embed(
+        &mut self,
+        outer: &Self,
+    ) -> syn::Result<()> {
+        for flag in KonstFamily::Integral.konsts() {
+            let required = outer
+                .konsts
+                .konst_for(&[flag], || outer.konst.enables(&[flag]));
+            if let Some((value, span)) = self.konsts.get(flag)
+                && value != required
+            {
+                return span.fail(
+                    "this value is not compatible with own konst config of bitflag",
+                );
+            }
+            self.konsts.insert(flag, required, Span::call_site());
+        }
+        self.konst = outer.konst;
+        return Ok(());
+    }
 }
 
 /// The operand source of a facet level's slots.
@@ -193,8 +230,7 @@ struct SlotSource<'a> {
 
 #[derive(Default)]
 pub(crate) struct Cfg {
-    pub(crate) konst: Konst,
-    konst_flags: KonstFlags,
+    pub(crate) wide: WrapperWide,
     root: FlagSettings<IntegralFlag>,
     /// `without = fn_{name}` from the profiles and the root.
     pub(crate) removals: Removals,
@@ -222,8 +258,6 @@ pub(crate) struct Cfg {
     /// `prove = [...]`: operations that must be proven closed.
     pub(crate) prove: Vec<ProveItem>,
     pub(crate) kind: Kind,
-    /// `panic_at = ...`: what generated code may still panic on.
-    pub(crate) panic_at: PanicAt,
     /// `math = core | std | nightly` (floats only).
     pub(crate) math: MathProvider,
     /// The value field is not private, so code outside the generated API
@@ -250,12 +284,6 @@ impl Cfg {
     }
 
     fn validate_facet(it: &FacetCfg) -> syn::Result<()> {
-        if let Some(span) = it.precedes_span {
-            return span.fail(
-                "`precedes` is wrapper-wide and cannot be configured inside a facet",
-            );
-        }
-
         for profile in it.profile.iter() {
             Self::validate_facet_settings(profile.settings())?;
         }
@@ -347,13 +375,13 @@ impl Cfg {
         return Ok(());
     }
 
-    /// One slot per enabled operator of `operations` for `rhs` (`Self` when
+    /// One slot per enabled operator of `kind` for `rhs` (`Self` when
     /// `None`). An explicit facet rejects a claimed slot; the default facet
     /// keeps it.
     fn insert_slots(
         slots: &mut BTreeMap<FacetSlotKey, FacetSlot>,
         source: &SlotSource,
-        operations: &[Operator],
+        kind: OpKind,
         rhs: Option<&Path>,
         conversion: Option<&Path>,
         span: Span,
@@ -363,13 +391,13 @@ impl Cfg {
             |rhs| rhs.to_token_stream().to_string(),
         );
 
-        for operator in operations
-            .iter()
-            .copied()
-            .filter(|operator| source.flags.has(IntegralFlag::math(*operator)))
-        {
+        for operator in OPS.iter().filter(|it| it.kind == kind) {
+            let flags = IntegralFlag::of_op(operator.op);
+            if !source.flags.has(flags.math) {
+                continue;
+            }
             let key = FacetSlotKey {
-                operator,
+                operator: operator.op,
                 rhs: identity.clone(),
             };
             let slot = FacetSlot {
@@ -378,8 +406,7 @@ impl Cfg {
                 arithmetic: source.arithmetic,
                 ty_out: source.ty_out.clone(),
                 assign: source.ty_out.is_self()
-                    && IntegralFlag::assign(operator)
-                        .is_some_and(|flag| source.flags.has(flag)),
+                    && flags.assign.is_some_and(|flag| source.flags.has(flag)),
                 owner: source.owner,
                 span,
             };
@@ -407,12 +434,12 @@ impl Cfg {
     ) -> syn::Result<()> {
         for friend in friends {
             let span = friend.ty.path().span();
-            for (capability, operations) in FACET_OPERATORS {
+            for (capability, kind) in FACET_OPERATORS {
                 if friend.has(capability) {
                     Self::insert_slots(
                         slots,
                         source,
-                        operations(),
+                        kind,
                         Some(friend.ty.path()),
                         friend.conv.as_ref(),
                         span,
@@ -427,14 +454,12 @@ impl Cfg {
             self_math,
             self_bit,
         ];
-        for ((_, operations), span) in
-            FACET_OPERATORS.into_iter().zip(self_slots)
-        {
+        for ((_, kind), span) in FACET_OPERATORS.into_iter().zip(self_slots) {
             if let Some(span) = span {
                 Self::insert_slots(
                     slots,
                     source,
-                    operations(),
+                    kind,
                     None,
                     Some(&conversion),
                     span,
@@ -485,7 +510,7 @@ impl Cfg {
             Self::check_facet_assignments(
                 &slots,
                 &source,
-                self.panic_at,
+                self.wide.panic_at,
                 |flag| facet.explicit_flag(flag),
             )?;
         }
@@ -507,7 +532,7 @@ impl Cfg {
         Self::check_facet_assignments(
             &slots,
             &source,
-            self.panic_at,
+            self.wide.panic_at,
             |flag| self.explicit_flag(flag),
         )?;
 
@@ -524,11 +549,9 @@ impl Cfg {
         panic_at: PanicAt,
         explicit: impl Fn(IntegralFlag) -> Option<(bool, Span)>,
     ) -> syn::Result<()> {
-        let operators = FACET_OPERATORS
-            .iter()
-            .flat_map(|(_, operators)| operators().iter().copied());
-        for operator in operators {
-            let Some(flag) = IntegralFlag::assign(operator)
+        for operator in OPS.iter().filter(|it| it.kind.has_operand()) {
+            let flags = IntegralFlag::of_op(operator.op);
+            let Some(flag) = flags.assign
             else {
                 continue;
             };
@@ -549,10 +572,11 @@ impl Cfg {
                     .fail("produce cannot generate assignment operators");
             }
             let owned = slots.iter().any(|(key, slot)| {
-                return key.operator == operator && slot.owner == source.owner;
+                return key.operator == operator.op
+                    && slot.owner == source.owner;
             });
             if !owned {
-                let math = IntegralFlag::math(operator).name();
+                let math = flags.math.name();
                 return span.fail(format!(
                     "`{}` needs a `{math}` slot to assign through",
                     flag.name(),
@@ -572,15 +596,14 @@ impl Cfg {
             .filter(|(_, slot)| slot.assign)
             .map(|(key, _)| key)
         {
-            let assign = key.operator.assign_konst_flags();
-            if !self.konst_for(&assign)
-                || self.konst_for(&key.operator.is_konst_flags())
-            {
+            let operator = key.operator.spec();
+            let assign = operator.assign_konsts();
+            if !self.konst_for(&assign) || self.konst_for(&operator.konsts()) {
                 continue;
             }
             let span = assign
                 .iter()
-                .find_map(|flag| self.konst_flags.get(*flag))
+                .find_map(|flag| self.wide.konsts.get(*flag))
                 .map_or_else(Span::call_site, |(_, span)| span);
             return span.fail(
                 "a facet assignment forwards to its operator and can be \
@@ -654,14 +677,13 @@ impl Cfg {
                 }
             }
             Kind::Float => {
-                let float_profile = |it: &Profile| {
-                    return matches!(it, Profile::Int(_) | Profile::Point(_));
-                };
-                if !self.profile.iter().all(float_profile)
-                    || !self
-                        .facets
-                        .iter()
-                        .all(|facet| facet.profile.iter().all(float_profile))
+                if !self.profile.iter().all(Profile::accepts_float)
+                    || !self.facets.iter().all(|facet| {
+                        return facet
+                            .profile
+                            .iter()
+                            .all(Profile::accepts_float);
+                    })
                 {
                     return Span::call_site().fail(
                         "float types support only the int and point profiles",
@@ -753,8 +775,8 @@ impl Cfg {
         &mut self,
         raw: Num,
     ) -> syn::Result<()> {
-        if self.panic_at.fallible() {
-            let level = self.panic_at.name();
+        if self.wide.panic_at.fallible() {
+            let level = self.wide.panic_at.name();
             if let Some(item) = self.prove.first() {
                 return item.name.fail(format!(
                     "panic_at = {level} validates every result and takes no \
@@ -845,19 +867,19 @@ impl Cfg {
             }
             Kind::Float => self.apply_float_defaults(),
         }
-        self.konst_flags = KonstFlags::default();
+        self.wide.konsts = KonstFlags::default();
         self.removals = Removals::default();
         for profile in self.profile.iter() {
             profile.apply(&mut self.flags);
             profile.settings().layer(
                 &mut self.flags,
-                &mut self.konst_flags,
+                &mut self.wide.konsts,
                 &mut self.removals,
             );
         }
         self.root.layer(
             &mut self.flags,
-            &mut self.konst_flags,
+            &mut self.wide.konsts,
             &mut self.removals,
         );
     }
@@ -895,7 +917,7 @@ impl Cfg {
             })?;
         }
 
-        if self.panic_at.fallible() {
+        if self.wide.panic_at.fallible() {
             self.settle_panic_at()?;
         }
 
@@ -906,7 +928,7 @@ impl Cfg {
     /// which cannot report failure, and construction without validation
     /// (`unsafe` friends, `with_blind_trust`).
     fn settle_panic_at(&mut self) -> syn::Result<()> {
-        let level = self.panic_at.name();
+        let level = self.wide.panic_at.name();
         let unsafe_friend = self.friends.iter().find_map(|friend| {
             return friend.capabilities.iter().find(|it| {
                 return Capability::of(it) == Some(Capability::Unsafe);
@@ -965,31 +987,9 @@ impl Cfg {
         flags: &[Konsts],
     ) -> bool {
         return self
-            .konst_flags
-            .konst_for(flags, || self.konst.enables(flags));
-    }
-
-    /// Hands constness to the outer family: each `konst_*` flag takes the
-    /// outer value, and a disagreeing nested explicit setting fails at its
-    /// span. Call after `resolve`, which clears the konst flags.
-    pub(crate) fn embed_konst(
-        &mut self,
-        konst: Konst,
-        outer: &KonstFlags,
-    ) -> syn::Result<()> {
-        for &flag in Konsts::INTEGRAL {
-            let required = outer.konst_for(&[flag], || konst.enables(&[flag]));
-            if let Some((value, span)) = self.konst_flags.get(flag)
-                && value != required
-            {
-                return span.fail(
-                    "this value is not compatible with own konst config of bitflag",
-                );
-            }
-            self.konst_flags.insert(flag, required, Span::call_site());
-        }
-        self.konst = konst;
-        return Ok(());
+            .wide
+            .konsts
+            .konst_for(flags, || self.wide.konst.enables(flags));
     }
 
     pub(crate) fn konst_friendship(&self) -> bool {
@@ -997,10 +997,10 @@ impl Cfg {
             return true;
         }
 
-        return Konsts::INTEGRAL
-            .iter()
-            .filter(|flag| **flag != Konsts::Friendship && !flag.is_stable())
-            .any(|flag| self.konst_for(&[*flag]));
+        return KonstFamily::Integral
+            .konsts()
+            .filter(|flag| *flag != Konsts::Friendship && !flag.is_stable())
+            .any(|flag| self.konst_for(&[flag]));
     }
 
     /// Whether the private helpers that run validation (`_or_panic` and the
@@ -1086,29 +1086,18 @@ impl Cfg {
     fn parse_attrs(
         &mut self,
         input: ParseStream,
-        site: CfgSite,
+        site: Site,
     ) -> syn::Result<()> {
-        let outer = site != CfgSite::Nested;
-        let fixed_profile = site == CfgSite::FixedProfile;
-        return zz::parse_inner(input, |attr, rest| {
-            if self.validation.parse_attr(attr, rest)? {
+        let fixed_profile = site == Site::FixedProfile;
+        return zz::parse_inner(input, site, |attr, rest| {
+            if self.validation.parse_attr(attr, rest)?
+                || self.wide.parse_attr(attr, rest)?
+            {
                 return Ok(true);
             }
 
             match attr {
-                Key::Konst if outer => self.konst = rest.parse()?,
-                Key::Konst => {
-                    return Span::call_site()
-                        .fail("constness is specified in multiple places");
-                }
                 Key::Error => zz::parse_unit_error(rest)?,
-                Key::PanicAt if outer => self.panic_at = rest.parse()?,
-                Key::PanicAt => {
-                    return rest.span().fail(
-                        "panic_at belongs on integral types, not in \
-                        integral = [..]",
-                    );
-                }
                 Key::With => self.root.parse(rest, true, &GRAMMAR)?,
                 Key::Without => self.root.parse(rest, false, &GRAMMAR)?,
                 Key::Friend => {
@@ -1118,20 +1107,10 @@ impl Cfg {
                     self.math_span = Some(rest.span());
                     self.math = rest.parse()?;
                 }
-                Key::Tree if outer => {
+                Key::Tree => {
                     self.tree = Some(marker_tree::Cfg::parse_attribute(rest)?);
                 }
-                Key::Tree => {
-                    return Span::call_site().fail(
-                        "bitflag integral configuration does not support tree",
-                    );
-                }
-                Key::HideIn if outer => self.hide_in = rest.parse()?,
-                Key::HideIn => {
-                    return Span::call_site().fail(
-                        "hide_in belongs on the bitflag root, not in integral = [..]",
-                    );
-                }
+                Key::HideIn => self.hide_in = rest.parse()?,
                 Key::Facet => {
                     self.facets = zz::one_or_list::<FacetCfg>(rest)?.collect();
                     self.facets_present = true;
@@ -1140,10 +1119,6 @@ impl Cfg {
                     if !self.profile.single_mut().parse_attr(attr, rest)? {
                         return Ok(false);
                     }
-                }
-                Key::Profile if fixed_profile => {
-                    return Span::call_site()
-                        .fail("profile is selected by this macro");
                 }
                 Key::GetRaw => self.get_raw = Some(rest.parse()?),
                 Key::LitName => self.lit_name = Some(rest.parse()?),
@@ -1175,7 +1150,7 @@ impl Cfg {
             kind: Kind::Float,
             ..Default::default()
         };
-        this.parse_attrs(input, CfgSite::Root)?;
+        this.parse_attrs(input, Site::Root)?;
         this.resolve()?;
         return Ok(this);
     }
@@ -1190,7 +1165,7 @@ impl Cfg {
             kind,
             ..Default::default()
         };
-        this.parse_attrs(input, CfgSite::FixedProfile)?;
+        this.parse_attrs(input, Site::FixedProfile)?;
         this.resolve()?;
         return Ok(this);
     }
@@ -1199,13 +1174,16 @@ impl Cfg {
         input: ParseStream
     ) -> syn::Result<Self> {
         let mut this = Self::without_konst();
-        this.parse_attrs(input, CfgSite::Nested)?;
+        this.parse_attrs(input, Site::Nested)?;
         return Ok(this);
     }
 
     pub(crate) fn without_konst() -> Self {
         return Self {
-            konst: Konst::None,
+            wide: WrapperWide {
+                konst: Konst::None,
+                ..Default::default()
+            },
             ..Default::default()
         };
     }
@@ -1218,7 +1196,7 @@ impl Debug for Cfg {
     ) -> std::fmt::Result {
         return f
             .debug_struct("IntegralCfg")
-            .field("konst", &self.konst)
+            .field("konst", &self.wide.konst)
             .field("get_raw", &self.get_raw.to_token_stream().to_string())
             .field("validation", &self.validation)
             .field("friends", &self.friends)
@@ -1241,7 +1219,7 @@ impl HideCfg for Cfg {
 impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::default();
-        this.parse_attrs(input, CfgSite::Root)?;
+        this.parse_attrs(input, Site::Root)?;
         this.resolve()?;
         return Ok(this);
     }
@@ -1273,6 +1251,7 @@ impl IntegralFlag {
         Self::AssignRem,
         Self::AssignShl,
         Self::AssignShr,
+        Self::AssignXor,
     ];
 
     /// The assignment operator flags.
@@ -1286,6 +1265,7 @@ impl IntegralFlag {
         Self::AssignShl,
         Self::AssignShr,
         Self::AssignSub,
+        Self::AssignXor,
     ];
 
     /// Integer-only flags: off for floats, and an error when enabled there.
@@ -1310,6 +1290,7 @@ impl IntegralFlag {
         Self::AssignOr,
         Self::AssignShl,
         Self::AssignShr,
+        Self::AssignXor,
         Self::FnMathAnd,
         Self::FnMathOr,
         Self::FnMathXor,
@@ -1349,8 +1330,8 @@ impl IntegralFlag {
         Self::PartialOrd,
     ];
 
-    /// The float kind's defaults beyond `DEFAULT_ON`; `float_math` follows
-    /// the math provider.
+    /// The float kind's defaults beyond the rows that are `on`;
+    /// `float_math` follows the math provider.
     pub(crate) const FLOAT_DEFAULT_ON: &'static [Self] = &[
         Self::MathNeg,
         Self::FnMathNeg,
@@ -1418,7 +1399,7 @@ impl IntegralFlag {
     ];
 
     /// The assignment flags a facet may set: those of its operand operators
-    /// (`BitXor` has none; shifts are wrapper-wide).
+    /// (shifts are wrapper-wide).
     pub(crate) const FACET_ASSIGNMENTS: &'static [Self] = &[
         Self::AssignAdd,
         Self::AssignSub,
@@ -1427,36 +1408,46 @@ impl IntegralFlag {
         Self::AssignRem,
         Self::AssignAnd,
         Self::AssignOr,
+        Self::AssignXor,
     ];
 
-    /// The flag that generates `op`'s operator.
-    pub(crate) fn math(op: Operator) -> Self {
-        return match op {
-            Operator::Add => Self::MathAdd,
-            Operator::Sub => Self::MathSub,
-            Operator::Mul => Self::MathMul,
-            Operator::Div => Self::MathDiv,
-            Operator::Rem => Self::MathRem,
-            Operator::BitAnd => Self::MathAnd,
-            Operator::BitOr => Self::MathOr,
-            Operator::BitXor => Self::MathXor,
+    /// The flags of `op`: its operator, its assignment and its helper.
+    pub(crate) fn of_op(op: Op) -> OpFlags {
+        let (math, assign, helper) = match op {
+            Op::Add => (Self::MathAdd, Some(Self::AssignAdd), Self::FnMathAdd),
+            Op::Sub => (Self::MathSub, Some(Self::AssignSub), Self::FnMathSub),
+            Op::Mul => (Self::MathMul, Some(Self::AssignMul), Self::FnMathMul),
+            Op::Div => (Self::MathDiv, Some(Self::AssignDiv), Self::FnMathDiv),
+            Op::Rem => (Self::MathRem, Some(Self::AssignRem), Self::FnMathRem),
+            Op::BitAnd => {
+                (Self::MathAnd, Some(Self::AssignAnd), Self::FnMathAnd)
+            }
+            Op::BitOr => (Self::MathOr, Some(Self::AssignOr), Self::FnMathOr),
+            Op::BitXor => {
+                (Self::MathXor, Some(Self::AssignXor), Self::FnMathXor)
+            }
+            Op::Shl => (Self::MathShl, Some(Self::AssignShl), Self::FnMathShl),
+            Op::Shr => (Self::MathShr, Some(Self::AssignShr), Self::FnMathShr),
+            Op::Neg => (Self::MathNeg, None, Self::FnMathNeg),
+            Op::Not => (Self::MathNot, None, Self::FnMathNot),
+        };
+        return OpFlags {
+            math,
+            assign,
+            helper,
         };
     }
+}
 
-    /// The flag that generates `op`'s assignment operator; `BitXor` has
-    /// none.
-    pub(crate) fn assign(op: Operator) -> Option<Self> {
-        return match op {
-            Operator::Add => Some(Self::AssignAdd),
-            Operator::Sub => Some(Self::AssignSub),
-            Operator::Mul => Some(Self::AssignMul),
-            Operator::Div => Some(Self::AssignDiv),
-            Operator::Rem => Some(Self::AssignRem),
-            Operator::BitAnd => Some(Self::AssignAnd),
-            Operator::BitOr => Some(Self::AssignOr),
-            Operator::BitXor => None,
-        };
-    }
+/// The integral flags of one operator.
+pub(crate) struct OpFlags {
+    /// `math_*`: generates the operator.
+    pub(crate) math: IntegralFlag,
+    /// `assign_*`: generates the assignment operator; the unary operators
+    /// have none.
+    pub(crate) assign: Option<IntegralFlag>,
+    /// `fn_math_*`: generates the validating helper the operator calls.
+    pub(crate) helper: IntegralFlag,
 }
 
 /// A name integral and float generate.
@@ -1469,7 +1460,7 @@ pub(crate) enum IntegralName {
     RelTrait,
     UnsafeTrait,
     /// `{Op}Rhs`: a facet's right-hand-side trait.
-    RhsTrait(Operator),
+    RhsTrait(Op),
     /// `conv_{snake}`: the seal's conversion.
     Conversion,
     /// `make`: the value-type constructor `auto_of_raw` generates.
@@ -1527,7 +1518,9 @@ impl NameKey for IntegralName {
             Self::BitTrait => Capability::Bit.name().to_string(),
             Self::RelTrait => Capability::Rel.name().to_string(),
             Self::UnsafeTrait => Capability::Unsafe.name().to_string(),
-            Self::RhsTrait(operator) => format!("{}Rhs", operator.name()),
+            Self::RhsTrait(operator) => {
+                format!("{}Rhs", operator.spec().trait_name)
+            }
             Self::Conversion => {
                 format!("conv_{}", snake_case_of(&owner.to_string()))
             }
@@ -1537,8 +1530,8 @@ impl NameKey for IntegralName {
             Self::OrPanic => "_or_panic".to_string(),
             Self::OrErr => "_or_err".to_string(),
             Self::BlindTrust => "_blind_trust".to_string(),
-            Self::Into(target) => format!("into_{}", target.rust_name()),
-            Self::TryInto(target) => format!("try_into_{}", target.rust_name()),
+            Self::Into(target) => format!("into_{}", target.name()),
+            Self::TryInto(target) => format!("try_into_{}", target.name()),
             Self::BitPart(part, index) => {
                 let prefix = match part {
                     N::U008 => "byte",
@@ -1550,10 +1543,10 @@ impl NameKey for IntegralName {
                 format!("{prefix}{index}")
             }
             Self::LowHalf(half) => {
-                format!("lo{}", half.bits_for_pointer_width(64))
+                format!("lo{}", half.bits_for_pointer_width(Width::W64))
             }
             Self::HighHalf(half) => {
-                format!("hi{}", half.bits_for_pointer_width(64))
+                format!("hi{}", half.bits_for_pointer_width(Width::W64))
             }
             Self::Fn(function) => function.name().to_string(),
             Self::WithinFn => "_within".to_string(),
@@ -1644,6 +1637,7 @@ pub(crate) enum IntegralFlag {
     AssignShl,
     AssignShr,
     AssignSub,
+    AssignXor,
     MathAdd,
     MathAnd,
     MathDiv,
@@ -1690,285 +1684,118 @@ pub(crate) enum IntegralFlag {
 }
 
 impl Flag for IntegralFlag {
-    const ITEMS: &'static [Self] = &[
-        Self::Range,
-        Self::AsRef,
-        Self::AutoOfRaw,
-        Self::Assertions,
-        Self::BitAccess,
-        Self::Clone,
-        Self::Copy,
-        Self::Debug,
-        Self::Display,
-        Self::Hash,
-        Self::Eq,
-        Self::FmtBinary,
-        Self::FmtHexLower,
-        Self::FmtHexUpper,
-        Self::FmtOctal,
-        Self::FromStr,
-        Self::CoreInt,
-        Self::Into,
-        Self::Map,
-        Self::Ord,
-        Self::PartialEq,
-        Self::PartialOrd,
-        Self::Repr,
-        Self::Serde,
-        Self::TryInto,
-        Self::WithConstMapFn,
-        Self::WithBlindTrust,
-        Self::LitMacro,
-        Self::NonZero,
-        Self::Proven,
-        Self::WithinSource,
-        Self::MathNeg,
-        Self::FnMathNeg,
-        Self::CoreFloat,
-        Self::FloatMath,
-        Self::FmtExpLower,
-        Self::FmtExpUpper,
-        Self::Sum,
-        Self::Product,
-        Self::AssignAdd,
-        Self::AssignAnd,
-        Self::AssignDiv,
-        Self::AssignMul,
-        Self::AssignOr,
-        Self::AssignRem,
-        Self::AssignShl,
-        Self::AssignShr,
-        Self::AssignSub,
-        Self::MathAdd,
-        Self::MathAnd,
-        Self::MathDiv,
-        Self::MathMul,
-        Self::MathNot,
-        Self::MathOr,
-        Self::MathRem,
-        Self::MathShl,
-        Self::MathShr,
-        Self::MathSub,
-        Self::MathXor,
-        Self::SelfFriendMake,
-        Self::SelfFriendMathBit,
-        Self::SelfFriendMathOps,
-        Self::SelfFriendRel,
-        Self::FriendSeal,
-        Self::FriendzoneFriendMake,
-        Self::FriendzoneFriendMathBit,
-        Self::FriendzoneFriendMathOps,
-        Self::FriendzoneFriendRel,
-        Self::FriendzoneSeal,
-        Self::SelfMath,
-        Self::SelfBit,
-        Self::FnConvInto,
-        Self::FnConvOf,
-        Self::FnConvRaw,
-        Self::FnConvTryIntoLossy,
-        Self::FnConvTryIntoLossless,
-        Self::FnOrPanic,
-        Self::FnTryMake,
-        Self::FnMathAdd,
-        Self::FnMathAnd,
-        Self::FnMathDiv,
-        Self::FnMathMul,
-        Self::FnMathNot,
-        Self::FnMathOr,
-        Self::FnMathRem,
-        Self::FnMathShl,
-        Self::FnMathShr,
-        Self::FnMathSub,
-        Self::FnMathXor,
-        Self::FnOpCmp,
-        Self::FnOpEq,
+    const ROWS: &'static [FlagRow<Self>] = &[
+        FlagRow::off(Self::Range, "range"),
+        FlagRow::on(Self::AsRef, "as_ref_"),
+        FlagRow::on(Self::AutoOfRaw, "auto_of_raw"),
+        FlagRow::on(Self::Assertions, "assertions"),
+        FlagRow::on(Self::BitAccess, "bit_access"),
+        FlagRow::on(Self::Clone, "clone"),
+        FlagRow::on(Self::Copy, "copy"),
+        FlagRow::on(Self::Debug, "debug"),
+        FlagRow::off(Self::Display, "display"),
+        FlagRow::on(Self::Hash, "hash"),
+        FlagRow::on(Self::Eq, "eq"),
+        FlagRow::on(Self::FmtBinary, "fmt_binary"),
+        FlagRow::on(Self::FmtHexLower, "fmt_hex_lower"),
+        FlagRow::on(Self::FmtHexUpper, "fmt_hex_upper"),
+        FlagRow::on(Self::FmtOctal, "fmt_octal"),
+        FlagRow::on(Self::FromStr, "from_str"),
+        FlagRow::on(Self::CoreInt, "core_int"),
+        FlagRow::on(Self::Into, "into"),
+        FlagRow::on(Self::Map, "map"),
+        FlagRow::on(Self::Ord, "ord"),
+        FlagRow::on(Self::PartialEq, "partial_eq"),
+        FlagRow::on(Self::PartialOrd, "partial_ord"),
+        FlagRow::on(Self::Repr, "repr"),
+        FlagRow::off(Self::Serde, "serde"),
+        FlagRow::on(Self::TryInto, "try_into"),
+        FlagRow::off(Self::WithConstMapFn, "with_const_map_fn"),
+        FlagRow::off(Self::WithBlindTrust, "with_blind_trust"),
+        FlagRow::off(Self::LitMacro, "lit_macro"),
+        FlagRow::off(Self::NonZero, "non_zero"),
+        FlagRow::off(Self::Proven, "proven"),
+        FlagRow::on(Self::WithinSource, "within_source"),
+        FlagRow::off(Self::MathNeg, "math_neg"),
+        FlagRow::off(Self::FnMathNeg, "fn_math_neg"),
+        FlagRow::off(Self::CoreFloat, "core_float"),
+        FlagRow::off(Self::FloatMath, "float_math"),
+        FlagRow::off(Self::FmtExpLower, "fmt_exp_lower"),
+        FlagRow::off(Self::FmtExpUpper, "fmt_exp_upper"),
+        FlagRow::off(Self::Sum, "sum"),
+        FlagRow::off(Self::Product, "product"),
+        FlagRow::on(Self::AssignAdd, "assign_add"),
+        FlagRow::on(Self::AssignAnd, "assign_and"),
+        FlagRow::on(Self::AssignDiv, "assign_div"),
+        FlagRow::on(Self::AssignMul, "assign_mul"),
+        FlagRow::on(Self::AssignOr, "assign_or"),
+        FlagRow::on(Self::AssignRem, "assign_rem"),
+        FlagRow::on(Self::AssignShl, "assign_shl"),
+        FlagRow::on(Self::AssignShr, "assign_shr"),
+        FlagRow::on(Self::AssignSub, "assign_sub"),
+        FlagRow::on(Self::AssignXor, "assign_xor"),
+        FlagRow::on(Self::MathAdd, "math_add"),
+        FlagRow::on(Self::MathAnd, "math_and"),
+        FlagRow::on(Self::MathDiv, "math_div"),
+        FlagRow::on(Self::MathMul, "math_mul"),
+        FlagRow::on(Self::MathNot, "math_not"),
+        FlagRow::on(Self::MathOr, "math_or"),
+        FlagRow::on(Self::MathRem, "math_rem"),
+        FlagRow::on(Self::MathShl, "math_shl"),
+        FlagRow::on(Self::MathShr, "math_shr"),
+        FlagRow::on(Self::MathSub, "math_sub"),
+        FlagRow::on(Self::MathXor, "math_xor"),
+        FlagRow::on(Self::SelfFriendMake, "self_friend_make"),
+        FlagRow::on(Self::SelfFriendMathBit, "self_friend_math_bit"),
+        FlagRow::on(Self::SelfFriendMathOps, "self_friend_math_ops"),
+        FlagRow::on(Self::SelfFriendRel, "self_friend_rel"),
+        FlagRow::on(Self::FriendSeal, "friend_seal"),
+        FlagRow::on(Self::FriendzoneFriendMake, "friendzone_friend_make"),
+        FlagRow::on(
+            Self::FriendzoneFriendMathBit,
+            "friendzone_friend_math_bit",
+        ),
+        FlagRow::on(
+            Self::FriendzoneFriendMathOps,
+            "friendzone_friend_math_ops",
+        ),
+        FlagRow::on(Self::FriendzoneFriendRel, "friendzone_friend_rel"),
+        FlagRow::on(Self::FriendzoneSeal, "friendzone_seal"),
+        FlagRow::on(Self::SelfMath, "self_math"),
+        FlagRow::on(Self::SelfBit, "self_bit"),
+        FlagRow::on(Self::FnConvInto, "fn_conv_into"),
+        FlagRow::on(Self::FnConvOf, "fn_conv_of"),
+        FlagRow::on(Self::FnConvRaw, "fn_conv_raw"),
+        FlagRow::on(Self::FnConvTryIntoLossy, "fn_conv_try_into_lossy"),
+        FlagRow::on(Self::FnConvTryIntoLossless, "fn_conv_try_into_lossless"),
+        FlagRow::on(Self::FnOrPanic, "fn_or_panic"),
+        FlagRow::on(Self::FnTryMake, "fn_try_make"),
+        FlagRow::on(Self::FnMathAdd, "fn_math_add"),
+        FlagRow::on(Self::FnMathAnd, "fn_math_and"),
+        FlagRow::on(Self::FnMathDiv, "fn_math_div"),
+        FlagRow::on(Self::FnMathMul, "fn_math_mul"),
+        FlagRow::on(Self::FnMathNot, "fn_math_not"),
+        FlagRow::on(Self::FnMathOr, "fn_math_or"),
+        FlagRow::on(Self::FnMathRem, "fn_math_rem"),
+        FlagRow::on(Self::FnMathShl, "fn_math_shl"),
+        FlagRow::on(Self::FnMathShr, "fn_math_shr"),
+        FlagRow::on(Self::FnMathSub, "fn_math_sub"),
+        FlagRow::on(Self::FnMathXor, "fn_math_xor"),
+        FlagRow::on(Self::FnOpCmp, "fn_op_cmp"),
+        FlagRow::on(Self::FnOpEq, "fn_op_eq"),
     ];
-    const DEFAULT_ON: &'static [Self] = &[
-        Self::AsRef,
-        Self::AutoOfRaw,
-        Self::Assertions,
-        Self::BitAccess,
-        Self::Clone,
-        Self::Copy,
-        Self::Debug,
-        Self::Hash,
-        Self::Eq,
-        Self::FmtBinary,
-        Self::FmtHexLower,
-        Self::FmtHexUpper,
-        Self::FmtOctal,
-        Self::FromStr,
-        Self::CoreInt,
-        Self::Into,
-        Self::Map,
-        Self::Ord,
-        Self::PartialEq,
-        Self::PartialOrd,
-        Self::Repr,
-        Self::TryInto,
-        Self::WithinSource,
-        Self::AssignAdd,
-        Self::AssignAnd,
-        Self::AssignDiv,
-        Self::AssignMul,
-        Self::AssignOr,
-        Self::AssignRem,
-        Self::AssignShl,
-        Self::AssignShr,
-        Self::AssignSub,
-        Self::MathAdd,
-        Self::MathAnd,
-        Self::MathDiv,
-        Self::MathMul,
-        Self::MathNot,
-        Self::MathOr,
-        Self::MathRem,
-        Self::MathShl,
-        Self::MathShr,
-        Self::MathSub,
-        Self::MathXor,
-        Self::SelfFriendMake,
-        Self::SelfFriendMathBit,
-        Self::SelfFriendMathOps,
-        Self::SelfFriendRel,
-        Self::FriendSeal,
-        Self::FriendzoneFriendMake,
-        Self::FriendzoneFriendMathBit,
-        Self::FriendzoneFriendMathOps,
-        Self::FriendzoneFriendRel,
-        Self::FriendzoneSeal,
-        Self::SelfMath,
-        Self::SelfBit,
-        Self::FnConvInto,
-        Self::FnConvOf,
-        Self::FnConvRaw,
-        Self::FnConvTryIntoLossy,
-        Self::FnConvTryIntoLossless,
-        Self::FnOrPanic,
-        Self::FnTryMake,
-        Self::FnMathAdd,
-        Self::FnMathAnd,
-        Self::FnMathDiv,
-        Self::FnMathMul,
-        Self::FnMathNot,
-        Self::FnMathOr,
-        Self::FnMathRem,
-        Self::FnMathShl,
-        Self::FnMathShr,
-        Self::FnMathSub,
-        Self::FnMathXor,
-        Self::FnOpCmp,
-        Self::FnOpEq,
-    ];
-
-    fn name(self) -> &'static str {
-        return match self {
-            Self::Range => "range",
-            Self::AsRef => "as_ref_",
-            Self::AutoOfRaw => "auto_of_raw",
-            Self::Assertions => "assertions",
-            Self::BitAccess => "bit_access",
-            Self::Clone => "clone",
-            Self::Copy => "copy",
-            Self::Debug => "debug",
-            Self::Display => "display",
-            Self::Hash => "hash",
-            Self::Eq => "eq",
-            Self::FmtBinary => "fmt_binary",
-            Self::FmtHexLower => "fmt_hex_lower",
-            Self::FmtHexUpper => "fmt_hex_upper",
-            Self::FmtOctal => "fmt_octal",
-            Self::FromStr => "from_str",
-            Self::CoreInt => "core_int",
-            Self::Into => "into",
-            Self::Map => "map",
-            Self::Ord => "ord",
-            Self::PartialEq => "partial_eq",
-            Self::PartialOrd => "partial_ord",
-            Self::Repr => "repr",
-            Self::Serde => "serde",
-            Self::TryInto => "try_into",
-            Self::WithConstMapFn => "with_const_map_fn",
-            Self::WithBlindTrust => "with_blind_trust",
-            Self::LitMacro => "lit_macro",
-            Self::NonZero => "non_zero",
-            Self::Proven => "proven",
-            Self::WithinSource => "within_source",
-            Self::MathNeg => "math_neg",
-            Self::FnMathNeg => "fn_math_neg",
-            Self::CoreFloat => "core_float",
-            Self::FloatMath => "float_math",
-            Self::FmtExpLower => "fmt_exp_lower",
-            Self::FmtExpUpper => "fmt_exp_upper",
-            Self::Sum => "sum",
-            Self::Product => "product",
-            Self::AssignAdd => "assign_add",
-            Self::AssignAnd => "assign_and",
-            Self::AssignDiv => "assign_div",
-            Self::AssignMul => "assign_mul",
-            Self::AssignOr => "assign_or",
-            Self::AssignRem => "assign_rem",
-            Self::AssignShl => "assign_shl",
-            Self::AssignShr => "assign_shr",
-            Self::AssignSub => "assign_sub",
-            Self::MathAdd => "math_add",
-            Self::MathAnd => "math_and",
-            Self::MathDiv => "math_div",
-            Self::MathMul => "math_mul",
-            Self::MathNot => "math_not",
-            Self::MathOr => "math_or",
-            Self::MathRem => "math_rem",
-            Self::MathShl => "math_shl",
-            Self::MathShr => "math_shr",
-            Self::MathSub => "math_sub",
-            Self::MathXor => "math_xor",
-            Self::SelfFriendMake => "self_friend_make",
-            Self::SelfFriendMathBit => "self_friend_math_bit",
-            Self::SelfFriendMathOps => "self_friend_math_ops",
-            Self::SelfFriendRel => "self_friend_rel",
-            Self::FriendSeal => "friend_seal",
-            Self::FriendzoneFriendMake => "friendzone_friend_make",
-            Self::FriendzoneFriendMathBit => "friendzone_friend_math_bit",
-            Self::FriendzoneFriendMathOps => "friendzone_friend_math_ops",
-            Self::FriendzoneFriendRel => "friendzone_friend_rel",
-            Self::FriendzoneSeal => "friendzone_seal",
-            Self::SelfMath => "self_math",
-            Self::SelfBit => "self_bit",
-            Self::FnConvInto => "fn_conv_into",
-            Self::FnConvOf => "fn_conv_of",
-            Self::FnConvRaw => "fn_conv_raw",
-            Self::FnConvTryIntoLossy => "fn_conv_try_into_lossy",
-            Self::FnConvTryIntoLossless => "fn_conv_try_into_lossless",
-            Self::FnOrPanic => "fn_or_panic",
-            Self::FnTryMake => "fn_try_make",
-            Self::FnMathAdd => "fn_math_add",
-            Self::FnMathAnd => "fn_math_and",
-            Self::FnMathDiv => "fn_math_div",
-            Self::FnMathMul => "fn_math_mul",
-            Self::FnMathNot => "fn_math_not",
-            Self::FnMathOr => "fn_math_or",
-            Self::FnMathRem => "fn_math_rem",
-            Self::FnMathShl => "fn_math_shl",
-            Self::FnMathShr => "fn_math_shr",
-            Self::FnMathSub => "fn_math_sub",
-            Self::FnMathXor => "fn_math_xor",
-            Self::FnOpCmp => "fn_op_cmp",
-            Self::FnOpEq => "fn_op_eq",
-        };
-    }
 
     fn index(self) -> u32 {
         return self as u32;
     }
 }
 
-// Every variant is in `ITEMS`, at its own index.
+// Every row of `ROWS` is at its variant's index.
 const _: () = {
-    let items = <IntegralFlag as Flag>::ITEMS;
-    assert!(items.len() == IntegralFlag::FnOpEq as usize + 1);
+    let rows = <IntegralFlag as Flag>::ROWS;
     let mut index = 0;
-    while index < items.len() {
-        assert!(items[index] as usize == index);
+    while index < rows.len() {
+        assert!(rows[index].flag as usize == index);
         index += 1;
     }
 };

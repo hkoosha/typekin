@@ -12,6 +12,7 @@ mod tests {
     use crate::zz_values::{
         Int,
         N,
+        Width,
     };
 
     fn resolved(
@@ -272,7 +273,7 @@ mod tests {
                 lhs: int(1),
                 rhs: Some(int(2)),
                 result: int(0),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -338,7 +339,7 @@ mod tests {
                 lhs: int(1),
                 rhs: Some(int(u32::MAX as i128)),
                 result: int(0),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -404,7 +405,7 @@ mod tests {
                 lhs: int(1),
                 rhs: Some(int(16)),
                 result: int(17),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -441,7 +442,7 @@ mod tests {
             Closure::Unknown {
                 lo: int(0),
                 hi: int(30),
-                width: 16,
+                width: Width::W16,
             },
             "{source}"
         );
@@ -478,7 +479,7 @@ mod tests {
                 lhs: int(1),
                 rhs: Some(int(1)),
                 result: int(0),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -530,7 +531,7 @@ mod tests {
                 lhs: int(1),
                 rhs: None,
                 result: int(255),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -610,7 +611,7 @@ mod tests {
                 lhs: int(0),
                 rhs: Some(int(29)),
                 result: int(14),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -633,7 +634,7 @@ mod tests {
             Closure::Unknown {
                 lo: int(-128),
                 hi: int(127),
-                width: 16,
+                width: Width::W16,
             },
             "{source}"
         );
@@ -687,7 +688,7 @@ mod tests {
                 lhs: int(0),
                 rhs: None,
                 result: int(65535),
-                width: 16,
+                width: Width::W16,
                 all_widths: false,
             },
             "{source}"
@@ -739,7 +740,7 @@ mod tests {
                 lhs: int(1),
                 rhs: Some(Int::NonNegative(u128::MAX)),
                 result: int(0),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -777,7 +778,7 @@ mod tests {
                 lhs: Int::NonNegative(1 << 127),
                 rhs: Some(int(1)),
                 result: Int::NonNegative(1 << 126),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -815,7 +816,7 @@ mod tests {
                 lhs: int(i128::MIN),
                 rhs: Some(int(i128::MIN)),
                 result: int(1),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -839,7 +840,7 @@ mod tests {
                 lhs: int(i128::MIN + 1),
                 rhs: None,
                 result: int(i128::MAX),
-                width: 16,
+                width: Width::W16,
                 all_widths: true,
             },
             "{source}"
@@ -862,7 +863,7 @@ mod tests {
             Closure::Unknown {
                 lo: int(i128::MIN),
                 hi: int(i128::MAX),
-                width: 16,
+                width: Width::W16,
             },
             "{source}"
         );
@@ -1096,7 +1097,7 @@ mod tests {
             &self,
             value: Int,
         ) -> bool {
-            return self.domain.contains(value, 64);
+            return self.domain.contains(value, Width::W64);
         }
     }
 
@@ -1252,7 +1253,8 @@ mod tests {
         for a in T::all() {
             for b in &rhs_values {
                 let expected = real(a, *b).map(T::int);
-                let actual = eval(op, policy, T::SUBJECT, 64, a.int(), *b);
+                let ty = T::SUBJECT.at(Width::W64);
+                let actual = eval(op, policy, ty, a.int(), *b);
 
                 assert_eq!(
                     actual, expected,

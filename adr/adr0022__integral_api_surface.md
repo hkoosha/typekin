@@ -4,7 +4,7 @@
 - Date: 2026-11-04
 - Related: `src/integral_items.rs`, `src/integral_impls.rs`,
   `src/integral_cfg.rs`, README "The Catch", PHILOSOPHY.md; ADR 0006, 0008,
-  0011, 0018
+  0011, 0018, 0033
 
 ## Context
 
@@ -31,6 +31,13 @@ or generics through the API.
   For final-only validation use `try_map`/`map` (closure on the raw value,
   validated once; `src/integral_items.rs:473/486`).
 - **Operators panic** on an invalid result instead of returning `Result`.
+- **Every binary operator has its own assignment flag** (`assign_add` …
+  `assign_xor`), on by default and independent of the operator's `math_*`
+  flag. `^=` got `assign_xor` on 2026-11-09 (ADR 0033, D0.2); until then it
+  had no flag and followed `math_xor`, so `without = math_xor` removed it and
+  a facet's xor slot never got `BitXorAssign<Rhs>`. Both now behave like the
+  other operators: `without = math_xor` keeps `^=`, and a `Self`-output xor
+  slot is assignable while its owner has `assign_xor` on.
 - **Errors:** `try_make` returns the rejected raw value; only `error = ()` is
   accepted, reserving the grammar.
 - **Empty domain** keeps the normal return types; every ordinary construction is

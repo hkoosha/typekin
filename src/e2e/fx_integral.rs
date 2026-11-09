@@ -912,6 +912,21 @@ impl OutputWithoutXorAssign {
     }
 }
 
+#[typekin::integral(konst = none)]
+pub(crate) struct XorAssigned(u8);
+
+#[typekin::integral(konst = none, without = assign_xor)]
+pub(crate) struct WithoutXorAssign(u8);
+
+#[typekin::integral(konst = none, without = math_xor)]
+pub(crate) struct WithoutXor(u8);
+
+#[typekin::integral(
+    konst = none,
+    profile = circular { with = [math_xor, self_bit] },
+)]
+pub(crate) struct CircularWithXor(u8);
+
 #[typekin::integral(konst = none, profile = point {})]
 pub(crate) struct PointOnly(u8);
 
@@ -1249,6 +1264,24 @@ impl FacetAssignedPoint {
         return FacetOffset(self.raw());
     }
 }
+
+/// The facet inherits the root's `assign_xor`.
+#[typekin::integral(
+    konst = none,
+    facet = int {
+        friend = facet_bits_raw(FacetBits) -> Bit,
+    },
+)]
+pub struct FacetXorAssigned(u8);
+
+#[typekin::integral(
+    konst = none,
+    facet = int {
+        friend = facet_bits_raw(FacetBits) -> Bit,
+    },
+    without = assign_xor,
+)]
+pub struct FacetWithoutXorAssign(u8);
 
 #[typekin::integral(
     konst = none,

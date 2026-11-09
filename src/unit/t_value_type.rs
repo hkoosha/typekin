@@ -4,6 +4,7 @@ mod tests {
         F,
         N,
         Num,
+        Width,
         pow2_literal,
     };
 
@@ -11,8 +12,8 @@ mod tests {
     fn usize_converts_to_f32_exactly_only_at_16_bits() {
         let source = Num::Int(N::USIZ);
         let target = Num::Float(F::F032);
-        let narrow = source.can_safe_cast_to(target, 16);
-        let wide = source.can_safe_cast_to(target, 32);
+        let narrow = source.can_safe_cast_to(target, Width::W16);
+        let wide = source.can_safe_cast_to(target, Width::W32);
 
         assert!(narrow, "{source:?} -> {target:?} on 16 bits");
         assert!(!wide, "{source:?} -> {target:?} on 32 bits");
@@ -22,7 +23,7 @@ mod tests {
     fn usize_converts_to_f64_exactly_at_32_bits() {
         let source = Num::Int(N::USIZ);
         let target = Num::Float(F::F064);
-        let narrow = source.can_safe_cast_to(target, 32);
+        let narrow = source.can_safe_cast_to(target, Width::W32);
 
         assert!(narrow, "{source:?} -> {target:?} on 32 bits");
     }

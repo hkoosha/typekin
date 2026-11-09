@@ -7,13 +7,97 @@ use std::fmt::{
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::zz_lib::Konsts;
+use crate::zz_domain_closure::ClosureOp;
+use crate::zz_lib::{
+    Konsts,
+    Named,
+};
 
-pub(crate) const POINTER_WIDTHS: [u32; 3] = [
-    16,
-    32,
-    64,
-];
+/// A supported pointer width. Per-width data is a `[T; Width::COUNT]` in
+/// `ALL` order, indexed by `index()`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Width {
+    W16,
+    W32,
+    W64,
+}
+
+impl Width {
+    pub(crate) const ALL: [Self; 3] = [
+        Self::W16,
+        Self::W32,
+        Self::W64,
+    ];
+    pub(crate) const COUNT: usize = Self::ALL.len();
+
+    pub(crate) const fn index(self) -> usize {
+        return self as usize;
+    }
+
+    pub(crate) const fn bits(self) -> u32 {
+        return match self {
+            Self::W16 => 16,
+            Self::W32 => 32,
+            Self::W64 => 64,
+        };
+    }
+}
+
+/// The width in bits, as `target_pointer_width` spells it.
+impl Display for Width {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        return write!(f, "{}", self.bits());
+    }
+}
+
+/// The `cfg` attribute selecting `widths`: none for every width, `any(...)`
+/// for several.
+fn width_cfg(widths: &[Width]) -> TokenStream {
+    let widths = widths.iter().map(Width::to_string).collect::<Vec<_>>();
+    return match widths.as_slice() {
+        [width] => quote! { #[cfg(target_pointer_width = #width)] },
+        _ if widths.len() == Width::COUNT => TokenStream::new(),
+        _ => quote! { #[cfg(any(#(target_pointer_width = #widths),*))] },
+    };
+}
+
+/// Per-width tokens with the `cfg` attribute to emit each under: one entry
+/// without a `cfg` when every width has the same tokens, otherwise one entry
+/// per width.
+pub(crate) fn by_width(
+    values: [TokenStream; Width::COUNT]
+) -> Vec<(TokenStream, TokenStream)> {
+    let first = values[0].to_string();
+    if values.iter().all(|it| it.to_string() == first) {
+        return vec![(TokenStream::new(), values[0].clone())];
+    }
+    return Width::ALL
+        .into_iter()
+        .zip(values)
+        .map(|(width, value)| (width_cfg(&[width]), value))
+        .collect();
+}
+
+/// Each distinct per-width value once, in order of its first width, with the
+/// `cfg` attribute of the widths that have it (see `width_cfg`).
+pub(crate) fn by_width_grouped<T: PartialEq>(
+    values: [T; Width::COUNT]
+) -> Vec<(TokenStream, T)> {
+    let mut groups = Vec::<(Vec<Width>, T)>::new();
+    for (width, value) in Width::ALL.into_iter().zip(values) {
+        match groups.iter_mut().find(|(_, it)| *it == value) {
+            Some((widths, _)) => widths.push(width),
+            None => groups.push((vec![width], value)),
+        }
+    }
+    return groups
+        .into_iter()
+        .map(|(widths, value)| (width_cfg(&widths), value))
+        .collect();
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[allow(clippy::upper_case_acronyms)]
@@ -32,82 +116,38 @@ pub(crate) enum N {
     I128,
 }
 
-impl N {
-    const ITEMS: [Self; 12] = [
-        Self::USIZ,
-        Self::ISIZ,
-        Self::U008,
-        Self::U016,
-        Self::U032,
-        Self::U064,
-        Self::U128,
-        Self::I008,
-        Self::I016,
-        Self::I032,
-        Self::I064,
-        Self::I128,
+impl Named for N {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::USIZ, "usize"),
+        (Self::ISIZ, "isize"),
+        (Self::U008, "u8"),
+        (Self::U016, "u16"),
+        (Self::U032, "u32"),
+        (Self::U064, "u64"),
+        (Self::U128, "u128"),
+        (Self::I008, "i8"),
+        (Self::I016, "i16"),
+        (Self::I032, "i32"),
+        (Self::I064, "i64"),
+        (Self::I128, "i128"),
     ];
-}
 
-impl N {
-    pub fn of(name: impl AsRef<str>) -> Option<Self> {
-        return match name.as_ref() {
-            "isize" => Some(Self::ISIZ),
-            "usize" => Some(Self::USIZ),
-            "u8" => Some(Self::U008),
-            "u16" => Some(Self::U016),
-            "u32" => Some(Self::U032),
-            "u64" => Some(Self::U064),
-            "u128" => Some(Self::U128),
-            "i8" => Some(Self::I008),
-            "i16" => Some(Self::I016),
-            "i32" => Some(Self::I032),
-            "i64" => Some(Self::I064),
-            "i128" => Some(Self::I128),
-            _ => None,
-        };
-    }
-
-    pub const fn items() -> &'static [Self] {
-        return &Self::ITEMS;
+    fn index(self) -> usize {
+        return self as usize;
     }
 }
 
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = N::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
 impl N {
-    pub fn rust_name(&self) -> &'static str {
-        return match self {
-            N::USIZ => "usize",
-            N::ISIZ => "isize",
-            N::U008 => "u8",
-            N::U016 => "u16",
-            N::U032 => "u32",
-            N::U064 => "u64",
-            N::U128 => "u128",
-            N::I008 => "i8",
-            N::I016 => "i16",
-            N::I032 => "i32",
-            N::I064 => "i64",
-            N::I128 => "i128",
-        };
-    }
-
-    pub fn unsigned_rust_name(&self) -> &'static str {
-        return match self {
-            N::USIZ => "usize",
-            N::ISIZ => "usize",
-            N::U008 => "u8",
-            N::U016 => "u16",
-            N::U032 => "u32",
-            N::U064 => "u64",
-            N::U128 => "u128",
-            N::I008 => "u8",
-            N::I016 => "u16",
-            N::I032 => "u32",
-            N::I064 => "u64",
-            N::I128 => "u128",
-        };
-    }
-
     /// The unsigned type of the same width; itself when unsigned.
     pub(crate) fn unsigned(self) -> N {
         return match self {
@@ -120,14 +160,15 @@ impl N {
         };
     }
 
-    pub fn signed_rust_name(&self) -> &'static str {
+    /// The signed type of the same width; itself when signed.
+    pub(crate) fn signed(self) -> N {
         return match self {
-            N::USIZ | N::ISIZ => "isize",
-            N::U008 | N::I008 => "i8",
-            N::U016 | N::I016 => "i16",
-            N::U032 | N::I032 => "i32",
-            N::U064 | N::I064 => "i64",
-            N::U128 | N::I128 => "i128",
+            N::USIZ | N::ISIZ => N::ISIZ,
+            N::U008 | N::I008 => N::I008,
+            N::U016 | N::I016 => N::I016,
+            N::U032 | N::I032 => N::I032,
+            N::U064 | N::I064 => N::I064,
+            N::U128 | N::I128 => N::I128,
         };
     }
 
@@ -150,10 +191,10 @@ impl N {
 
     pub(crate) fn bits_for_pointer_width(
         self,
-        pointer_width: u32,
+        width: Width,
     ) -> usize {
         return match self {
-            N::USIZ | N::ISIZ => pointer_width,
+            N::USIZ | N::ISIZ => width.bits(),
             N::U008 | N::I008 => 8,
             N::U016 | N::I016 => 16,
             N::U032 | N::I032 => 32,
@@ -180,73 +221,80 @@ impl N {
     }
 }
 
+/// An integer type at one pointer width.
+#[derive(Clone, Copy)]
+pub(crate) struct IntTy {
+    pub(crate) signed: bool,
+    pub(crate) bits: u32,
+    pub(crate) min: Int,
+    pub(crate) max: Int,
+}
+
+impl IntTy {
+    pub(crate) fn contains(
+        self,
+        value: Int,
+    ) -> bool {
+        return self.min <= value && value <= self.max;
+    }
+
+    /// Every bit of the type set.
+    pub(crate) fn mask(self) -> u128 {
+        return match self.bits {
+            u128::BITS => u128::MAX,
+            bits => (1u128 << bits) - 1,
+        };
+    }
+
+    /// The value of a two's-complement bit pattern reduced to this type.
+    pub(crate) fn wrap(
+        self,
+        pattern: u128,
+    ) -> Int {
+        let masked = pattern & self.mask();
+        if !self.signed || (masked >> (self.bits - 1)) & 1 == 0 {
+            return Int::NonNegative(masked);
+        }
+        return Int::Negative((!masked & self.mask()) + 1);
+    }
+}
+
 impl N {
+    pub(crate) fn at(
+        self,
+        width: Width,
+    ) -> IntTy {
+        let signed = self.is_signed();
+        let bits = self.bits_for_pointer_width(width) as u32;
+        // `2^(bits - 1)`: the magnitude of a signed minimum.
+        let half = 1u128 << (bits - 1);
+        let (min, max) = match signed {
+            true => (Int::Negative(half), Int::NonNegative(half - 1)),
+            false => (Int::NonNegative(0), Int::NonNegative(half - 1 + half)),
+        };
+        return IntTy {
+            signed,
+            bits,
+            min,
+            max,
+        };
+    }
+
     pub(crate) fn bounds_for_pointer_width(
         self,
-        pointer_width: u32,
+        width: Width,
     ) -> (Int, Int) {
-        assert!(POINTER_WIDTHS.contains(&pointer_width));
-        return match self {
-            Self::USIZ => (
-                Int::NonNegative(0),
-                Int::NonNegative((1u128 << pointer_width) - 1),
-            ),
-            Self::ISIZ => (
-                Int::Negative(1u128 << (pointer_width - 1)),
-                Int::NonNegative((1u128 << (pointer_width - 1)) - 1),
-            ),
-            Self::U008 => (
-                Int::NonNegative(u8::MIN as u128),
-                Int::NonNegative(u8::MAX as u128),
-            ),
-            Self::U016 => (
-                Int::NonNegative(u16::MIN as u128),
-                Int::NonNegative(u16::MAX as u128),
-            ),
-            Self::U032 => (
-                Int::NonNegative(u32::MIN as u128),
-                Int::NonNegative(u32::MAX as u128),
-            ),
-            Self::U064 => (
-                Int::NonNegative(u64::MIN as u128),
-                Int::NonNegative(u64::MAX as u128),
-            ),
-            Self::U128 => {
-                (Int::NonNegative(u128::MIN), Int::NonNegative(u128::MAX))
-            }
-            Self::I008 => (
-                Int::Negative((i8::MIN as i128).unsigned_abs()),
-                Int::NonNegative(i8::MAX as u128),
-            ),
-            Self::I016 => (
-                Int::Negative((i16::MIN as i128).unsigned_abs()),
-                Int::NonNegative(i16::MAX as u128),
-            ),
-            Self::I032 => (
-                Int::Negative((i32::MIN as i128).unsigned_abs()),
-                Int::NonNegative(i32::MAX as u128),
-            ),
-            Self::I064 => (
-                Int::Negative((i64::MIN as i128).unsigned_abs()),
-                Int::NonNegative(i64::MAX as u128),
-            ),
-            Self::I128 => (
-                Int::Negative(i128::MIN.unsigned_abs()),
-                Int::NonNegative(i128::MAX as u128),
-            ),
-        };
+        let ty = self.at(width);
+        return (ty.min, ty.max);
     }
 
     pub(crate) fn can_safe_cast_to(
         self,
         to: Self,
-        pointer_width: u32,
+        width: Width,
     ) -> bool {
-        let (source_min, source_max) =
-            self.bounds_for_pointer_width(pointer_width);
-        let (target_min, target_max) =
-            to.bounds_for_pointer_width(pointer_width);
-        return target_min <= source_min && source_max <= target_max;
+        let (source, target) = (self.at(width), to.at(width));
+        return target.min <= source.min && source.max <= target.max;
     }
 }
 
@@ -255,9 +303,9 @@ impl N {
 impl N {
     pub(crate) fn magnitude_bits_for_pointer_width(
         self,
-        pointer_width: u32,
+        width: Width,
     ) -> u32 {
-        let bits = self.bits_for_pointer_width(pointer_width) as u32;
+        let bits = self.bits_for_pointer_width(width) as u32;
         return match self.is_signed() {
             true => bits - 1,
             false => bits,
@@ -274,31 +322,28 @@ pub(crate) enum F {
     F064,
 }
 
-impl F {
-    const ITEMS: [Self; 2] = [
-        Self::F032,
-        Self::F064,
+impl Named for F {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::F032, "f32"),
+        (Self::F064, "f64"),
     ];
 
-    pub fn of(name: impl AsRef<str>) -> Option<Self> {
-        return match name.as_ref() {
-            "f32" => Some(Self::F032),
-            "f64" => Some(Self::F064),
-            _ => None,
-        };
+    fn index(self) -> usize {
+        return self as usize;
     }
+}
 
-    pub const fn items() -> &'static [Self] {
-        return &Self::ITEMS;
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = F::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
     }
+};
 
-    pub fn rust_name(&self) -> &'static str {
-        return match self {
-            Self::F032 => "f32",
-            Self::F064 => "f64",
-        };
-    }
-
+impl F {
     pub fn bits(&self) -> u32 {
         return match self {
             Self::F032 => 32,
@@ -326,9 +371,9 @@ impl F {
     pub(crate) fn represents_every(
         self,
         int: N,
-        pointer_width: u32,
+        width: Width,
     ) -> bool {
-        return int.magnitude_bits_for_pointer_width(pointer_width)
+        return int.magnitude_bits_for_pointer_width(width)
             <= self.mantissa_digits();
     }
 }
@@ -390,17 +435,13 @@ impl Num {
     }
 
     pub fn items() -> impl Iterator<Item = Self> {
-        return N::items()
-            .iter()
-            .copied()
-            .map(Self::Int)
-            .chain(F::items().iter().copied().map(Self::Float));
+        return N::items().map(Self::Int).chain(F::items().map(Self::Float));
     }
 
-    pub fn rust_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         return match self {
-            Self::Int(it) => it.rust_name(),
-            Self::Float(it) => it.rust_name(),
+            Self::Int(it) => it.name(),
+            Self::Float(it) => it.name(),
         };
     }
 
@@ -411,25 +452,18 @@ impl Num {
         };
     }
 
-    pub fn float(&self) -> Option<F> {
-        return match self {
-            Self::Int(_) => None,
-            Self::Float(it) => Some(*it),
-        };
-    }
-
     /// Lossless `as` conversion at the given pointer width.
     pub(crate) fn can_safe_cast_to(
         self,
         to: Self,
-        pointer_width: u32,
+        width: Width,
     ) -> bool {
         return match (self, to) {
             (Self::Int(from), Self::Int(to)) => {
-                from.can_safe_cast_to(to, pointer_width)
+                from.can_safe_cast_to(to, width)
             }
             (Self::Int(from), Self::Float(to)) => {
-                to.represents_every(from, pointer_width)
+                to.represents_every(from, width)
             }
             (Self::Float(_), Self::Int(_)) => false,
             (Self::Float(from), Self::Float(to)) => from.can_safe_cast_to(to),
@@ -689,62 +723,60 @@ impl Int {
     }
 }
 
-// =============================================================================
+/// A set of values: sorted, disjoint, non-adjacent inclusive intervals.
+#[derive(Clone)]
+pub(crate) struct IntervalSet(Vec<(Int, Int)>);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ArithmeticOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Shl,
-    Shr,
+impl IntervalSet {
+    /// The union of `intervals`; one whose ends are out of order is empty.
+    pub(crate) fn new(mut intervals: Vec<(Int, Int)>) -> Self {
+        intervals.retain(|(lo, hi)| lo <= hi);
+        intervals.sort();
+        let mut result = Vec::<(Int, Int)>::with_capacity(intervals.len());
+        for (lo, hi) in intervals {
+            if let Some(last) = result.last_mut()
+                && last.1.successor().is_none_or(|it| lo <= it)
+            {
+                last.1 = last.1.max(hi);
+                continue;
+            }
+            result.push((lo, hi));
+        }
+        return Self(result);
+    }
+
+    pub(crate) fn contains(
+        &self,
+        value: Int,
+    ) -> bool {
+        return self.0.iter().any(|(lo, hi)| *lo <= value && value <= *hi);
+    }
+
+    /// One interval holds all of `lo..=hi`.
+    pub(crate) fn encloses(
+        &self,
+        (lo, hi): (Int, Int),
+    ) -> bool {
+        return self.0.iter().any(|(dl, dh)| *dl <= lo && hi <= *dh);
+    }
 }
 
-impl ArithmeticOp {
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Add => "add",
-            Self::Sub => "sub",
-            Self::Mul => "mul",
-            Self::Div => "div",
-            Self::Rem => "rem",
-            Self::Shl => "shl",
-            Self::Shr => "shr",
-        };
-    }
+/// The intervals, in order.
+impl std::ops::Deref for IntervalSet {
+    type Target = [(Int, Int)];
 
-    /// The operator token: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`.
-    pub(crate) fn symbol(self) -> TokenStream {
-        return match self {
-            Self::Add => quote! { + },
-            Self::Sub => quote! { - },
-            Self::Mul => quote! { * },
-            Self::Div => quote! { / },
-            Self::Rem => quote! { % },
-            Self::Shl => quote! { << },
-            Self::Shr => quote! { >> },
-        };
-    }
-
-    /// The binary operator behind `self`; the shifts are none.
-    pub(crate) fn operator(self) -> Option<Operator> {
-        return match self {
-            Self::Add => Some(Operator::Add),
-            Self::Sub => Some(Operator::Sub),
-            Self::Mul => Some(Operator::Mul),
-            Self::Div => Some(Operator::Div),
-            Self::Rem => Some(Operator::Rem),
-            Self::Shl | Self::Shr => None,
-        };
+    fn deref(&self) -> &Self::Target {
+        return &self.0;
     }
 }
 
 // =============================================================================
 
+/// An operator typekin generates. The variants are in the canonical
+/// operator order: the order of `OPS`, and of everything generated per
+/// operator.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) enum Operator {
+pub(crate) enum Op {
     Add,
     Sub,
     Mul,
@@ -753,163 +785,234 @@ pub(crate) enum Operator {
     BitAnd,
     BitOr,
     BitXor,
+    Shl,
+    Shr,
+    Neg,
+    Not,
 }
 
-impl Operator {
-    const ITEMS: [Self; 8] = [
-        Self::Add,
-        Self::Sub,
-        Self::Mul,
-        Self::Div,
-        Self::Rem,
-        Self::BitAnd,
-        Self::BitOr,
-        Self::BitXor,
-    ];
+impl Op {
+    /// The operator's row of `OPS`.
+    pub(crate) fn spec(self) -> &'static OpSpec {
+        return &OPS[self as usize];
+    }
+}
 
-    const MATH: [Self; 5] = [
-        Self::Add,
-        Self::Sub,
-        Self::Mul,
-        Self::Div,
-        Self::Rem,
-    ];
+/// What an operator takes on its right-hand side.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OpKind {
+    /// A value, combined under the profile's arithmetic: `+ - * / %`.
+    Arith,
+    /// A value, combined bit by bit: `& | ^`.
+    Bitwise,
+    /// A `usize` amount: `<< >>`.
+    Shift,
+    /// Nothing: `-x`, `!x`.
+    Unary,
+}
 
-    const BIT: [Self; 3] = [
-        Self::BitAnd,
-        Self::BitOr,
-        Self::BitXor,
-    ];
+impl OpKind {
+    /// The right-hand side is a value (same type, raw, or friend): the
+    /// operators that facets dispatch by slot.
+    pub(crate) fn has_operand(self) -> bool {
+        return matches!(self, Self::Arith | Self::Bitwise);
+    }
+}
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Add => "Add",
-            Self::Sub => "Sub",
-            Self::Mul => "Mul",
-            Self::Div => "Div",
-            Self::Rem => "Rem",
-            Self::BitAnd => "BitAnd",
-            Self::BitOr => "BitOr",
-            Self::BitXor => "BitXor",
-        };
+/// One operator: its `core::ops` trait and method, its `konst_*` flags, its
+/// closure-proof operation and its symbol.
+pub(crate) struct OpSpec {
+    pub(crate) op: Op,
+    /// `Add`; the assignment trait is `AddAssign`.
+    pub(crate) trait_name: &'static str,
+    /// `add`; the assignment method is `add_assign`.
+    pub(crate) method: &'static str,
+    pub(crate) kind: OpKind,
+    /// The family's `konst_*` flag: `Math` or `Bit`.
+    pub(crate) family: Konsts,
+    pub(crate) konst: Konsts,
+    /// The assignment's own `konst_*` flag; unary operators have no
+    /// assignment.
+    pub(crate) konst_assign: Option<Konsts>,
+    /// What a closure proof asks about; `<<` is never proven.
+    pub(crate) closure: Option<ClosureOp>,
+    /// `+`: the operator token, also shown by `prove` diagnostics.
+    pub(crate) symbol: &'static str,
+}
+
+impl OpSpec {
+    /// The operator token: `+`, `<<`, `!`, …
+    pub(crate) fn token(&self) -> TokenStream {
+        return self.symbol.parse().expect("an operator symbol is a token");
     }
 
-    pub(crate) fn method_name(self) -> &'static str {
-        return match self {
-            Self::Add => "add",
-            Self::Sub => "sub",
-            Self::Mul => "mul",
-            Self::Div => "div",
-            Self::Rem => "rem",
-            Self::BitAnd => "bitand",
-            Self::BitOr => "bitor",
-            Self::BitXor => "bitxor",
-        };
-    }
-
-    /// The operator token: `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`.
-    pub(crate) fn symbol(self) -> TokenStream {
-        return match self {
-            Self::Add => quote! { + },
-            Self::Sub => quote! { - },
-            Self::Mul => quote! { * },
-            Self::Div => quote! { / },
-            Self::Rem => quote! { % },
-            Self::BitAnd => quote! { & },
-            Self::BitOr => quote! { | },
-            Self::BitXor => quote! { ^ },
-        };
-    }
-
-    /// The `konst_*` flag of the assignment operator: `AddAssign`, …
-    pub(crate) fn assign_konst(self) -> Konsts {
-        return match self {
-            Self::Add => Konsts::AddAssign,
-            Self::Sub => Konsts::SubAssign,
-            Self::Mul => Konsts::MulAssign,
-            Self::Div => Konsts::DivAssign,
-            Self::Rem => Konsts::RemAssign,
-            Self::BitAnd => Konsts::AndAssign,
-            Self::BitOr => Konsts::OrAssign,
-            Self::BitXor => Konsts::XorAssign,
-        };
-    }
-
-    pub(crate) fn arithmetic_op(self) -> Option<ArithmeticOp> {
-        return match self {
-            Self::Add => Some(ArithmeticOp::Add),
-            Self::Sub => Some(ArithmeticOp::Sub),
-            Self::Mul => Some(ArithmeticOp::Mul),
-            Self::Div => Some(ArithmeticOp::Div),
-            Self::Rem => Some(ArithmeticOp::Rem),
-            Self::BitAnd | Self::BitOr | Self::BitXor => None,
-        };
-    }
-
-    pub(crate) fn items() -> &'static [Self] {
-        return &Self::ITEMS;
-    }
-
-    pub(crate) fn bit_items() -> &'static [Self] {
-        return &Self::BIT;
-    }
-
-    pub(crate) fn math_items() -> &'static [Self] {
-        return &Self::MATH;
-    }
-
-    pub(crate) fn is_konst_flags(&self) -> [Konsts; 2] {
-        return match self {
-            Self::Add => [
-                Konsts::Add,
-                Konsts::Math,
-            ],
-            Self::Sub => [
-                Konsts::Sub,
-                Konsts::Math,
-            ],
-            Self::Mul => [
-                Konsts::Mul,
-                Konsts::Math,
-            ],
-            Self::Div => [
-                Konsts::Div,
-                Konsts::Math,
-            ],
-            Self::Rem => [
-                Konsts::Rem,
-                Konsts::Math,
-            ],
-            Self::BitAnd => [
-                Konsts::And,
-                Konsts::Bit,
-            ],
-            Self::BitOr => [
-                Konsts::Or,
-                Konsts::Bit,
-            ],
-            Self::BitXor => [
-                Konsts::Xor,
-                Konsts::Bit,
-            ],
-        };
+    /// The `konst_*` flags of the operator, first decisive: `[X, family]`.
+    pub(crate) fn konsts(&self) -> [Konsts; 2] {
+        return [
+            self.konst,
+            self.family,
+        ];
     }
 
     /// The `konst_*` flags of the assignment operator, first decisive:
     /// `[XAssign, X, Assign, family]`.
-    pub(crate) fn assign_konst_flags(&self) -> [Konsts; 4] {
-        let [
-            operator,
-            family,
-        ] = self.is_konst_flags();
+    pub(crate) fn assign_konsts(&self) -> [Konsts; 4] {
         return [
-            self.assign_konst(),
-            operator,
+            self.konst_assign
+                .expect("a binary operator has an assignment"),
+            self.konst,
             Konsts::Assign,
-            family,
+            self.family,
         ];
     }
 }
+
+/// The operators, in the canonical order; every site that generates or
+/// checks something per operator iterates this table.
+pub(crate) const OPS: &[OpSpec] = &[
+    OpSpec {
+        op: Op::Add,
+        trait_name: "Add",
+        method: "add",
+        kind: OpKind::Arith,
+        family: Konsts::Math,
+        konst: Konsts::Add,
+        konst_assign: Some(Konsts::AddAssign),
+        closure: Some(ClosureOp::Add),
+        symbol: "+",
+    },
+    OpSpec {
+        op: Op::Sub,
+        trait_name: "Sub",
+        method: "sub",
+        kind: OpKind::Arith,
+        family: Konsts::Math,
+        konst: Konsts::Sub,
+        konst_assign: Some(Konsts::SubAssign),
+        closure: Some(ClosureOp::Sub),
+        symbol: "-",
+    },
+    OpSpec {
+        op: Op::Mul,
+        trait_name: "Mul",
+        method: "mul",
+        kind: OpKind::Arith,
+        family: Konsts::Math,
+        konst: Konsts::Mul,
+        konst_assign: Some(Konsts::MulAssign),
+        closure: Some(ClosureOp::Mul),
+        symbol: "*",
+    },
+    OpSpec {
+        op: Op::Div,
+        trait_name: "Div",
+        method: "div",
+        kind: OpKind::Arith,
+        family: Konsts::Math,
+        konst: Konsts::Div,
+        konst_assign: Some(Konsts::DivAssign),
+        closure: Some(ClosureOp::Div),
+        symbol: "/",
+    },
+    OpSpec {
+        op: Op::Rem,
+        trait_name: "Rem",
+        method: "rem",
+        kind: OpKind::Arith,
+        family: Konsts::Math,
+        konst: Konsts::Rem,
+        konst_assign: Some(Konsts::RemAssign),
+        closure: Some(ClosureOp::Rem),
+        symbol: "%",
+    },
+    OpSpec {
+        op: Op::BitAnd,
+        trait_name: "BitAnd",
+        method: "bitand",
+        kind: OpKind::Bitwise,
+        family: Konsts::Bit,
+        konst: Konsts::And,
+        konst_assign: Some(Konsts::AndAssign),
+        closure: Some(ClosureOp::BitAnd),
+        symbol: "&",
+    },
+    OpSpec {
+        op: Op::BitOr,
+        trait_name: "BitOr",
+        method: "bitor",
+        kind: OpKind::Bitwise,
+        family: Konsts::Bit,
+        konst: Konsts::Or,
+        konst_assign: Some(Konsts::OrAssign),
+        closure: Some(ClosureOp::BitOr),
+        symbol: "|",
+    },
+    OpSpec {
+        op: Op::BitXor,
+        trait_name: "BitXor",
+        method: "bitxor",
+        kind: OpKind::Bitwise,
+        family: Konsts::Bit,
+        konst: Konsts::Xor,
+        konst_assign: Some(Konsts::XorAssign),
+        closure: Some(ClosureOp::BitXor),
+        symbol: "^",
+    },
+    OpSpec {
+        op: Op::Shl,
+        trait_name: "Shl",
+        method: "shl",
+        kind: OpKind::Shift,
+        family: Konsts::Math,
+        konst: Konsts::Shl,
+        konst_assign: Some(Konsts::ShlAssign),
+        closure: None,
+        symbol: "<<",
+    },
+    OpSpec {
+        op: Op::Shr,
+        trait_name: "Shr",
+        method: "shr",
+        kind: OpKind::Shift,
+        family: Konsts::Math,
+        konst: Konsts::Shr,
+        konst_assign: Some(Konsts::ShrAssign),
+        closure: Some(ClosureOp::Shr),
+        symbol: ">>",
+    },
+    OpSpec {
+        op: Op::Neg,
+        trait_name: "Neg",
+        method: "neg",
+        kind: OpKind::Unary,
+        family: Konsts::Math,
+        konst: Konsts::Neg,
+        konst_assign: None,
+        closure: Some(ClosureOp::Neg),
+        symbol: "-",
+    },
+    OpSpec {
+        op: Op::Not,
+        trait_name: "Not",
+        method: "not",
+        kind: OpKind::Unary,
+        family: Konsts::Bit,
+        konst: Konsts::Not,
+        konst_assign: None,
+        closure: Some(ClosureOp::Not),
+        symbol: "!",
+    },
+];
+
+// Every operator has a row of `OPS`, at its index.
+const _: () = {
+    assert!(OPS.len() == Op::Not as usize + 1);
+    let mut index = 0;
+    while index < OPS.len() {
+        assert!(OPS[index].op as usize == index);
+        index += 1;
+    }
+};
 
 // =============================================================================
 
@@ -959,6 +1062,7 @@ pub(crate) enum FnName {
     CheckedSub,
     Clamp,
     Classify,
+    Clear,
     Copysign,
     Cos,
     Cosh,
@@ -984,6 +1088,8 @@ pub(crate) enum FnName {
     Ilog,
     Ilog10,
     Ilog2,
+    Insert,
+    InsertStr,
     IntoBytes,
     IsEmpty,
     IsFinite,
@@ -1029,11 +1135,17 @@ pub(crate) enum FnName {
     OverflowingShl,
     OverflowingShr,
     OverflowingSub,
+    Pop,
     Pow,
     Powf,
     Powi,
+    Push,
+    PushStr,
     Recip,
     RemEuclid,
+    Remove,
+    ReplaceRange,
+    Retain,
     ReverseBits,
     RotateLeft,
     RotateRight,
@@ -1078,16 +1190,7 @@ pub(crate) enum FnName {
     TrailingOnes,
     TrailingZeros,
     Trunc,
-    TryClear,
-    TryInsert,
-    TryInsertStr,
-    TryPop,
-    TryPush,
-    TryPushStr,
-    TryRemove,
-    TryReplaceRange,
-    TryRetain,
-    TryTruncate,
+    Truncate,
     UnboundedShl,
     UnboundedShr,
     UnsignedAbs,
@@ -1105,386 +1208,206 @@ pub(crate) enum FnName {
     WrappingSub,
 }
 
-impl FnName {
-    const ITEMS: [Self; 185] = [
-        Self::Abs,
-        Self::AbsDiff,
-        Self::Acos,
-        Self::Acosh,
-        Self::AsBytes,
-        Self::AsStr,
-        Self::Asin,
-        Self::Asinh,
-        Self::Atan,
-        Self::Atan2,
-        Self::Atanh,
-        Self::BitWidth,
-        Self::BorrowingSub,
-        Self::Capacity,
-        Self::CarryingAdd,
-        Self::CarryingMul,
-        Self::CarryingMulAdd,
-        Self::CastSigned,
-        Self::CastUnsigned,
-        Self::Cbrt,
-        Self::Ceil,
-        Self::CheckedAbs,
-        Self::CheckedAdd,
-        Self::CheckedDiv,
-        Self::CheckedDivEuclid,
-        Self::CheckedIlog,
-        Self::CheckedIlog10,
-        Self::CheckedIlog2,
-        Self::CheckedIsqrt,
-        Self::CheckedMul,
-        Self::CheckedNeg,
-        Self::CheckedNextMultipleOf,
-        Self::CheckedNextPowerOfTwo,
-        Self::CheckedPow,
-        Self::CheckedRem,
-        Self::CheckedRemEuclid,
-        Self::CheckedShl,
-        Self::CheckedShr,
-        Self::CheckedSub,
-        Self::Clamp,
-        Self::Classify,
-        Self::Copysign,
-        Self::Cos,
-        Self::Cosh,
-        Self::CountOnes,
-        Self::CountZeros,
-        Self::DivCeil,
-        Self::DivEuclid,
-        Self::Exp,
-        Self::Exp2,
-        Self::ExpM1,
-        Self::Floor,
-        Self::Fract,
-        Self::FromBe,
-        Self::FromBeBytes,
-        Self::FromBits,
-        Self::FromLe,
-        Self::FromLeBytes,
-        Self::FromNeBytes,
-        Self::FunnelShl,
-        Self::FunnelShr,
-        Self::HighestOne,
-        Self::Hypot,
-        Self::Ilog,
-        Self::Ilog10,
-        Self::Ilog2,
-        Self::IntoBytes,
-        Self::IsEmpty,
-        Self::IsFinite,
-        Self::IsInfinite,
-        Self::IsMultipleOf,
-        Self::IsNan,
-        Self::IsNegative,
-        Self::IsNormal,
-        Self::IsPositive,
-        Self::IsPowerOfTwo,
-        Self::IsSignNegative,
-        Self::IsSignPositive,
-        Self::IsSubnormal,
-        Self::IsolateHighestOne,
-        Self::IsolateLowestOne,
-        Self::Isqrt,
-        Self::LeadingOnes,
-        Self::LeadingZeros,
-        Self::Len,
-        Self::Ln,
-        Self::Ln1p,
-        Self::Log,
-        Self::Log10,
-        Self::Log2,
-        Self::LowestOne,
-        Self::Max,
-        Self::Midpoint,
-        Self::Min,
-        Self::MulAdd,
-        Self::NextDown,
-        Self::NextMultipleOf,
-        Self::NextPowerOfTwo,
-        Self::NextUp,
-        Self::OverflowingAbs,
-        Self::OverflowingAdd,
-        Self::OverflowingDiv,
-        Self::OverflowingDivEuclid,
-        Self::OverflowingMul,
-        Self::OverflowingNeg,
-        Self::OverflowingPow,
-        Self::OverflowingRem,
-        Self::OverflowingRemEuclid,
-        Self::OverflowingShl,
-        Self::OverflowingShr,
-        Self::OverflowingSub,
-        Self::Pow,
-        Self::Powf,
-        Self::Powi,
-        Self::Recip,
-        Self::RemEuclid,
-        Self::ReverseBits,
-        Self::RotateLeft,
-        Self::RotateRight,
-        Self::Round,
-        Self::RoundTiesEven,
-        Self::SaturatingAbs,
-        Self::SaturatingAdd,
-        Self::SaturatingDiv,
-        Self::SaturatingMul,
-        Self::SaturatingNeg,
-        Self::SaturatingPow,
-        Self::SaturatingSub,
-        Self::Signum,
-        Self::Sin,
-        Self::SinCos,
-        Self::Sinh,
-        Self::Sqrt,
-        Self::StrictAbs,
-        Self::StrictAdd,
-        Self::StrictDiv,
-        Self::StrictDivEuclid,
-        Self::StrictMul,
-        Self::StrictNeg,
-        Self::StrictPow,
-        Self::StrictRem,
-        Self::StrictRemEuclid,
-        Self::StrictShl,
-        Self::StrictShr,
-        Self::StrictSub,
-        Self::SwapBytes,
-        Self::Tan,
-        Self::Tanh,
-        Self::ToBe,
-        Self::ToBeBytes,
-        Self::ToBits,
-        Self::ToDegrees,
-        Self::ToLe,
-        Self::ToLeBytes,
-        Self::ToNeBytes,
-        Self::ToRadians,
-        Self::TotalCmp,
-        Self::TrailingOnes,
-        Self::TrailingZeros,
-        Self::Trunc,
-        Self::TryClear,
-        Self::TryInsert,
-        Self::TryInsertStr,
-        Self::TryPop,
-        Self::TryPush,
-        Self::TryPushStr,
-        Self::TryRemove,
-        Self::TryReplaceRange,
-        Self::TryRetain,
-        Self::TryTruncate,
-        Self::UnboundedShl,
-        Self::UnboundedShr,
-        Self::UnsignedAbs,
-        Self::WrappingAbs,
-        Self::WrappingAdd,
-        Self::WrappingDiv,
-        Self::WrappingDivEuclid,
-        Self::WrappingMul,
-        Self::WrappingNeg,
-        Self::WrappingPow,
-        Self::WrappingRem,
-        Self::WrappingRemEuclid,
-        Self::WrappingShl,
-        Self::WrappingShr,
-        Self::WrappingSub,
+impl Named for FnName {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Abs, "abs"),
+        (Self::AbsDiff, "abs_diff"),
+        (Self::Acos, "acos"),
+        (Self::Acosh, "acosh"),
+        (Self::AsBytes, "as_bytes"),
+        (Self::AsStr, "as_str"),
+        (Self::Asin, "asin"),
+        (Self::Asinh, "asinh"),
+        (Self::Atan, "atan"),
+        (Self::Atan2, "atan2"),
+        (Self::Atanh, "atanh"),
+        (Self::BitWidth, "bit_width"),
+        (Self::BorrowingSub, "borrowing_sub"),
+        (Self::Capacity, "capacity"),
+        (Self::CarryingAdd, "carrying_add"),
+        (Self::CarryingMul, "carrying_mul"),
+        (Self::CarryingMulAdd, "carrying_mul_add"),
+        (Self::CastSigned, "cast_signed"),
+        (Self::CastUnsigned, "cast_unsigned"),
+        (Self::Cbrt, "cbrt"),
+        (Self::Ceil, "ceil"),
+        (Self::CheckedAbs, "checked_abs"),
+        (Self::CheckedAdd, "checked_add"),
+        (Self::CheckedDiv, "checked_div"),
+        (Self::CheckedDivEuclid, "checked_div_euclid"),
+        (Self::CheckedIlog, "checked_ilog"),
+        (Self::CheckedIlog10, "checked_ilog10"),
+        (Self::CheckedIlog2, "checked_ilog2"),
+        (Self::CheckedIsqrt, "checked_isqrt"),
+        (Self::CheckedMul, "checked_mul"),
+        (Self::CheckedNeg, "checked_neg"),
+        (Self::CheckedNextMultipleOf, "checked_next_multiple_of"),
+        (Self::CheckedNextPowerOfTwo, "checked_next_power_of_two"),
+        (Self::CheckedPow, "checked_pow"),
+        (Self::CheckedRem, "checked_rem"),
+        (Self::CheckedRemEuclid, "checked_rem_euclid"),
+        (Self::CheckedShl, "checked_shl"),
+        (Self::CheckedShr, "checked_shr"),
+        (Self::CheckedSub, "checked_sub"),
+        (Self::Clamp, "clamp"),
+        (Self::Classify, "classify"),
+        (Self::Clear, "clear"),
+        (Self::Copysign, "copysign"),
+        (Self::Cos, "cos"),
+        (Self::Cosh, "cosh"),
+        (Self::CountOnes, "count_ones"),
+        (Self::CountZeros, "count_zeros"),
+        (Self::DivCeil, "div_ceil"),
+        (Self::DivEuclid, "div_euclid"),
+        (Self::Exp, "exp"),
+        (Self::Exp2, "exp2"),
+        (Self::ExpM1, "exp_m1"),
+        (Self::Floor, "floor"),
+        (Self::Fract, "fract"),
+        (Self::FromBe, "from_be"),
+        (Self::FromBeBytes, "from_be_bytes"),
+        (Self::FromBits, "from_bits"),
+        (Self::FromLe, "from_le"),
+        (Self::FromLeBytes, "from_le_bytes"),
+        (Self::FromNeBytes, "from_ne_bytes"),
+        (Self::FunnelShl, "funnel_shl"),
+        (Self::FunnelShr, "funnel_shr"),
+        (Self::HighestOne, "highest_one"),
+        (Self::Hypot, "hypot"),
+        (Self::Ilog, "ilog"),
+        (Self::Ilog10, "ilog10"),
+        (Self::Ilog2, "ilog2"),
+        (Self::Insert, "insert"),
+        (Self::InsertStr, "insert_str"),
+        (Self::IntoBytes, "into_bytes"),
+        (Self::IsEmpty, "is_empty"),
+        (Self::IsFinite, "is_finite"),
+        (Self::IsInfinite, "is_infinite"),
+        (Self::IsMultipleOf, "is_multiple_of"),
+        (Self::IsNan, "is_nan"),
+        (Self::IsNegative, "is_negative"),
+        (Self::IsNormal, "is_normal"),
+        (Self::IsPositive, "is_positive"),
+        (Self::IsPowerOfTwo, "is_power_of_two"),
+        (Self::IsSignNegative, "is_sign_negative"),
+        (Self::IsSignPositive, "is_sign_positive"),
+        (Self::IsSubnormal, "is_subnormal"),
+        (Self::IsolateHighestOne, "isolate_highest_one"),
+        (Self::IsolateLowestOne, "isolate_lowest_one"),
+        (Self::Isqrt, "isqrt"),
+        (Self::LeadingOnes, "leading_ones"),
+        (Self::LeadingZeros, "leading_zeros"),
+        (Self::Len, "len"),
+        (Self::Ln, "ln"),
+        (Self::Ln1p, "ln_1p"),
+        (Self::Log, "log"),
+        (Self::Log10, "log10"),
+        (Self::Log2, "log2"),
+        (Self::LowestOne, "lowest_one"),
+        (Self::Max, "max"),
+        (Self::Midpoint, "midpoint"),
+        (Self::Min, "min"),
+        (Self::MulAdd, "mul_add"),
+        (Self::NextDown, "next_down"),
+        (Self::NextMultipleOf, "next_multiple_of"),
+        (Self::NextPowerOfTwo, "next_power_of_two"),
+        (Self::NextUp, "next_up"),
+        (Self::OverflowingAbs, "overflowing_abs"),
+        (Self::OverflowingAdd, "overflowing_add"),
+        (Self::OverflowingDiv, "overflowing_div"),
+        (Self::OverflowingDivEuclid, "overflowing_div_euclid"),
+        (Self::OverflowingMul, "overflowing_mul"),
+        (Self::OverflowingNeg, "overflowing_neg"),
+        (Self::OverflowingPow, "overflowing_pow"),
+        (Self::OverflowingRem, "overflowing_rem"),
+        (Self::OverflowingRemEuclid, "overflowing_rem_euclid"),
+        (Self::OverflowingShl, "overflowing_shl"),
+        (Self::OverflowingShr, "overflowing_shr"),
+        (Self::OverflowingSub, "overflowing_sub"),
+        (Self::Pop, "pop"),
+        (Self::Pow, "pow"),
+        (Self::Powf, "powf"),
+        (Self::Powi, "powi"),
+        (Self::Push, "push"),
+        (Self::PushStr, "push_str"),
+        (Self::Recip, "recip"),
+        (Self::RemEuclid, "rem_euclid"),
+        (Self::Remove, "remove"),
+        (Self::ReplaceRange, "replace_range"),
+        (Self::Retain, "retain"),
+        (Self::ReverseBits, "reverse_bits"),
+        (Self::RotateLeft, "rotate_left"),
+        (Self::RotateRight, "rotate_right"),
+        (Self::Round, "round"),
+        (Self::RoundTiesEven, "round_ties_even"),
+        (Self::SaturatingAbs, "saturating_abs"),
+        (Self::SaturatingAdd, "saturating_add"),
+        (Self::SaturatingDiv, "saturating_div"),
+        (Self::SaturatingMul, "saturating_mul"),
+        (Self::SaturatingNeg, "saturating_neg"),
+        (Self::SaturatingPow, "saturating_pow"),
+        (Self::SaturatingSub, "saturating_sub"),
+        (Self::Signum, "signum"),
+        (Self::Sin, "sin"),
+        (Self::SinCos, "sin_cos"),
+        (Self::Sinh, "sinh"),
+        (Self::Sqrt, "sqrt"),
+        (Self::StrictAbs, "strict_abs"),
+        (Self::StrictAdd, "strict_add"),
+        (Self::StrictDiv, "strict_div"),
+        (Self::StrictDivEuclid, "strict_div_euclid"),
+        (Self::StrictMul, "strict_mul"),
+        (Self::StrictNeg, "strict_neg"),
+        (Self::StrictPow, "strict_pow"),
+        (Self::StrictRem, "strict_rem"),
+        (Self::StrictRemEuclid, "strict_rem_euclid"),
+        (Self::StrictShl, "strict_shl"),
+        (Self::StrictShr, "strict_shr"),
+        (Self::StrictSub, "strict_sub"),
+        (Self::SwapBytes, "swap_bytes"),
+        (Self::Tan, "tan"),
+        (Self::Tanh, "tanh"),
+        (Self::ToBe, "to_be"),
+        (Self::ToBeBytes, "to_be_bytes"),
+        (Self::ToBits, "to_bits"),
+        (Self::ToDegrees, "to_degrees"),
+        (Self::ToLe, "to_le"),
+        (Self::ToLeBytes, "to_le_bytes"),
+        (Self::ToNeBytes, "to_ne_bytes"),
+        (Self::ToRadians, "to_radians"),
+        (Self::TotalCmp, "total_cmp"),
+        (Self::TrailingOnes, "trailing_ones"),
+        (Self::TrailingZeros, "trailing_zeros"),
+        (Self::Trunc, "trunc"),
+        (Self::Truncate, "truncate"),
+        (Self::UnboundedShl, "unbounded_shl"),
+        (Self::UnboundedShr, "unbounded_shr"),
+        (Self::UnsignedAbs, "unsigned_abs"),
+        (Self::WrappingAbs, "wrapping_abs"),
+        (Self::WrappingAdd, "wrapping_add"),
+        (Self::WrappingDiv, "wrapping_div"),
+        (Self::WrappingDivEuclid, "wrapping_div_euclid"),
+        (Self::WrappingMul, "wrapping_mul"),
+        (Self::WrappingNeg, "wrapping_neg"),
+        (Self::WrappingPow, "wrapping_pow"),
+        (Self::WrappingRem, "wrapping_rem"),
+        (Self::WrappingRemEuclid, "wrapping_rem_euclid"),
+        (Self::WrappingShl, "wrapping_shl"),
+        (Self::WrappingShr, "wrapping_shr"),
+        (Self::WrappingSub, "wrapping_sub"),
     ];
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Abs => "abs",
-            Self::AbsDiff => "abs_diff",
-            Self::Acos => "acos",
-            Self::Acosh => "acosh",
-            Self::AsBytes => "as_bytes",
-            Self::AsStr => "as_str",
-            Self::Asin => "asin",
-            Self::Asinh => "asinh",
-            Self::Atan => "atan",
-            Self::Atan2 => "atan2",
-            Self::Atanh => "atanh",
-            Self::BitWidth => "bit_width",
-            Self::BorrowingSub => "borrowing_sub",
-            Self::Capacity => "capacity",
-            Self::CarryingAdd => "carrying_add",
-            Self::CarryingMul => "carrying_mul",
-            Self::CarryingMulAdd => "carrying_mul_add",
-            Self::CastSigned => "cast_signed",
-            Self::CastUnsigned => "cast_unsigned",
-            Self::Cbrt => "cbrt",
-            Self::Ceil => "ceil",
-            Self::CheckedAbs => "checked_abs",
-            Self::CheckedAdd => "checked_add",
-            Self::CheckedDiv => "checked_div",
-            Self::CheckedDivEuclid => "checked_div_euclid",
-            Self::CheckedIlog => "checked_ilog",
-            Self::CheckedIlog10 => "checked_ilog10",
-            Self::CheckedIlog2 => "checked_ilog2",
-            Self::CheckedIsqrt => "checked_isqrt",
-            Self::CheckedMul => "checked_mul",
-            Self::CheckedNeg => "checked_neg",
-            Self::CheckedNextMultipleOf => "checked_next_multiple_of",
-            Self::CheckedNextPowerOfTwo => "checked_next_power_of_two",
-            Self::CheckedPow => "checked_pow",
-            Self::CheckedRem => "checked_rem",
-            Self::CheckedRemEuclid => "checked_rem_euclid",
-            Self::CheckedShl => "checked_shl",
-            Self::CheckedShr => "checked_shr",
-            Self::CheckedSub => "checked_sub",
-            Self::Clamp => "clamp",
-            Self::Classify => "classify",
-            Self::Copysign => "copysign",
-            Self::Cos => "cos",
-            Self::Cosh => "cosh",
-            Self::CountOnes => "count_ones",
-            Self::CountZeros => "count_zeros",
-            Self::DivCeil => "div_ceil",
-            Self::DivEuclid => "div_euclid",
-            Self::Exp => "exp",
-            Self::Exp2 => "exp2",
-            Self::ExpM1 => "exp_m1",
-            Self::Floor => "floor",
-            Self::Fract => "fract",
-            Self::FromBe => "from_be",
-            Self::FromBeBytes => "from_be_bytes",
-            Self::FromBits => "from_bits",
-            Self::FromLe => "from_le",
-            Self::FromLeBytes => "from_le_bytes",
-            Self::FromNeBytes => "from_ne_bytes",
-            Self::FunnelShl => "funnel_shl",
-            Self::FunnelShr => "funnel_shr",
-            Self::HighestOne => "highest_one",
-            Self::Hypot => "hypot",
-            Self::Ilog => "ilog",
-            Self::Ilog10 => "ilog10",
-            Self::Ilog2 => "ilog2",
-            Self::IntoBytes => "into_bytes",
-            Self::IsEmpty => "is_empty",
-            Self::IsFinite => "is_finite",
-            Self::IsInfinite => "is_infinite",
-            Self::IsMultipleOf => "is_multiple_of",
-            Self::IsNan => "is_nan",
-            Self::IsNegative => "is_negative",
-            Self::IsNormal => "is_normal",
-            Self::IsPositive => "is_positive",
-            Self::IsPowerOfTwo => "is_power_of_two",
-            Self::IsSignNegative => "is_sign_negative",
-            Self::IsSignPositive => "is_sign_positive",
-            Self::IsSubnormal => "is_subnormal",
-            Self::IsolateHighestOne => "isolate_highest_one",
-            Self::IsolateLowestOne => "isolate_lowest_one",
-            Self::Isqrt => "isqrt",
-            Self::LeadingOnes => "leading_ones",
-            Self::LeadingZeros => "leading_zeros",
-            Self::Len => "len",
-            Self::Ln => "ln",
-            Self::Ln1p => "ln_1p",
-            Self::Log => "log",
-            Self::Log10 => "log10",
-            Self::Log2 => "log2",
-            Self::LowestOne => "lowest_one",
-            Self::Max => "max",
-            Self::Midpoint => "midpoint",
-            Self::Min => "min",
-            Self::MulAdd => "mul_add",
-            Self::NextDown => "next_down",
-            Self::NextMultipleOf => "next_multiple_of",
-            Self::NextPowerOfTwo => "next_power_of_two",
-            Self::NextUp => "next_up",
-            Self::OverflowingAbs => "overflowing_abs",
-            Self::OverflowingAdd => "overflowing_add",
-            Self::OverflowingDiv => "overflowing_div",
-            Self::OverflowingDivEuclid => "overflowing_div_euclid",
-            Self::OverflowingMul => "overflowing_mul",
-            Self::OverflowingNeg => "overflowing_neg",
-            Self::OverflowingPow => "overflowing_pow",
-            Self::OverflowingRem => "overflowing_rem",
-            Self::OverflowingRemEuclid => "overflowing_rem_euclid",
-            Self::OverflowingShl => "overflowing_shl",
-            Self::OverflowingShr => "overflowing_shr",
-            Self::OverflowingSub => "overflowing_sub",
-            Self::Pow => "pow",
-            Self::Powf => "powf",
-            Self::Powi => "powi",
-            Self::Recip => "recip",
-            Self::RemEuclid => "rem_euclid",
-            Self::ReverseBits => "reverse_bits",
-            Self::RotateLeft => "rotate_left",
-            Self::RotateRight => "rotate_right",
-            Self::Round => "round",
-            Self::RoundTiesEven => "round_ties_even",
-            Self::SaturatingAbs => "saturating_abs",
-            Self::SaturatingAdd => "saturating_add",
-            Self::SaturatingDiv => "saturating_div",
-            Self::SaturatingMul => "saturating_mul",
-            Self::SaturatingNeg => "saturating_neg",
-            Self::SaturatingPow => "saturating_pow",
-            Self::SaturatingSub => "saturating_sub",
-            Self::Signum => "signum",
-            Self::Sin => "sin",
-            Self::SinCos => "sin_cos",
-            Self::Sinh => "sinh",
-            Self::Sqrt => "sqrt",
-            Self::StrictAbs => "strict_abs",
-            Self::StrictAdd => "strict_add",
-            Self::StrictDiv => "strict_div",
-            Self::StrictDivEuclid => "strict_div_euclid",
-            Self::StrictMul => "strict_mul",
-            Self::StrictNeg => "strict_neg",
-            Self::StrictPow => "strict_pow",
-            Self::StrictRem => "strict_rem",
-            Self::StrictRemEuclid => "strict_rem_euclid",
-            Self::StrictShl => "strict_shl",
-            Self::StrictShr => "strict_shr",
-            Self::StrictSub => "strict_sub",
-            Self::SwapBytes => "swap_bytes",
-            Self::Tan => "tan",
-            Self::Tanh => "tanh",
-            Self::ToBe => "to_be",
-            Self::ToBeBytes => "to_be_bytes",
-            Self::ToBits => "to_bits",
-            Self::ToDegrees => "to_degrees",
-            Self::ToLe => "to_le",
-            Self::ToLeBytes => "to_le_bytes",
-            Self::ToNeBytes => "to_ne_bytes",
-            Self::ToRadians => "to_radians",
-            Self::TotalCmp => "total_cmp",
-            Self::TrailingOnes => "trailing_ones",
-            Self::TrailingZeros => "trailing_zeros",
-            Self::Trunc => "trunc",
-            Self::TryClear => "try_clear",
-            Self::TryInsert => "try_insert",
-            Self::TryInsertStr => "try_insert_str",
-            Self::TryPop => "try_pop",
-            Self::TryPush => "try_push",
-            Self::TryPushStr => "try_push_str",
-            Self::TryRemove => "try_remove",
-            Self::TryReplaceRange => "try_replace_range",
-            Self::TryRetain => "try_retain",
-            Self::TryTruncate => "try_truncate",
-            Self::UnboundedShl => "unbounded_shl",
-            Self::UnboundedShr => "unbounded_shr",
-            Self::UnsignedAbs => "unsigned_abs",
-            Self::WrappingAbs => "wrapping_abs",
-            Self::WrappingAdd => "wrapping_add",
-            Self::WrappingDiv => "wrapping_div",
-            Self::WrappingDivEuclid => "wrapping_div_euclid",
-            Self::WrappingMul => "wrapping_mul",
-            Self::WrappingNeg => "wrapping_neg",
-            Self::WrappingPow => "wrapping_pow",
-            Self::WrappingRem => "wrapping_rem",
-            Self::WrappingRemEuclid => "wrapping_rem_euclid",
-            Self::WrappingShl => "wrapping_shl",
-            Self::WrappingShr => "wrapping_shr",
-            Self::WrappingSub => "wrapping_sub",
-        };
-    }
-
-    pub(crate) fn of(name: &str) -> Option<Self> {
-        return Self::ITEMS.iter().copied().find(|it| it.name() == name);
+    fn index(self) -> usize {
+        return self as usize;
     }
 }
+
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = FnName::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};

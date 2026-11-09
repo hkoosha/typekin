@@ -50,8 +50,9 @@ use crate::zz_runner::{
 };
 use crate::zz_values::{
     Num,
-    Operator,
-    POINTER_WIDTHS,
+    OPS,
+    Op,
+    Width,
 };
 
 /// Integral friend capabilities are validated: each has a protocol trait.
@@ -218,10 +219,11 @@ impl Maker {
                 .as_ref()
                 .expect("facets require a resolved default facet");
             let flags = Cfg::resolved_facet_flags(&default.flags, facet);
-            let konst = Operator::items().iter().any(|operator| {
-                flags.has(IntegralFlag::math(*operator))
-                    && cfg.konst_for(&operator.is_konst_flags())
-            });
+            let konst =
+                OPS.iter().filter(|it| it.kind.has_operand()).any(|it| {
+                    return flags.has(IntegralFlag::of_op(it.op).math)
+                        && cfg.konst_for(&it.konsts());
+                });
             friends.extend(facet_friends.map(|friend| (friend, konst)));
         }
 
@@ -380,7 +382,7 @@ impl Maker {
             else {
                 continue;
             };
-            let ty = format_ident!("{}", source.rust_name());
+            let ty = format_ident!("{}", source.name());
             let mut newly_added = false;
             upsert_friend(
                 &mut self.ctx.cfg.friends,
@@ -409,9 +411,9 @@ impl Maker {
             else {
                 continue;
             };
-            let exact = POINTER_WIDTHS
-                .iter()
-                .all(|width| source.can_safe_cast_to(self.num, *width));
+            let exact = Width::ALL
+                .into_iter()
+                .all(|width| source.can_safe_cast_to(self.num, width));
             let relation = friend.capabilities.iter().find(|it| {
                 return matches!(
                     Capability::of(it),
@@ -424,8 +426,8 @@ impl Maker {
                 return capability.fail(format!(
                     "{} -> {} is lossy; float Rel and Math friends must \
                     convert exactly",
-                    source.rust_name(),
-                    self.num.rust_name(),
+                    source.name(),
+                    self.num.name(),
                 ));
             }
         }
@@ -477,21 +479,22 @@ impl Maker {
     /// The `{Op}Rhs` trait a facet operator dispatches through.
     fn facet_rhs_trait(
         &self,
-        operator: Operator,
+        operator: Op,
     ) -> Ident {
         return self.ctx.names.get(IntegralName::RhsTrait(operator));
     }
 
     fn facet_rhs_trait_decl(
         &self,
-        operator: Operator,
+        operator: Op,
         target: &TokenStream,
         generics: &Generics,
     ) -> TokenStream {
         let (parameters, _, where_clause) = generics.split_for_impl();
         let trait_name = self.facet_rhs_trait(operator);
-        let method = format_ident!("{}", operator.method_name());
-        let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
+        let operator = operator.spec();
+        let method = format_ident!("{}", operator.method);
+        let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let konst = Konst::konst(is_konst);
 
         return quote! {
@@ -527,7 +530,8 @@ impl Maker {
         key: &FacetSlotKey,
         slot: &FacetSlot,
     ) -> bool {
-        let proof = self.operator_proof_with(key.operator, slot.arithmetic);
+        let proof =
+            self.operator_proof_with(key.operator.spec(), slot.arithmetic);
         return match slot.rhs {
             Some(_) => proof.full,
             None => proof.same,
@@ -542,9 +546,9 @@ impl Maker {
         generics: &Generics,
     ) -> TokenStream {
         let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operator = key.operator;
-        let trait_name = self.facet_rhs_trait(operator);
-        let method = format_ident!("{}", operator.method_name());
+        let operator = key.operator.spec();
+        let trait_name = self.facet_rhs_trait(operator.op);
+        let method = format_ident!("{}", operator.method);
         let rhs_ty = self.facet_rhs_ty(slot, target);
         let get_raw = self.target.qualify_path(&self.ctx.get_raw);
         let rhs = match &slot.rhs {
@@ -573,11 +577,11 @@ impl Maker {
         );
         let output_ty = output.ty();
         let result = output.convert(quote! { value });
-        let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
+        let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let operation = match self.ctx.failure {
             Some(_) => slot.arithmetic.make_fallible_expr(
                 operator,
-                self.ctx.cfg.panic_at,
+                self.ctx.cfg.wide.panic_at,
                 matches!(self.num, Num::Float(_)),
                 is_konst,
             ),
@@ -609,16 +613,17 @@ impl Maker {
     /// `core::ops::{Op}<T> for Target` forwarding to `T`'s `{Op}Rhs` impl.
     fn facet_operator_impl(
         &self,
-        operator: Operator,
+        operator: Op,
         target: &TokenStream,
         generics: &Generics,
     ) -> TokenStream {
         let (_, arguments, _) = generics.split_for_impl();
         let trait_name = self.facet_rhs_trait(operator);
-        let method = format_ident!("{}", operator.method_name());
-        let operation = format_ident!("{}", operator.name());
+        let operator = operator.spec();
+        let method = format_ident!("{}", operator.method);
+        let operation = format_ident!("{}", operator.trait_name);
         let rhs = self.target.fresh_ident("T");
-        let is_konst = self.ctx.cfg.konst_for(&operator.is_konst_flags());
+        let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let konst = Konst::konst(is_konst);
         let bound = Konst::bound(is_konst, quote! { #trait_name #arguments });
         let (impl_generics, where_clause) = self.target.impl_header(
@@ -654,14 +659,14 @@ impl Maker {
         generics: &Generics,
     ) -> TokenStream {
         let (parameters, arguments, where_clause) = generics.split_for_impl();
-        let operator = key.operator;
-        let trait_name = self.facet_rhs_trait(operator);
-        let method = format_ident!("{}", operator.method_name());
-        let assign_trait = format_ident!("{}Assign", operator.name());
-        let assign_method = format_ident!("{}_assign", operator.method_name());
+        let operator = key.operator.spec();
+        let trait_name = self.facet_rhs_trait(operator.op);
+        let method = format_ident!("{}", operator.method);
+        let assign_trait = format_ident!("{}Assign", operator.trait_name);
+        let assign_method = format_ident!("{}_assign", operator.method);
         let rhs_ty = self.facet_rhs_ty(slot, target);
         let doc = self.proof_doc(self.facet_proven(key, slot));
-        let is_konst = self.ctx.cfg.konst_for(&operator.assign_konst_flags());
+        let is_konst = self.ctx.cfg.konst_for(&operator.assign_konsts());
         let konst = Konst::konst(is_konst);
 
         return quote! {

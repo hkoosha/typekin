@@ -37,33 +37,45 @@ constness, and runtime cost as API behavior.
   emission for each macro family. `src/integral.rs` holds the integral entry
   (`ekran`, `ekran_with`), the target and storage model, and the emitter
   orchestration; its siblings hold the rest: `integral_cfg.rs` (configuration,
-  flags, and resolution), `integral_friend.rs` (friend protocol and facet
-  dispatch), `integral_impls.rs` (trait and operator impls), `integral_items.rs`
-  (inherent items), `integral_forward.rs` (`core_int` forwards),
-  `integral_proof.rs` (closure-proof use and `prove`), and `integral_within.rs`
-  (`Within` friends and the constants sources publish for them). `src/float.rs`
-  holds the float-only `impl Maker` emitters (`core_float`, `float_math`,
-  exponent formatting, `Sum`/`Product`). `src/packed.rs` holds the packed
+  the wrapper-wide settings `WrapperWide`, flags, and resolution),
+  `integral_friend.rs` (friend protocol and facet dispatch),
+  `integral_impls.rs` (trait and operator impls), `integral_items.rs`
+  (inherent items), `integral_forward.rs` (the emitter of the `core` forwards,
+  integer and float, from their rows), `integral_proof.rs` (closure-proof use
+  and `prove`), and `integral_within.rs` (`Within` friends and the constants
+  sources publish for them). `src/float.rs` holds the float-only `impl Maker`
+  emitters (the float constants, domain-decided queries, exponent formatting,
+  `Sum`/`Product`). `src/packed.rs` holds the packed
   record: field windows, the `{Type}Values` struct and accessors, the validation
   callback it hands `integral::ekran_with`, and the fit and `non_zero` proofs.
 - `src/marker_tree.rs`: standalone and embedded marker-tree generation.
 - `src/zz_runner.rs`: shared parsing, diagnostic, and macro-runner helpers.
+- `src/zz_forward.rs`: the `core` forwards as rows (`CoreFwd`; the tables
+  `CORE_INT`, `CORE_FLOAT`, `FLOAT_MATH`): every generated function that calls
+  the primitive function of its own name. The forward emitter builds the
+  functions from them, and `domain` typing reads which functions an expression
+  may apply.
 - `src/zz_flags.rs`: typed `with`/`without` flags: the `Flag` trait each
-  family's hand-written flag enum implements, the `Flags` bitset, and the
-  per-level `FlagSettings` with their `konst_*` settings (`KonstFlags`) and
-  removals.
+  family's hand-written flag enum implements with its `FlagRow` table, the
+  `Flags` bitset, and the per-level `FlagSettings` with their `konst_*`
+  settings (`KonstFlags`) and removals.
 - `src/zz_names.rs`: generated-name tables: the `NameKey` trait each family's
   key enum implements, the names a user chose (`Names`), and the defaults with
   today's spans and collision rule (`ResolvedNames`).
-- `src/zz_lib.rs`: shared validation, constness, list parsing (`Key`),
-  item-shape, `repr`, and function-removal (`Forward`, `Removals`) helpers.
+- `src/zz_lib.rs`: shared name tables (`Named`, `parse_choice`), validation
+  and construction emission (`Validation`, `Check`, `OnInvalid`,
+  `unwrap_or_panic`), constness (`Konst`, `Konsts`), list parsing (`Key`,
+  `parse_inner`, and the `Site` table of the keys a site rejects), item-shape,
+  `repr`, and function-removal (`Forward`, `Form`, `Removals`) helpers.
 - `src/zz_friend.rs`: the friend capability model (`Friend`, `Capability`) and
   protocol emission (`Protocol`, `emit_protocol`) that integral, float, bitflag,
   text, `friends`, and `constructor` share.
-- `src/zz_profile_integral.rs` and `src/zz_conv.rs`: integral profile/facet
-  resolution (`ProfileKind`) and operator-output conversion.
-- `src/zz_values.rs`: primitive integer and float (`F`, `Num`), operator, and
-  function-name (`FnName`) metadata.
+- `src/zz_profile_integral.rs` and `src/zz_conv.rs`: the integral profile table
+  (`ProfileKind`, `PROFILES`), facet resolution, and operator-output
+  conversion.
+- `src/zz_values.rs`: primitive integer and float (`N`, `F`, `Num`), pointer
+  width (`Width`, `IntTy`, `by_width`), interval-set (`IntervalSet`), operator
+  (`Op`, `OpSpec`, `OPS`), and function-name (`FnName`) metadata.
 - `src/zz_hide.rs`: `hide_in` parsing, path re-anchoring, and module wrapping.
 - `src/zz_lit.rs`: the per-type literal macro (`Port` → `port!`): naming, export
   shape, guard, and arms.
@@ -78,13 +90,14 @@ constness, and runtime cost as API behavior.
   `const fn` code.
 - `src/unit`: unit tests of what the public surface cannot show (diagnostics,
   crate-private analysis, and token details; see "Tests and verification").
-- `typekin_testing/`: a separate unpublished Cargo crate and the default home
-  for tests. Its `src/` contains downstream behavior, allocation, compile-time
-  absence, fixture-crate (compile-fail, `no_std`, cross-crate, 32-bit), and
-  assembly tests in `test_*.rs`, their fixtures in the matching `fx_*.rs`, the
-  assembly fixture crate's `asm_case_*.rs` modules, and the shared helpers in
-  `src/machinery/` (`asserts.rs`, `absent.rs`, `alloc.rs`, `fixture.rs`,
-  `asm.rs`, …).
+- `src/e2e`: the `e2e` integration-test target (`Cargo.toml` `[[test]]`, root
+  `src/e2e/mod.rs`) and the default home for tests; it uses typekin as a
+  downstream crate does. It contains downstream behavior, allocation,
+  compile-time absence, fixture-crate (compile-fail, `no_std`, cross-crate,
+  32-bit), and assembly tests in `test_*.rs`, their fixtures in the matching
+  `fx_*.rs`, the assembly fixture crate's `asm_case_*.rs` modules, and the
+  shared helpers in `src/e2e/machinery/` (`asserts.rs`, `absent.rs`,
+  `alloc.rs`, `fixture.rs`, `asm.rs`, …).
 - `examples/`: small source examples and checked-in `_exp.rs` expansions. Do not
   edit `_exp.rs` files directly; regenerate one with its `just <name>-expand`
   target (`expandem --fix`), then run `cargo +nightly fmt`, because the
@@ -99,19 +112,19 @@ constness, and runtime cost as API behavior.
 
 - Keep public documentation practical, concise, and code-first.
 - Preserve the optimized assembly comparison for changes that claim runtime
-  erasure. `typekin_testing`'s `test_slow` includes optimized comparisons and
+  erasure. The full `e2e` test set includes optimized comparisons and
   unoptimized negative controls; compilation or `#[inline]` alone is not proof.
 - Favor explicit capabilities, ownership, and constness. Reuse shared parsing
   and emission machinery rather than adding parallel syntax or generators.
 - Do not create macros solely to reduce repetition.
 - Inspect generated code with `expandem` (from the `expandem` crate;
-  `just init-here` installs it), not `cargo expand`.
+  `just init` installs it), not `cargo expand`.
   `expandem <file> 'typekin::**'` expands only typekin's macros in that source
   file and leaves Rust's, serde's, and every other macro as written, so the
   output shows exactly what typekin generates; `--fix` simplifies it for
   reading, as the `*-expand` recipes do. Items declared inside function bodies
   stay unexpanded. To show that a change leaves generated code alone, diff the
-  `expandem` output of every `typekin_testing/src` file with a typekin attribute
+  `expandem` output of every `src/e2e` file with a typekin attribute
   before and after; differences in trailing commas and spacing don't count. Use
   `cargo expand` only when another macro's expansion matters.
 
@@ -402,12 +415,14 @@ constness, and runtime cost as API behavior.
 - Every generated function that forwards to a `core` function (text: a `String`
   method) is built as a `zz_lib::Forward` and passes through `Removals::keep`,
   so `without = fn_<generated name>` removes it (`fn_round_ties_even`,
-  `fn_count_ones`, `fn_try_push`). Removal is opt-out only (`with = fn_…` is an
-  error), applies at the root and in profile bodies but not in facets, and
-  naming a function the configuration does not generate is an error. Generated
-  code never calls these public functions; it uses the raw value or field, so
-  every removal still compiles. Constants (`BITS`, `RADIX`, …) stay with their
-  family flag.
+  `fn_count_ones`, `fn_try_push`). A removal is keyed by `(Form, FnName)`:
+  `fn_try_push` is the `Try` form of `push`, and a family's `FlagGrammar` lists
+  the forms it has. Removal is opt-out only (`with = fn_…` is an error),
+  applies at the root and in profile bodies but not in facets, and naming a
+  function the configuration does not generate is an error. Generated code
+  never calls these public functions; it uses the raw value or field, so every
+  removal still compiles. Constants (`BITS`, `RADIX`, …) stay with their family
+  flag.
 - `friend` accepts one declaration or a bracketed list. A declaration uses
   `conversion(SourceType)` or typed `_(SourceType)`, optionally followed by
   `-> Capability` or a bracketed capability list. Integral defaults an omitted
@@ -442,15 +457,37 @@ constness, and runtime cost as API behavior.
   flags (`IntegralFlag`, `TextFlag`, `BitFlag`, each implementing `Flag`),
   `konst_*` names (`Konsts`), capabilities (`Capability`), profiles
   (`ProfileKind`), attribute keys (`Key`), primitive types (`N`, `F`), and
-  operators. Its text lives in one name table (`ITEMS`, `name()`, `of()`,
-  `ident()`; see `zz_values::Operator`). Convert user input with `of()` once at
-  the parse boundary and work with the enum afterwards; never compare an
-  `Ident`'s `to_string()` or a `&str` against a literal in logic. A lone name
-  used in one or two places is a module-level `const`, not an enum. Text stays
-  inline only for diagnostics, docs, `Debug` output, tokens inside `quote!`, an
-  identifier emitted at a single place, Rust syntax checks (`self`, `super`,
-  `crate`, `Self`), and data tables that are themselves the single boundary
-  table (zz_lit's keyword lists, float constants).
+  operators. Its text lives in one row table and nowhere else: `Named::TABLE`
+  rows of `(variant, text)` with the default `name()` and `of()`
+  (`zz_lib::Named`; callers import the trait), `FlagRow` rows for a flag enum
+  (name and default), `KonstRow` rows for `Konsts`. Each table keeps one
+  compile-time assertion that row `i` holds variant `i`, so a new name is a
+  variant plus its row. Convert user input with `of()` (a single-word value:
+  `parse_choice`) once at the parse boundary and work with the enum
+  afterwards; never compare an `Ident`'s `to_string()` or a `&str` against a
+  literal in logic. A lone name used in one or two places is a module-level
+  `const`, not an enum. Text stays inline only for diagnostics, docs, `Debug`
+  output, tokens inside `quote!`, an identifier emitted at a single place,
+  Rust syntax checks (`self`, `super`, `crate`, `Self`), and data tables that
+  are themselves the single boundary table (zz_lit's keyword lists, float
+  constants).
+- Every concept has one owner: a table row, an enum with one name table, or
+  one emitter (ADR 0033). Emitters iterate the tables; never add a per-site
+  list or order array beside one. To add
+    - a flag: a variant and its `FlagRow`, plus the category lists it belongs
+      to (`RESTRICTED_MATH_FLAGS`, `INT_ONLY_FLAGS`, …);
+    - a `konst_*` name: a `Konsts` variant and its `KonstRow`;
+    - a wrapper-wide key: a `Key` row, a `WrapperWide` field with its
+      `parse_attr` arm, and a `REJECTIONS` row for each site that must reject
+      it (a rejection is reported at the key);
+    - an operator: an `OpSpec` row in `OPS`, its `IntegralFlag::of_op` arm,
+      and its flag and `konst_*` variants;
+    - an integral or float forward: a `CoreFwd` row, not a new `quote!` block;
+    - a profile: a `ProfileKind` variant with its name and `ProfileSpec` rows;
+    - a storage kind: a `Base` arm of `StoragePlan`, the only path that reads
+      or writes the value field;
+    - a constructor: a call of `Maker::construction` (`Validation::construct`)
+      with its `Check` and `OnInvalid`, not a hand-written check.
 - Generated names come from the family's names table (`zz_names`; key enums
   `IntegralName`, `BitflagName`, `TextName`, `FriendsName`, `ConstructorName`):
   an emitter that spells a generated public name, or one a user can choose,
@@ -476,15 +513,15 @@ constness, and runtime cost as API behavior.
   imports and parameters, and `ClosingNextLine` braces.
 - Share genuinely common grammar and emission rules. Do not force integral
   ranges and text literal membership through the same parser.
-- Keep the module tree flat: every module of either crate is a file directly in
-  its `src/`, declared from the crate root. Name a split-off part after its
-  parent with a suffix (`zz_domain_closure.rs` beside `zz_domain.rs`). Never
-  create a new directory, a module file under another module (`src/a/b.rs`), a
-  `mod` declared from a non-root module, or a `#[path]` module without the
-  user's explicit permission. The only exceptions are the existing `src/unit`
-  directory of `t_*.rs` files; `typekin_testing/src/machinery/`, whose `unit`
-  only declares its helper modules (tests and fixtures stay directly in
-  `typekin_testing/src/`); the inline test modules inside `test_*.rs` files; and
+- Keep the module tree flat: every module of the library is a file directly in
+  `src/`, declared from the crate root. Name a split-off part after its parent
+  with a suffix (`zz_domain_closure.rs` beside `zz_domain.rs`). Never create a
+  new directory, a module file under another module (`src/a/b.rs`), a `mod`
+  declared from a non-root module, or a `#[path]` module without the user's
+  explicit permission. The only exceptions are the existing `src/unit`
+  directory of `t_*.rs` files; `src/e2e`, the root of the `e2e` test target,
+  with its `machinery/` directory of helper modules (tests and fixtures stay
+  directly in `src/e2e`); the inline test modules inside `test_*.rs` files; and
   inline `mod name { … }` blocks that `fx_*.rs` files use as scopes for
   declarations under test (privacy, paths, `scope = …`).
 - `zz_` marks machinery, never a macro entry point. A shared `zz_*` file never
@@ -495,16 +532,16 @@ constness, and runtime cost as API behavior.
 
 Test behavior at the layer where it is observable:
 
-- `typekin_testing/src/` is the default home for every test. A behavior a
-  downstream crate can observe is tested there, as a consumer sees it, even when
-  a parser or emitter test could reach it more directly: accepted configuration,
-  defaults and flag resolution, construction, ownership, validation and domain
+- `src/e2e` is the default home for every test. A behavior a downstream crate
+  can observe is tested there, as a consumer sees it, even when a parser or
+  emitter test could reach it more directly: accepted configuration, defaults
+  and flag resolution, construction, ownership, validation and domain
   membership, generated traits, methods, and their absence, constness, layout
   and storage, allocation, boundaries, and generated operations. Assert that a
   trait, method, or associated function is absent with `assert_not_impl!`,
   `assert_no_method!`, or `assert_no_associated_fn!`
-  (`typekin_testing/src/machinery/absent.rs`) in the fast modules; a violation
-  fails to compile.
+  (`src/e2e/machinery/absent.rs`) in the fast modules; a violation fails to
+  compile.
 - `src/unit` holds only what the public surface cannot show: typekin's own
   diagnostics (a typekin rejection fails the consumer's build, and fixture
   crates are reserved for rustc's rejections), crate-private functions and data
@@ -514,7 +551,7 @@ Test behavior at the layer where it is observable:
   pointer widths other than the host's. Before adding a test there, confirm that
   no consumer-side assertion can observe the behavior.
 - Only what needs a separate crate goes into a fixture crate
-  (`typekin_testing/src/machinery/fixture.rs`): rejections only rustc reports
+  (`src/e2e/machinery/fixture.rs`): rejections only rustc reports
   (privacy, name resolution, bounds on private protocols, borrow checking,
   constant evaluation), crate-level attributes such as `#![no_std]`, other
   crates, toolchains, or targets. Add a case to an existing fixture before
@@ -522,7 +559,7 @@ Test behavior at the layer where it is observable:
 - Test each behavior at one layer. Do not repeat in a fixture crate what a
   `src/unit` test or a fast-module assertion already covers.
 - Tests never include or depend on `examples/`; examples are not tests. Declare
-  test-specific types in the testing crate instead.
+  test-specific types in `src/e2e` instead.
 - Keep fixtures and tests in separate files. A `test_<name>.rs` holds only tests
   and their imports; everything they share lives in `fx_<name>.rs`: typekin
   declarations, helper types, functions, traits, constants, statics, and
@@ -531,28 +568,26 @@ Test behavior at the layer where it is observable:
   value fields stay private, and a test that needs defining-module access gets a
   helper function in the fixture file. Items used by a single test stay in its
   body. The test file imports them with `use crate::fx_<name>::*;`.
-- Machinery and fixtures are unconditional: they compile in every build, feature
-  or not. Gate one only when compiling it needs something the environment does
-  not otherwise provide (a pointer width, a target, a binary required at compile
+- Machinery and fixtures are unconditional: they compile in every build. Gate
+  one only when compiling it needs something the environment does not
+  otherwise provide (a pointer width, a target, a binary required at compile
   time).
-- Gate tests on modules, never on a `#[test]` function. Every inline test module
-  in a `test_*.rs` file carries `#[cfg(test)]` and its feature, repeated on each
-  module: `test_fast` for in-crate tests, `test_slow_only` for fixture crates
-  and assembly, and a per-target feature (`test_slow_wasm32`,
-  `test_slow_aarch64`, `test_slow_armv7`, `test_slow_i686`) for tests that build
-  for another target. A requirement the environment may lack (a rustup target, a
-  tool) gets its own feature outside `test_slow`. Nothing runs without a
-  feature. A test needing an extra condition moves into an inline module that
-  adds it (`mod opt_level_z` behind `test_slow_z`, `mod pointer_width_64`).
-  `typekin_testing/src/lib.rs` stays attribute-free apart from crate-level
-  `#![…]` attributes: it only declares modules and re-exports the machinery.
+- Gate tests on modules, never on a `#[test]` function. `src/e2e/mod.rs`
+  declares the fast test modules unconditionally and the slow ones (fixture
+  crates, assembly, other targets) under `#[cfg(feature = "default")]`, so
+  `--no-default-features` runs the fast set and a plain `cargo test` runs
+  everything. Every inline test module in a `test_*.rs` file carries
+  `#[cfg(test)]`. A test needing an extra condition moves into an inline module
+  that adds it (`mod pointer_width_64`). Apart from those `cfg`s and its
+  crate-level `#![…]` attributes, `src/e2e/mod.rs` only declares modules and
+  re-exports the machinery.
 - Every test lives in an inline module of its `test_*.rs` file, even a module
   with a single test; no test function sits at the file's top level. Group tests
   with modules rather than separator comments: a section that would get a
   `// ----` heading is a module named after that heading. Prefer few modules; do
   not split a group that has no distinct subject.
 - A test never passes by skipping. A missing toolchain, target, or tool fails
-  the test; make optional requirements a feature instead.
+  the test.
 - Assembly fixtures may share one crate per target and opt-level, one module per
   case. What they check runs through `#[inline(always)]` paths, which other
   cases in the same crate cannot inline differently: `alwaysinline` ignores
@@ -611,42 +646,40 @@ Use these commands from the repository root:
 
 ```sh
 cargo +nightly fmt -- --check
-cargo +nightly fmt --manifest-path typekin_testing/Cargo.toml -- --check
+cargo +nightly clippy --locked --lib -- -D warnings
+cargo +nightly test --locked --no-default-features
 cargo +nightly test --locked
-cargo +nightly test --locked \
-  --manifest-path typekin_testing/Cargo.toml --features test_fast
-cargo +nightly test --locked \
-  --manifest-path typekin_testing/Cargo.toml --features test_slow
+cargo +nightly test --locked --lib --features nightly
 cargo +stable run --locked --example my_text
 ```
 
-The separate testing crate requires nightly. `test_slow` includes `test_fast`,
-the host fixture crates, and host assembly comparisons, including opt-level z
-(`test_slow_z`); it needs no extra rustup target. A fixture crate holds many
-cases, one module each, and is checked once (`check`), or built once (`compile`)
-for errors only monomorphization reports, such as a generic target's `Within`
-proof; a rejection must report its expected error inside its own case module,
-and every error there must match it. Fixture crates and their target directories
-live in `typekin_testing/target/typekin-fixtures/`; they use offline Cargo and
-require cached dependencies, and some use stable. `--features test_slow_wasm32`
-adds 32-bit pointer-width fixtures and requires the nightly
-`wasm32-unknown-unknown` target; it fails rather than skips when the target is
-missing. Assembly cases (`asm_case_*.rs`) are the modules of one fixture crate
-per target and opt-level (AArch64 at opt-level z: one per case), built once per
-test run; each test compares its own case's probes symbol by symbol. Host checks
-run that crate and require `nm` and `objdump`; `--features test_slow_aarch64`,
-`test_slow_armv7`, and `test_slow_i686` (together `test_slow_cross`) each
-compile it as an object for `aarch64-unknown-linux-gnu`,
-`armv7-unknown-linux-gnueabihf`, or `i686-unknown-linux-gnu` (nightly targets)
-and read it with `llvm-nm`/`llvm-objdump`. Opt-levels 1, 2, 3, and s must match
-the raw code and level 0 must differ; below level 2 checked float conversions
-compare against the same check behind one `#[inline(always)]` layer, which
-changes instruction selection by itself. Opt-level z is checked only with
-`--features test_slow_z` (part of `test_slow`): size optimizations such as the
-AArch64 machine outliner move sequences repeated anywhere in a crate,
-hand-written code included, into shared functions, which typekin's erasure
-promise does not cover. For changes to the crate's `nightly` feature, also run
-`cargo +nightly test --locked --lib --features nightly`.
+The `e2e` target requires nightly. `--no-default-features` runs the unit tests
+and the fast `e2e` modules; a plain `cargo test` adds the fixture crates, the
+host assembly comparisons (opt-level z included), and the other targets. A
+fixture crate holds many cases, one module each, and is checked once
+(`check`), or built once (`compile`) for errors only monomorphization reports,
+such as a generic target's `Within` proof; a rejection must report its
+expected error inside its own case module, and every error there must match
+it. Fixture crates and their target directories live in
+`target/typekin-fixtures/`; they use offline Cargo and require cached
+dependencies, and some use stable. The 32-bit pointer-width fixtures require
+the nightly `wasm32-unknown-unknown` target; they fail rather than skip when
+the target is missing. Assembly cases (`asm_case_*.rs`) are the modules of one
+fixture crate per target and opt-level (AArch64 at opt-level z: one per case),
+built once per test run; each test compares its own case's probes symbol by
+symbol. Host checks run that crate and require `nm` and `objdump`; the cross
+checks compile it as an object for `aarch64-unknown-linux-gnu`,
+`armv7-unknown-linux-gnueabihf`, and `i686-unknown-linux-gnu` (nightly
+targets) and read it with `llvm-nm`/`llvm-objdump`. `just init` installs
+`expandem`, the four targets, and `llvm-tools`. Opt-levels 1, 2, 3, and s must
+match the raw code and level 0 must differ; below level 2 checked float
+conversions compare against the same check behind one `#[inline(always)]`
+layer, which changes instruction selection by itself. Opt-level z has its own
+`opt_level_z` modules: size optimizations such as the AArch64 machine outliner
+move sequences repeated anywhere in a crate, hand-written code included, into
+shared functions, which typekin's erasure promise does not cover. For changes
+to the crate's `nightly` feature, `cargo +nightly test --locked --lib
+--features nightly` is the check.
 
 Run a relevant example as a smoke test for the changed macro. On stable,
 `my_u32_non_const` exercises `konst = none`, while `my_u32_stable_const`,
@@ -655,12 +688,12 @@ Run a relevant example as a smoke test for the changed macro. On stable,
 Nightly const settings and other unstable features require the corresponding
 feature gates.
 
-Root `just fmt`, `just test`, `just test-fast`, `just test-slow`, `just all`,
-and example recipes without `-expand` format root `*.md`, including README. Do
-not run them unless that README change is explicitly requested. Individual
-`*-expand` targets avoid that formatter. The root `justfile` exports
-`RUSTFLAGS = -Zmacro-backtrace`, requiring nightly for its Cargo commands; the
-nested testing recipes also run `cargo fmt`.
+Root `just fmt`, `just test`, `just test-fast`, `just build`, `just clippy`,
+`just fix`, `just all`, and example recipes without `-expand` format the root,
+`adr/`, and `arena/` `*.md` files, including README. Do not run them unless
+that README change is explicitly requested. Individual `*-expand` targets
+avoid that formatter. The root `justfile` exports
+`RUSTFLAGS = -Zmacro-backtrace`, requiring nightly for its Cargo commands.
 
 ## Documentation and change discipline
 

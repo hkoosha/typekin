@@ -171,7 +171,7 @@ impl Parse for Cfg {
         let mut friends = BTreeSet::new();
         let mut scope = None;
 
-        zz::parse_inner(input, |attr, stream| {
+        zz::parse_inner(input, zz::Site::Root, |attr, stream| {
             match attr {
                 Key::Relationship => relationship = Some(stream.parse()?),
                 Key::Maker => {

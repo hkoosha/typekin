@@ -31,6 +31,7 @@ use syn::{
 use crate::zz_lib as zz;
 use crate::zz_lib::{
     Konst,
+    Named,
     PathIdentity,
     arg_or_list,
     one_or_list,
@@ -39,7 +40,7 @@ use crate::zz_runner::{
     MkErr,
     ToCollection,
 };
-use crate::zz_values::Operator;
+use crate::zz_values::OpKind;
 
 #[derive(Clone)]
 pub(crate) struct Friend {
@@ -69,31 +70,37 @@ pub(crate) enum Capability {
     Within,
 }
 
-impl Capability {
-    const ITEMS: [Self; 7] = [
-        Self::Make,
-        Self::Math,
-        Self::Bit,
-        Self::Rel,
-        Self::Cmp,
-        Self::Unsafe,
-        Self::Within,
+impl Named for Capability {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Make, "Make"),
+        (Self::Math, "Math"),
+        (Self::Bit, "Bit"),
+        (Self::Rel, "Rel"),
+        (Self::Cmp, "Cmp"),
+        (Self::Unsafe, "Unsafe"),
+        (Self::Within, "Within"),
     ];
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Make => "Make",
-            Self::Math => "Math",
-            Self::Bit => "Bit",
-            Self::Rel => "Rel",
-            Self::Cmp => "Cmp",
-            Self::Unsafe => "Unsafe",
-            Self::Within => "Within",
-        };
+    fn index(self) -> usize {
+        return self as usize;
     }
+}
 
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = Capability::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
+impl Capability {
+    /// The capability a written identifier names: the one conversion from
+    /// an identifier, which compares it with the table's names.
     pub(crate) fn of(name: &Ident) -> Option<Self> {
-        return Self::ITEMS.into_iter().find(|it| *name == it.name());
+        return Self::items().find(|it| *name == it.name());
     }
 
     pub(crate) fn ident(self) -> Ident {
@@ -246,14 +253,11 @@ pub(crate) const BITFLAG_ROOT: CapabilityPolicy = CapabilityPolicy {
     unknown: "unknown capability",
 };
 
-/// The operators a facet slot capability opens.
-pub(crate) type SlotOperators = fn() -> &'static [Operator];
-
-/// The facet slot capabilities and the operators each one opens, `Math`
-/// first.
-pub(crate) const FACET_OPERATORS: [(Capability, SlotOperators); 2] = [
-    (Capability::Math, Operator::math_items),
-    (Capability::Bit, Operator::bit_items),
+/// The facet slot capabilities and the kind of operators each one opens,
+/// `Math` first.
+pub(crate) const FACET_OPERATORS: [(Capability, OpKind); 2] = [
+    (Capability::Math, OpKind::Arith),
+    (Capability::Bit, OpKind::Bitwise),
 ];
 
 impl CapabilityPolicy {

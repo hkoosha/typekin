@@ -250,7 +250,7 @@ impl Parse for Cfg {
             extra_caps: BTreeSet::new(),
         };
 
-        zz::parse_inner(input, |attr, stream| {
+        zz::parse_inner(input, zz::Site::Root, |attr, stream| {
             match attr {
                 Key::Relation => this.relation = Some(stream.parse()?),
                 Key::Value => this.value = Some(stream.parse()?),

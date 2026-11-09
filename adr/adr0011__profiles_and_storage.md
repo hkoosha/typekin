@@ -23,13 +23,16 @@ with facets without a second configuration system.
 - **Profiles are presets over flags.** `profile = NAME { settings }` clears/sets
   flags; explicit root `with`/`without` always win, regardless of order. Profile
   bodies `{}` are optional.
-- **Data model:** one
-  `enum Profile { Int(Int), Circular(Circular), Delta(Circular), Sequential, Wrapping, Point, … }`
-  with per-variant structs; each variant parses itself as if no other existed. A
-  key a profile doesn't own (e.g. `precedes` on `int`) is the generic
-  `unknown attribute`, not a special-cased error. Preset effects live in the
-  `Profile::preset_off` table (replaced per-profile `profile_apply_*`
-  functions).
+- **Data model:** `Profile { kind, settings, precedes }` plus one
+  `ProfileSpec` row per `ProfileKind` in `PROFILES`: the arithmetic, the
+  preset-off lists, whether floats and facets accept the profile, `Wrapping`
+  storage, circularity, and the `precedes` default (ADR 0033, 2026-11-09).
+  Until then it was one `enum Profile { Int(Int), Circular(Circular), … }`
+  with per-variant structs, five of which held nothing but `settings`, and
+  the facts were spread over `arithmetic()`, `preset_off()`, `from_name` and
+  the float and facet checks. What the structs were for is kept: a key a
+  profile doesn't own (e.g. `precedes` on `int`) is the generic
+  `unknown attribute`, not a special-cased error.
 - **Default ≠ `int`.** `Profiles(Vec<Profile>)`, and `is_default()` means "no
   profile given" (empty list), not "resolves to int". Bitflag's nested integral
   checks `is_default()` before resolving.
@@ -58,9 +61,11 @@ with facets without a second configuration system.
   → suppress storage only, domain unchanged. Facet-local `non_zero` is rejected.
 - **Storage rewrite only for private fields.** `raw()`, parsing, Serde, friends
   and constructors keep primitive `P`. One
-  `StoragePlan { raw, non_zero, wrapping }` is resolved once at the macro
-  boundary and every storage read/construction goes through it. Combined:
-  `Wrapping<NonZeroP>`.
+  `StoragePlan { raw, base, wrapping }` with `Base { Plain, NonZero }` is
+  resolved once at the macro boundary, and every storage read (`extract`) and
+  construction (`storage_expression`) goes through it, bitflag's value type,
+  `_within` and `_blind_trust` included (ADR 0033, 2026-11-09; a new storage
+  kind is a `Base` arm). Combined: `Wrapping<NonZeroP>`.
 - **Custom `or_panic` constructor + NonZero storage is an error** ("safe
   generated APIs cannot delegate structural validity to an opaque custom
   constructor").

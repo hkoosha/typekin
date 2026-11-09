@@ -39,6 +39,8 @@ use crate::zz_friend::{
 use crate::zz_lib::{
     self as zz,
     Key,
+    Named,
+    Site,
 };
 use crate::zz_runner::{
     MkErr,
@@ -46,8 +48,9 @@ use crate::zz_runner::{
     snake_case_of,
 };
 use crate::zz_values::{
-    ArithmeticOp,
-    Operator,
+    Op,
+    OpKind,
+    OpSpec,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,26 +64,20 @@ pub(crate) enum Arithmetic {
 impl Arithmetic {
     pub(crate) fn make_expr(
         self,
-        it: ArithmeticOp,
+        it: &OpSpec,
     ) -> TokenStream {
-        let symbol = it.symbol();
+        let symbol = it.token();
         return match self {
             Arithmetic::Primitive => quote! { lhs #symbol rhs },
             Arithmetic::PrimitiveWrapping => {
-                let method = format_ident!("wrapping_{}", it.name());
+                let method = format_ident!("wrapping_{}", it.method);
                 let rhs = Self::rhs_for(it);
                 quote! { lhs.#method(#rhs) }
             }
             Arithmetic::WrapperWrapping => {
-                let rhs = match it {
-                    ArithmeticOp::Shl | ArithmeticOp::Shr => quote! { rhs },
-                    ArithmeticOp::Add
-                    | ArithmeticOp::Sub
-                    | ArithmeticOp::Mul
-                    | ArithmeticOp::Div
-                    | ArithmeticOp::Rem => {
-                        quote! { ::core::num::Wrapping(rhs) }
-                    }
+                let rhs = match it.kind == OpKind::Shift {
+                    true => quote! { rhs },
+                    false => quote! { ::core::num::Wrapping(rhs) },
                 };
                 quote! {
                     (
@@ -90,7 +87,7 @@ impl Arithmetic {
                 }
             }
             Arithmetic::Checked => {
-                let method = format_ident!("checked_{}", it.name());
+                let method = format_ident!("checked_{}", it.method);
                 let rhs = Self::rhs_for(it);
                 quote! {
                     match lhs.#method(#rhs) {
@@ -108,7 +105,7 @@ impl Arithmetic {
 
     pub(crate) fn make_const_expr(
         self,
-        it: ArithmeticOp,
+        it: &OpSpec,
     ) -> TokenStream {
         return match self {
             Self::WrapperWrapping => Self::PrimitiveWrapping.make_expr(it),
@@ -118,23 +115,16 @@ impl Arithmetic {
 
     pub(crate) fn make_operator_expr(
         self,
-        operator: Operator,
+        operator: &OpSpec,
         is_konst: bool,
     ) -> TokenStream {
-        let make_expr = |operation| {
-            return if is_konst {
-                self.make_const_expr(operation)
-            }
-            else {
-                self.make_expr(operation)
-            };
-        };
-        return match operator.arithmetic_op() {
-            Some(operation) => make_expr(operation),
-            None => {
-                let symbol = operator.symbol();
-                quote! { lhs #symbol rhs }
-            }
+        if operator.kind == OpKind::Bitwise {
+            let symbol = operator.token();
+            return quote! { lhs #symbol rhs };
+        }
+        return match is_konst {
+            true => self.make_const_expr(operator),
+            false => self.make_expr(operator),
         };
     }
 
@@ -145,7 +135,7 @@ impl Arithmetic {
     /// profiles only have division by zero to check. Floats never panic.
     pub(crate) fn make_fallible_expr(
         self,
-        operator: Operator,
+        operator: &OpSpec,
         level: PanicAt,
         float: bool,
         is_konst: bool,
@@ -153,23 +143,17 @@ impl Arithmetic {
         let some = |value: TokenStream| {
             return quote! { ::core::option::Option::Some(#value) };
         };
-        let Some(operation) = operator.arithmetic_op()
-        else {
-            let symbol = operator.symbol();
+        if operator.kind == OpKind::Bitwise {
+            let symbol = operator.token();
             return some(quote! { lhs #symbol rhs });
-        };
-        return self.make_fallible_arithmetic(
-            operation,
-            level,
-            float,
-            is_konst,
-        );
+        }
+        return self.make_fallible_arithmetic(operator, level, float, is_konst);
     }
 
-    /// `make_fallible_expr` of an arithmetic operation, shifts included.
-    pub(crate) fn make_fallible_arithmetic(
+    /// `make_fallible_expr` of an arithmetic operator or a shift.
+    fn make_fallible_arithmetic(
         self,
-        operation: ArithmeticOp,
+        operation: &OpSpec,
         level: PanicAt,
         float: bool,
         is_konst: bool,
@@ -184,8 +168,7 @@ impl Arithmetic {
             (Self::WrapperWrapping, true) => Self::PrimitiveWrapping,
             (arithmetic, _) => arithmetic,
         };
-        let division =
-            matches!(operation, ArithmeticOp::Div | ArithmeticOp::Rem);
+        let division = matches!(operation.op, Op::Div | Op::Rem);
         let checked = match arithmetic {
             Self::Checked => true,
             Self::Primitive => match division {
@@ -213,10 +196,10 @@ impl Arithmetic {
 
     /// `checked_{operation}` of the raw operands; a shift amount past
     /// `u32` is `None` rather than truncated.
-    fn make_checked_option(operation: ArithmeticOp) -> TokenStream {
-        let method = format_ident!("checked_{}", operation.name());
-        return match operation {
-            ArithmeticOp::Shl | ArithmeticOp::Shr => quote! {
+    fn make_checked_option(operation: &OpSpec) -> TokenStream {
+        let method = format_ident!("checked_{}", operation.method);
+        return match operation.kind == OpKind::Shift {
+            true => quote! {
                 if rhs > u32::MAX as usize {
                     ::core::option::Option::None
                 }
@@ -224,74 +207,136 @@ impl Arithmetic {
                     lhs.#method(rhs as u32)
                 }
             },
-            ArithmeticOp::Add
-            | ArithmeticOp::Sub
-            | ArithmeticOp::Mul
-            | ArithmeticOp::Div
-            | ArithmeticOp::Rem => quote! { lhs.#method(rhs) },
+            false => quote! { lhs.#method(rhs) },
         };
     }
 
-    fn rhs_for(operation: ArithmeticOp) -> TokenStream {
-        return match operation {
-            ArithmeticOp::Shl | ArithmeticOp::Shr => quote! { rhs as u32 },
-            ArithmeticOp::Add
-            | ArithmeticOp::Sub
-            | ArithmeticOp::Mul
-            | ArithmeticOp::Div
-            | ArithmeticOp::Rem => quote! { rhs },
+    fn rhs_for(operation: &OpSpec) -> TokenStream {
+        return match operation.kind == OpKind::Shift {
+            true => quote! { rhs as u32 },
+            false => quote! { rhs },
         };
     }
 }
 
-#[derive(Clone, Default)]
-pub(crate) struct Int {
-    settings: FlagSettings<IntegralFlag>,
-}
-
-#[derive(Clone)]
-pub(crate) struct Circular {
-    settings: FlagSettings<IntegralFlag>,
+/// What a profile is: one row of [`PROFILES`] per [`ProfileKind`].
+pub(crate) struct ProfileSpec {
+    kind: ProfileKind,
+    /// The arithmetic the profile selects; `None` keeps the one selected
+    /// before it.
+    arithmetic: Option<Arithmetic>,
+    /// Flags the preset turns off; layering the profile also resets their
+    /// explicit settings.
+    preset_off: &'static [&'static [IntegralFlag]],
+    /// Whether an `f32`/`f64` value field accepts the profile.
+    pub(crate) float: bool,
+    /// Whether a facet can select the profile.
+    facet: bool,
+    /// Whether the profile selects `Wrapping` storage.
+    wrapping_storage: bool,
+    /// Whether values wrap around: no linear ordering and no `range`.
+    circular: bool,
+    /// Whether `precedes` is generated by default; only such a profile
+    /// takes the `precedes` key.
     precedes: bool,
 }
 
-impl Default for Circular {
-    fn default() -> Self {
-        return Self {
-            settings: Default::default(),
-            precedes: true,
-        };
+/// Every profile's row, at its kind's index.
+const PROFILES: [ProfileSpec; 7] = [
+    ProfileSpec {
+        kind: ProfileKind::Int,
+        arithmetic: Some(Arithmetic::Primitive),
+        preset_off: &[],
+        float: true,
+        facet: true,
+        wrapping_storage: false,
+        circular: false,
+        precedes: false,
+    },
+    ProfileSpec {
+        kind: ProfileKind::Circular,
+        arithmetic: Some(Arithmetic::PrimitiveWrapping),
+        preset_off: &[
+            IntegralFlag::RESTRICTED_MATH_FLAGS,
+            IntegralFlag::ORDERING,
+        ],
+        float: false,
+        facet: true,
+        wrapping_storage: false,
+        circular: true,
+        precedes: true,
+    },
+    // `circular` with `precedes` off.
+    ProfileSpec {
+        kind: ProfileKind::Delta,
+        arithmetic: Some(Arithmetic::PrimitiveWrapping),
+        preset_off: &[
+            IntegralFlag::RESTRICTED_MATH_FLAGS,
+            IntegralFlag::ORDERING,
+        ],
+        float: false,
+        facet: true,
+        wrapping_storage: false,
+        circular: true,
+        precedes: false,
+    },
+    ProfileSpec {
+        kind: ProfileKind::Sequential,
+        arithmetic: Some(Arithmetic::Checked),
+        preset_off: &[IntegralFlag::RESTRICTED_MATH_FLAGS],
+        float: false,
+        facet: true,
+        wrapping_storage: false,
+        circular: false,
+        precedes: false,
+    },
+    ProfileSpec {
+        kind: ProfileKind::Wrapping,
+        arithmetic: Some(Arithmetic::WrapperWrapping),
+        preset_off: &[],
+        float: false,
+        facet: true,
+        wrapping_storage: true,
+        circular: false,
+        precedes: false,
+    },
+    ProfileSpec {
+        kind: ProfileKind::Point,
+        arithmetic: None,
+        preset_off: &[
+            IntegralFlag::RESTRICTED_MATH_FLAGS,
+            IntegralFlag::POINT_OFF,
+        ],
+        float: true,
+        facet: true,
+        wrapping_storage: false,
+        circular: false,
+        precedes: false,
+    },
+    ProfileSpec {
+        kind: ProfileKind::Nominal,
+        arithmetic: None,
+        preset_off: &[
+            IntegralFlag::RESTRICTED_MATH_FLAGS,
+            IntegralFlag::ORDERING,
+            IntegralFlag::NOMINAL_OFF,
+        ],
+        float: false,
+        facet: false,
+        wrapping_storage: false,
+        circular: false,
+        precedes: false,
+    },
+];
+
+// Every row of `PROFILES` is at its kind's index.
+const _: () = {
+    let mut index = 0;
+    while index < PROFILES.len() {
+        assert!(PROFILES[index].kind as usize == index);
+        index += 1;
     }
-}
-
-impl Circular {
-    fn without_precedes() -> Self {
-        return Self {
-            settings: Default::default(),
-            precedes: false,
-        };
-    }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct Sequential {
-    settings: FlagSettings<IntegralFlag>,
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct Wrapping {
-    settings: FlagSettings<IntegralFlag>,
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct Point {
-    settings: FlagSettings<IntegralFlag>,
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct Nominal {
-    settings: FlagSettings<IntegralFlag>,
-}
+};
 
 /// A profile name: `profile = NAME`, a facet, or a fixed-profile macro.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -305,31 +350,35 @@ pub(crate) enum ProfileKind {
     Nominal,
 }
 
-impl ProfileKind {
-    const ITEMS: [Self; 7] = [
-        Self::Int,
-        Self::Circular,
-        Self::Delta,
-        Self::Sequential,
-        Self::Wrapping,
-        Self::Point,
-        Self::Nominal,
+impl Named for ProfileKind {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Int, "int"),
+        (Self::Circular, "circular"),
+        (Self::Delta, "delta"),
+        (Self::Sequential, "sequential"),
+        (Self::Wrapping, "wrapping"),
+        (Self::Point, "point"),
+        (Self::Nominal, "nominal"),
     ];
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Int => "int",
-            Self::Circular => "circular",
-            Self::Delta => "delta",
-            Self::Sequential => "sequential",
-            Self::Wrapping => "wrapping",
-            Self::Point => "point",
-            Self::Nominal => "nominal",
-        };
+    fn index(self) -> usize {
+        return self as usize;
     }
+}
 
-    pub(crate) fn of(name: &str) -> Option<Self> {
-        return Self::ITEMS.into_iter().find(|it| it.name() == name);
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = ProfileKind::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
+impl ProfileKind {
+    pub(crate) fn spec(self) -> &'static ProfileSpec {
+        return &PROFILES[self as usize];
     }
 }
 
@@ -343,27 +392,21 @@ impl Parse for ProfileKind {
     }
 }
 
+/// A selected profile: its kind, the settings of its body, and whether it
+/// generates `precedes`.
 #[derive(Clone)]
-pub(crate) enum Profile {
-    Int(Int),
-    Circular(Circular),
-    Delta(Circular),
-    Sequential(Sequential),
-    Wrapping(Wrapping),
-    Point(Point),
-    Nominal(Nominal),
+pub(crate) struct Profile {
+    kind: ProfileKind,
+    settings: FlagSettings<IntegralFlag>,
+    precedes: bool,
 }
 
 impl Profile {
     pub(crate) fn from_name(kind: ProfileKind) -> Self {
-        return match kind {
-            ProfileKind::Int => Self::Int(Int::default()),
-            ProfileKind::Circular => Self::Circular(Circular::default()),
-            ProfileKind::Delta => Self::Delta(Circular::without_precedes()),
-            ProfileKind::Sequential => Self::Sequential(Sequential::default()),
-            ProfileKind::Wrapping => Self::Wrapping(Wrapping::default()),
-            ProfileKind::Point => Self::Point(Point::default()),
-            ProfileKind::Nominal => Self::Nominal(Nominal::default()),
+        return Self {
+            kind,
+            settings: FlagSettings::default(),
+            precedes: kind.spec().precedes,
         };
     }
 
@@ -373,14 +416,13 @@ impl Profile {
         rest: ParseStream,
     ) -> syn::Result<bool> {
         match attr {
-            Key::With => self.settings_mut().parse(rest, true, &GRAMMAR)?,
-            Key::Without => self.settings_mut().parse(rest, false, &GRAMMAR)?,
+            Key::With => self.settings.parse(rest, true, &GRAMMAR)?,
+            Key::Without => self.settings.parse(rest, false, &GRAMMAR)?,
             Key::Precedes => {
-                let Self::Circular(Circular { precedes, .. }) = self
-                else {
+                if !self.kind.spec().precedes {
                     return Ok(false);
-                };
-                *precedes = rest.parse::<LitBool>()?.value;
+                }
+                self.precedes = rest.parse::<LitBool>()?.value;
             }
             _ => return Ok(false),
         }
@@ -389,69 +431,21 @@ impl Profile {
     }
 
     pub(crate) fn arithmetic(&self) -> Option<Arithmetic> {
-        return match self {
-            Self::Int { .. } => Some(Arithmetic::Primitive),
-            Self::Circular { .. } | Self::Delta(_) => {
-                Some(Arithmetic::PrimitiveWrapping)
-            }
-            Self::Sequential { .. } => Some(Arithmetic::Checked),
-            Self::Wrapping { .. } => Some(Arithmetic::WrapperWrapping),
-            Self::Point { .. } | Self::Nominal { .. } => None,
-        };
+        return self.kind.spec().arithmetic;
     }
 
-    pub(crate) fn is_circular(&self) -> bool {
-        return matches!(self, Self::Circular(_) | Self::Delta(_));
-    }
-
-    pub(crate) fn emits_precedes(&self) -> bool {
-        return matches!(self, Self::Circular(Circular { precedes: true, .. }));
+    pub(crate) fn accepts_float(&self) -> bool {
+        return self.kind.spec().float;
     }
 
     pub(crate) fn settings(&self) -> &FlagSettings<IntegralFlag> {
-        return match self {
-            Self::Int(Int { settings, .. })
-            | Self::Circular(Circular { settings, .. })
-            | Self::Delta(Circular { settings, .. })
-            | Self::Sequential(Sequential { settings, .. })
-            | Self::Wrapping(Wrapping { settings, .. })
-            | Self::Point(Point { settings, .. })
-            | Self::Nominal(Nominal { settings, .. }) => settings,
-        };
-    }
-
-    fn settings_mut(&mut self) -> &mut FlagSettings<IntegralFlag> {
-        return match self {
-            Self::Int(Int { settings, .. })
-            | Self::Circular(Circular { settings, .. })
-            | Self::Delta(Circular { settings, .. })
-            | Self::Sequential(Sequential { settings, .. })
-            | Self::Wrapping(Wrapping { settings, .. })
-            | Self::Point(Point { settings, .. })
-            | Self::Nominal(Nominal { settings, .. }) => settings,
-        };
+        return &self.settings;
     }
 
     /// Flags the preset turns off; layering the profile also resets their
     /// explicit settings.
     fn preset_off(&self) -> &'static [&'static [IntegralFlag]] {
-        return match self {
-            Self::Int(_) | Self::Wrapping(_) => &[],
-            Self::Circular(_) | Self::Delta(_) => &[
-                IntegralFlag::RESTRICTED_MATH_FLAGS,
-                IntegralFlag::ORDERING,
-            ],
-            Self::Sequential(_) => &[IntegralFlag::RESTRICTED_MATH_FLAGS],
-            Self::Point(_) => &[
-                IntegralFlag::RESTRICTED_MATH_FLAGS,
-                IntegralFlag::POINT_OFF,
-            ],
-            Self::Nominal(_) => &[
-                IntegralFlag::RESTRICTED_MATH_FLAGS,
-                IntegralFlag::ORDERING,
-                IntegralFlag::NOMINAL_OFF,
-            ],
-        };
+        return self.kind.spec().preset_off;
     }
 
     /// Applies the preset.
@@ -479,7 +473,7 @@ impl Parse for Profile {
         if input.peek(syn::token::Brace) {
             let content;
             let _ = braced!(content in input);
-            zz::parse_inner(&content, |attr, rest| {
+            zz::parse_inner(&content, Site::Root, |attr, rest| {
                 return profile.parse_attr(attr, rest);
             })?;
         }
@@ -523,11 +517,13 @@ impl Profiles {
     pub(crate) fn requires_wrapping_storage(&self) -> bool {
         return self
             .effective()
-            .is_some_and(|profile| matches!(profile, Profile::Wrapping(_)));
+            .is_some_and(|profile| profile.kind.spec().wrapping_storage);
     }
 
     pub(crate) fn is_circular(&self) -> bool {
-        return self.effective().is_some_and(Profile::is_circular);
+        return self
+            .effective()
+            .is_some_and(|profile| profile.kind.spec().circular);
     }
 
     pub(crate) fn is_default(&self) -> bool {
@@ -535,7 +531,7 @@ impl Profiles {
     }
 
     pub(crate) fn emits_precedes(&self) -> bool {
-        return self.effective().is_some_and(Profile::emits_precedes);
+        return self.effective().is_some_and(|profile| profile.precedes);
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Profile> {
@@ -584,7 +580,6 @@ pub(crate) struct FacetCfg {
     pub(crate) profile: Profiles,
     pub(crate) friends: BTreeSet<Friend>,
     pub(crate) ty_out: Option<SelfConverter>,
-    pub(crate) precedes_span: Option<Span>,
 }
 
 impl Debug for FacetCfg {
@@ -600,7 +595,6 @@ impl Debug for FacetCfg {
                 "ty_out",
                 &self.ty_out.as_ref().is_some_and(|it| !it.is_self()),
             )
-            .field("precedes", &self.precedes_span.is_some())
             .finish();
     }
 }
@@ -609,21 +603,17 @@ impl Parse for FacetCfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let span = input.span();
         let kind = input.parse::<ProfileKind>()?;
-        if kind == ProfileKind::Nominal {
+        if !kind.spec().facet {
             return span.fail("a nominal facet has no operators to select");
         }
         let mut profile = Profile::from_name(kind);
         let mut friends = BTreeSet::new();
         let mut ty_out = None;
-        let mut precedes_span = None;
 
         if input.peek(syn::token::Brace) {
             let content;
             let _ = braced!(content in input);
-            zz::parse_inner(&content, |attr, rest| {
-                if attr == Key::Precedes {
-                    precedes_span = Some(rest.span());
-                }
+            zz::parse_inner(&content, Site::Facet, |attr, rest| {
                 if profile.parse_attr(attr, rest)? {
                     return Ok(true);
                 }
@@ -645,7 +635,6 @@ impl Parse for FacetCfg {
             profile: Profiles::one(profile),
             friends,
             ty_out,
-            precedes_span,
         });
     }
 }
@@ -665,7 +654,7 @@ impl FacetCfg {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct FacetSlotKey {
-    pub(crate) operator: Operator,
+    pub(crate) operator: Op,
     pub(crate) rhs: String,
 }
 

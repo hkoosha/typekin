@@ -169,6 +169,21 @@ mod configuration {
     }
 
     #[test]
+    fn rejects_panic_at_at_the_key() {
+        let it = "repr = u32, panic_at = nothing";
+        let this = syn::parse_str::<crate::packed::Cfg>(it);
+        let error = this.unwrap_err();
+
+        assert_eq!(error.to_string(), "`packed` does not support `panic_at`");
+        assert_eq!(error.span().start().line, 1, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("panic_at").unwrap(),
+            "{it}",
+        );
+    }
+
+    #[test]
     fn rejects_operator_flag_at_its_span() {
         let it = "repr = u32, with = [ord, math_add]";
         let this = syn::parse_str::<crate::packed::Cfg>(it);

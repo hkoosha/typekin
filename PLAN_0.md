@@ -863,3 +863,38 @@ although their exact value set is still a union of intervals.
       operation that is still not closed keeps failing with its
       counterexample.
 4. Update ADR 0003.
+
+## 13. Applied (2026-11-09)
+
+The user had this plan applied before PLAN.md, to the tree as it stood (the
+pre-PLAN tree of §3 plus `panic_at`), with the intended output changes of
+Phase 7 and without commits. ADR 0033 records the decisions. "Waits" means the
+subject exists only in PLAN.md; each such part already has its owner.
+
+| Item | Status | Landed as | Waits for PLAN.md |
+|------|--------|-----------|-------------------|
+| W1 name rows | done | `zz_lib::Named` (`FnName`, `Key`, `Konst`, `N`, `F`, `Capability`, `ProfileKind`, `PanicAt`, `MathProvider`), `FlagRow`, `KonstRow` | the level and `unsafe_code` enums |
+| W2 `parse_choice` | done | `Konst`, `MathProvider`, `PanicAt`; `ProfileKind` keeps its own message, `HideIn` is not a closed choice | the new keys' parsers |
+| W3 wrapper-wide keys | done | `WrapperWide { konst, konsts, panic_at }`, `zz_lib::{Site, rejection}`, `parse_inner(stream, site, …)` | `checks`, `unsafe_code`, `validate()` |
+| W4 profile table | done | `Profile { kind, settings, precedes }`, `PROFILES` | the proof policy per level (R7) |
+| W5 `OpSpec` | done | `zz_values::{Op, OpKind, OpSpec, OPS}`, `IntegralFlag::of_op` | prechecks and `try_` names per operator |
+| W6 slots | see below | | `{Op}Rhs` dispatch for non-facet wrappers |
+| W7 `CoreFwd` rows | done | `zz_forward::{CoreFwd, CORE_INT, CORE_FLOAT, FLOAT_MATH}`, one emitter in `integral_forward.rs` | the `forms` column (`try_`) |
+| W8 `compute()` | see below | | the `lax` guard, `pedantic` prechecks, U3/U4 |
+| W9 `translate()` | see below | | R8 |
+| W10 construction | done | `zz_lib::{Validation, Check, OnInvalid, unwrap_or_panic}`, `Maker::construction`, `StoragePlan { raw, base, wrapping }` | `Base::Enum`, U1/U2/U5, implied conjuncts (Q31) |
+| W11 removal keys | done | `Removals` keyed by `(Form, FnName)`; text's `Try*` names are `(Try, name)` | `Try` forms of integral forwards |
+| W12 value sets | done | `Width`, `IntTy`, `IntervalSet`, `by_width`, `ResolvedDomain::{values, excludes}` | `hull`, `same_hull` (no consumer yet) |
+| W13 boilerplate | done | `Maker::{impl_trait, impl_trait_with}`, `zz_lib::reject_generics` | |
+| D0.1 order | done | operators and forwards follow their tables | |
+| D0.2 `assign_xor` | done | `IntegralFlag::AssignXor`, in `ASSIGN_FLAGS`, `INT_ONLY_FLAGS`, `RESTRICTED_MATH_FLAGS`, `FACET_ASSIGNMENTS`; facet xor slots with a `Self` output gain `BitXorAssign<Rhs>` | |
+| D0.3 key spans | done | every `rejection` row reports at the key; a facet rejects `precedes` whatever its profile | |
+| D0.5 bitflag storage | done as far as it has a subject | bitflag constructs through `StoragePlan`; storage stays primitive | the `enum_storage` opt-in |
+| D0.6 attributes | see below | | |
+| D0.7 | kept | closure eligibility unchanged | |
+| D0.8 rustdoc | done | `src/lib.rs` | |
+
+Token changes inside generated items, reviewed with W10: the bodies of
+`try_make`, `_or_panic`, `_result_or_panic` and `_or_err` take the one
+emitter's `return if … { … } else { … };` shape (`_or_err` binds its `Some`
+with `let … else`), and text's two `Err(())` panic arms read `Err(_)`.

@@ -36,6 +36,15 @@ can never leave the domain, yet the asm still had a redundant
   lenses), `valid` callbacks and `with = non_zero` (adds an opaque `!= 0`; write
   `1..` instead) block proofs. Not proven: `<<` (`Shl` has no `ClosureOp`;
   `Shr`/`UnboundedShr` do), `pow`, `ilog*`.
+- Value sets (ADR 0033, 2026-11-09): the proof reads the domain as an
+  `IntervalSet` (sorted, disjoint, inclusive) per `Width`, over `IntTy`
+  bounds shared with `Within`. Eligibility is unchanged: a domain that is not
+  a union of plain intervals on the value (`..=10 & !{5}`, lens atoms) stays
+  ineligible even where its exact value set is such a union. Feeding the
+  proof the exact per-width set (`ResolvedDomain::values`, modulus 1) is
+  future work (`PLAN_0.md` §12.1): it makes more operations `_proven` and
+  changes which `prove` lists succeed, so it needs the formal evidence
+  `PLAN.md` asks for.
 - `prove = [...]` is a checked contract: it fails expansion with a
   counterexample and names a blocking atom. It **only checks**: emission never
   consults it, so `prove` cannot change which `_proven` paths exist (PLAN.md).

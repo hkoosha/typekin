@@ -11,7 +11,7 @@ mod forms {
     use crate::zz_values::{
         Int,
         N,
-        POINTER_WIDTHS,
+        Width,
     };
 
     pub(crate) fn resolved(
@@ -70,9 +70,9 @@ mod forms {
         subject: N,
     ) {
         let domain = resolved(source, subject);
-        let (min, max) = subject.bounds_for_pointer_width(16);
-        for (index, width) in POINTER_WIDTHS.into_iter().enumerate() {
-            let form = domain.form(index);
+        let (min, max) = subject.bounds_for_pointer_width(Width::W16);
+        for width in Width::ALL {
+            let form = domain.values(width);
             assert!(form.is_ok(), "{source}: {:?}", form.err());
             let form = form.unwrap();
             assert_invariants(source, &form);
@@ -217,7 +217,7 @@ mod forms {
         let resolved = domain.resolve(N::U008, true);
         assert!(resolved.is_ok(), "{source}");
         let resolved = resolved.unwrap();
-        let form = resolved.form(0);
+        let form = resolved.values(Width::W16);
         assert!(form.is_ok(), "{source}: {:?}", form.err());
 
         let form = form.unwrap();
@@ -234,7 +234,7 @@ mod forms {
     fn pointer_sized_domain_at_16_bits_is_exact() {
         let source = "..=1000 | 60_000..";
         let domain = resolved(source, N::USIZ);
-        let form = domain.form(0);
+        let form = domain.values(Width::W16);
         assert!(form.is_ok(), "{source}: {:?}", form.err());
         let form = form.unwrap();
 
@@ -242,7 +242,7 @@ mod forms {
             let it = Int::NonNegative(u128::from(value));
             assert_eq!(
                 contains(&form, it),
-                domain.contains(it, 16),
+                domain.contains(it, Width::W16),
                 "{source}: {value}"
             );
         }
@@ -262,7 +262,7 @@ mod wide_forms {
     use crate::zz_values::{
         Int,
         N,
-        POINTER_WIDTHS,
+        Width,
     };
 
     fn assert_exact_at_boundaries(
@@ -270,12 +270,12 @@ mod wide_forms {
         subject: N,
     ) {
         let domain = resolved(source, subject);
-        for (index, width) in POINTER_WIDTHS.into_iter().enumerate() {
+        for width in Width::ALL {
             let (min, max) = subject.bounds_for_pointer_width(width);
-            let segments = domain.segments(index);
+            let segments = domain.segments(width);
             assert!(segments.is_ok(), "{source}: {:?}", segments.err());
             let (starts, modulus) = segments.unwrap();
-            let form = domain.form(index);
+            let form = domain.values(width);
             assert!(form.is_ok(), "{source}: {:?}", form.err());
             let form = form.unwrap();
             assert_invariants(source, &form);
@@ -360,13 +360,14 @@ mod opaque {
     use crate::zz_values::{
         FnName,
         N,
+        Width,
     };
 
     fn reason(
         source: &str,
         subject: N,
     ) -> Opaque {
-        let form = resolved(source, subject).form(2);
+        let form = resolved(source, subject).values(Width::W64);
         assert!(form.is_err(), "{source}: {form:?}");
         return form.unwrap_err();
     }
@@ -402,7 +403,7 @@ mod opaque {
         let it = "valid = is_even";
         let cfg = syn::parse_str::<Cfg>(it);
         assert!(cfg.is_ok(), "{it}");
-        let form = cfg.unwrap().validation.form(N::U016, 0);
+        let form = cfg.unwrap().validation.form(N::U016, Width::W16);
         assert!(form.is_err(), "{it}: {form:?}");
         let reason = form.unwrap_err();
 
@@ -468,6 +469,7 @@ mod subset {
     use crate::zz_values::{
         Int,
         N,
+        Width,
     };
 
     fn form(
@@ -476,9 +478,9 @@ mod subset {
     ) -> Form {
         let Some(source) = source
         else {
-            return Form::full(subject, 0);
+            return Form::full(subject, Width::W16);
         };
-        let form = resolved(source, subject).form(0);
+        let form = resolved(source, subject).values(Width::W16);
         assert!(form.is_ok(), "{source}: {:?}", form.err());
         return form.unwrap();
     }
@@ -509,8 +511,8 @@ mod subset {
     ) -> String {
         let source_form = form(source, source_type);
         let target_form = form(target, target_type);
-        let range = target_type.bounds_for_pointer_width(16);
-        let (min, max) = source_type.bounds_for_pointer_width(16);
+        let range = target_type.bounds_for_pointer_width(Width::W16);
+        let (min, max) = source_type.bounds_for_pointer_width(Width::W16);
         let fits = |it: Int| range.0 <= it && it <= range.1;
         let members = (min.to_i128()..=max.to_i128())
             .map(Int::from_i128)
@@ -633,7 +635,7 @@ mod subset {
     fn walk_above_the_budget_is_refused() {
         let source = form(Some("mul(997)"), N::U064);
         let target = form(Some("rem_euclid(1009) in ..100"), N::U064);
-        let range = N::U064.bounds_for_pointer_width(16);
+        let range = N::U064.bounds_for_pointer_width(Width::W16);
         let verdict = text(&subset(&source, &target, range));
 
         assert_eq!(verdict, "budget 101909");

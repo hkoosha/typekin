@@ -7,6 +7,7 @@ mod tests {
         ekran_with,
     };
     use crate::integral_cfg::Cfg;
+    use crate::zz_lib::Named as _;
     use crate::zz_values::N;
 
     fn expansion_of(
@@ -18,7 +19,7 @@ mod tests {
             StoragePlan::new(el, config.requires_non_zero_storage(), false);
         return ekran_with(
             format_ident!("Percent"),
-            format_ident!("{}", el.rust_name()),
+            format_ident!("{}", el.name()),
             Box::new(config),
             storage,
         )

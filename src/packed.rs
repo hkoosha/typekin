@@ -61,9 +61,9 @@ use crate::zz_domain_within_const::__TYPEKIN_WITHIN_BUDGET;
 use crate::zz_flags::{
     Flag,
     FlagGrammar,
+    FlagRow,
     FlagSettings,
     Flags,
-    KonstFlags,
 };
 use crate::zz_hide::{
     Envelope,
@@ -75,11 +75,15 @@ use crate::zz_hide::{
 use crate::zz_lib::{
     Key,
     Konst,
+    KonstFamily,
     Konsts,
     NUMERIC_LINTS,
+    Named as _,
+    Site,
     lint_scope,
     one_or_list,
     parse_inner,
+    reject_generics,
 };
 use crate::zz_names::{
     NameKey,
@@ -90,6 +94,7 @@ use crate::zz_runner::MkErr;
 use crate::zz_values::{
     F,
     N,
+    Width,
 };
 use crate::{
     integral,
@@ -99,8 +104,8 @@ use crate::{
 
 /// The `with`/`without` grammar of `packed`: its own flags only.
 const GRAMMAR: FlagGrammar = FlagGrammar {
-    konsts: &[],
-    removals: false,
+    konsts: None,
+    removals: &[],
 };
 
 /// The item shape `packed` accepts.
@@ -173,7 +178,7 @@ pub(crate) fn ekran(
 ) -> syn::Result<TokenStream> {
     let PackedItem(mut item) = item;
     let repr = cfg.repr()?;
-    reject_generics(&item)?;
+    reject_generics(&item.generics, SHAPE)?;
 
     let mut envelope = Envelope::new(&cfg.hide_in, &item, &item.vis);
     envelope.prepare(&mut item, None::<&marker_tree::Cfg>)?;
@@ -195,17 +200,6 @@ pub(crate) fn ekran(
     let implementation = maker.ekran(&values_visibility)?;
 
     return Ok(envelope.finish(attributes, item, implementation));
-}
-
-/// `packed` takes no generic parameters and no `where` clause.
-fn reject_generics(item: &ItemStruct) -> syn::Result<()> {
-    if !item.generics.params.is_empty() {
-        return item.generics.params.fail(SHAPE);
-    }
-    if let Some(clause) = &item.generics.where_clause {
-        return clause.fail(SHAPE);
-    }
-    return Ok(());
 }
 
 // =============================================================================
@@ -460,7 +454,7 @@ fn window_in(
             "{} {} `{}` ({bits} bits)",
             window.text(),
             window.agree("exceed"),
-            repr.rust_name(),
+            repr.name(),
         ));
     }
     return Ok(window);
@@ -490,7 +484,7 @@ fn parse_range(input: ParseStream) -> syn::Result<(u32, Option<u32>, String)> {
 
 /// The bit width of a fixed-width integer type.
 fn repr_bits(repr: N) -> u32 {
-    return repr.bits_for_pointer_width(64) as u32;
+    return repr.bits_for_pointer_width(Width::W64) as u32;
 }
 
 /// The field type's encoding; `bool` and primitives must fill their window.
@@ -598,7 +592,7 @@ impl Maker {
                 || int.helper_konst(),
         );
         let this = Self {
-            el: format_ident!("{}", repr.rust_name()),
+            el: format_ident!("{}", repr.name()),
             storage: StoragePlan::new(repr, non_zero, false),
             cfg,
             ty,
@@ -712,7 +706,7 @@ impl Maker {
     ) -> TokenStream {
         let bits = self.bits(field, raw);
         let pad = Self::amount(repr_bits(self.repr) - field.window.width());
-        let signed = format_ident!("{}", self.repr.signed_rust_name());
+        let signed = format_ident!("{}", self.repr.signed().name());
         let ty = &field.ty;
         let raw_type = self.integral.get(IntegralName::WithinRaw);
         return quote! {
@@ -738,8 +732,7 @@ impl Maker {
         return match field.shape {
             Shape::Bool => quote! { ((#value as #el) << #lo) },
             Shape::Primitive(primitive) => {
-                let unsigned =
-                    format_ident!("{}", primitive.unsigned_rust_name());
+                let unsigned = format_ident!("{}", primitive.unsigned().name());
                 quote! { ((#value as #unsigned as #el) << #lo) }
             }
             Shape::Wrapper => {
@@ -765,15 +758,15 @@ impl Maker {
     /// The record built from `raw`, which every field value fits: debug
     /// builds check it.
     fn construct(&self) -> TokenStream {
-        let valid = self.names.get(PackedName::ValidFn);
+        let valid = [self.names.get(PackedName::ValidFn).into()];
         let storage = self.storage.storage_expression(quote! { raw });
-        return quote! {
-            ::core::debug_assert!(
-                #valid(raw),
-                "typekin packed record invariant violated",
+        let violated = "typekin packed record invariant violated";
+        return crate::zz_lib::Validation::new(None, &valid, &quote! { raw })
+            .construct(
+                crate::zz_lib::Check::DebugOnly(violated),
+                crate::zz_lib::OnInvalid::Panic(violated),
+                quote! { Self(#storage) },
             );
-            return Self(#storage);
-        };
     }
 
     // -------------------------------------------------------------------------
@@ -944,14 +937,11 @@ impl Maker {
             Shape::Primitive(_) => quote! { return (raw >> #lo) as #ty; },
             Shape::Wrapper => {
                 let value = self.wrapper_raw(field, &raw);
-                quote! {
-                    return match <#ty>::try_make(#value) {
-                        ::core::result::Result::Ok(value) => value,
-                        ::core::result::Result::Err(_) => {
-                            ::core::panic!("typekin packed field invariant violated")
-                        }
-                    };
-                }
+                let value = crate::zz_lib::unwrap_or_panic(
+                    quote! { <#ty>::try_make(#value) },
+                    "typekin packed field invariant violated",
+                );
+                quote! { return #value; }
             }
         };
         return quote! {
@@ -1291,7 +1281,11 @@ fn integral_cfg(
         int.non_zero = NonZeroPolicy::Require;
         int.validation.require_non_zero(true);
     }
-    int.embed_konst(cfg.konst, &KonstFlags::default())?;
+    let outer = integral_cfg::WrapperWide {
+        konst: cfg.konst,
+        ..Default::default()
+    };
+    int.wide.embed(&outer)?;
     int.hide_in = cfg.hide_in.clone();
     return Ok(Box::new(int));
 }
@@ -1325,7 +1319,9 @@ impl Parse for Cfg {
             settings: FlagSettings::default(),
             flags: PackedFlags::default(),
         };
-        parse_inner(input, |key, rest| this.parse_attr(key, rest))?;
+        parse_inner(input, Site::Packed, |key, rest| {
+            return this.parse_attr(key, rest);
+        })?;
         this.settings.apply(&mut this.flags);
         if let Some((true, span)) = this.settings.flag(PackedFlag::Ord)
             && !this.flags.has(PackedFlag::Eq)
@@ -1351,12 +1347,8 @@ impl Cfg {
                 reject_integral_flags(rest)?;
                 self.settings.parse(rest, key == Key::With, &GRAMMAR)?;
             }
-            other => {
-                return rest.span().fail(format!(
-                    "`packed` does not support `{}`",
-                    other.name()
-                ));
-            }
+            // `parse_inner` names every other key at `Site::Packed`.
+            _ => return Ok(false),
         }
         return Ok(true);
     }
@@ -1386,7 +1378,7 @@ impl Cfg {
 /// target.
 fn parse_repr(input: ParseStream) -> syn::Result<N> {
     let name: Ident = input.parse()?;
-    return match N::of(name.to_string()) {
+    return match N::of(&name.to_string()) {
         Some(N::USIZ) => name.fail(
             "`packed` needs a fixed-width `repr`; the width of `usize` \
             depends on the target",
@@ -1407,7 +1399,7 @@ fn reject_integral_flags(input: ParseStream) -> syn::Result<()> {
         let name = ident.to_string();
         if PackedFlag::of(&name).is_none()
             && (IntegralFlag::of(&name).is_some()
-                || Konsts::of_in(&name, Konsts::INTEGRAL).is_some())
+                || Konsts::of_in(&name, KonstFamily::Integral).is_some())
         {
             return ident.fail(format!("`packed` does not support `{name}`"));
         }
@@ -1484,46 +1476,27 @@ pub(crate) enum PackedFlag {
 }
 
 impl Flag for PackedFlag {
-    const ITEMS: &'static [Self] = &[
-        Self::Debug,
-        Self::Eq,
-        Self::Hash,
-        Self::ValuesStruct,
-        Self::NonZero,
-        Self::Ord,
-        Self::Serde,
+    const ROWS: &'static [FlagRow<Self>] = &[
+        FlagRow::on(Self::Debug, "debug"),
+        FlagRow::on(Self::Eq, "eq"),
+        FlagRow::on(Self::Hash, "hash"),
+        FlagRow::on(Self::ValuesStruct, "values_struct"),
+        FlagRow::off(Self::NonZero, "non_zero"),
+        FlagRow::off(Self::Ord, "ord"),
+        FlagRow::off(Self::Serde, "serde"),
     ];
-    const DEFAULT_ON: &'static [Self] = &[
-        Self::Debug,
-        Self::Eq,
-        Self::Hash,
-        Self::ValuesStruct,
-    ];
-
-    fn name(self) -> &'static str {
-        return match self {
-            Self::Debug => "debug",
-            Self::Eq => "eq",
-            Self::Hash => "hash",
-            Self::ValuesStruct => "values_struct",
-            Self::NonZero => "non_zero",
-            Self::Ord => "ord",
-            Self::Serde => "serde",
-        };
-    }
 
     fn index(self) -> u32 {
         return self as u32;
     }
 }
 
-// Every variant is in `ITEMS`, at its own index.
+// Every row of `ROWS` is at its variant's index.
 const _: () = {
-    let items = <PackedFlag as Flag>::ITEMS;
-    assert!(items.len() == PackedFlag::Serde as usize + 1);
+    let rows = <PackedFlag as Flag>::ROWS;
     let mut index = 0;
-    while index < items.len() {
-        assert!(items[index] as usize == index);
+    while index < rows.len() {
+        assert!(rows[index].flag as usize == index);
         index += 1;
     }
 };

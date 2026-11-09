@@ -53,6 +53,7 @@ use crate::zz_runner::{
 };
 use crate::zz_values::{
     FnName,
+    Int,
     N,
     Num,
 };
@@ -109,6 +110,65 @@ impl Ord for PathIdentity {
     }
 }
 
+/// A family of names that logic compares, matches, or looks up: an enum
+/// whose text lives in one row table. `of` is the parse boundary.
+pub(crate) trait Named: Copy + 'static {
+    /// Every variant with its text, in declaration order:
+    /// `TABLE[i].0 as usize == i`, which each enum asserts at compile time.
+    const TABLE: &'static [(Self, &'static str)];
+
+    /// `self as usize`: the position in `TABLE`.
+    fn index(self) -> usize;
+
+    fn name(self) -> &'static str {
+        return Self::TABLE[self.index()].1;
+    }
+
+    fn of(name: &str) -> Option<Self> {
+        return Self::TABLE
+            .iter()
+            .find(|(_, text)| *text == name)
+            .map(|(it, _)| *it);
+    }
+
+    /// Every variant, in `TABLE` order.
+    fn items() -> impl Iterator<Item = Self> {
+        return Self::TABLE.iter().map(|(it, _)| *it);
+    }
+}
+
+/// "expected `a`, `b`, or `c`": the names of `T`, in `TABLE` order.
+pub(crate) fn expected_choice<T: Named>() -> String {
+    let names = T::TABLE
+        .iter()
+        .map(|(_, name)| format!("`{name}`"))
+        .collect::<Vec<_>>();
+    return match names.as_slice() {
+        [] => String::from("expected nothing"),
+        [only] => format!("expected {only}"),
+        [
+            first,
+            second,
+        ] => format!("expected {first} or {second}"),
+        [
+            rest @ ..,
+            last,
+        ] => {
+            format!("expected {}, or {last}", rest.join(", "))
+        }
+    };
+}
+
+/// One name of `T`. Any other name is "expected `a`, `b`, or `c`" at the
+/// name; a token that is no identifier is syn's "expected identifier".
+pub(crate) fn parse_choice<T: Named>(input: ParseStream) -> syn::Result<T> {
+    let name = input.parse::<Ident>()?;
+    return match T::of(&name.to_string()) {
+        Some(it) => Ok(it),
+        None => name.span().fail(expected_choice::<T>()),
+    };
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum Konsts {
     Add,
@@ -159,131 +219,170 @@ pub(crate) enum Konsts {
     XorAssign,
 }
 
-impl Konsts {
-    pub(crate) const INTEGRAL: &[Self] = &[
-        Self::Add,
-        Self::AddAssign,
-        Self::And,
-        Self::AndAssign,
-        Self::Assign,
-        Self::Bit,
-        Self::Comparison,
-        Self::Conversion,
-        Self::CoreFloat,
-        Self::CoreInt,
-        Self::Div,
-        Self::DivAssign,
-        Self::Eq,
-        Self::Friendship,
-        Self::Into,
-        Self::Iterator,
-        Self::Map,
-        Self::Math,
-        Self::Mul,
-        Self::MulAssign,
-        Self::Neg,
-        Self::Not,
-        Self::Of,
-        Self::Or,
-        Self::OrAssign,
-        Self::Ord,
-        Self::PartialEq,
-        Self::PartialOrd,
-        Self::Rem,
-        Self::RemAssign,
-        Self::Shl,
-        Self::ShlAssign,
-        Self::Shr,
-        Self::ShrAssign,
-        Self::Sub,
-        Self::SubAssign,
-        Self::TryInto,
-        Self::TryMake,
-        Self::Value,
-        Self::Xor,
-        Self::XorAssign,
-    ];
+/// The families whose `with`/`without` take `konst_*` flags.
+#[derive(Clone, Copy)]
+pub(crate) enum KonstFamily {
+    Integral,
+    Text,
+}
 
-    pub(crate) const TEXT: &[Self] = &[
-        Self::Friendship,
-        Self::From,
-        Self::Text,
-        Self::TextAccess,
-        Self::TextFriendship,
-        Self::TextFrom,
-    ];
-
-    pub(crate) fn is_stable(self) -> bool {
-        return matches!(
-            self,
-            Self::CoreInt
-                | Self::CoreFloat
-                | Self::TryMake
-                | Self::Value
-                | Self::TextAccess
-        );
-    }
-
-    /// `name`'s `konst_*` flag, if `family` (`INTEGRAL`, `TEXT`) has it.
-    pub(crate) fn of_in(
-        name: &str,
-        family: &[Self],
-    ) -> Option<Self> {
-        return Self::parse_konst_flags(name).filter(|it| family.contains(it));
-    }
-
-    fn parse_konst_flags(name: &str) -> Option<Konsts> {
-        return Some(match name {
-            "konst_add" => Konsts::Add,
-            "konst_add_assign" => Konsts::AddAssign,
-            "konst_and" => Konsts::And,
-            "konst_and_assign" => Konsts::AndAssign,
-            "konst_assign" => Konsts::Assign,
-            "konst_bit" => Konsts::Bit,
-            "konst_comparison" => Konsts::Comparison,
-            "konst_conversion" => Konsts::Conversion,
-            "konst_core_float" => Konsts::CoreFloat,
-            "konst_core_int" => Konsts::CoreInt,
-            "konst_div" => Konsts::Div,
-            "konst_div_assign" => Konsts::DivAssign,
-            "konst_eq" => Konsts::Eq,
-            "konst_friendship" => Konsts::Friendship,
-            "konst_from" => Konsts::From,
-            "konst_into" => Konsts::Into,
-            "konst_iterator" => Konsts::Iterator,
-            "konst_map" => Konsts::Map,
-            "konst_math" => Konsts::Math,
-            "konst_mul" => Konsts::Mul,
-            "konst_mul_assign" => Konsts::MulAssign,
-            "konst_neg" => Konsts::Neg,
-            "konst_not" => Konsts::Not,
-            "konst_of" => Konsts::Of,
-            "konst_or" => Konsts::Or,
-            "konst_or_assign" => Konsts::OrAssign,
-            "konst_ord" => Konsts::Ord,
-            "konst_partial_eq" => Konsts::PartialEq,
-            "konst_partial_ord" => Konsts::PartialOrd,
-            "konst_rem" => Konsts::Rem,
-            "konst_rem_assign" => Konsts::RemAssign,
-            "konst_shl" => Konsts::Shl,
-            "konst_shl_assign" => Konsts::ShlAssign,
-            "konst_shr" => Konsts::Shr,
-            "konst_shr_assign" => Konsts::ShrAssign,
-            "konst_sub" => Konsts::Sub,
-            "konst_sub_assign" => Konsts::SubAssign,
-            "konst_text" => Konsts::Text,
-            "konst_text_access" => Konsts::TextAccess,
-            "konst_text_friendship" => Konsts::TextFriendship,
-            "konst_text_from" => Konsts::TextFrom,
-            "konst_try_into" => Konsts::TryInto,
-            "konst_try_make" => Konsts::TryMake,
-            "konst_value" => Konsts::Value,
-            "konst_xor" => Konsts::Xor,
-            "konst_xor_assign" => Konsts::XorAssign,
-            _ => return None,
-        });
+impl KonstFamily {
+    /// The family's `konst_*` flags, in `Konsts` order.
+    pub(crate) fn konsts(self) -> impl Iterator<Item = Konsts> {
+        return Konsts::ROWS
+            .iter()
+            .filter(move |row| row.is_in(self))
+            .map(|row| row.konst);
     }
 }
+
+/// One `konst_*` flag: its name after `konst_`, whether its items can be
+/// `const` on stable Rust, and the families that take it.
+struct KonstRow {
+    konst: Konsts,
+    name: &'static str,
+    stable: bool,
+    integral: bool,
+    text: bool,
+}
+
+impl KonstRow {
+    /// A nightly-only flag no family takes yet.
+    const fn of(
+        konst: Konsts,
+        name: &'static str,
+    ) -> Self {
+        return Self {
+            konst,
+            name,
+            stable: false,
+            integral: false,
+            text: false,
+        };
+    }
+
+    const fn stable(mut self) -> Self {
+        self.stable = true;
+        return self;
+    }
+
+    const fn integral(mut self) -> Self {
+        self.integral = true;
+        return self;
+    }
+
+    const fn text(mut self) -> Self {
+        self.text = true;
+        return self;
+    }
+
+    fn is_in(
+        &self,
+        family: KonstFamily,
+    ) -> bool {
+        return match family {
+            KonstFamily::Integral => self.integral,
+            KonstFamily::Text => self.text,
+        };
+    }
+}
+
+impl Konsts {
+    /// The flag prefix: `with = konst_{name}`.
+    const PREFIX: &str = "konst_";
+
+    /// Every variant's row, in declaration order:
+    /// `ROWS[i].konst as usize == i`.
+    const ROWS: &[KonstRow] = &[
+        KonstRow::of(Self::Add, "add").integral(),
+        KonstRow::of(Self::AddAssign, "add_assign").integral(),
+        KonstRow::of(Self::And, "and").integral(),
+        KonstRow::of(Self::AndAssign, "and_assign").integral(),
+        KonstRow::of(Self::Assign, "assign").integral(),
+        KonstRow::of(Self::Bit, "bit").integral(),
+        KonstRow::of(Self::Comparison, "comparison").integral(),
+        KonstRow::of(Self::Conversion, "conversion").integral(),
+        KonstRow::of(Self::CoreFloat, "core_float")
+            .integral()
+            .stable(),
+        KonstRow::of(Self::CoreInt, "core_int").integral().stable(),
+        KonstRow::of(Self::Div, "div").integral(),
+        KonstRow::of(Self::DivAssign, "div_assign").integral(),
+        KonstRow::of(Self::Eq, "eq").integral(),
+        KonstRow::of(Self::Friendship, "friendship")
+            .integral()
+            .text(),
+        KonstRow::of(Self::From, "from").text(),
+        KonstRow::of(Self::Into, "into").integral(),
+        KonstRow::of(Self::Iterator, "iterator").integral(),
+        KonstRow::of(Self::Map, "map").integral(),
+        KonstRow::of(Self::Math, "math").integral(),
+        KonstRow::of(Self::Mul, "mul").integral(),
+        KonstRow::of(Self::MulAssign, "mul_assign").integral(),
+        KonstRow::of(Self::Neg, "neg").integral(),
+        KonstRow::of(Self::Not, "not").integral(),
+        KonstRow::of(Self::Of, "of").integral(),
+        KonstRow::of(Self::Or, "or").integral(),
+        KonstRow::of(Self::OrAssign, "or_assign").integral(),
+        KonstRow::of(Self::Ord, "ord").integral(),
+        KonstRow::of(Self::PartialEq, "partial_eq").integral(),
+        KonstRow::of(Self::PartialOrd, "partial_ord").integral(),
+        KonstRow::of(Self::Rem, "rem").integral(),
+        KonstRow::of(Self::RemAssign, "rem_assign").integral(),
+        KonstRow::of(Self::Shl, "shl").integral(),
+        KonstRow::of(Self::ShlAssign, "shl_assign").integral(),
+        KonstRow::of(Self::Shr, "shr").integral(),
+        KonstRow::of(Self::ShrAssign, "shr_assign").integral(),
+        KonstRow::of(Self::Sub, "sub").integral(),
+        KonstRow::of(Self::SubAssign, "sub_assign").integral(),
+        KonstRow::of(Self::Text, "text").text(),
+        KonstRow::of(Self::TextAccess, "text_access")
+            .text()
+            .stable(),
+        KonstRow::of(Self::TextFriendship, "text_friendship").text(),
+        KonstRow::of(Self::TextFrom, "text_from").text(),
+        KonstRow::of(Self::TryInto, "try_into").integral(),
+        KonstRow::of(Self::TryMake, "try_make").integral().stable(),
+        KonstRow::of(Self::Value, "value").integral().stable(),
+        KonstRow::of(Self::Xor, "xor").integral(),
+        KonstRow::of(Self::XorAssign, "xor_assign").integral(),
+    ];
+
+    fn row(self) -> &'static KonstRow {
+        return &Self::ROWS[self as usize];
+    }
+
+    pub(crate) fn is_stable(self) -> bool {
+        return self.row().stable;
+    }
+
+    /// The flag `konst_{name}`, of any family.
+    fn of(name: &str) -> Option<Self> {
+        let name = name.strip_prefix(Self::PREFIX)?;
+        return Self::ROWS
+            .iter()
+            .find(|row| row.name == name)
+            .map(|row| row.konst);
+    }
+
+    /// `name`'s `konst_*` flag, if `family` takes it.
+    pub(crate) fn of_in(
+        name: &str,
+        family: KonstFamily,
+    ) -> Option<Self> {
+        return Self::of(name).filter(|it| it.row().is_in(family));
+    }
+}
+
+// Every row of `ROWS` is at its variant's index.
+const _: () = {
+    let rows = Konsts::ROWS;
+    let mut index = 0;
+    while index < rows.len() {
+        assert!(rows[index].konst as usize == index);
+        index += 1;
+    }
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Konst {
@@ -302,26 +401,35 @@ impl Default for Konst {
     }
 }
 
+impl Named for Konst {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::None, "none"),
+        (Self::Stable, "stable"),
+        (Self::Nightly, "nightly"),
+    ];
+
+    fn index(self) -> usize {
+        return self as usize;
+    }
+}
+
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = Konst::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
 impl Parse for Konst {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if !input.peek(syn::Ident) {
-            return Err(syn::Error::new(
-                input.span(),
-                "expected `none`, `stable`, or `nightly`",
-            ));
+            return input.span().fail(expected_choice::<Self>());
         }
 
-        let name = input.parse::<Ident>()?;
-
-        return match name.to_string().as_str() {
-            "none" => Ok(Self::None),
-            "stable" => Ok(Self::Stable),
-            "nightly" => Ok(Self::Nightly),
-            _ => Err(syn::Error::new(
-                name.span(),
-                "expected `none`, `stable`, or `nightly`",
-            )),
-        };
+        return parse_choice(input);
     }
 }
 
@@ -438,30 +546,122 @@ pub(crate) fn lint_scope(
     };
 }
 
-/// `return if #condition { Ok(#ok) } else { Err(#err) };`, fully qualified.
-pub(crate) fn validated_result(
-    condition: &TokenStream,
-    ok: TokenStream,
-    err: TokenStream,
+/// `expr`'s `Ok` value; its `Err` panics with `message`, the arguments of
+/// `panic!`.
+pub(crate) fn unwrap_or_panic(
+    expr: TokenStream,
+    message: impl ToTokens,
 ) -> TokenStream {
     return quote! {
-        return if #condition {
-            ::core::result::Result::Ok(#ok)
+        match #expr {
+            ::core::result::Result::Ok(value) => value,
+            ::core::result::Result::Err(_) => {
+                ::core::panic!(#message)
+            }
         }
-        else {
-            ::core::result::Result::Err(#err)
-        };
     };
 }
 
-pub(crate) fn callback_condition(
-    callbacks: &[Path],
-    value: &TokenStream,
-) -> Option<TokenStream> {
-    return callbacks
-        .iter()
-        .map(|callback| quote! { #callback(#value) })
-        .reduce(|left, right| quote! { (#left) && (#right) });
+/// When a constructor evaluates its validation.
+#[derive(Clone, Copy)]
+pub(crate) enum Check {
+    Validate,
+    /// In a `debug_assert!` with this message: a proof shows the value
+    /// valid, so release builds construct unchecked.
+    DebugOnly(&'static str),
+}
+
+/// What a constructor returns for an invalid value; that also fixes how it
+/// returns the valid one (`Ok`, `Some`, or the bare value).
+pub(crate) enum OnInvalid {
+    Err(TokenStream),
+    None,
+    /// A panic with this message.
+    Panic(&'static str),
+}
+
+/// The validation of one raw value, an ordered list of conjuncts: the
+/// domain's condition, then each callback's call. As tokens it is their
+/// short-circuit conjunction (`true` without conjuncts), the callbacks
+/// grouped as one operand beside the domain.
+pub(crate) struct Validation {
+    domain: Option<TokenStream>,
+    callbacks: Vec<TokenStream>,
+}
+
+impl Validation {
+    pub(crate) fn new(
+        domain: Option<TokenStream>,
+        callbacks: &[Path],
+        value: &TokenStream,
+    ) -> Self {
+        let callbacks = callbacks.iter().map(|it| quote! { #it(#value) });
+        return Self {
+            domain,
+            callbacks: callbacks.collect(),
+        };
+    }
+
+    /// The statements ending a constructor's body: check the raw value,
+    /// return `constructed` (built from it), else fail as `on_invalid`
+    /// says. `Check::DebugOnly` only asserts, and only when there is
+    /// something to check.
+    pub(crate) fn construct(
+        &self,
+        check: Check,
+        on_invalid: OnInvalid,
+        constructed: TokenStream,
+    ) -> TokenStream {
+        let (valid, invalid) = match on_invalid {
+            OnInvalid::Err(error) => (
+                quote! { ::core::result::Result::Ok(#constructed) },
+                quote! { ::core::result::Result::Err(#error) },
+            ),
+            OnInvalid::None => (
+                quote! { ::core::option::Option::Some(#constructed) },
+                quote! { ::core::option::Option::None },
+            ),
+            OnInvalid::Panic(message) => {
+                (constructed, quote! { ::core::panic!(#message) })
+            }
+        };
+        return match check {
+            Check::Validate => quote! {
+                return if #self {
+                    #valid
+                }
+                else {
+                    #invalid
+                };
+            },
+            Check::DebugOnly(message) => {
+                let checked =
+                    self.domain.is_some() || !self.callbacks.is_empty();
+                let assertion = checked.then(|| {
+                    return quote! {
+                        ::core::debug_assert!(#self, #message,);
+                    };
+                });
+                quote! {
+                    #assertion
+                    return #valid;
+                }
+            }
+        };
+    }
+}
+
+impl ToTokens for Validation {
+    fn to_tokens(
+        &self,
+        tokens: &mut TokenStream,
+    ) {
+        let both = |left, right| quote! { (#left) && (#right) };
+        let callbacks = self.callbacks.iter().cloned().reduce(both);
+        let condition = self.domain.iter().cloned().chain(callbacks);
+        tokens
+            .extend(condition.reduce(both).unwrap_or_else(|| quote! { true }));
+    }
 }
 
 /// A domain resolved for its value type.
@@ -510,24 +710,19 @@ pub(crate) struct ValidationCfg {
 }
 
 impl ValidationCfg {
-    /// Domain first, then callbacks in declaration order (D12): callbacks only
-    /// see values the domain admits.
+    /// The validation of `value`: the domain first, then callbacks in
+    /// declaration order (D12), so callbacks only see values the domain
+    /// admits.
     pub(crate) fn emit(
         &self,
         value: &TokenStream,
-    ) -> TokenStream {
+    ) -> Validation {
         let domain = self.resolved.as_ref().map(|it| it.emit(value));
         assert!(
             domain.is_some() || (self.domain.is_none() && !self.non_zero),
             "validation is emitted after the domain is resolved"
         );
-        let callbacks = callback_condition(&self.callbacks, value);
-
-        return domain
-            .into_iter()
-            .chain(callbacks)
-            .reduce(|left, right| quote! { (#left) && (#right) })
-            .unwrap_or_else(|| quote! { true });
+        return Validation::new(domain, &self.callbacks, value);
     }
 
     /// Types the domain (and `non_zero`) for the value type. Called where the
@@ -625,7 +820,9 @@ impl ValidationCfg {
     /// that, only when the untyped probe is definite.
     pub(crate) fn domain_excludes_zero(&self) -> bool {
         match &self.resolved {
-            Some(Resolved::Int(it)) => return it.excludes_zero(),
+            Some(Resolved::Int(it)) => {
+                return it.excludes(Int::NonNegative(0));
+            }
             Some(Resolved::Float(_)) => return false,
             None => {}
         }
@@ -659,6 +856,21 @@ impl ValidationCfg {
 
 pub(crate) fn parse_callbacks(input: ParseStream) -> syn::Result<Vec<Path>> {
     return Ok(one_or_list::<Path>(input)?.collect());
+}
+
+/// Fails with `message` at the generic parameters, else at the `where`
+/// clause, of an item that may have neither.
+pub(crate) fn reject_generics(
+    generics: &syn::Generics,
+    message: &str,
+) -> syn::Result<()> {
+    if !generics.params.is_empty() {
+        return generics.params.fail(message);
+    }
+    if let Some(clause) = &generics.where_clause {
+        return clause.fail(message);
+    }
+    return Ok(());
 }
 
 pub(crate) fn get_concrete_type(
@@ -776,39 +988,78 @@ pub(crate) fn tuple<T: Parse>(
     return Ok(many);
 }
 
+/// The form of a generated function beside the method it forwards to.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Form {
+    /// `{name}`: the method's own name.
+    Regular,
+    /// `try_{name}`: the method's effect, validated into a `Result`.
+    Try,
+}
+
+impl Form {
+    /// What the form puts before the method's name in the generated
+    /// function's name, and so in `without = fn_{prefix}{name}`.
+    pub(crate) fn prefix(self) -> &'static str {
+        return match self {
+            Self::Regular => "",
+            Self::Try => "try_",
+        };
+    }
+}
+
 /// A generated function forwarding to a `core` function (text: a `String`
-/// method). `without = fn_{name}` removes it, `name` keying both its removal
-/// and its generated name.
+/// method). `without = fn_{name}` removes it, `form` and `name` keying both
+/// its removal and its generated name.
 pub(crate) struct Forward {
+    form: Form,
     name: FnName,
     tokens: TokenStream,
 }
 
 impl Forward {
-    /// `emit` receives the function's identifier from `names`.
+    /// The regular form of `name`. `emit` receives the function's
+    /// identifier from `names`.
     pub(crate) fn new<K: NameKey + From<FnName>>(
         name: FnName,
         names: &ResolvedNames<K>,
         emit: impl FnOnce(&Ident) -> TokenStream,
     ) -> Self {
         let tokens = emit(&names.get(K::from(name)));
-        return Self { name, tokens };
+        return Self {
+            form: Form::Regular,
+            name,
+            tokens,
+        };
+    }
+
+    /// The `try_` form of `name`. `emit` receives the function's
+    /// identifier (`try_{name}`) from `names`.
+    pub(crate) fn new_try<K: NameKey + From<(Form, FnName)>>(
+        name: FnName,
+        names: &ResolvedNames<K>,
+        emit: impl FnOnce(&Ident) -> TokenStream,
+    ) -> Self {
+        let form = Form::Try;
+        let tokens = emit(&names.get(K::from((form, name))));
+        return Self { form, name, tokens };
     }
 }
 
-/// `without = fn_{name}`: the generated functions to remove, with the span
-/// of each flag.
+/// `without = fn_{name}`: the generated functions to remove, each keyed by
+/// its form and the method it forwards to, with the span of each flag.
 #[derive(Clone, Default)]
-pub(crate) struct Removals(BTreeMap<FnName, Span>);
+pub(crate) struct Removals(BTreeMap<(Form, FnName), Span>);
 
 impl Removals {
-    /// Records the removal of `function`, written at `span`.
+    /// Records the removal of the `form` of `function`, written at `span`.
     pub(crate) fn insert(
         &mut self,
+        form: Form,
         function: FnName,
         span: Span,
     ) {
-        self.0.insert(function, span);
+        self.0.insert((form, function), span);
     }
 
     pub(crate) fn extend(
@@ -816,14 +1067,23 @@ impl Removals {
         that: &Self,
     ) {
         self.0
-            .extend(that.0.iter().map(|(name, span)| (*name, *span)));
+            .extend(that.0.iter().map(|(key, span)| (*key, *span)));
     }
 
+    /// Whether the regular form of `name` is removed.
     pub(crate) fn removes(
         &self,
         name: FnName,
     ) -> bool {
-        return self.0.contains_key(&name);
+        return self.removes_form(Form::Regular, name);
+    }
+
+    pub(crate) fn removes_form(
+        &self,
+        form: Form,
+        name: FnName,
+    ) -> bool {
+        return self.0.contains_key(&(form, name));
     }
 
     pub(crate) fn first_span(&self) -> Option<Span> {
@@ -839,19 +1099,21 @@ impl Removals {
         let mut removed = BTreeSet::new();
         let mut kept = TokenStream::new();
         for forward in forwards {
-            if self.removes(forward.name) {
-                removed.insert(forward.name);
+            let key = (forward.form, forward.name);
+            if self.0.contains_key(&key) {
+                removed.insert(key);
                 continue;
             }
             kept.extend(forward.tokens);
         }
 
-        if let Some((name, span)) =
-            self.0.iter().find(|(name, _)| !removed.contains(*name))
+        if let Some(((form, name), span)) =
+            self.0.iter().find(|(key, _)| !removed.contains(*key))
         {
+            let prefix = form.prefix();
             let name = name.name();
             return span.fail(format!(
-                "`fn_{name}` removes nothing: no generated function `{name}`"
+                "`fn_{prefix}{name}` removes nothing: no generated function `{prefix}{name}`"
             ));
         }
 
@@ -871,12 +1133,12 @@ pub(crate) fn find_repr_n(
         .try_for_each(|it| {
             it.parse_nested_meta(|it| {
                 for n in N::items() {
-                    if it.path.is_ident(n.rust_name()) {
+                    if it.path.is_ident(n.name()) {
                         if repr.is_some() {
                             return span.fail("multiple repr matched");
                         }
                         else {
-                            repr = Some(*n);
+                            repr = Some(n);
                         }
                     }
                 }
@@ -927,99 +1189,153 @@ pub(crate) enum Key {
     Without,
 }
 
-impl Key {
-    const ITEMS: [Self; 34] = [
-        Self::Conversion,
-        Self::Domain,
-        Self::Error,
-        Self::ExtraCaps,
-        Self::Facet,
-        Self::Friend,
-        Self::GetRaw,
-        Self::HideIn,
-        Self::Integral,
-        Self::Konst,
-        Self::LitName,
-        Self::LitPath,
-        Self::Maker,
-        Self::Math,
-        Self::Mod,
-        Self::PanicAt,
-        Self::Precedes,
-        Self::Produce,
-        Self::Profile,
-        Self::Prove,
-        Self::Relation,
-        Self::Relationship,
-        Self::Repr,
-        Self::Scope,
-        Self::Seal,
-        Self::Std,
-        Self::Suffix,
-        Self::Tree,
-        Self::Valid,
-        Self::Value,
-        Self::ValueName,
-        Self::ValuesName,
-        Self::With,
-        Self::Without,
+impl Named for Key {
+    const TABLE: &'static [(Self, &'static str)] = &[
+        (Self::Conversion, "conversion"),
+        (Self::Domain, "domain"),
+        (Self::Error, "error"),
+        (Self::ExtraCaps, "extra_caps"),
+        (Self::Facet, "facet"),
+        (Self::Friend, "friend"),
+        (Self::GetRaw, "get_raw"),
+        (Self::HideIn, "hide_in"),
+        (Self::Integral, "integral"),
+        (Self::Konst, "konst"),
+        (Self::LitName, "lit_name"),
+        (Self::LitPath, "lit_path"),
+        (Self::Maker, "maker"),
+        (Self::Math, "math"),
+        (Self::Mod, "mod"),
+        (Self::PanicAt, "panic_at"),
+        (Self::Precedes, "precedes"),
+        (Self::Produce, "produce"),
+        (Self::Profile, "profile"),
+        (Self::Prove, "prove"),
+        (Self::Relation, "relation"),
+        (Self::Relationship, "relationship"),
+        (Self::Repr, "repr"),
+        (Self::Scope, "scope"),
+        (Self::Seal, "seal"),
+        (Self::Std, "std"),
+        (Self::Suffix, "suffix"),
+        (Self::Tree, "tree"),
+        (Self::Valid, "valid"),
+        (Self::Value, "value"),
+        (Self::ValueName, "value_name"),
+        (Self::ValuesName, "values_name"),
+        (Self::With, "with"),
+        (Self::Without, "without"),
     ];
 
-    pub(crate) fn name(self) -> &'static str {
-        return match self {
-            Self::Conversion => "conversion",
-            Self::Domain => "domain",
-            Self::Error => "error",
-            Self::ExtraCaps => "extra_caps",
-            Self::Facet => "facet",
-            Self::Friend => "friend",
-            Self::GetRaw => "get_raw",
-            Self::HideIn => "hide_in",
-            Self::Integral => "integral",
-            Self::Konst => "konst",
-            Self::LitName => "lit_name",
-            Self::LitPath => "lit_path",
-            Self::Maker => "maker",
-            Self::Math => "math",
-            Self::Mod => "mod",
-            Self::PanicAt => "panic_at",
-            Self::Precedes => "precedes",
-            Self::Produce => "produce",
-            Self::Profile => "profile",
-            Self::Prove => "prove",
-            Self::Relation => "relation",
-            Self::Relationship => "relationship",
-            Self::Repr => "repr",
-            Self::Scope => "scope",
-            Self::Seal => "seal",
-            Self::Std => "std",
-            Self::Suffix => "suffix",
-            Self::Tree => "tree",
-            Self::Valid => "valid",
-            Self::Value => "value",
-            Self::ValueName => "value_name",
-            Self::ValuesName => "values_name",
-            Self::With => "with",
-            Self::Without => "without",
-        };
-    }
-
-    pub(crate) fn of(name: &str) -> Option<Self> {
-        return Self::ITEMS.into_iter().find(|it| it.name() == name);
+    fn index(self) -> usize {
+        return self as usize;
     }
 }
 
-/// Parses `key = value, ...`. A name outside [`Key`], or a key `on_attr`
-/// rejects, is an unknown attribute at the value span; a repeated key is a
-/// duplicated arg at the key span.
+// Every row of `TABLE` is at its variant's index.
+const _: () = {
+    let table = Key::TABLE;
+    let mut index = 0;
+    while index < table.len() {
+        assert!(table[index].0 as usize == index);
+        index += 1;
+    }
+};
+
+/// Where a `key = value` list is parsed, which decides the keys
+/// [`rejection`] rules out there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Site {
+    /// A macro's own arguments or a profile body: no rule rejects a key, and
+    /// the family reports a key it does not take as an unknown attribute.
+    Root,
+    /// The arguments of a fixed-profile macro (`circular`, `point`, …).
+    FixedProfile,
+    /// Bitflag's `integral = [..]`.
+    Nested,
+    /// A facet body.
+    Facet,
+    /// The arguments of `packed`.
+    Packed,
+}
+
+/// A key a site rejects, with its message.
+const REJECTIONS: &[(Site, Key, &str)] = &[
+    (
+        Site::FixedProfile,
+        Key::Profile,
+        "profile is selected by this macro",
+    ),
+    (
+        Site::Nested,
+        Key::Konst,
+        "constness is specified in multiple places",
+    ),
+    (
+        Site::Nested,
+        Key::PanicAt,
+        "panic_at belongs on integral types, not in integral = [..]",
+    ),
+    (
+        Site::Nested,
+        Key::Tree,
+        "bitflag integral configuration does not support tree",
+    ),
+    (
+        Site::Nested,
+        Key::HideIn,
+        "hide_in belongs on the bitflag root, not in integral = [..]",
+    ),
+    (
+        Site::Facet,
+        Key::Precedes,
+        "`precedes` is wrapper-wide and cannot be configured inside a facet",
+    ),
+];
+
+/// Why `site` rejects `key`, when a rule says it does. [`parse_inner`] asks
+/// before the family sees the key and reports the answer at the key.
+pub(crate) fn rejection(
+    site: Site,
+    key: Key,
+) -> Option<&'static str> {
+    return REJECTIONS
+        .iter()
+        .find(|(at, rejected, _)| *at == site && *rejected == key)
+        .map(|(_, _, message)| *message);
+}
+
+impl Site {
+    /// What a key the family does not take is called here: `packed` names
+    /// it, the other sites report an unknown attribute.
+    fn unsupported(
+        self,
+        key: Key,
+    ) -> Option<String> {
+        return match self {
+            Self::Packed => {
+                Some(format!("`packed` does not support `{}`", key.name()))
+            }
+            Self::Root | Self::FixedProfile | Self::Nested | Self::Facet => {
+                None
+            }
+        };
+    }
+}
+
+/// Parses `key = value, ...` at `site`. A repeated key is a duplicated arg
+/// and a key [`rejection`] rules out at `site` fails with the rule's
+/// message, both at the key span. A key `on_attr` rejects fails at the key
+/// where the site names such keys ([`Site::unsupported`]); elsewhere it is,
+/// like a name outside [`Key`], an unknown attribute at the value span.
 ///
 /// `on_attr` parses the value after `=` and returns `Ok(true)`, or returns
 /// `Ok(false)` to reject the key; it must reject before consuming any input,
-/// so the error lands on the value span. `FacetCfg` records `precedes_span`
-/// before delegating, and `Profile::parse_attr` returns `false` for
-/// `precedes` on a non-circular profile without consuming.
+/// so the error lands on the value span. `Profile::parse_attr` returns
+/// `false` for `precedes` on a non-circular profile without consuming.
 pub(crate) fn parse_inner(
     stream: ParseStream,
+    site: Site,
     mut on_attr: impl FnMut(Key, ParseStream) -> syn::Result<bool>,
 ) -> syn::Result<()> {
     let mut seen = BTreeSet::new();
@@ -1033,8 +1349,14 @@ pub(crate) fn parse_inner(
 
         stream.parse::<Token![=]>()?;
 
+        if let Some(message) = key.and_then(|key| rejection(site, key)) {
+            return here.fail(message);
+        }
         if !key.map_or(Ok(false), |key| on_attr(key, stream))? {
-            return stream.span().fail("unknown attribute");
+            return match key.and_then(|key| site.unsupported(key)) {
+                Some(message) => here.fail(message),
+                None => stream.span().fail("unknown attribute"),
+            };
         }
 
         if !stream.is_empty() {

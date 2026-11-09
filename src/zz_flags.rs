@@ -15,7 +15,10 @@ use proc_macro2::{
 use syn::parse::ParseStream;
 
 use crate::zz_lib::{
+    Form,
+    KonstFamily,
     Konsts,
+    Named as _,
     Removals,
     one_or_list,
 };
@@ -25,26 +28,64 @@ use crate::zz_values::FnName;
 /// The flag prefix of a function removal: `without = fn_{name}`.
 const REMOVAL_PREFIX: &str = "fn_";
 
-/// A family's flag enum, hand-written with its name table (the `FnName`
-/// convention); `of` is the parse boundary.
+/// One flag of a family: its `with`/`without` name and whether a
+/// configuration starts with it.
+pub(crate) struct FlagRow<F> {
+    pub(crate) flag: F,
+    pub(crate) name: &'static str,
+    pub(crate) on: bool,
+}
+
+impl<F> FlagRow<F> {
+    /// A flag that is on by default.
+    pub(crate) const fn on(
+        flag: F,
+        name: &'static str,
+    ) -> Self {
+        return Self {
+            flag,
+            name,
+            on: true,
+        };
+    }
+
+    /// A flag that is off by default.
+    pub(crate) const fn off(
+        flag: F,
+        name: &'static str,
+    ) -> Self {
+        return Self {
+            flag,
+            name,
+            on: false,
+        };
+    }
+}
+
+/// A family's flag enum, hand-written with its row table; `of` is the parse
+/// boundary.
 pub(crate) trait Flag: Copy + Ord + 'static {
-    /// Every variant, in declaration order: `ITEMS[i].index() == i`.
-    const ITEMS: &'static [Self];
-    /// The flags a configuration starts with.
-    const DEFAULT_ON: &'static [Self];
+    /// Every variant's row, in declaration order:
+    /// `ROWS[i].flag as usize == i`, which each enum asserts at compile time.
+    const ROWS: &'static [FlagRow<Self>];
 
-    fn name(self) -> &'static str;
-
-    /// `self as u32`: the position in `ITEMS`, below 128.
+    /// `self as u32`: the position in `ROWS`, below 128.
     fn index(self) -> u32;
 
+    fn name(self) -> &'static str {
+        return Self::ROWS[self.index() as usize].name;
+    }
+
     fn of(name: &str) -> Option<Self> {
-        return Self::ITEMS.iter().copied().find(|it| it.name() == name);
+        return Self::ROWS
+            .iter()
+            .find(|row| row.name == name)
+            .map(|row| row.flag);
     }
 }
 
 /// A set of one family's flags: fixed order, `Copy`, no allocation. The
-/// default is the family's `DEFAULT_ON`.
+/// default is the flags whose row is `on`.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct Flags<F> {
     bits: u128,
@@ -91,15 +132,22 @@ impl<F: Flag> Flags<F> {
         }
     }
 
-    /// The flags that are on, in `ITEMS` order.
+    /// The flags that are on, in `ROWS` order.
     pub(crate) fn iter(self) -> impl Iterator<Item = F> {
-        return F::ITEMS.iter().copied().filter(move |it| self.has(*it));
+        return F::ROWS
+            .iter()
+            .map(|row| row.flag)
+            .filter(move |it| self.has(*it));
     }
 }
 
 impl<F: Flag> Default for Flags<F> {
     fn default() -> Self {
-        return Self::of(F::DEFAULT_ON);
+        let mut this = Self::of(&[]);
+        for row in F::ROWS.iter().filter(|row| row.on) {
+            this.set(row.flag, true);
+        }
+        return this;
     }
 }
 
@@ -114,10 +162,11 @@ impl<F: Flag> Debug for Flags<F> {
 
 /// What a family accepts in `with`/`without` besides its own flags.
 pub(crate) struct FlagGrammar {
-    /// The `konst_*` names it accepts.
-    pub(crate) konsts: &'static [Konsts],
-    /// `without = fn_{name}` removes a generated forward.
-    pub(crate) removals: bool,
+    /// The family whose `konst_*` names it accepts, if any.
+    pub(crate) konsts: Option<KonstFamily>,
+    /// The forms `without = fn_{name}` removes a generated forward in:
+    /// `fn_{name}` for `Regular`, `fn_try_{name}` for `Try`.
+    pub(crate) removals: &'static [Form],
 }
 
 /// One `with`/`without` name, typed once.
@@ -125,7 +174,7 @@ pub(crate) struct FlagGrammar {
 enum Setting<F> {
     Konst(Konsts),
     Flag(F),
-    Removal(FnName),
+    Removal(Form, FnName),
 }
 
 /// Resolved or explicit `konst_*` settings, each with the span that set it.
@@ -236,8 +285,8 @@ impl<F: Flag> FlagSettings<F> {
                 Setting::Flag(flag) => {
                     self.flags.get(&flag).map(|(value, _)| *value)
                 }
-                Setting::Removal(function) => {
-                    self.removals.removes(function).then_some(false)
+                Setting::Removal(form, function) => {
+                    self.removals.removes_form(form, function).then_some(false)
                 }
             };
             match previous {
@@ -254,14 +303,15 @@ impl<F: Flag> FlagSettings<F> {
                 Setting::Flag(flag) => {
                     self.flags.insert(flag, (value, span));
                 }
-                Setting::Removal(function) => {
+                Setting::Removal(form, function) => {
                     if value {
+                        let prefix = form.prefix();
                         let function = function.name();
                         return span.fail(format!(
-                            "`{name}` only removes the generated `{function}`; write `without = {name}`",
+                            "`{name}` only removes the generated `{prefix}{function}`; write `without = {name}`",
                         ));
                     }
-                    self.removals.insert(function, span);
+                    self.removals.insert(form, function, span);
                 }
             }
         }
@@ -273,19 +323,20 @@ impl<F: Flag> FlagSettings<F> {
         name: &str,
         grammar: &FlagGrammar,
     ) -> Option<Setting<F>> {
-        if let Some(flag) = Konsts::of_in(name, grammar.konsts) {
+        let konst = grammar
+            .konsts
+            .and_then(|family| Konsts::of_in(name, family));
+        if let Some(flag) = konst {
             return Some(Setting::Konst(flag));
         }
         if let Some(flag) = F::of(name) {
             return Some(Setting::Flag(flag));
         }
-        if !grammar.removals {
-            return None;
-        }
-        return name
-            .strip_prefix(REMOVAL_PREFIX)
-            .and_then(FnName::of)
-            .map(Setting::Removal);
+        let function = name.strip_prefix(REMOVAL_PREFIX)?;
+        return grammar.removals.iter().find_map(|form| {
+            let function = function.strip_prefix(form.prefix())?;
+            return Some(Setting::Removal(*form, FnName::of(function)?));
+        });
     }
 
     pub(crate) fn flag(

@@ -26,6 +26,7 @@ use syn::{
 use crate::zz_flags::{
     Flag,
     FlagGrammar,
+    FlagRow,
     FlagSettings,
     Flags,
 };
@@ -41,12 +42,16 @@ use crate::zz_hide::{
     HideIn,
 };
 use crate::zz_lib::{
+    Form,
     Forward,
     Key,
     Konst,
+    KonstFamily,
     Konsts,
+    Named as _,
     TEXT_LINTS,
     lint_scope,
+    reject_generics,
     repr_transparent,
 };
 use crate::zz_names::{
@@ -87,55 +92,38 @@ pub(crate) enum TextFlag {
 }
 
 impl Flag for TextFlag {
-    const ITEMS: &'static [Self] = &[
-        Self::Clone,
-        Self::Debug,
-        Self::Display,
-        Self::Hash,
-        Self::Repr,
-        Self::Serde,
-        Self::WithBlindTrust,
+    const ROWS: &'static [FlagRow<Self>] = &[
+        FlagRow::on(Self::Clone, "clone"),
+        FlagRow::on(Self::Debug, "debug"),
+        FlagRow::on(Self::Display, "display"),
+        FlagRow::on(Self::Hash, "hash"),
+        FlagRow::on(Self::Repr, "repr"),
+        FlagRow::off(Self::Serde, "serde"),
+        FlagRow::off(Self::WithBlindTrust, "with_blind_trust"),
     ];
-    const DEFAULT_ON: &'static [Self] = &[
-        Self::Clone,
-        Self::Debug,
-        Self::Display,
-        Self::Hash,
-        Self::Repr,
-    ];
-
-    fn name(self) -> &'static str {
-        return match self {
-            Self::Clone => "clone",
-            Self::Debug => "debug",
-            Self::Display => "display",
-            Self::Hash => "hash",
-            Self::Repr => "repr",
-            Self::Serde => "serde",
-            Self::WithBlindTrust => "with_blind_trust",
-        };
-    }
 
     fn index(self) -> u32 {
         return self as u32;
     }
 }
 
-// Every variant is in `ITEMS`, at its own index.
+// Every row of `ROWS` is at its variant's index.
 const _: () = {
-    let items = <TextFlag as Flag>::ITEMS;
-    assert!(items.len() == TextFlag::WithBlindTrust as usize + 1);
+    let rows = <TextFlag as Flag>::ROWS;
     let mut index = 0;
-    while index < items.len() {
-        assert!(items[index] as usize == index);
+    while index < rows.len() {
+        assert!(rows[index].flag as usize == index);
         index += 1;
     }
 };
 
 /// The `with`/`without` grammar of a text configuration.
 const GRAMMAR: FlagGrammar = FlagGrammar {
-    konsts: Konsts::TEXT,
-    removals: true,
+    konsts: Some(KonstFamily::Text),
+    removals: &[
+        Form::Regular,
+        Form::Try,
+    ],
 };
 
 /// What a text value must satisfy: `valid = [..]` callbacks or a
@@ -301,7 +289,7 @@ impl Parse for Cfg {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut this = Self::new(Konst::default(), true);
 
-        zz::parse_inner(input, |attr, rest| {
+        zz::parse_inner(input, zz::Site::Root, |attr, rest| {
             match attr {
                 Key::Std => this.std = rest.parse::<LitBool>()?.value,
                 Key::Konst => {
@@ -345,7 +333,7 @@ pub(crate) enum TextName {
     /// `TextMake`: the friend protocol's trait.
     MakeTrait,
     /// A forward, keyed as `without = fn_*` is.
-    Fn(FnName),
+    Fn(Form, FnName),
 }
 
 impl NameKey for TextName {
@@ -357,14 +345,22 @@ impl NameKey for TextName {
     ) -> String {
         return match self {
             Self::MakeTrait => "TextMake".to_string(),
-            Self::Fn(function) => function.name().to_string(),
+            Self::Fn(form, function) => {
+                format!("{}{}", form.prefix(), function.name())
+            }
         };
     }
 }
 
 impl From<FnName> for TextName {
     fn from(function: FnName) -> Self {
-        return Self::Fn(function);
+        return Self::Fn(Form::Regular, function);
+    }
+}
+
+impl From<(Form, FnName)> for TextName {
+    fn from((form, function): (Form, FnName)) -> Self {
+        return Self::Fn(form, function);
     }
 }
 
@@ -382,15 +378,10 @@ impl TextMaker {
         item: ItemStruct,
         cfg: Cfg,
     ) -> syn::Result<Self> {
-        if !item.generics.params.is_empty() {
-            return item
-                .generics
-                .params
-                .fail("text does not support generic structs");
-        }
-        if let Some(clause) = &item.generics.where_clause {
-            return clause.fail("text does not support generic structs");
-        }
+        reject_generics(
+            &item.generics,
+            "text does not support generic structs",
+        )?;
         let shape_error =
             "expected a tuple struct with exactly one String field";
         let field = match &item.fields {
@@ -421,8 +412,9 @@ impl TextMaker {
         return match &self.cfg.validation {
             TextValidation::None => quote! { true },
             TextValidation::Callbacks(callbacks) => {
-                zz::callback_condition(callbacks, &quote! { value.as_str() })
-                    .unwrap_or_else(|| quote! { true })
+                let value = quote! { value.as_str() };
+                let validation = zz::Validation::new(None, callbacks, &value);
+                quote! { #validation }
             }
             TextValidation::Values(values) => values
                 .iter()
@@ -438,11 +430,13 @@ impl TextMaker {
         let ty_string = &self.ty_string;
         let konst = Konst::konst(self.cfg.konst_for(&[Konsts::Text]));
         let validation = self.validation_condition();
-        let try_make = zz::validated_result(
-            &quote! { Self::is_valid(&value) },
-            quote! { Self(value) },
-            quote! { () },
-        );
+        let is_valid = [syn::parse_quote! { Self::is_valid }];
+        let try_make = zz::Validation::new(None, &is_valid, &quote! { &value })
+            .construct(
+                zz::Check::Validate,
+                zz::OnInvalid::Err(quote! { () }),
+                quote! { Self(value) },
+            );
 
         return quote! {
             impl #ty {
@@ -501,12 +495,12 @@ impl TextMaker {
         });
     }
 
-    /// The forwards that edit the `String` through `map`.
+    /// The `try_` forwards that edit the `String` through `map`.
     fn edit_forwards(&self) -> Vec<Forward> {
         let mutate = |name: FnName,
                       parameters: TokenStream,
                       call: TokenStream| {
-            return Forward::new(name, &self.names, |name| {
+            return Forward::new_try(name, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
                     pub fn #name(self #parameters) -> ::core::result::Result<Self, ()> {
@@ -518,26 +512,26 @@ impl TextMaker {
 
         return vec![
             mutate(
-                FnName::TryPush,
+                FnName::Push,
                 quote! { , character: char },
                 quote! { push(character) },
             ),
             mutate(
-                FnName::TryPushStr,
+                FnName::PushStr,
                 quote! { , text: &str },
                 quote! { push_str(text) },
             ),
             mutate(
-                FnName::TryInsert,
+                FnName::Insert,
                 quote! { , index: usize, character: char },
                 quote! { insert(index, character) },
             ),
             mutate(
-                FnName::TryInsertStr,
+                FnName::InsertStr,
                 quote! { , index: usize, text: &str },
                 quote! { insert_str(index, text) },
             ),
-            Forward::new(FnName::TryReplaceRange, &self.names, |name| {
+            Forward::new_try(FnName::ReplaceRange, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
                     pub fn #name<R>(self, range: R, text: &str) -> ::core::result::Result<Self, ()>
@@ -549,12 +543,12 @@ impl TextMaker {
                 };
             }),
             mutate(
-                FnName::TryTruncate,
+                FnName::Truncate,
                 quote! { , length: usize },
                 quote! { truncate(length) },
             ),
-            mutate(FnName::TryClear, quote! {}, quote! { clear() }),
-            Forward::new(FnName::TryRetain, &self.names, |name| {
+            mutate(FnName::Clear, quote! {}, quote! { clear() }),
+            Forward::new_try(FnName::Retain, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
                     pub fn #name<F>(self, mut predicate: F) -> ::core::result::Result<Self, ()>
@@ -590,7 +584,7 @@ impl TextMaker {
         };
 
         return vec![
-            Forward::new(FnName::TryRemove, &self.names, |name| {
+            Forward::new_try(FnName::Remove, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
                     pub fn #name(self, index: usize) -> ::core::result::Result<(Self, char), ()> {
@@ -603,7 +597,7 @@ impl TextMaker {
                     }
                 };
             }),
-            Forward::new(FnName::TryPop, &self.names, |name| {
+            Forward::new_try(FnName::Pop, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
                     pub fn #name(self) -> ::core::result::Result<(Self, ::core::option::Option<char>), ()> {
@@ -636,6 +630,10 @@ impl TextMaker {
     /// `Add<&str>`, `AsRef<str>`, `AsRef<[u8]>`, `Borrow<str>` and `Deref`.
     fn make_str_access(&self) -> TokenStream {
         let ty = &self.ty;
+        let added = zz::unwrap_or_panic(
+            quote! { self.map(|value| value.push_str(text)) },
+            "invalid value from text addition",
+        );
 
         return quote! {
             impl ::core::ops::Add<&str> for #ty {
@@ -643,10 +641,7 @@ impl TextMaker {
 
                 #[inline(always)]
                 fn add(self, text: &str) -> Self {
-                    return match self.map(|value| value.push_str(text)) {
-                        ::core::result::Result::Ok(value) => value,
-                        ::core::result::Result::Err(()) => ::core::panic!("invalid value from text addition"),
-                    };
+                    return #added;
                 }
             }
 
@@ -916,14 +911,11 @@ impl TextMaker {
             };
         }
 
-        return quote! {
-            return match #ty::try_make(#conv(self)) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(()) => {
-                    ::core::panic!("invalid value from untrusted text friend")
-                }
-            };
-        };
+        let made = zz::unwrap_or_panic(
+            quote! { #ty::try_make(#conv(self)) },
+            "invalid value from untrusted text friend",
+        );
+        return quote! { return #made; };
     }
 
     fn make_blind_trust(&self) -> TokenStream {

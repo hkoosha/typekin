@@ -31,6 +31,7 @@ use crate::integral_cfg::IntegralFlag;
 use crate::zz_flags::{
     Flag,
     FlagGrammar,
+    FlagRow,
     FlagSettings,
     Flags,
 };
@@ -51,9 +52,12 @@ use crate::zz_hide::{
 use crate::zz_lib::{
     Key,
     Konst,
+    KonstFamily,
     Konsts,
     NUMERIC_LINTS,
+    Named as _,
     lint_scope,
+    reject_generics,
     repr_transparent,
 };
 use crate::zz_lit::LitMacro;
@@ -69,7 +73,10 @@ use crate::zz_runner::{
 };
 use crate::zz_values::{
     N,
-    Operator,
+    OPS,
+    Op,
+    OpKind,
+    OpSpec,
 };
 use crate::{
     integral,
@@ -90,13 +97,13 @@ pub(crate) fn ekran(
     let item_repr = zz::find_repr_n(attrs, &span)?;
     let repr = resolve_repr(attr.repr, item_repr, span)?;
     let repr_attr = attr.repr.map(|it| {
-        let it = format_ident!("{}", it.rust_name());
+        let it = format_ident!("{}", it.name());
         quote! { #[repr(#it)] }
     });
     let ty = item.ident.clone();
     let items = item.variants.iter().map(|it| it.ident.clone()).vec();
 
-    reject_generics(&item)?;
+    reject_generics(&item.generics, "bitflag does not support generic enums")?;
     reject_non_unit_variants(&item)?;
 
     let mut envelope = Envelope::new(&attr.hide_in, &item, &item.vis);
@@ -152,19 +159,6 @@ fn derive_attributes(cfg: &Cfg) -> TokenStream {
         #derive_hash
         #derive_debug
     };
-}
-
-/// Bitflag enums take no generic parameters and no `where` clause.
-fn reject_generics(item: &ItemEnum) -> syn::Result<()> {
-    const MSG: &str = "bitflag does not support generic enums";
-    if !item.generics.params.is_empty() {
-        return item.generics.params.fail(MSG);
-    }
-    if let Some(clause) = &item.generics.where_clause {
-        return clause.fail(MSG);
-    }
-
-    return Ok(());
 }
 
 /// Bitflag variants carry no data.
@@ -316,11 +310,11 @@ impl Maker {
             seal: names.get(BitflagName::SealTrait),
             fn_conv: names.get(BitflagName::Conversion),
             raw,
-            unsigned: format_ident!("{}", repr.unsigned_rust_name()),
+            unsigned: format_ident!("{}", repr.unsigned().name()),
             konst: FlagKonst::new(&cfg.int),
             value_text,
             vl,
-            el: format_ident!("{}", repr.rust_name()),
+            el: format_ident!("{}", repr.name()),
             repr,
             ty,
             cfg,
@@ -411,12 +405,10 @@ impl Maker {
 
         let impl_int = match self.cfg.bit.has(BitFlag::ImplValue) {
             false => TokenStream::new(),
-            true => integral::ekran_with(
-                self.vl,
-                self.el,
-                self.cfg.int,
-                integral::StoragePlan::primitive(self.repr),
-            )?,
+            true => {
+                let storage = self.vl_storage();
+                integral::ekran_with(self.vl, self.el, self.cfg.int, storage)?
+            }
         };
 
         let scope = lint_scope(
@@ -459,7 +451,7 @@ impl Maker {
     fn ekran_vl(&self) -> TokenStream {
         let ty_value = &self.vl;
         let el = &self.el;
-        let derive_clone = self.cfg.int.konst.derive(quote! { Clone });
+        let derive_clone = self.cfg.int.wide.konst.derive(quote! { Clone });
         let repr = repr_transparent(self.cfg.bit.has(BitFlag::Repr));
 
         return match self.cfg.bit.has(BitFlag::MakeValue) {
@@ -515,6 +507,21 @@ impl Maker {
             .collect();
     }
 
+    /// The value type's storage: the primitive itself.
+    fn vl_storage(&self) -> integral::StoragePlan {
+        return integral::StoragePlan::primitive(self.repr);
+    }
+
+    /// `constructor`, a path of the value type, applied to the validated
+    /// `bits`.
+    fn vl_of_bits(
+        &self,
+        constructor: TokenStream,
+    ) -> TokenStream {
+        let storage = self.vl_storage().storage_expression(quote! { bits });
+        return quote! { #constructor(#storage) };
+    }
+
     /// `from_bits_retain`'s body: `try_make`-or-panic with validation,
     /// `Self::_or_panic(bits)` without.
     fn vl_from_bits_body(&self) -> TokenStream {
@@ -522,14 +529,10 @@ impl Maker {
             return quote! { Self::_or_panic(bits) };
         }
 
-        return quote! {
-            match Self::try_make(bits) {
-                ::core::result::Result::Ok(value) => value,
-                ::core::result::Result::Err(_) => {
-                    ::core::panic!("invalid value")
-                }
-            }
-        };
+        return zz::unwrap_or_panic(
+            quote! { Self::try_make(bits) },
+            "invalid value",
+        );
     }
 
     /// `bits`, `from_bits_retain`, `empty` and the `all*` values.
@@ -974,11 +977,11 @@ impl Maker {
     /// The body that parses `source`, `|`-separated flag names and
     /// hexadecimal bits, into `bits`. Shared by `FromStr for #vl` and
     /// `SerdeFlagValueVisitor::visit_str`; `fail` builds each error, and
-    /// the body ends in `validated_result(validation, ok, fail("invalid
-    /// value"))`.
+    /// the body ends by validating `bits`: `ok`, else `fail("invalid
+    /// value")`.
     fn flag_parse_body(
         &self,
-        validation: &TokenStream,
+        validation: &zz::Validation,
         fail: impl Fn(&'static str) -> TokenStream,
         ok: TokenStream,
     ) -> TokenStream {
@@ -988,8 +991,11 @@ impl Maker {
         let empty = fail("empty flag");
         let invalid_hex = fail("invalid hexadecimal flag bits");
         let unknown = fail("unknown flag name");
-        let parsed =
-            zz::validated_result(validation, ok, fail("invalid value"));
+        let parsed = validation.construct(
+            zz::Check::Validate,
+            zz::OnInvalid::Err(fail("invalid value")),
+            ok,
+        );
 
         return quote! {
             let source = source.trim();
@@ -1061,7 +1067,7 @@ impl Maker {
     /// `from_str`); both fail with `()`.
     fn ekran_from_str(
         &self,
-        validation: &TokenStream,
+        validation: &zz::Validation,
     ) -> Option<TokenStream> {
         if !self.value_text.from_str {
             return None;
@@ -1072,7 +1078,7 @@ impl Maker {
         let body = self.flag_parse_body(
             validation,
             |_| quote! { () },
-            quote! { Self(bits) },
+            self.vl_of_bits(quote! { Self }),
         );
         return Some(quote! {
             impl ::core::str::FromStr for #ty {
@@ -1103,7 +1109,7 @@ impl Maker {
     /// `Deserialize` for the enum and the value type.
     fn ekran_serde(
         &self,
-        validation: &TokenStream,
+        validation: &zz::Validation,
     ) -> TokenStream {
         let Some(repr) = self.cfg.serde
         else {
@@ -1146,14 +1152,14 @@ impl Maker {
     /// value by names and hexadecimal bits).
     fn serde_visitors(
         &self,
-        validation: &TokenStream,
+        validation: &zz::Validation,
     ) -> TokenStream {
         let ty = &self.ty;
         let vl = &self.vl;
         let body = self.flag_parse_body(
             validation,
             |message| quote! { E::custom(#message) },
-            quote! { #vl(bits) },
+            self.vl_of_bits(quote! { #vl }),
         );
 
         return quote! {
@@ -1277,16 +1283,18 @@ impl Maker {
     fn serde_vl_impls(
         &self,
         repr: SerdeRepr,
-        validation: &TokenStream,
+        validation: &zz::Validation,
     ) -> TokenStream {
         let vl = &self.vl;
         let el = &self.el;
         let serialize_as_name = repr.as_name(quote! { serializer });
         let deserialize_as_name = repr.as_name(quote! { deserializer });
-        let deserialized = zz::validated_result(
-            validation,
-            quote! { Self(bits) },
-            quote! { <D::Error as ::serde::de::Error>::custom("invalid value") },
+        let deserialized = validation.construct(
+            zz::Check::Validate,
+            zz::OnInvalid::Err(quote! {
+                <D::Error as ::serde::de::Error>::custom("invalid value")
+            }),
+            self.vl_of_bits(quote! { Self }),
         );
 
         return quote! {
@@ -1516,15 +1524,13 @@ impl Maker {
     /// The enum's operator and comparison impls, in output order.
     fn ekran_ty_impls(&self) -> TokenStream {
         let display = self.ty_display_impl();
-        let shifts = self.ty_shift_impls();
-        let bit_operators = self.ty_bit_operator_impls();
+        let operators = self.ty_operator_impls();
         let comparisons = self.ty_comparison_impls();
         let not = self.ty_not_impl();
 
         return quote! {
             #display
-            #shifts
-            #bit_operators
+            #operators
             #comparisons
             #not
         };
@@ -1550,90 +1556,79 @@ impl Maker {
         });
     }
 
-    /// `Shr<usize>` and `Shl<usize>` for the enum, through the value type.
-    fn ty_shift_impls(&self) -> TokenStream {
+    /// The enum's binary operators whose `math_*` flag is on, in `OPS`
+    /// order, each through the value type.
+    fn ty_operator_impls(&self) -> TokenStream {
+        let flags = &self.cfg.int.flags;
+        return OPS
+            .iter()
+            .filter(|op| flags.has(IntegralFlag::of_op(op.op).math))
+            .map(|op| {
+                return match op.kind {
+                    OpKind::Bitwise => self.ty_bit_operator_impl(op),
+                    OpKind::Shift => self.ty_shift_impl(op),
+                    OpKind::Arith | OpKind::Unary => TokenStream::new(),
+                };
+            })
+            .collect();
+    }
+
+    /// `Shl<usize>` or `Shr<usize>` for the enum, through the value type.
+    fn ty_shift_impl(
+        &self,
+        op: &OpSpec,
+    ) -> TokenStream {
         let ty = &self.ty;
         let value = &self.vl;
-        let int = &self.cfg.int;
-
-        let shr = int.flags.has(IntegralFlag::MathShr).then(|| {
-            let konst = Konst::konst(int.konst_for(&[
-                Konsts::Shr,
-                Konsts::Math,
-            ]));
-            return quote! {
-                #konst impl ::core::ops::Shr<usize> for #ty {
-                    type Output = #value;
-
-                    #[inline(always)]
-                    fn shr(self, rhs: usize) -> Self::Output {
-                        return self.into_value() >> rhs;
-                    }
-                }
-            };
-        });
-
-        let shl = int.flags.has(IntegralFlag::MathShl).then(|| {
-            let konst = Konst::konst(int.konst_for(&[
-                Konsts::Shl,
-                Konsts::Math,
-            ]));
-            return quote! {
-                #konst impl ::core::ops::Shl<usize> for #ty {
-                    type Output = #value;
-
-                    #[inline(always)]
-                    fn shl(self, rhs: usize) -> Self::Output {
-                        return self.into_value() << rhs;
-                    }
-                }
-            };
-        });
-
+        let konst = Konst::konst(self.cfg.int.konst_for(&op.konsts()));
+        let operator = format_ident!("{}", op.trait_name);
+        let method = format_ident!("{}", op.method);
+        let symbol = op.token();
         return quote! {
-            #shr
-            #shl
+            #konst impl ::core::ops::#operator<usize> for #ty {
+                type Output = #value;
+
+                #[inline(always)]
+                fn #method(self, rhs: usize) -> Self::Output {
+                    return self.into_value() #symbol rhs;
+                }
+            }
         };
     }
 
-    /// `BitAnd`, `BitOr` and `BitXor` for the enum: any `FlagBit` friend on
+    /// `BitAnd`, `BitOr` or `BitXor` for the enum: any `FlagBit` friend on
     /// the right, combined through the value type's set method.
-    fn ty_bit_operator_impls(&self) -> TokenStream {
+    fn ty_bit_operator_impl(
+        &self,
+        op: &OpSpec,
+    ) -> TokenStream {
         let ty = &self.ty;
         let value = &self.vl;
         let seal = &self.seal;
         let fn_conv = &self.fn_conv;
         let bit_capability = self.names.get(BitflagName::BitTrait);
-        let int = &self.cfg.int;
+        let is_konst = self.cfg.int.konst_for(&op.konsts());
+        let konst = Konst::konst(is_konst);
+        let bounds = Konst::bound(is_konst, quote! { #seal });
+        let operator = format_ident!("{}", op.trait_name);
+        let method = format_ident!("{}", op.method);
+        let set_method = set_method(op.op);
+        return quote! {
+            #konst impl<T> ::core::ops::#operator<T> for #ty
+            where
+                T: #bit_capability + #bounds,
+            {
+                type Output = #value;
 
-        return Operator::bit_items()
-            .iter()
-            .filter(|op| int.flags.has(IntegralFlag::math(**op)))
-            .map(|&op| {
-                let is_konst = int.konst_for(&op.is_konst_flags());
-                let konst = Konst::konst(is_konst);
-                let bounds = Konst::bound(is_konst, quote! { #seal });
-                let operator = format_ident!("{}", op.name());
-                let method = format_ident!("{}", op.method_name());
-                let set_method = set_method(op);
-                return quote! {
-                    #konst impl<T> ::core::ops::#operator<T> for #ty
-                    where
-                        T: #bit_capability + #bounds,
-                    {
-                        type Output = #value;
-
-                        #[inline(always)]
-                        fn #method(self, rhs: T) -> Self::Output {
-                            let rhs = #seal::#fn_conv(rhs);
-                            return self.into_value().#set_method(
-                                #value::from_bits_retain(rhs)
-                            );
-                        }
-                    }
-                };
-            })
-            .collect();
+                #[inline(always)]
+                fn #method(self, rhs: T) -> Self::Output {
+                    let rhs = #seal::#fn_conv(rhs);
+                    return self.into_value().#set_method(
+                        #value::from_bits_retain(rhs)
+                    );
+                }
+            }
+        };
     }
 
     /// `PartialEq<#vl>` and `PartialOrd<#vl>` for the enum.
@@ -1883,16 +1878,20 @@ impl Maker {
 }
 
 /// The value type's set method behind each bit operator on the enum.
-fn set_method(op: Operator) -> Ident {
+fn set_method(op: Op) -> Ident {
     let name = match op {
-        Operator::BitAnd => "intersection",
-        Operator::BitOr => "union",
-        Operator::BitXor => "symmetric_difference",
-        Operator::Add
-        | Operator::Sub
-        | Operator::Mul
-        | Operator::Div
-        | Operator::Rem => unreachable!("not a bit operator: {op:?}"),
+        Op::BitAnd => "intersection",
+        Op::BitOr => "union",
+        Op::BitXor => "symmetric_difference",
+        Op::Add
+        | Op::Sub
+        | Op::Mul
+        | Op::Div
+        | Op::Rem
+        | Op::Shl
+        | Op::Shr
+        | Op::Neg
+        | Op::Not => unreachable!("not a bit operator: {op:?}"),
     };
     return format_ident!("{}", name);
 }
@@ -1901,8 +1900,8 @@ fn set_method(op: Operator) -> Ident {
 
 /// The `with`/`without` grammar of a bitflag root.
 const GRAMMAR: FlagGrammar = FlagGrammar {
-    konsts: Konsts::INTEGRAL,
-    removals: false,
+    konsts: Some(KonstFamily::Integral),
+    removals: &[],
 };
 
 /// How bitflag serde represents the enum and the value type.
@@ -1973,7 +1972,7 @@ impl Parse for Cfg {
         };
 
         let mut nested = false;
-        zz::parse_inner(input, |attr, rest| {
+        zz::parse_inner(input, zz::Site::Root, |attr, rest| {
             nested |= attr == Key::Integral;
             return this.parse_attr(attr, rest);
         })?;
@@ -1986,7 +1985,12 @@ impl Parse for Cfg {
 
         this.serde = this.serde_repr(input)?;
 
-        this.int.embed_konst(this.konst, this.settings.konsts())?;
+        let outer = integral_cfg::WrapperWide {
+            konst: this.konst,
+            konsts: this.settings.konsts().clone(),
+            ..Default::default()
+        };
+        this.int.wide.embed(&outer)?;
         // Named values are `const` items built through `_or_panic`.
         this.int.const_validation_required = true;
         // The nested integral emits into the root's module, hidden or not.
@@ -2035,7 +2039,7 @@ impl Cfg {
             }
             Key::Repr => {
                 let repr: Ident = rest.parse()?;
-                self.repr = N::of(repr.to_string());
+                self.repr = N::of(&repr.to_string());
                 if self.repr.is_none() {
                     return repr.fail("repr must be a Rust numeric type");
                 }
@@ -2179,59 +2183,32 @@ pub(crate) enum BitFlag {
 }
 
 impl Flag for BitFlag {
-    const ITEMS: &'static [Self] = &[
-        Self::Clone,
-        Self::Copy,
-        Self::Hash,
-        Self::Debug,
-        Self::MakeValue,
-        Self::ImplValue,
-        Self::Display,
-        Self::Repr,
-        Self::Serde,
-        Self::SerdeWithAuto,
-        Self::SerdeWithName,
-        Self::SerdeWithValue,
+    const ROWS: &'static [FlagRow<Self>] = &[
+        FlagRow::on(Self::Clone, "clone"),
+        FlagRow::on(Self::Copy, "copy"),
+        FlagRow::on(Self::Hash, "hash"),
+        FlagRow::on(Self::Debug, "debug"),
+        FlagRow::on(Self::MakeValue, "make_value"),
+        FlagRow::on(Self::ImplValue, "impl_value"),
+        FlagRow::off(Self::Display, "display"),
+        FlagRow::on(Self::Repr, "repr"),
+        FlagRow::off(Self::Serde, "serde"),
+        FlagRow::off(Self::SerdeWithAuto, "serde_with_auto"),
+        FlagRow::off(Self::SerdeWithName, "serde_with_name"),
+        FlagRow::off(Self::SerdeWithValue, "serde_with_value"),
     ];
-    const DEFAULT_ON: &'static [Self] = &[
-        Self::Clone,
-        Self::Copy,
-        Self::Hash,
-        Self::Debug,
-        Self::MakeValue,
-        Self::ImplValue,
-        Self::Repr,
-    ];
-
-    fn name(self) -> &'static str {
-        return match self {
-            Self::Clone => "clone",
-            Self::Copy => "copy",
-            Self::Hash => "hash",
-            Self::Debug => "debug",
-            Self::MakeValue => "make_value",
-            Self::ImplValue => "impl_value",
-            Self::Display => "display",
-            Self::Repr => "repr",
-            Self::Serde => "serde",
-            Self::SerdeWithAuto => "serde_with_auto",
-            Self::SerdeWithName => "serde_with_name",
-            Self::SerdeWithValue => "serde_with_value",
-        };
-    }
 
     fn index(self) -> u32 {
         return self as u32;
     }
 }
 
-// Every variant is in `ITEMS`, at its own index.
+// Every row of `ROWS` is at its variant's index.
 const _: () = {
-    let items = <BitFlag as Flag>::ITEMS;
-    assert!(items.len() == BitFlag::SerdeWithValue as usize + 1);
+    let rows = <BitFlag as Flag>::ROWS;
     let mut index = 0;
-    while index < items.len() {
-        assert!(items[index] as usize == index);
+    while index < rows.len() {
+        assert!(rows[index].flag as usize == index);
         index += 1;
     }
 };

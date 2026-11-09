@@ -135,16 +135,14 @@ use syn::{
     token,
 };
 
+use crate::zz_lib::Named as _;
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     F,
     FnName,
     Int,
     N,
-    POINTER_WIDTHS,
 };
-
-pub(crate) const WIDTHS: usize = POINTER_WIDTHS.len();
 
 /// The integer bound constants a domain may name (`u32::MAX`).
 pub(crate) const MIN: &str = "MIN";
@@ -915,7 +913,7 @@ fn parse_const_path(
         ConstKind::FloatPath {
             ty, name, consts, ..
         } => {
-            let ty = Ident::new(ty.rust_name(), span);
+            let ty = Ident::new(ty.name(), span);
             let name = Ident::new(name, span);
             match consts {
                 true => quote! { ::core::#ty::consts::#name },

@@ -13,6 +13,7 @@ use syn::{
     ItemTrait,
 };
 
+use crate::zz_lib::Named as _;
 use crate::zz_profile_integral::ProfileKind;
 use crate::zz_values::F;
 
@@ -39,6 +40,7 @@ pub(crate) mod zz_domain_int;
 pub(crate) mod zz_domain_within;
 pub(crate) mod zz_domain_within_const;
 pub(crate) mod zz_flags;
+pub(crate) mod zz_forward;
 pub(crate) mod zz_friend;
 pub(crate) mod zz_hide;
 pub(crate) mod zz_lib;
@@ -81,6 +83,11 @@ mod unit;
 /// - `tree = NODE | [NODE | without = FLAGS, ...]`
 /// - `hide_in = MODULE | none`
 /// - `panic_at = anything | arithmetic | overflow | nothing`
+/// - `prove = OP | [OP, ...]`: operations that must be proven closed over the
+///   domain, each an operator flag (`math_add`, `math_add(Rhs)`) or a
+///   `core_int` method (`abs`)
+/// - `lit_name = IDENT` and `lit_path = crate::PATH::Type` for the literal
+///   macro
 ///
 /// `PROFILE` is `int`, `circular`, `delta`, `sequential`, `wrapping`, `point`,
 /// or `nominal`. A profile body accepts `with` and `without`; only `circular`
@@ -89,7 +96,9 @@ mod unit;
 /// `produce`. A facet slot whose output is `Self` also gets its assignment
 /// operator (`+=` for a `math_add` slot) while its facet has the `assign_*`
 /// flag on; facets inherit the root's, and shift assignments stay
-/// wrapper-wide. `TREE` uses the [`tree`] node grammar, and a bracketed list
+/// wrapper-wide. Every binary operator has its own assignment flag
+/// (`assign_xor` for `^=`), on by default and independent of the operator's
+/// `math_*` flag. `TREE` uses the [`tree`] node grammar, and a bracketed list
 /// also takes the tree's `without`. Its private `MarkerTreeRoot` seal stays
 /// generated, while its nodes are re-exported beside the annotated item.
 ///
@@ -217,13 +226,14 @@ pub fn integral(
 ///
 /// - **Required item:** a tuple struct with exactly one `f32` or `f64` field.
 ///   Generic float structs require that value field to be private.
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `math`, `error`, `friend`, `with`, `without`, `get_raw`, `produce`,
-///   `profile` (`int` or `point`), `facet`, `panic_at`, `tree`, and
-///   `hide_in`.
+/// - Every configuration argument of [`integral`], all optional, plus `math`.
 ///
 /// Floats share the integral configuration. Differences:
 ///
+/// - `profile` and facets take only `int` and `point`.
+/// - `prove` is rejected, and so are the integer-only flags (`proven`,
+///   `non_zero`, `range`, `core_int`, `bit_access`, the bitwise operators,
+///   binary/octal/hex formatting).
 /// - `domain` uses float constants (`0.0..=1.0 & !{0.5} & is_finite`).
 ///   Ranges, rosters, and multiples reject NaN; their complements (`!{0.5}`)
 ///   admit it. A domain that rejects NaN makes the type NaN-free: it then gets
@@ -232,8 +242,8 @@ pub fn integral(
 /// - `math = core | std | nightly` selects where `floor`, `sqrt`, … come from
 ///   in domains and the `float_math` API: `std` uses inherent methods,
 ///   `nightly` uses `core::fNN::math` (no_std, `#![feature(core_float_math)]`).
-/// - `Math` friends grant `Make` and arithmetic only; there are no bitwise
-///   operations, `non_zero` storage, or `Step`.
+/// - `Math` friends grant `Make` and arithmetic only; `Bit` and `Within`
+///   friends are rejected.
 /// - Floats add `Neg`, `LowerExp`/`UpperExp`, `Sum`/`Product` (one validation
 ///   per call), `core_float` methods, and exact float-to-integer `try_into_*`.
 /// - `without = fn_NAME` removes one `core_float` or `float_math` function
@@ -296,16 +306,8 @@ pub fn float(
 
 /// Generates an integral newtype with the fixed `int` profile.
 ///
-/// # Inputs
-///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`.
-///
-/// This is equivalent to `#[typekin::integral(profile = int, ...)]`; it does
-/// not accept `profile`.
+/// Equivalent to `#[typekin::integral(profile = int, ...)]`: it takes the item
+/// and every configuration argument of [`integral`] except `profile`.
 #[proc_macro_attribute]
 pub fn int(
     attr: proc_macro::TokenStream,
@@ -316,17 +318,10 @@ pub fn int(
 
 /// Generates an integral newtype with the fixed `circular` profile.
 ///
-/// # Inputs
-///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, `hide_in`, and `precedes = bool`.
-///
-/// This is equivalent to `#[typekin::integral(profile = circular, ...)]`.
-/// `precedes` configures the selected circular profile directly; `profile` is
-/// not accepted.
+/// Equivalent to `#[typekin::integral(profile = circular, ...)]`: it takes the
+/// item and every configuration argument of [`integral`] except `profile`,
+/// plus `precedes = bool`, which configures the selected circular profile
+/// directly.
 #[proc_macro_attribute]
 pub fn circular(
     attr: proc_macro::TokenStream,
@@ -337,16 +332,8 @@ pub fn circular(
 
 /// Generates an integral newtype with the fixed `delta` profile.
 ///
-/// # Inputs
-///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`.
-///
-/// This is equivalent to `#[typekin::integral(profile = delta, ...)]`; it does
-/// not accept `profile` or `precedes`.
+/// Equivalent to `#[typekin::integral(profile = delta, ...)]`: it takes the
+/// item and every configuration argument of [`integral`] except `profile`.
 #[proc_macro_attribute]
 pub fn delta(
     attr: proc_macro::TokenStream,
@@ -357,16 +344,8 @@ pub fn delta(
 
 /// Generates an integral newtype with the fixed `sequential` profile.
 ///
-/// # Inputs
-///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`.
-///
-/// This is equivalent to `#[typekin::integral(profile = sequential, ...)]`; it
-/// does not accept `profile` or `precedes`.
+/// Equivalent to `#[typekin::integral(profile = sequential, ...)]`: it takes
+/// the item and every configuration argument of [`integral`] except `profile`.
 #[proc_macro_attribute]
 pub fn sequential(
     attr: proc_macro::TokenStream,
@@ -377,16 +356,8 @@ pub fn sequential(
 
 /// Generates an integral newtype with the fixed `wrapping` profile.
 ///
-/// # Inputs
-///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`.
-///
-/// This is equivalent to `#[typekin::integral(profile = wrapping, ...)]`; it
-/// does not accept `profile` or `precedes`.
+/// Equivalent to `#[typekin::integral(profile = wrapping, ...)]`: it takes the
+/// item and every configuration argument of [`integral`] except `profile`.
 #[proc_macro_attribute]
 pub fn wrapping(
     attr: proc_macro::TokenStream,
@@ -397,17 +368,12 @@ pub fn wrapping(
 
 /// Generates an integral or float newtype with the fixed `point` profile.
 ///
-/// # Inputs
+/// Equivalent to `#[typekin::integral(profile = point, ...)]`, or on an
+/// `f32`/`f64` field to `#[typekin::float(profile = point, ...)]`: it takes
+/// the item and every configuration argument of [`integral`] (of [`float`] for
+/// a float field) except `profile`.
 ///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`], or the `f32`/`f64` tuple struct accepted by [`float`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`; float fields also accept `math`.
-///
-/// This is equivalent to `#[typekin::integral(profile = point, ...)]` or
-/// `#[typekin::float(profile = point, ...)]`; it does not accept `profile` or
-/// `precedes`. Float points also omit `Neg`, `Sum`, `Product`, and the
+/// Float points also omit `Neg`, `Sum`, `Product`, and the
 /// `core_float`/`float_math` methods.
 #[proc_macro_attribute]
 pub fn point(
@@ -421,21 +387,15 @@ pub fn point(
 /// that is only told apart from others, such as an identifier, a port, or a
 /// header field.
 ///
-/// # Inputs
+/// Equivalent to `#[typekin::integral(profile = nominal, ...)]`: it takes the
+/// item and every configuration argument of [`integral`] except `profile`.
 ///
-/// - **Required item:** the same primitive-integer tuple struct accepted by
-///   [`integral`].
-/// - All configuration arguments are optional: `konst`, `valid`, `domain`,
-///   `error`, `friend`, `with`, `without`, `get_raw`, `produce`, `facet`,
-///   `panic_at`, `tree`, and `hide_in`.
-///
-/// This is equivalent to `#[typekin::integral(profile = nominal, ...)]`; it
-/// does not accept `profile` or `precedes`. A nominal value keeps
-/// construction, `raw()`, `Eq`, `Hash`, `Debug`, `Copy`, and `Clone`, and
-/// drops every operator, linear ordering, conversion, radix formatting,
-/// `AsRef`, `FromStr`, `map`, and its `Within` source constants. Like `point`
-/// it selects no arithmetic, so `profile = [circular, nominal]` keeps
-/// circular arithmetic and `precedes` for the operators `with` re-enables.
+/// A nominal value keeps construction, `raw()`, `Eq`, `Hash`, `Debug`, `Copy`,
+/// and `Clone`, and drops every operator, linear ordering, conversion, radix
+/// formatting, `AsRef`, `FromStr`, `map`, and its `Within` source constants.
+/// Like `point` it selects no arithmetic, so `profile = [circular, nominal]`
+/// keeps circular arithmetic and `precedes` for the operators `with`
+/// re-enables.
 ///
 /// ```
 /// #[typekin::nominal(with = display)]
@@ -744,17 +704,17 @@ fn profile_kind(
 ) -> syn::Result<integral_cfg::Kind> {
     return match (float_field(item), profile) {
         (None, _) => Ok(integral_cfg::Kind::Int),
-        (Some(_), ProfileKind::Point) => Ok(integral_cfg::Kind::Float),
-        (Some(span), ProfileKind::Int) => Err(syn::Error::new(
-            span,
-            "use #[typekin::float] for f32/f64 value fields",
-        )),
-        (Some(span), profile) => Err(syn::Error::new(
+        (Some(span), profile) if !profile.spec().float => Err(syn::Error::new(
             span,
             format!(
                 "the {} profile requires an integer value field",
                 profile.name()
             ),
+        )),
+        (Some(_), ProfileKind::Point) => Ok(integral_cfg::Kind::Float),
+        (Some(span), _) => Err(syn::Error::new(
+            span,
+            "use #[typekin::float] for f32/f64 value fields",
         )),
     };
 }
@@ -768,7 +728,7 @@ fn float_field(item: &proc_macro2::TokenStream) -> Option<proc_macro2::Span> {
             if path
                 .path
                 .get_ident()
-                .is_some_and(|it| F::of(it.to_string()).is_some()) =>
+                .is_some_and(|it| F::of(&it.to_string()).is_some()) =>
         {
             Some(syn::spanned::Spanned::span(&field.ty))
         }

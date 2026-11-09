@@ -52,11 +52,17 @@ mod tests {
     fn hide_in_is_rejected_inside_bitflag_integral() {
         let it = "integral = [hide_in = none]";
         let this = syn::parse_str::<crate::bitflag::Cfg>(it);
-        assert!(this.is_err(), "{it}");
+        let error = this.unwrap_err();
 
         assert_eq!(
-            this.unwrap_err().to_string(),
+            error.to_string(),
             "hide_in belongs on the bitflag root, not in integral = [..]"
+        );
+        assert_eq!(error.span().start().line, 1, "{it}");
+        assert_eq!(
+            error.span().start().column,
+            it.find("hide_in").unwrap(),
+            "{it}",
         );
     }
 

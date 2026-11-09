@@ -497,6 +497,27 @@ mod tests {
     }
 
     #[test]
+    fn value_bitxor_assignment_is_generated_by_default() {
+        let rhs = ThingyValue::WritersBlock;
+        let mut value = ThingyValue::from_bits_retain(0b011);
+        value ^= rhs;
+
+        assert_eq!(value.raw(), 0b001);
+    }
+
+    #[test]
+    fn nested_without_removes_value_bitxor_assignment_only() {
+        let read = XorUnassignedFlagValue::Read;
+        let write = XorUnassignedFlagValue::Write;
+        let combined = read ^ write;
+
+        assert_eq!(combined.raw(), 0b11);
+        assert_not_impl!(
+            XorUnassignedFlagValue: core::ops::BitXorAssign<XorUnassignedFlagValue>
+        );
+    }
+
+    #[test]
     fn nested_integral_ranges_reject_invalid_bits() {
         assert_panics(|| Thingy1::from_bits_retain(0b1000));
     }

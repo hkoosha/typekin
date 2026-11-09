@@ -23,18 +23,26 @@ use crate::zz_domain::{
     OperandKey,
     Test,
     Tri,
-    WIDTHS,
     collapse,
     group_in_order,
     kleene,
     listing,
 };
+use crate::zz_forward::{
+    CORE_INT,
+    CoreFwd,
+    InDomain,
+    domain_functions,
+};
+use crate::zz_lib::Named as _;
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     FnName,
     Int,
+    IntTy,
     N,
-    POINTER_WIDTHS,
+    Width,
+    by_width,
 };
 
 impl Domain {
@@ -56,9 +64,7 @@ impl Domain {
     }
 
     fn probe_atom(atom: &Atom) -> Option<bool> {
-        let values = (0..WIDTHS)
-            .map(|index| Self::probe_atom_at(atom, index))
-            .collect::<Vec<_>>();
+        let values = Width::ALL.map(|width| Self::probe_atom_at(atom, width));
         if values.iter().all(|it| *it == Some(true)) {
             return Some(true);
         }
@@ -70,9 +76,8 @@ impl Domain {
 
     fn probe_atom_at(
         atom: &Atom,
-        index: usize,
+        width: Width,
     ) -> Option<bool> {
-        let width = POINTER_WIDTHS[index];
         let operand = match &atom.lens {
             None => Int::NonNegative(0),
             Some(lens) => lens_at_zero_untyped(lens, width)?,
@@ -103,7 +108,7 @@ impl Domain {
 
 fn const_value_untyped(
     constant: &Const,
-    width: u32,
+    width: Width,
 ) -> Option<Int> {
     return match &constant.kind {
         ConstKind::Int { value, .. } => Some(*value),
@@ -129,7 +134,7 @@ fn predicate_at_zero(function: Option<FnName>) -> Option<bool> {
 /// the functions whose result at zero is the type's bit width.
 fn lens_at_zero_untyped(
     lens: &Lens,
-    width: u32,
+    width: Width,
 ) -> Option<Int> {
     return match lens.function? {
         FnName::Abs
@@ -168,7 +173,7 @@ pub(crate) struct Operand {
     subject: N,
     lens: Option<LensKind>,
     /// Lens arguments per width (validated to fit).
-    args: [Vec<Int>; WIDTHS],
+    args: [Vec<Int>; Width::COUNT],
 }
 
 impl Operand {
@@ -182,22 +187,13 @@ impl Operand {
         return self.lens;
     }
 
-    /// The lens argument at width `index`: the `a` of `abs_diff(a)`, the
-    /// divisor of `rem_euclid` and `div_euclid`.
+    /// The lens argument at `width`: the `a` of `abs_diff(a)`, the divisor
+    /// of `rem_euclid` and `div_euclid`.
     pub(crate) fn arg(
         &self,
-        index: usize,
+        width: Width,
     ) -> Int {
-        return self.args[index][0];
-    }
-
-    /// The value type's bit width at width `index`.
-    pub(crate) fn subject_bits(
-        &self,
-        index: usize,
-    ) -> u32 {
-        return self.subject.bits_for_pointer_width(POINTER_WIDTHS[index])
-            as u32;
+        return self.args[width.index()][0];
     }
 }
 
@@ -218,25 +214,6 @@ pub(crate) enum LensKind {
 }
 
 impl LensKind {
-    /// `abs` and `unsigned_abs` both read `UnsignedAbs`.
-    fn of(function: FnName) -> Option<Self> {
-        return Some(match function {
-            FnName::Abs | FnName::UnsignedAbs => Self::UnsignedAbs,
-            FnName::AbsDiff => Self::AbsDiff,
-            FnName::Signum => Self::Signum,
-            FnName::CountOnes => Self::CountOnes,
-            FnName::CountZeros => Self::CountZeros,
-            FnName::LeadingZeros => Self::LeadingZeros,
-            FnName::TrailingZeros => Self::TrailingZeros,
-            FnName::LeadingOnes => Self::LeadingOnes,
-            FnName::TrailingOnes => Self::TrailingOnes,
-            FnName::RemEuclid => Self::RemEuclid,
-            FnName::DivEuclid => Self::DivEuclid,
-            FnName::Isqrt => Self::Isqrt,
-            _ => return None,
-        });
-    }
-
     /// The primitive method the lens calls.
     pub(crate) fn function(self) -> FnName {
         return match self {
@@ -252,13 +229,6 @@ impl LensKind {
             Self::RemEuclid => FnName::RemEuclid,
             Self::DivEuclid => FnName::DivEuclid,
             Self::Isqrt => FnName::Isqrt,
-        };
-    }
-
-    fn arity(self) -> usize {
-        return match self {
-            Self::AbsDiff | Self::RemEuclid | Self::DivEuclid => 1,
-            _ => 0,
         };
     }
 
@@ -282,26 +252,15 @@ impl LensKind {
     }
 }
 
-const INT_LENSES: [FnName; 13] = [
-    FnName::Abs,
-    FnName::UnsignedAbs,
-    FnName::AbsDiff,
-    FnName::Signum,
-    FnName::CountOnes,
-    FnName::CountZeros,
-    FnName::LeadingZeros,
-    FnName::TrailingZeros,
-    FnName::LeadingOnes,
-    FnName::TrailingOnes,
-    FnName::RemEuclid,
-    FnName::DivEuclid,
-    FnName::Isqrt,
-];
-const INT_PREDICATES: [FnName; 3] = [
-    FnName::IsPowerOfTwo,
-    FnName::IsPositive,
-    FnName::IsNegative,
-];
+/// The `core_int` row `lens` names and the lens it reads; `abs` and
+/// `unsigned_abs` both read `UnsignedAbs`.
+fn lens_row(lens: &Lens) -> Option<(&'static CoreFwd, LensKind)> {
+    let row = CoreFwd::of(CORE_INT, lens.function?)?;
+    return match row.lens {
+        InDomain::Int(kind) => Some((row, kind)),
+        _ => None,
+    };
+}
 
 /// "unknown domain function …", listing every integer function.
 fn unknown_function(
@@ -311,9 +270,9 @@ fn unknown_function(
     return lens.name.errorful(format!(
         "unknown domain function {}; available for {}: {}, {}",
         lens.name,
-        subject.rust_name(),
-        listing(&INT_LENSES),
-        listing(&INT_PREDICATES)
+        subject.name(),
+        listing(&domain_functions(CORE_INT, false)),
+        listing(&domain_functions(CORE_INT, true))
     ));
 }
 
@@ -321,15 +280,13 @@ fn type_lens(
     lens: &Lens,
     subject: N,
 ) -> syn::Result<Operand> {
-    let Some((function, kind)) = lens
-        .function
-        .and_then(|it| return Some((it, LensKind::of(it)?)))
+    let Some((row, kind)) = lens_row(lens)
     else {
         return Err(unknown_function(lens, subject));
     };
-    check_sign(lens, function, subject)?;
+    check_sign(lens, row.name, subject)?;
 
-    let arity = kind.arity();
+    let arity = row.args.len();
     if lens.args.len() != arity {
         return lens.name.fail(format!(
             "{} takes {arity} argument{}",
@@ -372,7 +329,7 @@ fn check_sign(
     return match function {
         FnName::Abs if !signed => name.fail(format!(
             "abs on {} is the identity; remove it",
-            subject.rust_name()
+            subject.name()
         )),
         FnName::UnsignedAbs | FnName::Signum if !signed => {
             name.fail(format!("{name} requires a signed operand"))
@@ -388,21 +345,20 @@ fn check_sign(
 fn type_lens_args(
     lens: &Lens,
     subject: N,
-) -> syn::Result<[Vec<Int>; WIDTHS]> {
-    let mut args: [Vec<Int>; WIDTHS] = Default::default();
+) -> syn::Result<[Vec<Int>; Width::COUNT]> {
+    let mut args: [Vec<Int>; Width::COUNT] = Default::default();
     for arg in &lens.args {
         let values = type_const(arg, subject, None)?;
-        for (index, value) in values.into_iter().enumerate() {
-            let width = POINTER_WIDTHS[index];
+        for (width, value) in Width::ALL.into_iter().zip(values) {
             let (min, max) = subject.bounds_for_pointer_width(width);
             if value < min || value > max {
                 return arg.span.fail(format!(
                     "{} does not fit {width}-bit {}",
                     arg.tokens,
-                    subject.rust_name()
+                    subject.name()
                 ));
             }
-            args[index].push(value);
+            args[width.index()].push(value);
         }
     }
     return Ok(args);
@@ -417,22 +373,21 @@ fn predicate_operand_check(
     if !lens.args.is_empty() {
         return lens.name.fail(format!("{name} takes no arguments"));
     }
-    return match lens.function {
-        Some(FnName::IsPowerOfTwo) if subject.is_signed() => lens
+    let row = lens.function.and_then(|it| CoreFwd::of(CORE_INT, it));
+    return match row.map(|it| (it.name, it.lens)) {
+        Some((FnName::IsPowerOfTwo, _)) if subject.is_signed() => lens
             .name
             .fail("is_power_of_two requires an unsigned operand"),
-        Some(FnName::IsPositive | FnName::IsNegative)
+        Some((FnName::IsPositive | FnName::IsNegative, _))
             if !subject.is_signed() =>
         {
             lens.name.fail(format!("{name} requires a signed operand"))
         }
-        Some(function) if INT_PREDICATES.contains(&function) => Ok(function),
-        Some(function) if INT_LENSES.contains(&function) => {
-            lens.name.fail(format!(
-                "{name} needs `in` and a set of its results; for example \
-                {name} in ..=3"
-            ))
-        }
+        Some((function, InDomain::Predicate)) => Ok(function),
+        Some((_, InDomain::Int(_))) => lens.name.fail(format!(
+            "{name} needs `in` and a set of its results; for example \
+            {name} in ..=3"
+        )),
         _ => Err(unknown_function(lens, subject)),
     };
 }
@@ -443,9 +398,9 @@ fn type_const(
     constant: &Const,
     ty: N,
     lens: Option<&str>,
-) -> syn::Result<[Int; WIDTHS]> {
+) -> syn::Result<[Int; Width::COUNT]> {
     let mismatch = |found: &str| -> syn::Error {
-        let expected = ty.rust_name();
+        let expected = ty.name();
         return match lens {
             None => constant.span.errorful(format!(
                 "{found} does not match the {expected} operand; write \
@@ -460,13 +415,13 @@ fn type_const(
 
     return match &constant.kind {
         ConstKind::Int { value, suffix } => {
-            if !suffix.is_empty() && suffix != ty.rust_name() {
+            if !suffix.is_empty() && suffix != ty.name() {
                 return Err(constant.span.errorful(format!(
                     "{suffix} suffix does not match the {} operand",
-                    ty.rust_name()
+                    ty.name()
                 )));
             }
-            Ok([*value; WIDTHS])
+            Ok([*value; Width::COUNT])
         }
         ConstKind::Bound {
             ty: bound,
@@ -476,13 +431,12 @@ fn type_const(
             if *bound != ty {
                 return Err(mismatch(&format!(
                     "{}::{}",
-                    bound.rust_name(),
+                    bound.name(),
                     if *max { MAX } else { MIN }
                 )));
             }
-            Ok(std::array::from_fn(|index| {
-                let (min, maximum) =
-                    bound.bounds_for_pointer_width(POINTER_WIDTHS[index]);
+            Ok(Width::ALL.map(|width| {
+                let (min, maximum) = bound.bounds_for_pointer_width(width);
                 let value = if *max { maximum } else { min };
                 if *negated { value.negate() } else { value }
             }))
@@ -555,7 +509,7 @@ pub(crate) enum RNode {
 #[derive(Clone)]
 pub(crate) struct ResolvedDomain {
     pub(crate) subject: N,
-    pub(crate) per_width: [RNode; WIDTHS],
+    pub(crate) per_width: [RNode; Width::COUNT],
 }
 
 impl Domain {
@@ -567,20 +521,19 @@ impl Domain {
         non_zero: bool,
     ) -> syn::Result<ResolvedDomain> {
         let typed = type_node(&self.root, subject)?;
-        let per_width: [RNode; WIDTHS] =
-            std::array::from_fn(|index| normalize(fold(&typed, index), index));
+        let per_width =
+            Width::ALL.map(|width| normalize(fold(&typed, width), width));
 
         if per_width.iter().all(|it| matches!(it, RNode::Const(true))) {
             return self.span.fail(format!(
                 "domain admits every {} value; remove the domain",
-                subject.rust_name()
+                subject.name()
             ));
         }
         if per_width.iter().all(|it| matches!(it, RNode::Const(false))) {
-            return self.span.fail(format!(
-                "domain admits no {} value",
-                subject.rust_name()
-            ));
+            return self
+                .span
+                .fail(format!("domain admits no {} value", subject.name()));
         }
 
         let per_width = match non_zero {
@@ -589,14 +542,14 @@ impl Domain {
             // input.
             true => {
                 let mut folded = per_width.into_iter();
-                std::array::from_fn(|index| {
+                Width::ALL.map(|width| {
                     let it = folded.next().expect("one tree per width");
                     return normalize(
                         RNode::And(vec![
                             it,
                             ne_zero(subject),
                         ]),
-                        index,
+                        width,
                     );
                 })
             }
@@ -649,17 +602,17 @@ struct TAtom {
 
 enum TTest {
     Range {
-        lo: Option<([Int; WIDTHS], TokenStream)>,
-        hi: Option<([Int; WIDTHS], TokenStream)>,
+        lo: Option<([Int; Width::COUNT], TokenStream)>,
+        hi: Option<([Int; Width::COUNT], TokenStream)>,
         inclusive: bool,
     },
     Point {
-        values: [Int; WIDTHS],
+        values: [Int; Width::COUNT],
         tokens: TokenStream,
         negated: bool,
     },
     Divisible {
-        divisor: [Int; WIDTHS],
+        divisor: [Int; Width::COUNT],
         tokens: TokenStream,
         negated: bool,
     },
@@ -702,12 +655,13 @@ fn type_atom(
         Some(lens) => type_lens(lens, subject)?,
     };
     let lens_name = atom.lens.as_ref().map(|it| it.name.to_string());
-    let typed = |it: &Const| -> syn::Result<([Int; WIDTHS], TokenStream)> {
-        return Ok((
-            type_const(it, operand.ty, lens_name.as_deref())?,
-            it.tokens.clone(),
-        ));
-    };
+    let typed =
+        |it: &Const| -> syn::Result<([Int; Width::COUNT], TokenStream)> {
+            return Ok((
+                type_const(it, operand.ty, lens_name.as_deref())?,
+                it.tokens.clone(),
+            ));
+        };
 
     let test = match &atom.test {
         Test::Predicate => unreachable!("handled above"),
@@ -757,17 +711,15 @@ fn type_predicate(
 /// A range empty at every pointer width is an error.
 fn check_empty_range(
     atom: &Atom,
-    lo: &Option<([Int; WIDTHS], TokenStream)>,
-    hi: &Option<([Int; WIDTHS], TokenStream)>,
+    lo: &Option<([Int; Width::COUNT], TokenStream)>,
+    hi: &Option<([Int; Width::COUNT], TokenStream)>,
     inclusive: bool,
 ) -> syn::Result<()> {
     let (Some((lo_values, _)), Some((hi_values, hi_tokens))) = (lo, hi)
     else {
         return Ok(());
     };
-    let empty = (0..WIDTHS).all(|index| {
-        let lo = lo_values[index];
-        let hi = hi_values[index];
+    let empty = lo_values.iter().zip(hi_values).all(|(lo, hi)| {
         return match inclusive {
             true => lo > hi,
             false => lo >= hi,
@@ -788,17 +740,17 @@ fn check_empty_range(
 
 fn fold(
     node: &TNode,
-    index: usize,
+    width: Width,
 ) -> RNode {
     return match node {
         TNode::Or(items) => {
-            RNode::Or(items.iter().map(|it| fold(it, index)).collect())
+            RNode::Or(items.iter().map(|it| fold(it, width)).collect())
         }
         TNode::And(items) => {
-            RNode::And(items.iter().map(|it| fold(it, index)).collect())
+            RNode::And(items.iter().map(|it| fold(it, width)).collect())
         }
-        TNode::Not(inner) => RNode::Not(Box::new(fold(inner, index))),
-        TNode::Atom(atom) => fold_atom(atom, index),
+        TNode::Not(inner) => RNode::Not(Box::new(fold(inner, width))),
+        TNode::Atom(atom) => fold_atom(atom, width),
     };
 }
 
@@ -841,9 +793,10 @@ fn hi_edge(
 
 fn fold_atom(
     atom: &TAtom,
-    index: usize,
+    width: Width,
 ) -> RNode {
     let operand = &atom.operand;
+    let index = width.index();
     return match &atom.test {
         TTest::Predicate(name, function) => RNode::Predicate {
             operand: operand.clone(),
@@ -860,7 +813,7 @@ fn fold_atom(
                     hi_edge(values[index], tokens, *inclusive)
                 }
             },
-            index,
+            width,
         ),
         TTest::Point {
             values,
@@ -870,18 +823,18 @@ fn fold_atom(
             operand,
             Some(closed_bound(values[index], tokens)),
             Edge::At(closed_bound(values[index], tokens)),
-            index,
+            width,
         ),
         TTest::Point {
             values,
             tokens,
             negated: true,
-        } => fold_ne(operand, values[index], tokens, index),
+        } => fold_ne(operand, values[index], tokens, width),
         TTest::Divisible {
             divisor,
             tokens,
             negated,
-        } => fold_divisible(operand, divisor[index], tokens, *negated, index),
+        } => fold_divisible(operand, divisor[index], tokens, *negated, width),
     };
 }
 
@@ -889,7 +842,7 @@ fn fold_interval(
     operand: &Operand,
     lo: Option<Bound>,
     hi: Edge,
-    index: usize,
+    width: Width,
 ) -> RNode {
     let hi = match hi {
         Edge::Open => None,
@@ -902,7 +855,7 @@ fn fold_interval(
             lo,
             hi,
         },
-        index,
+        width,
     );
 }
 
@@ -910,9 +863,9 @@ fn fold_ne(
     operand: &Operand,
     value: Int,
     tokens: &TokenStream,
-    index: usize,
+    width: Width,
 ) -> RNode {
-    let (min, max) = operand.ty.bounds_for_pointer_width(POINTER_WIDTHS[index]);
+    let (min, max) = operand.ty.bounds_for_pointer_width(width);
     return match value < min || value > max {
         true => RNode::Const(true),
         false => RNode::Ne {
@@ -928,9 +881,9 @@ fn fold_divisible(
     divisor: Int,
     tokens: &TokenStream,
     negated: bool,
-    index: usize,
+    width: Width,
 ) -> RNode {
-    let (min, max) = operand.ty.bounds_for_pointer_width(POINTER_WIDTHS[index]);
+    let (min, max) = operand.ty.bounds_for_pointer_width(width);
     if divisor <= max {
         return RNode::Divisible {
             operand: operand.clone(),
@@ -970,7 +923,7 @@ fn beyond_divisor(
     if min.negate() != divisor {
         return zero;
     }
-    let ty = Ident::new(operand.ty.rust_name(), Span::call_site());
+    let ty = Ident::new(operand.ty.name(), Span::call_site());
     let minimum = Bound {
         value: min,
         tokens: quote! { #ty::MIN },
@@ -990,13 +943,13 @@ fn beyond_divisor(
 /// is empty or covers the whole type becomes a constant.
 fn clamp(
     node: RNode,
-    index: usize,
+    width: Width,
 ) -> RNode {
     let RNode::Interval { operand, lo, hi } = node
     else {
         return node;
     };
-    let (min, max) = operand.ty.bounds_for_pointer_width(POINTER_WIDTHS[index]);
+    let (min, max) = operand.ty.bounds_for_pointer_width(width);
     let lo = lo.filter(|it| it.value > min);
     let hi = hi.filter(|it| it.value < max);
     if lo.as_ref().is_some_and(|it| it.value > max)
@@ -1020,12 +973,12 @@ fn clamp(
 
 fn normalize(
     node: RNode,
-    index: usize,
+    width: Width,
 ) -> RNode {
     return match node {
-        RNode::Or(items) => normalize_or(items, index),
-        RNode::And(items) => normalize_and(items, index),
-        RNode::Not(inner) => match normalize(*inner, index) {
+        RNode::Or(items) => normalize_or(items, width),
+        RNode::And(items) => normalize_and(items, width),
+        RNode::Not(inner) => match normalize(*inner, width) {
             RNode::Const(value) => RNode::Const(!value),
             other => RNode::Not(Box::new(other)),
         },
@@ -1035,12 +988,12 @@ fn normalize(
 
 fn flatten(
     items: Vec<RNode>,
-    index: usize,
+    width: Width,
     or: bool,
 ) -> Vec<RNode> {
     let mut result = Vec::with_capacity(items.len());
     for item in items {
-        match (normalize(item, index), or) {
+        match (normalize(item, width), or) {
             (RNode::Or(inner), true) | (RNode::And(inner), false) => {
                 result.extend(inner);
             }
@@ -1060,9 +1013,9 @@ fn interval_key(node: &RNode) -> Option<&OperandKey> {
 
 fn normalize_or(
     items: Vec<RNode>,
-    index: usize,
+    width: Width,
 ) -> RNode {
-    let items = flatten(items, index, true);
+    let items = flatten(items, width, true);
     if items.iter().any(|it| matches!(it, RNode::Const(true))) {
         return RNode::Const(true);
     }
@@ -1080,7 +1033,7 @@ fn normalize_or(
         match entry {
             Err(item) => result.push(item),
             Ok(key) => {
-                let merged = merge_union(groups.remove(&key).unwrap(), index);
+                let merged = merge_union(groups.remove(&key).unwrap(), width);
                 if merged.iter().any(|it| matches!(it, RNode::Const(true))) {
                     return RNode::Const(true);
                 }
@@ -1105,7 +1058,7 @@ fn interval_parts(node: RNode) -> Ends {
 
 fn merge_union(
     intervals: Vec<RNode>,
-    index: usize,
+    width: Width,
 ) -> Vec<RNode> {
     let mut parts = intervals
         .into_iter()
@@ -1150,16 +1103,16 @@ fn merge_union(
     return merged
         .into_iter()
         .map(|(operand, lo, hi)| {
-            clamp(RNode::Interval { operand, lo, hi }, index)
+            clamp(RNode::Interval { operand, lo, hi }, width)
         })
         .collect();
 }
 
 fn normalize_and(
     items: Vec<RNode>,
-    index: usize,
+    width: Width,
 ) -> RNode {
-    let items = flatten(items, index, false);
+    let items = flatten(items, width, false);
     if items.iter().any(|it| matches!(it, RNode::Const(false))) {
         return RNode::Const(false);
     }
@@ -1190,7 +1143,7 @@ fn normalize_and(
             Err(item) => result.push(item),
             Ok(key) => {
                 let (operand, lo, hi) = ends[&key].clone();
-                match clamp(RNode::Interval { operand, lo, hi }, index) {
+                match clamp(RNode::Interval { operand, lo, hi }, width) {
                     RNode::Const(false) => return RNode::Const(false),
                     RNode::Const(true) => {}
                     other => result.push(other),
@@ -1296,11 +1249,11 @@ fn redundant_ne(
 // Exact evaluation (zero probes, `Within` forms, tests)
 
 /// The operand's value at `value`: the value itself, or the lens result,
-/// exactly as the primitive method computes it at width `index`.
+/// exactly as the primitive method computes it at `width`.
 pub(crate) fn lens_value(
     operand: &Operand,
     value: Int,
-    index: usize,
+    width: Width,
 ) -> Int {
     let Some(kind) = operand.lens
     else {
@@ -1309,7 +1262,7 @@ pub(crate) fn lens_value(
     return match kind {
         LensKind::UnsignedAbs => Int::NonNegative(value.magnitude()),
         LensKind::AbsDiff => {
-            Int::NonNegative(match (value, operand.arg(index)) {
+            Int::NonNegative(match (value, operand.arg(width)) {
                 (Int::NonNegative(a), Int::NonNegative(b))
                 | (Int::Negative(a), Int::Negative(b)) => a.abs_diff(b),
                 (Int::NonNegative(a), Int::Negative(b))
@@ -1323,10 +1276,10 @@ pub(crate) fn lens_value(
         },
         // Divisors are at least 2 (`check_divisor`), so neither overflows.
         LensKind::RemEuclid => value
-            .checked_rem_euclid(operand.arg(index))
+            .checked_rem_euclid(operand.arg(width))
             .expect("a nonzero divisor"),
         LensKind::DivEuclid => value
-            .checked_div_euclid(operand.arg(index))
+            .checked_div_euclid(operand.arg(width))
             .expect("a nonzero divisor"),
         LensKind::Isqrt => value.isqrt().expect("isqrt takes unsigned values"),
         LensKind::CountOnes
@@ -1337,24 +1290,21 @@ pub(crate) fn lens_value(
         | LensKind::TrailingOnes => Int::NonNegative(u128::from(bit_count(
             kind,
             value,
-            operand.subject_bits(index),
+            operand.subject.at(width),
         ))),
     };
 }
 
 /// A bit-counting lens over the two's-complement pattern of `value` in
-/// `bits` bits: `count_ones(0) == 0`, `leading_zeros(0) == bits`.
+/// `ty`: `count_ones(0) == 0`, `leading_zeros(0) == bits`.
 fn bit_count(
     kind: LensKind,
     value: Int,
-    bits: u32,
+    ty: IntTy,
 ) -> u32 {
-    let mask = match bits {
-        u128::BITS => u128::MAX,
-        bits => (1u128 << bits) - 1,
-    };
-    let ones = value.pattern() & mask;
-    let zeros = !ones & mask;
+    let bits = ty.bits;
+    let ones = value.pattern() & ty.mask();
+    let zeros = !ones & ty.mask();
     let leading = |it: u128| bits - (u128::BITS - it.leading_zeros());
     let trailing = |it: u128| {
         return match it {
@@ -1407,55 +1357,42 @@ fn predicate_holds(
     };
 }
 
-/// Exact membership of `value` in `node` at width `index`.
+/// Exact membership of `value` in `node` at `width`.
 pub(crate) fn eval(
     node: &RNode,
     value: Int,
-    index: usize,
+    width: Width,
 ) -> bool {
     return match node {
         RNode::Const(it) => *it,
-        RNode::Or(items) => items.iter().any(|it| eval(it, value, index)),
-        RNode::And(items) => items.iter().all(|it| eval(it, value, index)),
-        RNode::Not(inner) => !eval(inner, value, index),
+        RNode::Or(items) => items.iter().any(|it| eval(it, value, width)),
+        RNode::And(items) => items.iter().all(|it| eval(it, value, width)),
+        RNode::Not(inner) => !eval(inner, value, width),
         RNode::Interval { operand, .. }
         | RNode::Ne { operand, .. }
         | RNode::Divisible { operand, .. } => {
-            test_holds(node, lens_value(operand, value, index))
+            test_holds(node, lens_value(operand, value, width))
         }
         RNode::Predicate { function, .. } => predicate_holds(*function, value),
     };
 }
 
 impl ResolvedDomain {
-    fn index_of(width: u32) -> usize {
-        return POINTER_WIDTHS
-            .iter()
-            .position(|it| *it == width)
-            .expect("supported pointer width");
-    }
-
     /// Exact membership of `value` at `width`.
     pub(crate) fn contains(
         &self,
         value: Int,
-        width: u32,
+        width: Width,
     ) -> bool {
-        let index = Self::index_of(width);
-        return eval(&self.per_width[index], value, index);
+        return eval(&self.per_width[width.index()], value, width);
     }
 
-    /// Zero is admitted at `width`.
-    pub(crate) fn admits_zero(
+    /// `at` is rejected at every pointer width.
+    pub(crate) fn excludes(
         &self,
-        width: u32,
+        at: Int,
     ) -> bool {
-        return self.contains(Int::NonNegative(0), width);
-    }
-
-    /// Zero is rejected at every pointer width.
-    pub(crate) fn excludes_zero(&self) -> bool {
-        return POINTER_WIDTHS.iter().all(|width| !self.admits_zero(*width));
+        return Width::ALL.into_iter().all(|it| !self.contains(at, it));
     }
 
     /// Every valid `x` has a valid `-x` at every width. Proven structurally:
@@ -1477,21 +1414,18 @@ impl ResolvedDomain {
         &self,
         value: &TokenStream,
     ) -> TokenStream {
-        let emitted = self.per_width.clone().map(|it| emit(&it, value));
-        let first = emitted[0].to_string();
-        if emitted.iter().all(|it| it.to_string() == first) {
-            return emitted[0].clone();
+        let emitted =
+            by_width(self.per_width.clone().map(|it| emit(&it, value)));
+        if let [(_, condition)] = &emitted[..] {
+            return condition.clone();
         }
 
-        let variants = POINTER_WIDTHS.into_iter().zip(emitted).map(
-            |(width, condition)| {
-                let width = width.to_string();
-                return quote! {
-                    #[cfg(target_pointer_width = #width)]
-                    let __typekin_domain_valid = #condition;
-                };
-            },
-        );
+        let variants = emitted.into_iter().map(|(cfg, condition)| {
+            return quote! {
+                #cfg
+                let __typekin_domain_valid = #condition;
+            };
+        });
         return quote! {
             {
                 #(#variants)*

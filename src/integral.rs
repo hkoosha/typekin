@@ -46,8 +46,10 @@ use crate::zz_friend::{
 };
 use crate::zz_hide::Envelope;
 use crate::zz_lib::{
+    Check,
     Konst,
     NUMERIC_LINTS,
+    OnInvalid,
     lint_scope,
     repr_transparent,
 };
@@ -58,30 +60,21 @@ use crate::zz_names::{
 use crate::zz_profile_integral::Arithmetic;
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
-    ArithmeticOp,
     N,
     Num,
-    POINTER_WIDTHS,
+    OpKind,
+    OpSpec,
+    Width,
+    by_width_grouped,
 };
 
 // An empty token stream means the item is valid on every supported target.
 pub(crate) fn pointer_width_cfg(
-    mut enabled: impl FnMut(u32) -> bool
+    enabled: impl FnMut(Width) -> bool
 ) -> Option<TokenStream> {
-    let widths = POINTER_WIDTHS
+    return by_width_grouped(Width::ALL.map(enabled))
         .into_iter()
-        .filter(|&width| enabled(width))
-        .map(|width| width.to_string())
-        .collect::<Vec<_>>();
-    return match widths.len() {
-        0 => None,
-        1 => {
-            let width = &widths[0];
-            Some(quote! { #[cfg(target_pointer_width = #width)] })
-        }
-        3 => Some(TokenStream::new()),
-        _ => Some(quote! { #[cfg(any(#(target_pointer_width = #widths),*))] }),
-    };
+        .find_map(|(cfg, enabled)| enabled.then_some(cfg));
 }
 
 /// Float types typekin names but does not support (diagnostic only).
@@ -164,7 +157,7 @@ fn declaration_attributes(
     .then(|| quote! { #[derive(Copy)] });
     let derive_clone: Option<TokenStream> =
         (cfg.flags.has(IntegralFlag::Clone) && !target.has_generics())
-            .then(|| cfg.konst.derive(quote! { Clone }));
+            .then(|| cfg.wide.konst.derive(quote! { Clone }));
     return quote! { #repr #derive_copy #derive_clone };
 }
 
@@ -320,9 +313,8 @@ fn manual_copy_clone(
     let manual_clone = (cfg.flags.has(IntegralFlag::Clone)
         && target.has_generics())
     .then(|| {
-        let konst = Konst::konst(matches!(cfg.konst, Konst::Nightly));
+        let konst = Konst::konst(matches!(cfg.wide.konst, Konst::Nightly));
         let value = target.construct_storage(
-            quote! { Self },
             quote! { self.0 },
             cfg.flags.has(IntegralFlag::Assertions),
         );
@@ -646,25 +638,21 @@ impl IntegralTarget {
     pub(crate) fn construct(
         &self,
         storage: &StoragePlan,
-        constructor: TokenStream,
         raw: TokenStream,
         assert_layout: bool,
     ) -> TokenStream {
-        return self.construct_storage(
-            constructor,
-            storage.storage_expression(raw),
-            assert_layout,
-        );
+        return self
+            .construct_storage(storage.storage_expression(raw), assert_layout);
     }
 
+    /// `Self` holding `storage`, an expression of the field's type.
     fn construct_storage(
         &self,
-        constructor: TokenStream,
         storage: TokenStream,
         assert_layout: bool,
     ) -> TokenStream {
         if !self.has_generics() {
-            return quote! { #constructor(#storage) };
+            return quote! { Self(#storage) };
         }
         let markers = self
             .phantom_types
@@ -677,7 +665,7 @@ impl IntegralTarget {
         });
         return quote! {{
             #assertion
-            #constructor(#storage, #(#markers),*)
+            Self(#storage, #(#markers),*)
         }};
     }
 }
@@ -737,20 +725,27 @@ impl syn::visit_mut::VisitMut for TargetSelf {
     }
 }
 
+/// What holds the raw value, inside `Wrapping` or not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Base {
+    /// The raw type itself.
+    Plain,
+    /// `::core::num::NonZero*`: zero cannot be stored.
+    NonZero,
+}
+
+/// How a wrapper stores its raw value. Every read of the field goes through
+/// `extract`, every write through `storage_expression`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct StoragePlan {
     pub(crate) raw: Num,
-    pub(crate) non_zero: bool,
+    pub(crate) base: Base,
     pub(crate) wrapping: bool,
 }
 
 impl StoragePlan {
     pub(crate) fn primitive(raw: impl Into<Num>) -> Self {
-        return Self {
-            raw: raw.into(),
-            non_zero: false,
-            wrapping: false,
-        };
+        return Self::new(raw, false, false);
     }
 
     pub(crate) fn new(
@@ -760,13 +755,16 @@ impl StoragePlan {
     ) -> Self {
         return Self {
             raw: raw.into(),
-            non_zero,
+            base: match non_zero {
+                true => Base::NonZero,
+                false => Base::Plain,
+            },
             wrapping,
         };
     }
 
     fn rewrites_field(&self) -> bool {
-        return self.non_zero || self.wrapping;
+        return self.base != Base::Plain || self.wrapping;
     }
 
     fn non_zero_name(&self) -> &'static str {
@@ -778,13 +776,13 @@ impl StoragePlan {
     }
 
     pub(crate) fn field_type(&self) -> TokenStream {
-        let raw = format_ident!("{}", self.raw.rust_name());
-        let storage = if self.non_zero {
-            let non_zero = format_ident!("{}", self.non_zero_name());
-            quote! { ::core::num::#non_zero }
-        }
-        else {
-            quote! { #raw }
+        let raw = format_ident!("{}", self.raw.name());
+        let storage = match self.base {
+            Base::NonZero => {
+                let non_zero = format_ident!("{}", self.non_zero_name());
+                quote! { ::core::num::#non_zero }
+            }
+            Base::Plain => quote! { #raw },
         };
 
         return if self.wrapping {
@@ -802,21 +800,21 @@ impl StoragePlan {
         &self,
         raw: TokenStream,
     ) -> TokenStream {
-        let storage = if self.non_zero {
-            let non_zero = format_ident!("{}", self.non_zero_name());
-            quote! {
-                match ::core::num::#non_zero::new(#raw) {
-                    ::core::option::Option::Some(value) => value,
-                    ::core::option::Option::None => {
-                        ::core::panic!(
-                            "zero cannot be stored by this integral type"
-                        )
+        let storage = match self.base {
+            Base::NonZero => {
+                let non_zero = format_ident!("{}", self.non_zero_name());
+                quote! {
+                    match ::core::num::#non_zero::new(#raw) {
+                        ::core::option::Option::Some(value) => value,
+                        ::core::option::Option::None => {
+                            ::core::panic!(
+                                "zero cannot be stored by this integral type"
+                            )
+                        }
                     }
                 }
             }
-        }
-        else {
-            raw
+            Base::Plain => raw,
         };
 
         return if self.wrapping {
@@ -838,11 +836,9 @@ impl StoragePlan {
             storage
         };
 
-        return if self.non_zero {
-            quote! { (#storage).get() }
-        }
-        else {
-            storage
+        return match self.base {
+            Base::NonZero => quote! { (#storage).get() },
+            Base::Plain => storage,
         };
     }
 
@@ -852,7 +848,10 @@ impl StoragePlan {
         &self,
         storage: TokenStream,
     ) -> TokenStream {
-        assert!(!self.non_zero, "NonZero storage cannot lend its raw value");
+        assert!(
+            self.base != Base::NonZero,
+            "NonZero storage cannot lend its raw value"
+        );
         let raw = self.extract(storage);
         return quote! { &#raw };
     }
@@ -861,7 +860,7 @@ impl StoragePlan {
         &self,
         target: TokenStream,
     ) -> TokenStream {
-        let raw = format_ident!("{}", self.raw.rust_name());
+        let raw = format_ident!("{}", self.raw.name());
         return quote! {
             if !(::core::mem::size_of::<#target>()
                 == ::core::mem::size_of::<#raw>())
@@ -981,7 +980,6 @@ pub(crate) struct Ctx {
     pub(crate) where_clause: TokenStream,
     pub(crate) arguments: TokenStream,
     pub(crate) rhs_ty: Ident,
-    pub(crate) rhs_impl_generics: TokenStream,
     pub(crate) validation: TokenStream,
     pub(crate) rhs_raw: TokenStream,
     pub(crate) self_raw: TokenStream,
@@ -1012,19 +1010,18 @@ impl Ctx {
             .clone()
             .unwrap_or_else(|| parse_quote! { Self::raw });
         let rhs_ty = target.fresh_ident("T");
-        let (rhs_impl_generics, _) =
-            target.impl_header(&[parse_quote! { #rhs_ty }], &[]);
         let friends = FriendTraits::new(
             &names,
             arguments.clone(),
             &rhs_ty,
             target.has_generics(),
         );
-        let value = quote! { value };
-        let validation = cfg.validation.emit(&value);
+        let validation =
+            cfg.validation.emit(&quote! { value }).to_token_stream();
         let rhs_raw = storage.extract(quote! { rhs.0 });
         let self_raw = storage.extract(quote! { self.0 });
         let failure = cfg
+            .wide
             .panic_at
             .fallible()
             .then(|| quote! { ::core::option::Option<#el> });
@@ -1040,7 +1037,6 @@ impl Ctx {
             where_clause,
             arguments,
             rhs_ty,
-            rhs_impl_generics,
             validation,
             rhs_raw,
             self_raw,
@@ -1071,7 +1067,9 @@ impl Maker {
         cfg: Box<Cfg>,
         storage: StoragePlan,
     ) -> syn::Result<Self> {
-        if storage.non_zero && !cfg.flags.has(IntegralFlag::FnOrPanic) {
+        if storage.base == Base::NonZero
+            && !cfg.flags.has(IntegralFlag::FnOrPanic)
+        {
             return cfg
                 .explicit_span(IntegralFlag::FnOrPanic)
                 .fail("nonzero storage does not support a custom or_panic constructor");
@@ -1117,19 +1115,44 @@ impl Maker {
             && !self.target.has_generics();
     }
 
-    /// The where clause of an impl over the right-hand side `T: #bounds`.
-    pub(crate) fn rhs_where(
+    /// `#konst impl<..> #path for Ty where .. { #body }`, `const` under
+    /// `is_konst`.
+    pub(crate) fn impl_trait(
         &self,
-        bounds: TokenStream,
+        is_konst: bool,
+        path: TokenStream,
+        body: TokenStream,
     ) -> TokenStream {
-        let rhs_ty = &self.ctx.rhs_ty;
-        return self
-            .target
-            .impl_header(
-                &[parse_quote! { #rhs_ty }],
-                &[parse_quote! { #rhs_ty: #bounds }],
-            )
-            .1;
+        let ty = &self.ctx.ty;
+        let impl_generics = &self.ctx.impl_generics;
+        let where_clause = &self.ctx.where_clause;
+        let konst = Konst::konst(is_konst);
+        return quote! {
+            #konst impl #impl_generics #path for #ty #where_clause {
+                #body
+            }
+        };
+    }
+
+    /// `impl_trait` over the target's generics extended with `parameters`
+    /// (lifetimes join the lifetimes, the rest go last) and `predicates`.
+    pub(crate) fn impl_trait_with(
+        &self,
+        is_konst: bool,
+        parameters: &[GenericParam],
+        predicates: &[syn::WherePredicate],
+        path: TokenStream,
+        body: TokenStream,
+    ) -> TokenStream {
+        let ty = &self.ctx.ty;
+        let (impl_generics, where_clause) =
+            self.target.impl_header(parameters, predicates);
+        let konst = Konst::konst(is_konst);
+        return quote! {
+            #konst impl #impl_generics #path for #ty #where_clause {
+                #body
+            }
+        };
     }
 
     /// `Self` built from a validated `raw` value.
@@ -1139,9 +1162,24 @@ impl Maker {
     ) -> TokenStream {
         return self.target.construct(
             &self.storage,
-            quote! { Self },
             raw,
             self.ctx.cfg.flags.has(IntegralFlag::Assertions),
+        );
+    }
+
+    /// The statements ending a constructor's body: the raw value named
+    /// `raw` checked as `check` says, then `Self` built from it, else
+    /// `on_invalid`.
+    pub(crate) fn construction(
+        &self,
+        raw: TokenStream,
+        check: Check,
+        on_invalid: OnInvalid,
+    ) -> TokenStream {
+        return self.ctx.cfg.validation.emit(&raw).construct(
+            check,
+            on_invalid,
+            self.construct_self(raw),
         );
     }
 
@@ -1168,20 +1206,33 @@ impl Maker {
         });
     }
 
+    /// The validating helper of a binary operator: `_add`, `_bitor`, `_shr`.
+    /// Non-const arithmetic and shifts over `Wrapping` storage call the
+    /// `_wrapping` twin.
     pub(crate) fn arithmetic_method_name(
         &self,
-        operation: ArithmeticOp,
+        operator: &OpSpec,
         is_konst: bool,
     ) -> Ident {
-        let name = operation.name();
-        return if !is_konst
-            && self.ctx.cfg.profile.arithmetic() == Arithmetic::WrapperWrapping
-        {
+        let name = operator.method;
+        return if !is_konst && self.has_wrapping_helper(operator) {
             format_ident!("_{}_wrapping", name)
         }
         else {
             format_ident!("_{}", name)
         };
+    }
+
+    /// Whether `operator`'s helper has a non-const `_wrapping` twin: the
+    /// arithmetic and shifts of `Wrapping` storage, whose operators are not
+    /// const.
+    pub(crate) fn has_wrapping_helper(
+        &self,
+        operator: &OpSpec,
+    ) -> bool {
+        return operator.kind != OpKind::Bitwise
+            && self.ctx.cfg.profile.arithmetic()
+                == Arithmetic::WrapperWrapping;
     }
 
     fn ekran_items(&self) -> TokenStream {

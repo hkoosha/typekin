@@ -24,7 +24,6 @@ use crate::integral_cfg::{
     IntegralFlag,
     IntegralName,
 };
-use crate::zz_domain::WIDTHS;
 use crate::zz_domain_within::{
     Form,
     Opaque,
@@ -42,15 +41,19 @@ use crate::zz_friend::{
     Friend,
 };
 use crate::zz_lib::{
+    Check,
     Konst,
     Konsts,
+    Named as _,
+    OnInvalid,
 };
 use crate::zz_runner::MkErr;
 use crate::zz_values::{
     Int,
     N,
     Num,
-    POINTER_WIDTHS,
+    Width,
+    by_width,
 };
 
 /// How a `Within` friend is proven.
@@ -90,8 +93,7 @@ impl Maker {
         let table = names.get(IntegralName::WithinTable);
         let signed = self.repr().is_signed();
         let ty = self.target.ident.unraw().to_string();
-        let forms: [_; WIDTHS] =
-            std::array::from_fn(|index| self.source_form(index));
+        let forms = Width::ALL.map(|width| self.source_form(width));
         let form_values = forms.clone().map(|it| {
             return match it {
                 Ok(form) => {
@@ -150,17 +152,17 @@ impl Maker {
         });
     }
 
-    /// The values the wrapper can hold at width `index`: every raw value
-    /// when its value field is visible, else what validation admits.
+    /// The values the wrapper can hold at `width`: every raw value when its
+    /// value field is visible, else what validation admits.
     fn source_form(
         &self,
-        index: usize,
+        width: Width,
     ) -> Result<Form, Opaque> {
         let repr = self.repr();
         if self.ctx.cfg.visible_value {
-            return Ok(Form::full(repr, index));
+            return Ok(Form::full(repr, width));
         }
-        return self.ctx.cfg.validation.form(repr, index);
+        return self.ctx.cfg.validation.form(repr, width);
     }
 
     /// An 8-bit wrapper's validation at every raw value, when it is
@@ -255,20 +257,20 @@ impl Maker {
         return Ok(plan);
     }
 
-    /// The target's validated values at width `index`.
+    /// The target's validated values at `width`.
     fn target_form(
         &self,
-        index: usize,
+        width: Width,
     ) -> Result<Form, Opaque> {
-        return self.ctx.cfg.validation.form(self.repr(), index);
+        return self.ctx.cfg.validation.form(self.repr(), width);
     }
 
-    /// The target's raw range at width `index`.
+    /// The target's raw range at `width`.
     fn target_bounds(
         &self,
-        index: usize,
+        width: Width,
     ) -> (Int, Int) {
-        return self.repr().bounds_for_pointer_width(POINTER_WIDTHS[index]);
+        return self.repr().bounds_for_pointer_width(width);
     }
 
     /// A primitive source at every width: `true` when proven, `false` when
@@ -279,9 +281,8 @@ impl Maker {
         friend: &Friend,
         source: N,
     ) -> syn::Result<bool> {
-        let verdicts: [Verdict; WIDTHS] = std::array::from_fn(|index| {
-            return self.primitive_verdict(source, index);
-        });
+        let verdicts =
+            Width::ALL.map(|width| self.primitive_verdict(source, width));
         if verdicts.iter().all(|it| *it == Verdict::Proven) {
             return Ok(true);
         }
@@ -306,29 +307,28 @@ impl Maker {
         let message = match verdicts.iter().all(|it| *it == verdicts[position])
         {
             true => text.clone(),
-            false => format!(
-                "{text} at {}-bit pointer width",
-                POINTER_WIDTHS[position]
-            ),
+            false => {
+                format!("{text} at {}-bit pointer width", Width::ALL[position])
+            }
         };
         return friend.ty.path().fail(message);
     }
 
     /// Whether every value of primitive `source` lies in the target at
-    /// width `index`.
+    /// `width`.
     fn primitive_verdict(
         &self,
         source: N,
-        index: usize,
+        width: Width,
     ) -> Verdict {
-        let source_name = source.rust_name();
+        let source_name = source.name();
         let ty = self.target.ident.unraw();
         let refuted = |value: Int, tail: String| {
             let head = format!("`{source_name}` is not within `{ty}`: ");
             return Verdict::Refuted(message(&head, value, &tail));
         };
         let cannot = format!("cannot prove `{source_name}` within `{ty}`: ");
-        let target = match self.target_form(index) {
+        let target = match self.target_form(width) {
             Ok(it) => it,
             Err(reason) => {
                 let reason = reason.describe(&ty.to_string());
@@ -336,8 +336,8 @@ impl Maker {
             }
         };
         let value = Int::from_sign_magnitude;
-        let full = Form::full(source, index);
-        return match subset(&full, &target, self.target_bounds(index)) {
+        let full = Form::full(source, width);
+        return match subset(&full, &target, self.target_bounds(width)) {
             __TypekinWithin::Proven => Verdict::Proven,
             __TypekinWithin::Range(negative, magnitude) => refuted(
                 value(negative, magnitude),
@@ -384,20 +384,11 @@ impl Maker {
         let el = &self.el;
         let name = self.ctx.names.get(IntegralName::WithinFn);
         let konst = Konst::konst(self.ctx.cfg.helper_konst());
-        let check = self.ctx.cfg.validation.has_validation().then(|| {
-            let validation = self.ctx.cfg.validation.emit(&quote! { raw });
-            quote! {
-                ::core::debug_assert!(
-                    #validation,
-                    "typekin within proof violated",
-                );
-            }
-        });
-        let constructed = self.target.construct(
-            &self.storage,
-            quote! { Self },
+        let violated = "typekin within proof violated";
+        let body = self.construction(
             quote! { raw },
-            self.ctx.cfg.flags.has(IntegralFlag::Assertions),
+            Check::DebugOnly(violated),
+            OnInvalid::Panic(violated),
         );
         return quote! {
             /// Builds a value from a `Within` friend, whose every value
@@ -407,8 +398,7 @@ impl Maker {
             #[must_use]
             #[inline(always)]
             pub(self) #konst fn #name(raw: #el) -> Self {
-                #check
-                return #constructed;
+                #body
             }
         };
     }
@@ -585,7 +575,7 @@ impl Maker {
     ) -> TokenStream {
         let el = &self.el;
         let validation = &self.ctx.validation;
-        let (min, max) = self.target_bounds(0);
+        let (min, max) = self.target_bounds(Width::W16);
         let clamp = |it: Int| it.to_i128().clamp(-128, 255) as i16;
         let lo = Literal::i16_unsuffixed(clamp(min));
         let hi = Literal::i16_unsuffixed(clamp(max));
@@ -642,8 +632,8 @@ impl Maker {
             false => quote! { (false, 0u128) },
         };
         let max = quote! { (false, #el::MAX as u128) };
-        let checks: [TokenStream; WIDTHS] = std::array::from_fn(|index| {
-            return match self.target_form(index) {
+        let checks = Width::ALL.map(|width| {
+            return match self.target_form(width) {
                 Ok(target) => {
                     let target = target.tokens();
                     quote! {
@@ -747,46 +737,29 @@ fn message(
 fn per_width_const(
     name: &proc_macro2::Ident,
     ty: &TokenStream,
-    values: [TokenStream; WIDTHS],
+    values: [TokenStream; Width::COUNT],
 ) -> TokenStream {
-    let first = values[0].to_string();
-    if values.iter().all(|it| it.to_string() == first) {
-        let value = &values[0];
+    let items = by_width(values).into_iter().map(|(cfg, value)| {
         return quote! {
+            #cfg
             #[doc(hidden)]
             pub const #name: #ty = #value;
         };
-    }
-    let items = POINTER_WIDTHS
-        .into_iter()
-        .zip(values)
-        .map(|(width, value)| {
-            let width = width.to_string();
-            return quote! {
-                #[cfg(target_pointer_width = #width)]
-                #[doc(hidden)]
-                pub const #name: #ty = #value;
-            };
-        });
+    });
     return quote! { #(#items)* };
 }
 
 /// One statement, or one per pointer width when they differ.
-fn per_width_statement(statements: [TokenStream; WIDTHS]) -> TokenStream {
-    let first = statements[0].to_string();
-    if statements.iter().all(|it| it.to_string() == first) {
-        return statements[0].clone();
+fn per_width_statement(statements: [TokenStream; Width::COUNT]) -> TokenStream {
+    let statements = by_width(statements);
+    if let [(_, statement)] = &statements[..] {
+        return statement.clone();
     }
-    let items =
-        POINTER_WIDTHS
-            .into_iter()
-            .zip(statements)
-            .map(|(width, statement)| {
-                let width = width.to_string();
-                return quote! {
-                    #[cfg(target_pointer_width = #width)]
-                    let () = { #statement };
-                };
-            });
+    let items = statements.into_iter().map(|(cfg, statement)| {
+        return quote! {
+            #cfg
+            let () = { #statement };
+        };
+    });
     return quote! { #(#items)* };
 }

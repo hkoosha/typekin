@@ -36,6 +36,7 @@ use syn::{
 use crate::zz_flags::{
     Flag,
     FlagGrammar,
+    FlagRow,
     FlagSettings,
     Flags,
 };
@@ -45,7 +46,10 @@ use crate::zz_hide::{
     reexport,
     rewrite_child_paths,
 };
-use crate::zz_lib as zz;
+use crate::zz_lib::{
+    self as zz,
+    Named as _,
+};
 use crate::zz_runner::{
     MkErr,
     ToCollection,
@@ -84,45 +88,29 @@ pub(crate) enum TreeFlag {
 }
 
 impl Flag for TreeFlag {
-    const ITEMS: &'static [Self] = &[
-        Self::Clone,
-        Self::Copy,
-        Self::Debug,
-        Self::Default,
-        Self::PartialEq,
-        Self::Eq,
-        Self::Hash,
-        Self::PartialOrd,
-        Self::Ord,
+    const ROWS: &'static [FlagRow<Self>] = &[
+        FlagRow::on(Self::Clone, "clone"),
+        FlagRow::on(Self::Copy, "copy"),
+        FlagRow::on(Self::Debug, "debug"),
+        FlagRow::on(Self::Default, "default"),
+        FlagRow::on(Self::PartialEq, "partial_eq"),
+        FlagRow::on(Self::Eq, "eq"),
+        FlagRow::on(Self::Hash, "hash"),
+        FlagRow::on(Self::PartialOrd, "partial_ord"),
+        FlagRow::on(Self::Ord, "ord"),
     ];
-    const DEFAULT_ON: &'static [Self] = Self::ITEMS;
-
-    fn name(self) -> &'static str {
-        return match self {
-            Self::Clone => "clone",
-            Self::Copy => "copy",
-            Self::Debug => "debug",
-            Self::Default => "default",
-            Self::PartialEq => "partial_eq",
-            Self::Eq => "eq",
-            Self::Hash => "hash",
-            Self::PartialOrd => "partial_ord",
-            Self::Ord => "ord",
-        };
-    }
 
     fn index(self) -> u32 {
         return self as u32;
     }
 }
 
-// Every variant is in `ITEMS`, at its own index.
+// Every row of `ROWS` is at its variant's index.
 const _: () = {
-    let items = <TreeFlag as Flag>::ITEMS;
-    assert!(items.len() == TreeFlag::Ord as usize + 1);
+    let rows = <TreeFlag as Flag>::ROWS;
     let mut index = 0;
-    while index < items.len() {
-        assert!(items[index] as usize == index);
+    while index < rows.len() {
+        assert!(rows[index].flag as usize == index);
         index += 1;
     }
 };
@@ -155,8 +143,8 @@ impl TreeFlag {
 
 /// The `without` grammar of a tree: its derive flags only.
 const GRAMMAR: FlagGrammar = FlagGrammar {
-    konsts: &[],
-    removals: false,
+    konsts: None,
+    removals: &[],
 };
 
 /// A node of the tree: a branch trait or a leaf struct, with its doc

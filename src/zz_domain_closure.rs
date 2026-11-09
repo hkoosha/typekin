@@ -22,8 +22,10 @@ use crate::zz_domain_int::{
 };
 use crate::zz_values::{
     Int,
+    IntTy,
+    IntervalSet,
     N,
-    POINTER_WIDTHS,
+    Width,
 };
 
 /// Above this many intervals per operand, no proof is attempted.
@@ -99,11 +101,11 @@ pub(crate) enum Closure {
         lhs: Int,
         rhs: Option<Int>,
         result: Int,
-        width: u32,
+        width: Width,
         all_widths: bool,
     },
     /// No proof and no counterexample found: results may reach `lo..=hi`.
-    Unknown { lo: Int, hi: Int, width: u32 },
+    Unknown { lo: Int, hi: Int, width: Width },
 }
 
 impl ClosureOp {
@@ -139,68 +141,6 @@ impl ClosureOp {
 }
 
 // =============================================================================
-// The subject type at one pointer width
-
-#[derive(Clone, Copy)]
-struct Ty {
-    signed: bool,
-    bits: u32,
-    min: Int,
-    max: Int,
-}
-
-impl Ty {
-    fn new(
-        subject: N,
-        width: u32,
-    ) -> Self {
-        let (min, max) = subject.bounds_for_pointer_width(width);
-        return Self {
-            signed: subject.is_signed(),
-            bits: subject.bits_for_pointer_width(width) as u32,
-            min,
-            max,
-        };
-    }
-
-    fn contains(
-        self,
-        value: Int,
-    ) -> bool {
-        return self.min <= value && value <= self.max;
-    }
-
-    /// The value of a two's-complement bit pattern reduced to this type.
-    fn wrap(
-        self,
-        pattern: u128,
-    ) -> Int {
-        let masked = match self.bits {
-            u128::BITS => pattern,
-            bits => pattern & ((1u128 << bits) - 1),
-        };
-        if !self.signed || (masked >> (self.bits - 1)) & 1 == 0 {
-            return Int::NonNegative(masked);
-        }
-        return Int::Negative(match self.bits {
-            u128::BITS => masked.wrapping_neg(),
-            bits => (1u128 << bits) - masked,
-        });
-    }
-
-    fn clamp(
-        self,
-        value: Ext,
-    ) -> Int {
-        return match value {
-            Ext::Below => self.min,
-            Ext::Above => self.max,
-            Ext::Exact(it) => it.clamp(self.min, self.max),
-        };
-    }
-}
-
-// =============================================================================
 // Exact semantics
 
 /// A result bound: exact, or beyond every `Int` in one direction.
@@ -219,6 +159,18 @@ impl Ext {
         };
     }
 
+    /// The bound within `ty`.
+    fn clamped(
+        self,
+        ty: IntTy,
+    ) -> Int {
+        return match self {
+            Self::Below => ty.min,
+            Self::Above => ty.max,
+            Self::Exact(it) => it.clamp(ty.min, ty.max),
+        };
+    }
+
     fn exact(self) -> Int {
         let Self::Exact(it) = self
         else {
@@ -233,7 +185,7 @@ impl Ext {
 /// negative).
 fn exact(
     op: ClosureOp,
-    ty: Ty,
+    ty: IntTy,
     lhs: Int,
     rhs: Option<Int>,
 ) -> Option<Ext> {
@@ -284,7 +236,7 @@ fn exact(
 fn shift(
     op: ClosureOp,
     policy: Policy,
-    ty: Ty,
+    ty: IntTy,
     lhs: Int,
     amount: Int,
 ) -> Option<Int> {
@@ -308,18 +260,16 @@ fn shift(
     return Some(lhs.shr_floor(amount));
 }
 
-/// Exact semantics of one operation on concrete operands of `subject` at
-/// `width`; `None` when the operation yields no value (panic or `None`).
-/// `rhs` is `None` for unary operations and the amount for shifts.
+/// Exact semantics of one operation on concrete operands of the type `ty`;
+/// `None` when the operation yields no value (panic or `None`). `rhs` is
+/// `None` for unary operations and the amount for shifts.
 pub(crate) fn eval(
     op: ClosureOp,
     policy: Policy,
-    subject: N,
-    width: u32,
+    ty: IntTy,
     lhs: Int,
     rhs: Option<Int>,
 ) -> Option<Int> {
-    let ty = Ty::new(subject, width);
     if op.is_shift() {
         return shift(op, policy, ty, lhs, rhs.expect("shift amount"));
     }
@@ -351,7 +301,7 @@ pub(crate) fn eval(
             _ => None,
         },
         Policy::Wrapping => Some(ty.wrap(value.exact().pattern())),
-        Policy::Saturating => Some(ty.clamp(value)),
+        Policy::Saturating => Some(value.clamped(ty)),
     };
 }
 
@@ -375,11 +325,10 @@ impl ResolvedDomain {
             }
         }
 
-        let mut domains = Vec::with_capacity(POINTER_WIDTHS.len());
-        for (index, width) in POINTER_WIDTHS.into_iter().enumerate() {
-            let ty = Ty::new(self.subject, width);
-            match intervals(&self.per_width[index], ty) {
-                Ok(it) => domains.push(merge(it)),
+        let mut domains = Vec::with_capacity(Width::COUNT);
+        for width in Width::ALL {
+            match self.intervals(width) {
+                Ok(it) => domains.push(it),
                 Err(atom) => return Closure::Ineligible(atom),
             }
         }
@@ -391,33 +340,41 @@ impl ResolvedDomain {
             subject: self.subject,
             domains,
         };
-        let failures = (0..POINTER_WIDTHS.len())
-            .filter_map(|index| {
-                return analysis.prove(index).err().map(|hull| (index, hull));
+        let failures = Width::ALL
+            .into_iter()
+            .filter_map(|width| {
+                return analysis.prove(width).err().map(|hull| (width, hull));
             })
             .collect::<Vec<_>>();
         if failures.is_empty() {
             return Closure::Proven;
         }
-        for (index, _) in &failures {
-            if let Some(refuted) = analysis.refute(*index) {
+        for (width, _) in &failures {
+            if let Some(refuted) = analysis.refute(*width) {
                 return refuted;
             }
         }
-        let (index, (lo, hi)) = failures[0];
-        return Closure::Unknown {
-            lo,
-            hi,
-            width: POINTER_WIDTHS[index],
-        };
+        let (width, (lo, hi)) = failures[0];
+        return Closure::Unknown { lo, hi, width };
+    }
+
+    /// The domain at `width` as intervals on the value, or the first atom
+    /// that is not one.
+    fn intervals(
+        &self,
+        width: Width,
+    ) -> Result<IntervalSet, String> {
+        let ty = self.subject.at(width);
+        return intervals(&self.per_width[width.index()], ty)
+            .map(IntervalSet::new);
     }
 }
 
-/// The domain at one width as inclusive intervals on the value, or the first
-/// atom that is not one.
+/// `node` as inclusive intervals on a value of `ty`, in any order, or the
+/// first atom that is not one.
 fn intervals(
     node: &RNode,
-    ty: Ty,
+    ty: IntTy,
 ) -> Result<Vec<(Int, Int)>, String> {
     return match node {
         RNode::Const(true) => Ok(vec![(ty.min, ty.max)]),
@@ -443,30 +400,6 @@ fn intervals(
             .unwrap_or_else(|| render(node))),
         _ => Err(render(node)),
     };
-}
-
-/// Sorted, disjoint, non-adjacent intervals.
-fn merge(mut intervals: Vec<(Int, Int)>) -> Vec<(Int, Int)> {
-    intervals.retain(|(lo, hi)| lo <= hi);
-    intervals.sort();
-    let mut result = Vec::<(Int, Int)>::with_capacity(intervals.len());
-    for (lo, hi) in intervals {
-        if let Some(last) = result.last_mut()
-            && last.1.successor().is_none_or(|it| lo <= it)
-        {
-            last.1 = last.1.max(hi);
-            continue;
-        }
-        result.push((lo, hi));
-    }
-    return result;
-}
-
-fn covers(
-    domain: &[(Int, Int)],
-    value: Int,
-) -> bool {
-    return domain.iter().any(|(lo, hi)| *lo <= value && value <= *hi);
 }
 
 // -----------------------------------------------------------------------------
@@ -578,23 +511,23 @@ struct Analysis {
     rhs: Rhs,
     policy: Policy,
     subject: N,
-    /// Merged domain intervals per pointer width.
-    domains: Vec<Vec<(Int, Int)>>,
+    /// The domain's intervals per pointer width.
+    domains: Vec<IntervalSet>,
 }
 
 impl Analysis {
     fn rhs_set(
         &self,
-        index: usize,
-        ty: Ty,
-    ) -> Vec<(Int, Int)> {
+        width: Width,
+        ty: IntTy,
+    ) -> IntervalSet {
         return match self.rhs {
-            Rhs::SameDomain => self.domains[index].clone(),
-            Rhs::Full => vec![(ty.min, ty.max)],
-            Rhs::Shift => {
-                vec![(Int::NonNegative(0), Int::NonNegative(u128::MAX))]
-            }
-            Rhs::Unary => Vec::new(),
+            Rhs::SameDomain => self.domains[width.index()].clone(),
+            Rhs::Full => IntervalSet::new(vec![(ty.min, ty.max)]),
+            Rhs::Shift => IntervalSet::new(vec![
+                (Int::NonNegative(0), Int::NonNegative(u128::MAX)),
+            ]),
+            Rhs::Unary => IntervalSet::new(Vec::new()),
         };
     }
 
@@ -602,23 +535,21 @@ impl Analysis {
     /// the possible results.
     fn prove(
         &self,
-        index: usize,
+        width: Width,
     ) -> Result<(), (Int, Int)> {
-        let ty = Ty::new(self.subject, POINTER_WIDTHS[index]);
-        let domain = &self.domains[index];
+        let ty = self.subject.at(width);
+        let domain = &self.domains[width.index()];
         // Every operation yields a value of the type, if any.
         if domain.is_empty() || domain[..] == [(ty.min, ty.max)] {
             return Ok(());
         }
-        let rhs = self.rhs_set(index, ty);
+        let rhs = self.rhs_set(width, ty);
         if domain.len() > MAX_INTERVALS || rhs.len() > MAX_INTERVALS {
             return Err((ty.min, ty.max));
         }
 
         let hulls = self.hulls(ty, domain, &rhs).ok_or((ty.min, ty.max))?;
-        if hulls.iter().all(|(lo, hi)| {
-            return domain.iter().any(|(dl, dh)| dl <= lo && hi <= dh);
-        }) {
+        if hulls.iter().all(|hull| domain.encloses(*hull)) {
             return Ok(());
         }
         let lo = hulls.iter().map(|it| it.0).min().expect("a failing hull");
@@ -630,9 +561,9 @@ impl Analysis {
     /// when results cannot be bounded (wrapping overflow).
     fn hulls(
         &self,
-        ty: Ty,
-        domain: &[(Int, Int)],
-        rhs: &[(Int, Int)],
+        ty: IntTy,
+        domain: &IntervalSet,
+        rhs: &IntervalSet,
     ) -> Option<Vec<(Int, Int)>> {
         let lhs = split(domain);
         let mut result = Vec::new();
@@ -678,8 +609,8 @@ impl Analysis {
     /// value.
     fn amounts(
         &self,
-        ty: Ty,
-        rhs: &[(Int, Int)],
+        ty: IntTy,
+        rhs: &IntervalSet,
     ) -> Option<(u32, u32)> {
         let bits = Int::NonNegative(ty.bits as u128);
         let last = Int::NonNegative(ty.bits as u128 - 1);
@@ -730,7 +661,7 @@ impl Analysis {
     /// unbounded.
     fn settle(
         &self,
-        ty: Ty,
+        ty: IntTy,
         hull: Option<(Ext, Ext)>,
         result: &mut Vec<(Int, Int)>,
     ) -> Option<()> {
@@ -747,7 +678,7 @@ impl Analysis {
             return Some(());
         }
         if self.policy == Policy::Saturating || (min <= lo && hi <= max) {
-            result.push((ty.clamp(lo), ty.clamp(hi)));
+            result.push((lo.clamped(ty), hi.clamped(ty)));
             return Some(());
         }
         // Signed `MIN / -1`, `-MIN`, and `abs(MIN)` are exactly MAX + 1 and
@@ -777,9 +708,9 @@ impl Analysis {
 
     fn candidates(
         &self,
-        index: usize,
-        ty: Ty,
-        set: &[(Int, Int)],
+        width: Width,
+        ty: IntTy,
+        set: &IntervalSet,
         neighbors: bool,
     ) -> Vec<Int> {
         let mut values = vec![
@@ -794,7 +725,7 @@ impl Analysis {
         values.extend(ty.min.successor());
         values.extend(ty.max.predecessor());
         let sources = match neighbors {
-            true => &self.domains[index],
+            true => &self.domains[width.index()],
             false => set,
         };
         for (lo, hi) in sources.iter().take(MAX_INTERVALS) {
@@ -809,7 +740,7 @@ impl Analysis {
                 values.extend(hi.successor());
             }
         }
-        values.retain(|it| covers(set, *it));
+        values.retain(|it| set.contains(*it));
         values.sort();
         values.dedup();
         return values;
@@ -817,24 +748,23 @@ impl Analysis {
 
     fn refute(
         &self,
-        index: usize,
+        width: Width,
     ) -> Option<Closure> {
-        let width = POINTER_WIDTHS[index];
-        let ty = Ty::new(self.subject, width);
-        let domain = &self.domains[index];
-        let lhs = self.candidates(index, ty, domain, false);
+        let ty = self.subject.at(width);
+        let domain = &self.domains[width.index()];
+        let lhs = self.candidates(width, ty, domain, false);
         let rhs = match self.rhs {
             Rhs::Unary => vec![None],
             Rhs::Shift => (0..=ty.bits as u128 + 1)
                 .map(|it| Some(Int::NonNegative(it)))
                 .collect(),
             Rhs::SameDomain => self
-                .candidates(index, ty, domain, false)
+                .candidates(width, ty, domain, false)
                 .into_iter()
                 .map(Some)
                 .collect(),
             Rhs::Full => self
-                .candidates(index, ty, &[(ty.min, ty.max)], true)
+                .candidates(width, ty, &self.rhs_set(width, ty), true)
                 .into_iter()
                 .map(Some)
                 .collect(),
@@ -843,12 +773,11 @@ impl Analysis {
         let mut first = None;
         for l in &lhs {
             for r in &rhs {
-                let Some(result) =
-                    eval(self.op, self.policy, self.subject, width, *l, *r)
+                let Some(result) = eval(self.op, self.policy, ty, *l, *r)
                 else {
                     continue;
                 };
-                if covers(domain, result) {
+                if domain.contains(result) {
                     continue;
                 }
                 let all_widths = self.refutes_everywhere(*l, *r, result);
@@ -874,38 +803,28 @@ impl Analysis {
         rhs: Option<Int>,
         result: Int,
     ) -> bool {
-        return POINTER_WIDTHS
-            .into_iter()
-            .enumerate()
-            .all(|(index, width)| {
-                let ty = Ty::new(self.subject, width);
-                let domain = &self.domains[index];
-                let rhs_valid = match (self.rhs, rhs) {
-                    (Rhs::SameDomain, Some(it)) => covers(domain, it),
-                    (Rhs::Full, Some(it)) => ty.contains(it),
-                    (Rhs::Shift, Some(it)) => !it.is_negative(),
-                    (Rhs::Unary, None) => true,
-                    _ => false,
-                };
-                return covers(domain, lhs)
-                    && rhs_valid
-                    && eval(
-                        self.op,
-                        self.policy,
-                        self.subject,
-                        width,
-                        lhs,
-                        rhs,
-                    ) == Some(result)
-                    && !covers(domain, result);
-            });
+        return Width::ALL.into_iter().all(|width| {
+            let ty = self.subject.at(width);
+            let domain = &self.domains[width.index()];
+            let rhs_valid = match (self.rhs, rhs) {
+                (Rhs::SameDomain, Some(it)) => domain.contains(it),
+                (Rhs::Full, Some(it)) => ty.contains(it),
+                (Rhs::Shift, Some(it)) => !it.is_negative(),
+                (Rhs::Unary, None) => true,
+                _ => false,
+            };
+            return domain.contains(lhs)
+                && rhs_valid
+                && eval(self.op, self.policy, ty, lhs, rhs) == Some(result)
+                && !domain.contains(result);
+        });
     }
 }
 
 /// Splits intervals at zero so every part has one sign.
-fn split(intervals: &[(Int, Int)]) -> Vec<(Int, Int)> {
+fn split(intervals: &IntervalSet) -> Vec<(Int, Int)> {
     let mut result = Vec::with_capacity(intervals.len() + 1);
-    for (lo, hi) in intervals {
+    for (lo, hi) in intervals.iter() {
         match lo.is_negative() && !hi.is_negative() {
             true => {
                 result.push((*lo, Int::Negative(1)));
@@ -920,7 +839,7 @@ fn split(intervals: &[(Int, Int)]) -> Vec<(Int, Int)> {
 /// Exact results at the corners of a sign-split pair.
 fn corners(
     op: ClosureOp,
-    ty: Ty,
+    ty: IntTy,
     (al, ah): (Int, Int),
     (bl, bh): (Int, Int),
 ) -> Option<(Ext, Ext)> {
@@ -941,7 +860,7 @@ fn corners(
 /// the pair yields no value.
 fn binary(
     op: ClosureOp,
-    ty: Ty,
+    ty: IntTy,
     a: (Int, Int),
     b: (Int, Int),
 ) -> Option<(Ext, Ext)> {
@@ -1062,7 +981,7 @@ fn bitxor_hull(
 /// Raw result hull of a unary operation on a sign-split interval.
 fn unary(
     op: ClosureOp,
-    ty: Ty,
+    ty: IntTy,
     (lo, hi): (Int, Int),
 ) -> Option<(Ext, Ext)> {
     return match op {

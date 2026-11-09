@@ -43,6 +43,13 @@ pub enum Thingy2 {
     Execute = 0b100,
 }
 
+#[typekin::bitflag(integral = [without = assign_xor])]
+#[repr(u8)]
+pub(crate) enum XorUnassignedFlag {
+    Read = 0b01,
+    Write = 0b10,
+}
+
 #[typekin::bitflag(with = serde)]
 #[repr(u8)]
 pub(crate) enum AutoSerdeFlag {

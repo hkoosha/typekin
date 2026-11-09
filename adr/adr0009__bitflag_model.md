@@ -34,6 +34,14 @@ features apply to flags, and how values print, parse and serialize.
   nested config rejects facets, `produce`, non-default profiles, `non_zero`,
   NonZero storage and any domain that excludes zero (the empty set is 0).
   `konst` is forwarded into it.
+- **Value-type storage (ADR 0033 D0.5, 2026-11-09):** the value type is
+  constructed through `StoragePlan` like every wrapper (it used to write
+  `Self(bits)` itself), and its storage stays the primitive. It exists to
+  hold combined and unknown bits, its domain must include zero, and it is the
+  typekin type most likely to cross FFI, where a rewritten bit pattern turns
+  an out-of-domain value into undefined behavior. A storage that rewrites
+  the field (`PLAN.md`'s enum storage, ADR 0034's niche storage) will
+  therefore need an explicit opt-in in the nested configuration.
 - **`Not` is bitflag's own:** `!value` is `complemented()`, masked to the
   declared flags, instead of the integral bitwise `Not`.
 - **Text:** the `bitflags` retain grammar: names joined by ` | `, unknown bits
