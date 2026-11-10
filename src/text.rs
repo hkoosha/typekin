@@ -42,6 +42,7 @@ use crate::zz_hide::{
     HideIn,
 };
 use crate::zz_lib::{
+    FnAttrs,
     Form,
     Forward,
     Key,
@@ -49,6 +50,7 @@ use crate::zz_lib::{
     KonstFamily,
     Konsts,
     Named as _,
+    Output,
     TEXT_LINTS,
     lint_scope,
     reject_generics,
@@ -440,6 +442,7 @@ impl TextMaker {
 
         return quote! {
             impl #ty {
+                #[must_use]
                 #[inline(always)]
                 #konst fn is_valid(value: &#ty_string) -> bool {
                     #validation
@@ -495,45 +498,59 @@ impl TextMaker {
         });
     }
 
-    /// The `try_` forwards that edit the `String` through `map`.
+    /// The `try_` forwards that edit the `String` through `map`. `panics`:
+    /// the `String` method panics on an index out of bounds or inside a
+    /// character.
     fn edit_forwards(&self) -> Vec<Forward> {
+        let track = |panics: bool| {
+            return FnAttrs::of(panics, Output::MustUseType).track_caller;
+        };
         let mutate = |name: FnName,
                       parameters: TokenStream,
-                      call: TokenStream| {
+                      call: TokenStream,
+                      panics: bool| {
+            let track_caller = track(panics);
             return Forward::new_try(name, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
+                    #track_caller
                     pub fn #name(self #parameters) -> ::core::result::Result<Self, ()> {
                         return self.map(|value| value.#call);
                     }
                 };
             });
         };
+        let track_replace_range = track(true);
 
         return vec![
             mutate(
                 FnName::Push,
                 quote! { , character: char },
                 quote! { push(character) },
+                false,
             ),
             mutate(
                 FnName::PushStr,
                 quote! { , text: &str },
                 quote! { push_str(text) },
+                false,
             ),
             mutate(
                 FnName::Insert,
                 quote! { , index: usize, character: char },
                 quote! { insert(index, character) },
+                true,
             ),
             mutate(
                 FnName::InsertStr,
                 quote! { , index: usize, text: &str },
                 quote! { insert_str(index, text) },
+                true,
             ),
             Forward::new_try(FnName::ReplaceRange, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
+                    #track_replace_range
                     pub fn #name<R>(self, range: R, text: &str) -> ::core::result::Result<Self, ()>
                     where
                         R: ::core::ops::RangeBounds<usize>,
@@ -546,8 +563,9 @@ impl TextMaker {
                 FnName::Truncate,
                 quote! { , length: usize },
                 quote! { truncate(length) },
+                true,
             ),
-            mutate(FnName::Clear, quote! {}, quote! { clear() }),
+            mutate(FnName::Clear, quote! {}, quote! { clear() }, false),
             Forward::new_try(FnName::Retain, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
@@ -582,11 +600,15 @@ impl TextMaker {
                 };
             });
         };
+        // `String::remove` panics on an index out of bounds or inside a
+        // character.
+        let track_remove = FnAttrs::of(true, Output::MustUseType).track_caller;
 
         return vec![
             Forward::new_try(FnName::Remove, &self.names, |name| {
                 return quote! {
                     #[inline(always)]
+                    #track_remove
                     pub fn #name(self, index: usize) -> ::core::result::Result<(Self, char), ()> {
                         let mut value = self.0;
                         let removed = value.remove(index);
@@ -634,12 +656,15 @@ impl TextMaker {
             quote! { self.map(|value| value.push_str(text)) },
             "invalid value from text addition",
         );
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(self.validation_panics(), Output::Unmarked);
 
         return quote! {
             impl ::core::ops::Add<&str> for #ty {
                 type Output = Self;
 
                 #[inline(always)]
+                #track_caller
                 fn add(self, text: &str) -> Self {
                     return #added;
                 }
@@ -848,6 +873,13 @@ impl TextMaker {
         let konst = Konst::konst(is_konst);
         let seal = self.names.get(TextName::MakeTrait);
         let bound = Konst::bound(is_konst, quote! { #seal });
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(
+            makers.iter().any(|it| self.friend_panics(it)),
+            Output::Value,
+        );
         let impls = makers
             .into_iter()
             .map(|friend| self.make_friend_impl(friend));
@@ -861,7 +893,9 @@ impl TextMaker {
 
             impl #ty {
                 #[allow(private_bounds)]
+                #must_use
                 #[inline(always)]
+                #track_caller
                 pub #konst fn of<T>(value: T) -> Self
                 where
                     T: #bound,
@@ -886,15 +920,33 @@ impl TextMaker {
             false => quote! { #friend_ty },
         };
         let make = self.make_friend_body(friend);
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(self.friend_panics(friend), Output::Unmarked);
 
         return quote! {
             #konst impl #seal for #friend_ty {
                 #[inline(always)]
+                #track_caller
                 fn make_text(self) -> #ty {
                     #make
                 }
             }
         };
+    }
+
+    /// Whether validating a text and panicking on an invalid one can
+    /// panic: there is validation to fail.
+    fn validation_panics(&self) -> bool {
+        return self.cfg.has_validation();
+    }
+
+    /// Whether `friend`'s `make_text` can panic: it validates, unless the
+    /// friend is blindly trusted.
+    fn friend_panics(
+        &self,
+        friend: &Friend,
+    ) -> bool {
+        return !friend.has(Capability::Unsafe) && self.validation_panics();
     }
 
     /// `make_text`: blind trust for an `Unsafe` friend, else validation

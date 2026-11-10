@@ -11,6 +11,12 @@ use crate::integral::Maker;
 use crate::integral_cfg::{
     IntegralFlag,
     Kind,
+    Translation,
+    translate,
+};
+use crate::integral_compute::{
+    Body,
+    OpRef,
 };
 use crate::zz_domain_float::MathProvider;
 use crate::zz_forward::{
@@ -21,7 +27,6 @@ use crate::zz_forward::{
     FLOAT_MATH,
     FwdKonst,
     Gate,
-    Panics,
     Plain,
     Recv,
     Ret,
@@ -31,11 +36,13 @@ use crate::zz_forward::{
 };
 use crate::zz_lib::{
     Check,
+    FnAttrs,
     Forward,
     Konst,
     Konsts,
     Named as _,
     OnInvalid,
+    Output,
 };
 use crate::zz_values::{
     FnName,
@@ -98,16 +105,18 @@ impl Maker {
             .filter(|it| self.core_fwd_exists(it.when));
     }
 
-    /// `core_int` is on, `name`'s row applies to this wrapper, and no
-    /// `without = fn_{name}` removes it.
+    /// `core_int` is on, `name`'s row applies to this wrapper and has a
+    /// form, and no `without = fn_{name}` removes it.
     pub(crate) fn forward_generated(
         &self,
         name: FnName,
     ) -> bool {
-        return self.ctx.cfg.flags.has(IntegralFlag::CoreInt)
-            && self
-                .core_forward(name)
-                .is_some_and(|it| self.core_fwd_kept(it))
+        let flag = IntegralFlag::CoreInt;
+        return self.ctx.cfg.flags.has(flag)
+            && self.core_forward(name).is_some_and(|row| {
+                let body = self.compute(OpRef::Forward { row, flag });
+                return self.core_fwd_form(row, body.fails).is_some();
+            })
             && !self.ctx.cfg.removals.removes(name);
     }
 
@@ -131,42 +140,44 @@ impl Maker {
         return sign && gate;
     }
 
-    /// Below `panic_at = anything`, a forward stays only when its
-    /// signature cannot panic: a raw result, unless the primitive itself
-    /// panics (`ilog*`) and `panic_at` checks such inputs, and an
-    /// `Option`. A validated `Self` would have to change its return type
-    /// to report failure, so those forwards are left out.
-    fn core_fwd_kept(
+    /// What a forward does with a body that `fails`; `None` where it is
+    /// not generated. A function never changes its signature, so a
+    /// forward's output is fixed: one that would have to report a failure
+    /// is left out, be that an invalid `Self` or a raw result the
+    /// primitive function would panic for. An `Option` reports it as
+    /// `None`.
+    fn core_fwd_form(
         &self,
         row: &CoreFwd,
-    ) -> bool {
-        let level = self.ctx.cfg.wide.panic_at;
-        if !level.fallible() {
-            return true;
-        }
+        fails: bool,
+    ) -> Option<Translation> {
         return match row.ret {
-            Ret::Raw(_) => {
-                row.panics == Panics::Never || !level.checks_division()
+            Ret::Opt => Some(Translation::Pass),
+            Ret::Raw(_) | Ret::Wrap | Ret::Pair(..) => {
+                translate(fails, self.ctx.cfg.wide.panic_at, true)
             }
-            ret => !ret.panics(),
         };
     }
 
     /// One forward, named `name`, from a row of `flag`'s table: the
-    /// signature and the attributes around `core_fwd_body`.
+    /// signature and the attributes around `core_fwd_body`. A forward is an
+    /// inherent function that returns a value. It can panic where the
+    /// primitive function does (the row's `panics`), and one that builds
+    /// `Self` also as its form does.
     fn core_fwd_tokens(
         &self,
         row: &CoreFwd,
         flag: IntegralFlag,
         name: &Ident,
+        translation: Translation,
+        body: &Body,
     ) -> TokenStream {
         let receiver = match row.recv {
             Recv::Value => Some(quote! { self }),
             Recv::Ref => Some(quote! { &self }),
             Recv::Assoc => None,
         };
-        let (declared, passed): (Vec<_>, Vec<_>) =
-            row.args.iter().map(|it| self.core_fwd_arg(*it)).unzip();
+        let declared = row.args.iter().map(|it| self.core_fwd_parameter(*it));
         let parameters = receiver.into_iter().chain(declared);
         let output = match row.ret {
             Ret::Raw(ty) => self.core_plain(ty),
@@ -189,15 +200,17 @@ impl Maker {
             FwdKonst::Setting => self.core_konst(),
             FwdKonst::Never => None,
         };
-        let (doc, body) = self.core_fwd_body(row, flag, name, &passed);
-        // By family and return shape: an integer forward carries neither
-        // attribute; a float's is `must_use` when called on a value and
-        // `track_caller` when its result holds a validated `Self`.
-        let float = flag != IntegralFlag::CoreInt;
-        let must_use =
-            (float && row.recv != Recv::Assoc).then(|| quote! { #[must_use] });
-        let track_caller =
-            (float && row.ret.panics()).then(|| quote! { #[track_caller] });
+        let panics = match row.ret {
+            Ret::Raw(_) => body.panics,
+            Ret::Wrap | Ret::Opt | Ret::Pair(..) => {
+                self.form_panics(body.panics, translation)
+            }
+        };
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(panics, Output::Value);
+        let (doc, body) = self.core_fwd_body(row, flag, translation, body);
 
         return quote! {
             #doc
@@ -210,25 +223,46 @@ impl Maker {
         };
     }
 
-    /// A parameter's declaration and the argument the forward passes on.
-    fn core_fwd_arg(
+    /// A parameter's declaration.
+    fn core_fwd_parameter(
         &self,
         arg: Arg,
-    ) -> (TokenStream, TokenStream) {
-        let get_raw = &self.ctx.get_raw;
+    ) -> TokenStream {
         return match arg {
             Arg::Wrapped(name) => {
                 let name = format_ident!("{}", name);
-                (quote! { #name: Self }, quote! { #get_raw(#name) })
+                quote! { #name: Self }
             }
             Arg::Ref(name) => {
                 let name = format_ident!("{}", name);
-                (quote! { #name: &Self }, quote! { &#get_raw(*#name) })
+                quote! { #name: &Self }
             }
             Arg::Plain(name, ty) => {
                 let name = format_ident!("{}", name);
                 let ty = self.core_plain(ty);
-                (quote! { #name: #ty }, quote! { #name })
+                quote! { #name: #ty }
+            }
+        };
+    }
+
+    /// The argument a forward passes on for a parameter.
+    fn core_fwd_passed(
+        &self,
+        arg: Arg,
+    ) -> TokenStream {
+        let get_raw = &self.ctx.get_raw;
+        return match arg {
+            Arg::Wrapped(name) => {
+                let name = format_ident!("{}", name);
+                quote! { #get_raw(#name) }
+            }
+            Arg::Ref(name) => {
+                let name = format_ident!("{}", name);
+                quote! { &#get_raw(*#name) }
+            }
+            Arg::Plain(name, _) => {
+                let name = format_ident!("{}", name);
+                quote! { #name }
             }
         };
     }
@@ -264,18 +298,18 @@ impl Maker {
         };
     }
 
-    /// The call of the primitive function. `float_math` follows the
-    /// `math` provider: `std` has inherent methods, `nightly` the free
-    /// functions of `::core::fNN::math`.
-    fn core_fwd_call(
+    /// The call of the primitive function of the row's name. `float_math`
+    /// follows the `math` provider: `std` has inherent methods, `nightly`
+    /// the free functions of `::core::fNN::math`.
+    pub(crate) fn core_fwd_call(
         &self,
         row: &CoreFwd,
         flag: IntegralFlag,
-        name: &Ident,
-        passed: &[TokenStream],
     ) -> TokenStream {
         let el = &self.el;
         let get_raw = &self.ctx.get_raw;
+        let name = format_ident!("{}", row.name.name());
+        let passed = row.args.iter().map(|it| self.core_fwd_passed(*it));
         if flag == IntegralFlag::FloatMath {
             match self.ctx.cfg.math {
                 MathProvider::Std => {}
@@ -299,7 +333,7 @@ impl Maker {
     /// A row's result needs no validation: by its closure proof, or by
     /// the domain's shape where validation that it may skip is configured
     /// (a domain and the generated `_or_panic`).
-    fn core_fwd_closed(
+    pub(crate) fn core_fwd_closed(
         &self,
         row: &CoreFwd,
     ) -> bool {
@@ -315,44 +349,63 @@ impl Maker {
             });
     }
 
-    /// A forward's doc line and its body: the primitive call, and the
-    /// construction of each validated `Self` in its result.
+    /// The constructor of an `Option` result: `_make`, whose `None`
+    /// reports an invalid value. A result that cannot fail skips validation
+    /// through `_make_proven` where the type has `_proven`.
+    fn option_constructor(
+        &self,
+        fails: bool,
+    ) -> TokenStream {
+        return match !fails && self.proofs_available() {
+            true => quote! { Self::_make_proven },
+            false => quote! { Self::_make },
+        };
+    }
+
+    /// A forward's doc line and its body: the primitive call `body`
+    /// computes, and the construction `translation` asks for of each
+    /// validated `Self` in its result.
     fn core_fwd_body(
         &self,
         row: &CoreFwd,
         flag: IntegralFlag,
-        name: &Ident,
-        passed: &[TokenStream],
+        translation: Translation,
+        body: &Body,
     ) -> (TokenStream, TokenStream) {
         if let Some(decided) = self.decided_query(row) {
             return decided;
         }
-        let call = self.core_fwd_call(row, flag, name, passed);
-        let closed = self.core_fwd_closed(row);
-        // The doc line belongs to the rows closure proofs cover.
-        let doc = self.proof_doc(closed && row.proof.is_some());
-        let constructor =
-            self.proven_constructor(closed, quote! { Self::_result_or_panic });
+        let call = &body.tokens;
+        // The doc line belongs to the rows closure proofs cover, where
+        // validation exists and the result cannot fail it.
+        let doc = self.proof_doc(
+            row.proof.is_some()
+                && self.ctx.cfg.validation.has_validation()
+                && !body.fails,
+        );
+        let constructed = |value: TokenStream| {
+            return self.result_constructed(body.fails, translation, value);
+        };
         // A validated `Self` has two spellings: a structural row and the
         // `core_float` methods bind the raw result to `it` first, the
         // other rows pass the call to the constructor.
         let binds = row.structural.is_some()
             || (flag == IntegralFlag::CoreFloat && row.recv != Recv::Assoc);
-        let body = match row.ret {
+        let tokens = match row.ret {
             Ret::Raw(_) => quote! { return #call; },
             Ret::Wrap if binds => {
-                let result = self.closed_or_validated(closed);
+                let result = constructed(quote! { it });
                 quote! {
                     let it = #call;
                     return #result;
                 }
             }
-            Ret::Wrap => quote! { return #constructor(#call); },
+            Ret::Wrap => {
+                let result = constructed(quote! { #call });
+                quote! { return #result; }
+            }
             Ret::Opt => {
-                let constructor = match closed {
-                    true => quote! { Self::_make_proven },
-                    false => quote! { Self::_make },
-                };
+                let constructor = self.option_constructor(body.fails);
                 quote! {
                     return match #call {
                         ::core::option::Option::Some(value) => {
@@ -373,7 +426,7 @@ impl Maker {
                 .map(|it| match it {
                     RetEl::Wrap(name) => {
                         let name = format_ident!("{}", name);
-                        (quote! { #name }, quote! { #constructor(#name) })
+                        (quote! { #name }, constructed(quote! { #name }))
                     }
                     RetEl::Bool(name) => {
                         let name = format_ident!("{}", name);
@@ -387,24 +440,30 @@ impl Maker {
                 }
             }
         };
-        return (doc, body);
+        return (doc, tokens);
     }
 
     /// The forwarded `core` functions that `without = fn_{name}` keeps, in
-    /// table order.
+    /// table order: each row that applies to this wrapper and has a form.
     pub(crate) fn make_forwards(&self) -> syn::Result<TokenStream> {
         let mut forwards = Vec::new();
         for (flag, rows) in FORWARDS {
             if !self.ctx.cfg.flags.has(flag) {
                 continue;
             }
-            let rows = rows.iter().filter(|it| {
-                return self.core_fwd_exists(it.when) && self.core_fwd_kept(it);
-            });
-            forwards.extend(rows.map(|it| {
-                return Forward::new(it.name, &self.ctx.names, |name| {
-                    return self.core_fwd_tokens(it, flag, name);
-                });
+            let rows = rows.iter().filter(|it| self.core_fwd_exists(it.when));
+            forwards.extend(rows.filter_map(|it| {
+                let body = self.compute(OpRef::Forward { row: it, flag });
+                let translation = self.core_fwd_form(it, body.fails)?;
+                return Some(Forward::new(it.name, &self.ctx.names, |name| {
+                    return self.core_fwd_tokens(
+                        it,
+                        flag,
+                        name,
+                        translation,
+                        &body,
+                    );
+                }));
             }));
         }
         let kept = self.ctx.cfg.removals.keep(forwards)?;
@@ -424,7 +483,8 @@ impl Maker {
 
     /// `_result_or_panic` validates an operation's raw result for the
     /// `core_int`, `core_float`, `float_math`, `Sum` and `Product` items.
-    /// Operations that report failure call none of those.
+    /// Its output is fixed, so it only exists where an invalid value may
+    /// panic: operations that report failure call none of those.
     fn make_result_helpers(&self) -> TokenStream {
         let flags = &self.ctx.cfg.flags;
         let used = [
@@ -436,7 +496,7 @@ impl Maker {
         ]
         .into_iter()
         .any(|it| flags.has(it));
-        if !used || self.ctx.failure.is_some() {
+        if !used || self.fixed_form().is_none() {
             return TokenStream::new();
         }
         let el = &self.el;
@@ -447,9 +507,14 @@ impl Maker {
             OnInvalid::Panic("operation produced an invalid value"),
         );
 
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.validation_panics(), Output::Value);
         return quote! {
+            #must_use
             #[inline(always)]
-            #[track_caller]
+            #track_caller
             pub(self) #konst fn _result_or_panic(value: #el) -> Self {
                 #body
             }
@@ -470,8 +535,14 @@ impl Maker {
             OnInvalid::None,
         );
 
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.storage.write_panics(), Output::Value);
         let mut stream = quote! {
+            #must_use
             #[inline(always)]
+            #track_caller
             pub(self) #konst fn _make(
                 value: #el,
             ) -> ::core::option::Option<Self> {
@@ -480,7 +551,9 @@ impl Maker {
         };
         if self.proofs_available() {
             stream.extend(quote! {
+                #must_use
                 #[inline(always)]
+                #track_caller
                 pub(self) const fn _make_proven(
                     value: #el,
                 ) -> ::core::option::Option<Self> {

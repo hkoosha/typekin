@@ -49,6 +49,7 @@ mod fx_marker_tree;
 mod fx_no_std;
 mod fx_packed;
 mod fx_panic_at;
+mod fx_panic_location;
 mod fx_pointer_width_compile;
 mod fx_text;
 mod fx_within;
@@ -65,6 +66,7 @@ mod test_lit;
 mod test_marker_tree;
 mod test_packed;
 mod test_panic_at;
+mod test_panic_location;
 mod test_text;
 mod test_within;
 

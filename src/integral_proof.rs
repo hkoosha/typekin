@@ -80,35 +80,6 @@ impl Maker {
             && (structural || self.proven(op, Rhs::Unary, policy));
     }
 
-    /// Construction from `it` when validation is configured, the generated
-    /// `_or_panic` is in use, and `closed` proves the result valid: through
-    /// `_proven` for integers, directly for floats.
-    pub(crate) fn closed_result(
-        &self,
-        closed: bool,
-    ) -> Option<TokenStream> {
-        if !closed
-            || !self.ctx.cfg.validation.has_validation()
-            || !self.ctx.cfg.flags.has(IntegralFlag::FnOrPanic)
-        {
-            return None;
-        }
-        if self.proofs_available() {
-            return Some(quote! { Self::_proven(it) });
-        }
-        return Some(self.construct_self(quote! { it }));
-    }
-
-    /// `closed_result`, else `it` validated by `_result_or_panic`.
-    pub(crate) fn closed_or_validated(
-        &self,
-        closed: bool,
-    ) -> TokenStream {
-        return self
-            .closed_result(closed)
-            .unwrap_or_else(|| quote! { Self::_result_or_panic(it) });
-    }
-
     /// Integer wrappers validated by their domain alone can construct
     /// results that a closure proof (`zz_domain_closure`) shows valid
     /// through `_proven`. Callbacks are opaque to proofs, and operations
@@ -205,19 +176,6 @@ impl Maker {
         let full = self.proven(op, Rhs::Full, policy);
         let same = full || self.proven(op, Rhs::SameDomain, policy);
         return OperatorProof { full, same };
-    }
-
-    /// The constructor of a raw result: `Self::_proven` when `proven`,
-    /// else the validating `fallback`.
-    pub(crate) fn proven_constructor(
-        &self,
-        proven: bool,
-        fallback: TokenStream,
-    ) -> TokenStream {
-        return match proven {
-            true => quote! { Self::_proven },
-            false => fallback,
-        };
     }
 
     /// The doc line of a generated item whose result cannot fail validation.

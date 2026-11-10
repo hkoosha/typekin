@@ -31,10 +31,12 @@ use crate::zz_friend::{
 };
 use crate::zz_lib::{
     Check,
+    FnAttrs,
     Konst,
     Konsts,
     Named as _,
     OnInvalid,
+    Output,
     unwrap_or_panic,
 };
 use crate::zz_profile_integral::{
@@ -80,14 +82,24 @@ impl Maker {
         };
         let get_raw = &self.ctx.get_raw;
         let rhs = rhs.map(|rhs| quote! { rhs: #rhs, });
-        let output = match self.passed_failure(body.fails, translation) {
-            Some(failure) => quote! { ::core::result::Result<Self, #failure> },
-            None => quote! { Self },
-        };
+        let (output, returned) =
+            match self.passed_failure(body.fails, translation) {
+                Some(failure) => (
+                    quote! { ::core::result::Result<Self, #failure> },
+                    Output::MustUseType,
+                ),
+                None => (quote! { Self }, Output::Value),
+            };
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.form_panics(body.panics, translation), returned);
         let expression = &body.tokens;
         let result = self.constructed(body.fails, translation, quote! { it });
         return quote! {
+            #must_use
             #[inline(always)]
+            #track_caller
             pub(self) #konst fn #name(
                 &self,
                 #rhs
@@ -126,8 +138,9 @@ impl Maker {
             if !konst && !self.has_wrapping_helper(operator, slot) {
                 continue;
             }
-            let row = OpRef::Operator {
+            let row = |slot| OpRef::Operator {
                 spec: operator,
+                slot,
                 konst,
             };
             let helper_konst =
@@ -137,7 +150,7 @@ impl Maker {
                 &helper_konst,
                 &name,
                 Some(&rhs_type),
-                &self.compute(row, slot),
+                &self.compute(row(slot)),
             ));
             let sibling = self.helper_name(operator, &same, konst);
             if sibling != name {
@@ -145,7 +158,7 @@ impl Maker {
                     &helper_konst,
                     &sibling,
                     Some(&rhs_type),
-                    &self.compute(row, &same),
+                    &self.compute(row(&same)),
                 ));
             }
         }
@@ -284,8 +297,11 @@ impl Maker {
         if self.fixed_form().is_none() {
             let el = &self.el;
             let fn_try_of = self.ctx.names.get(IntegralName::TryOfFn);
+            let FnAttrs { track_caller, .. } =
+                FnAttrs::of(self.of_panics(), Output::MustUseType);
             return quote! {
                 #[inline(always)]
+                #track_caller
                 #[allow(private_bounds)]
                 pub #konst fn #fn_try_of<#parameter>(
                     it: #parameter,
@@ -299,9 +315,15 @@ impl Maker {
         }
 
         let fn_of = self.ctx.names.get(IntegralName::OfFn);
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.of_panics(), Output::Value);
 
         return quote! {
+            #must_use
             #[inline(always)]
+            #track_caller
             #[allow(private_bounds)]
             pub #konst fn #fn_of<#parameter>(
                 it: #parameter,
@@ -335,8 +357,14 @@ impl Maker {
 
         let fn_make = self.ctx.names.get(IntegralName::MakeFn);
         let fp_or_panic = &self.ctx.fp_or_panic;
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.validation_panics(), Output::Value);
         return quote! {
+            #must_use
             #[inline(always)]
+            #track_caller
             pub const fn #fn_make(it: #el) -> #ty {
                 return #fp_or_panic(it);
             }
@@ -411,9 +439,14 @@ impl Maker {
                 quote! { self.try_map(function) },
                 "mapping operation produced an invalid value",
             );
+            let FnAttrs {
+                must_use,
+                track_caller,
+            } = FnAttrs::of(self.validation_panics(), Output::Value);
             quote! {
+                #must_use
                 #[inline(always)]
-                #[track_caller]
+                #track_caller
                 pub #konst fn map<#callback>(
                     self,
                     function: #callback,
@@ -425,8 +458,11 @@ impl Maker {
                 }
             }
         });
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(self.storage.write_panics(), Output::MustUseType);
         return quote! {
             #[inline(always)]
+            #track_caller
             pub #konst fn try_map<#callback>(
                 self,
                 function: #callback,
@@ -683,11 +719,11 @@ impl Maker {
         operator: &OpSpec,
         slot: &Slot,
     ) -> TokenStream {
-        let row = OpRef::Operator {
+        let body = self.compute(OpRef::Operator {
             spec: operator,
+            slot,
             konst: true,
-        };
-        let body = self.compute(row, slot);
+        });
         let konst = Konst::konst(!body.fails || self.ctx.cfg.helper_konst());
         return self.validating_helper(
             &konst,
@@ -801,8 +837,11 @@ impl Maker {
         let el = &self.el;
         if !self.ctx.cfg.validation.has_validation() {
             let fp_or_panic = &self.ctx.fp_or_panic;
+            let FnAttrs { track_caller, .. } =
+                FnAttrs::of(self.validation_panics(), Output::MustUseType);
             return quote! {
                 #[inline(always)]
+                #track_caller
                 pub const fn try_make(it: #el) -> Result<Self, #el> {
                     return Ok(#fp_or_panic(it));
                 }
@@ -815,8 +854,10 @@ impl Maker {
             Check::Validate,
             OnInvalid::Err(quote! { it }),
         );
+        let track_caller = self.track_write();
         return quote! {
             #[inline(always)]
+            #track_caller
             pub #konst fn try_make(it: #el) -> Result<Self, #el> {
                 #body
             }
@@ -845,21 +886,30 @@ impl Maker {
         let or_panic = self.ctx.names.get(IntegralName::OrPanic);
         let konst = Konst::konst(self.ctx.cfg.helper_konst());
         let fails = self.ctx.cfg.validation.has_validation();
-        let body = match translate(fails, self.ctx.cfg.wide.panic_at, true) {
-            None => return TokenStream::new(),
-            Some(Translation::Unwrap(message)) => self.construction(
+        let Some(translation) =
+            translate(fails, self.ctx.cfg.wide.panic_at, true)
+        else {
+            return TokenStream::new();
+        };
+        let body = match translation {
+            Translation::Unwrap(message) => self.construction(
                 quote! { it },
                 Check::Validate,
                 OnInvalid::Panic(message),
             ),
-            Some(Translation::Pass) => {
+            Translation::Pass => {
                 let constructed = self.construct_self(quote! { it });
                 quote! { return #constructed; }
             }
         };
+        let FnAttrs {
+            must_use,
+            track_caller,
+        } = FnAttrs::of(self.form_panics(false, translation), Output::Value);
         return quote! {
-            #[must_use]
+            #must_use
             #[inline(always)]
+            #track_caller
             pub(self) #konst fn #or_panic(it: #el) -> Self {
                 #body
             }
@@ -883,8 +933,10 @@ impl Maker {
             Check::Validate,
             OnInvalid::Err(quote! { ::core::option::Option::Some(it) }),
         );
+        let track_caller = self.track_write();
         return quote! {
             #[inline(always)]
+            #track_caller
             pub(self) #konst fn #or_err(
                 it: ::core::option::Option<#el>,
             ) -> ::core::result::Result<Self, #failure> {
@@ -910,11 +962,13 @@ impl Maker {
             Check::DebugOnly(violated),
             OnInvalid::Panic(violated),
         );
+        let track_caller = self.track_write();
         return quote! {
             /// Builds a result that an expansion-time closure proof
             /// shows valid; debug builds still check it.
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub(self) const fn _proven(it: #el) -> Self {
                 #body
             }
@@ -937,6 +991,7 @@ impl Maker {
             &self.ctx.cfg.hide_in,
             with_blind_trust,
         );
+        let track_caller = self.track_write();
         return quote! {
             /// Builds the wrapper **without validation**; the caller
             /// vouches for `raw`. Zero still cannot enter `NonZero`
@@ -944,6 +999,7 @@ impl Maker {
             #[doc(hidden)]
             #[must_use]
             #[inline(always)]
+            #track_caller
             #visibility const fn #blind_trust(raw: #el) -> Self {
                 return #constructed;
             }

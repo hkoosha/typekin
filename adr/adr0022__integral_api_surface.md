@@ -38,6 +38,14 @@ or generics through the API.
   a facet's xor slot never got `BitXorAssign<Rhs>`. Both now behave like the
   other operators: `without = math_xor` keeps `^=`, and a `Self`-output xor
   slot is assignable while its owner has `assign_xor` on.
+- **One rule for `#[track_caller]` and `#[must_use]`** (ADR 0033, D0.6,
+  2026-11-09). A generated function or trait method whose body can panic
+  (validation that panics, rustc's own checks, the `NonZero` zero test) is
+  `#[track_caller]`, so the panic names the caller's line; an inherent
+  function that returns a value is `#[must_use]` unless its type already is
+  (`Result`, `impl Iterator`). Until then integer forwards had neither
+  attribute and float forwards had both. New `#[must_use]` attributes can
+  raise `unused_must_use` in user code; that is intended.
 - **Errors:** `try_make` returns the rejected raw value; only `error = ()` is
   accepted, reserving the grammar.
 - **Empty domain** keeps the normal return types; every ordinary construction is

@@ -11,17 +11,75 @@ use syn::{
     GenericParam,
     Lifetime,
     LifetimeParam,
+    Path,
 };
 
 use crate::integral::Maker;
 use crate::integral_cfg::{
     IntegralFlag,
-    IntegralName,
+    Translation,
+    translate,
+};
+use crate::integral_compute::{
+    Body,
+    OpRef,
 };
 use crate::zz_forward::{
     CoreFwd,
     InDomain,
 };
+use crate::zz_lib::{
+    FnAttrs,
+    Output,
+};
+use crate::zz_values::{
+    Op,
+    OpSpec,
+};
+
+/// `Sum` and `Product`: each one's flag, the operator it folds, its
+/// `core::iter` trait and that trait's method.
+const FOLDS: [(IntegralFlag, Op, &str, &str); 2] = [
+    (IntegralFlag::Sum, Op::Add, "Sum", "sum"),
+    (IntegralFlag::Product, Op::Mul, "Product", "product"),
+];
+
+/// One impl of `Sum` or `Product`.
+struct Fold<'a> {
+    /// The operator folded: `+` or `*`.
+    spec: &'a OpSpec,
+    /// `Sum` or `Product`.
+    name: Ident,
+    /// `sum` or `product`.
+    method: Ident,
+    /// The lifetime of items taken by reference; `None` takes them by
+    /// value.
+    lifetime: Option<&'a Lifetime>,
+}
+
+impl Fold<'_> {
+    /// The wrapper value of the item `it`.
+    fn item(&self) -> TokenStream {
+        return match self.lifetime {
+            Some(_) => quote! { *it },
+            None => quote! { it },
+        };
+    }
+
+    /// What stands before the type of an item taken by reference.
+    fn borrow(&self) -> Option<TokenStream> {
+        return self.lifetime.map(|it| quote! { &#it });
+    }
+
+    /// The generic parameter the impl adds: the items' lifetime.
+    fn parameters(&self) -> Vec<GenericParam> {
+        return self
+            .lifetime
+            .map(|it| GenericParam::Lifetime(LifetimeParam::new(it.clone())))
+            .into_iter()
+            .collect();
+    }
+}
 
 const CORE_FLOAT_CONSTS: &[(&str, &str)] = &[
     ("RADIX", "u32"),
@@ -86,128 +144,160 @@ impl Maker {
         ]);
     }
 
-    /// `Sum` and `Product` over values and references: the raw fold of
-    /// `core`'s float implementation, then one validation of the result.
-    /// Operations that report failure fold into a `Result` instead.
+    /// `Sum` and `Product` over values and references.
     pub(crate) fn make_iterator_folds(&self) -> TokenStream {
-        let ty = &self.ctx.ty;
-        let impl_generics = &self.ctx.impl_generics;
-        let where_clause = &self.ctx.where_clause;
-        let el = &self.el;
-        let get_raw = &self.ctx.get_raw;
-        let iterator = self.target.fresh_ident("I");
         let lifetime = Lifetime::new("'__typekin_item", Span::call_site());
-        let lifetime_param =
-            GenericParam::Lifetime(LifetimeParam::new(lifetime.clone()));
-
         let mut stream = TokenStream::new();
-
-        for (flag, name, method, symbol) in [
-            (IntegralFlag::Sum, "Sum", "sum", quote! { + }),
-            (IntegralFlag::Product, "Product", "product", quote! { * }),
-        ] {
+        for (flag, op, name, method) in FOLDS {
             if !self.ctx.cfg.flags.has(flag) {
                 continue;
             }
-            let fold = format_ident!("{}", name);
-            let method = Ident::new(method, Span::call_site());
-            if let Some(failure) = &self.ctx.failure {
-                let (ref_impl_generics, ref_where_clause) = self
-                    .target
-                    .impl_header(std::slice::from_ref(&lifetime_param), &[]);
-                let or_err = self.ctx.names.get(IntegralName::OrErr);
-                // `Self` is the `Result` here: qualify by the target.
-                let get_raw = self.target.qualify_path(get_raw);
-                let output = quote! {
-                    ::core::result::Result<#ty, #failure>
-                };
-                let body = |item: TokenStream| {
-                    return quote! {
-                        let mut iter = iter;
-                        let mut folded = match iter.next() {
-                            ::core::option::Option::Some(it) => #item,
-                            ::core::option::Option::None => {
-                                let empty = ::core::iter::empty::<#el>();
-                                return <#ty>::#or_err(
-                                    ::core::option::Option::Some(
-                                        empty.#method::<#el>(),
-                                    ),
-                                );
-                            }
-                        };
-                        for it in iter {
-                            let value = #get_raw(folded) #symbol #get_raw(#item);
-                            folded = <#ty>::#or_err(
-                                ::core::option::Option::Some(value),
-                            )?;
-                        }
-                        return ::core::result::Result::Ok(folded);
-                    };
-                };
-                let by_value = body(quote! { it });
-                let by_reference = body(quote! { *it });
-                stream.extend(quote! {
-                    impl #impl_generics ::core::iter::#fold<#ty> for #output
-                    #where_clause {
-                        #[inline(always)]
-                        fn #method<#iterator>(iter: #iterator) -> Self
-                        where
-                            #iterator: ::core::iter::Iterator<Item = #ty>,
-                        {
-                            #by_value
-                        }
-                    }
-
-                    impl #ref_impl_generics ::core::iter::#fold<&#lifetime #ty>
-                        for #output
-                    #ref_where_clause
-                    {
-                        #[inline(always)]
-                        fn #method<#iterator>(iter: #iterator) -> Self
-                        where
-                            #iterator:
-                                ::core::iter::Iterator<Item = &#lifetime #ty>,
-                        {
-                            #by_reference
-                        }
-                    }
-                });
-                continue;
+            for lifetime in [
+                None,
+                Some(&lifetime),
+            ] {
+                stream.extend(self.fold_impl(&Fold {
+                    spec: op.spec(),
+                    name: format_ident!("{}", name),
+                    method: format_ident!("{}", method),
+                    lifetime,
+                }));
             }
-            stream.extend(self.impl_trait(
-                false,
-                quote! { ::core::iter::#fold },
-                quote! {
-                    #[inline(always)]
-                    #[track_caller]
-                    fn #method<#iterator>(iter: #iterator) -> Self
-                    where
-                        #iterator: ::core::iter::Iterator<Item = Self>,
-                    {
-                        let raw = iter.map(|it| #get_raw(it)).#method::<#el>();
-                        return Self::_result_or_panic(raw);
-                    }
-                },
-            ));
-            stream.extend(self.impl_trait_with(
-                false,
-                std::slice::from_ref(&lifetime_param),
-                &[],
-                quote! { ::core::iter::#fold<&#lifetime #ty> },
-                quote! {
-                    #[inline(always)]
-                    #[track_caller]
-                    fn #method<#iterator>(iter: #iterator) -> Self
-                    where
-                        #iterator: ::core::iter::Iterator<Item = &#lifetime Self>,
-                    {
-                        let raw = iter.map(|it| #get_raw(*it)).#method::<#el>();
-                        return Self::_result_or_panic(raw);
-                    }
-                },
-            ));
         }
-
         return stream;
+    }
+
+    /// One impl of a fold. Its output is free: where a failure panics,
+    /// the impl is the target's; where it is passed on, the `Result`'s.
+    fn fold_impl(
+        &self,
+        fold: &Fold,
+    ) -> TokenStream {
+        let get_raw = &self.ctx.get_raw;
+        let item = fold.item();
+        let items = quote! { iter.map(|it| #get_raw(#item)) };
+        let body = self.compute(OpRef::Fold {
+            method: &fold.method,
+            items: &items,
+        });
+        let panic_at = self.ctx.cfg.wide.panic_at;
+        let Some(translation) = translate(body.fails, panic_at, false)
+        else {
+            return TokenStream::new();
+        };
+        let FnAttrs { track_caller, .. } = FnAttrs::of(
+            self.form_panics(body.panics, translation),
+            Output::Unmarked,
+        );
+        return match self.passed_failure(body.fails, translation) {
+            Some(failure) => {
+                let constructor = self
+                    .result_constructor(body.fails, translation)
+                    .expect("a failure is passed on by its constructor");
+                self.fold_passing(fold, failure, &constructor, &track_caller)
+            }
+            None => {
+                self.fold_panicking(fold, &body, translation, &track_caller)
+            }
+        };
+    }
+
+    /// A fold as the target's impl: the raw fold of `core`'s float
+    /// implementation (`body`), then one construction of the result.
+    fn fold_panicking(
+        &self,
+        fold: &Fold,
+        body: &Body,
+        translation: Translation,
+        track_caller: &Option<TokenStream>,
+    ) -> TokenStream {
+        let ty = &self.ctx.ty;
+        let iterator = self.target.fresh_ident("I");
+        let (name, method) = (&fold.name, &fold.method);
+        let borrow = fold.borrow();
+        // By value the trait's parameter is its default, `Self`.
+        let items = fold.lifetime.map(|_| quote! { <#borrow #ty> });
+        let raw = &body.tokens;
+        let result =
+            self.result_constructed(body.fails, translation, quote! { raw });
+        return self.impl_trait_with(
+            false,
+            &fold.parameters(),
+            &[],
+            quote! { ::core::iter::#name #items },
+            quote! {
+                #[inline(always)]
+                #track_caller
+                fn #method<#iterator>(iter: #iterator) -> Self
+                where
+                    #iterator: ::core::iter::Iterator<Item = #borrow Self>,
+                {
+                    let raw = #raw;
+                    return #result;
+                }
+            },
+        );
+    }
+
+    /// A fold as an impl of the `Result` that passes `failure` on: every
+    /// step goes through `constructor`, and so does `core`'s fold of no
+    /// items, the value of an empty iterator.
+    fn fold_passing(
+        &self,
+        fold: &Fold,
+        failure: &TokenStream,
+        constructor: &Path,
+        track_caller: &Option<TokenStream>,
+    ) -> TokenStream {
+        let ty = &self.ctx.ty;
+        let el = &self.el;
+        let iterator = self.target.fresh_ident("I");
+        let (name, method) = (&fold.name, &fold.method);
+        let borrow = fold.borrow();
+        let (impl_generics, where_clause) =
+            self.target.impl_header(&fold.parameters(), &[]);
+        // `Self` is the `Result` here: the constructor is the target's.
+        let constructor = constructor.segments.iter().skip(1);
+        let constructor = quote! { <#ty>::#(#constructor)::* };
+        let item = fold.item();
+        let empty = self.compute(OpRef::Fold {
+            method,
+            items: &quote! { empty },
+        });
+        let step = self.compute(OpRef::FoldStep {
+            spec: fold.spec,
+            item: &item,
+        });
+        let (empty, step) = (empty.tokens, step.tokens);
+        return quote! {
+            impl #impl_generics ::core::iter::#name<#borrow #ty>
+                for ::core::result::Result<#ty, #failure>
+            #where_clause {
+                #[inline(always)]
+                #track_caller
+                fn #method<#iterator>(iter: #iterator) -> Self
+                where
+                    #iterator: ::core::iter::Iterator<Item = #borrow #ty>,
+                {
+                    let mut iter = iter;
+                    let mut folded = match iter.next() {
+                        ::core::option::Option::Some(it) => #item,
+                        ::core::option::Option::None => {
+                            let empty = ::core::iter::empty::<#el>();
+                            return #constructor(
+                                ::core::option::Option::Some(#empty),
+                            );
+                        }
+                    };
+                    for it in iter {
+                        let value = #step;
+                        folded = #constructor(
+                            ::core::option::Option::Some(value),
+                        )?;
+                    }
+                    return ::core::result::Result::Ok(folded);
+                }
+            }
+        };
     }
 }

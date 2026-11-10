@@ -36,7 +36,11 @@ use crate::zz_friend::{
     emit_protocol,
     upsert_friend,
 };
-use crate::zz_lib::Konst;
+use crate::zz_lib::{
+    FnAttrs,
+    Konst,
+    Output,
+};
 use crate::zz_profile_integral::{
     RhsKind,
     Slot,
@@ -491,13 +495,14 @@ impl Maker {
 
     /// A facet slot's `{Op}Rhs` impl, its operator's regular form: the raw
     /// operands, `body`, the construction `translation` asks for, then the
-    /// slot's produced output.
+    /// slot's produced output. `panics`: the form can panic.
     pub(crate) fn facet_rhs_impl(
         &self,
         operator: &OpSpec,
         slot: &Slot,
         translation: Translation,
         body: &Body,
+        panics: bool,
     ) -> TokenStream {
         let target = self.target.ty();
         let generics = self.target.external_generics();
@@ -518,10 +523,15 @@ impl Maker {
             _ => quote! { #get_raw(rhs) },
         };
         // Only `Self` can be built directly: a result that cannot fail but
-        // has no `_proven` to skip validation through is validated.
-        let constructor = self
-            .constructor(body.fails, translation)
-            .unwrap_or_else(|| self.ctx.fp_or_panic.clone());
+        // has no `_proven` to skip validation through is validated, which
+        // can panic like any validation.
+        let constructor = self.constructor(body.fails, translation);
+        let panics =
+            panics || (constructor.is_none() && self.validation_panics());
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
+        let constructor =
+            constructor.unwrap_or_else(|| self.ctx.fp_or_panic.clone());
         let constructor = self.target.qualify_path(&constructor);
         let doc = self.proof_doc(self.slot_proven(operator, slot));
         let output = self.output_of(slot, true, body.fails, translation);
@@ -537,6 +547,7 @@ impl Maker {
 
                 #doc
                 #[inline(always)]
+                #track_caller
                 fn #method(
                     lhs: #target,
                     rhs: #rhs_ty,
@@ -553,10 +564,12 @@ impl Maker {
 
     /// `core::ops::{Op}<T> for Target` forwarding to `T`'s `{Op}Rhs` impl,
     /// for a row that facets dispatch (one whose `slots` are facet slots).
+    /// `panics`: an impl it forwards to can panic.
     pub(crate) fn facet_operator_impl(
         &self,
         operator: &OpSpec,
         slots: &[Slot],
+        panics: bool,
     ) -> TokenStream {
         if !slots.iter().any(Slot::is_facet) {
             return TokenStream::new();
@@ -576,6 +589,8 @@ impl Maker {
             &[parse_quote! { #rhs }],
             &[parse_quote! { #rhs: #bound }],
         );
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
 
         return quote! {
             #[allow(private_bounds)]
@@ -585,6 +600,7 @@ impl Maker {
                 type Output = <#rhs as #trait_name #arguments>::Output;
 
                 #[inline(always)]
+                #track_caller
                 fn #method(
                     self,
                     rhs: #rhs,
@@ -596,11 +612,13 @@ impl Maker {
     }
 
     /// `core::ops::{Op}Assign<Rhs> for Target` of a facet slot whose output
-    /// is `Self`, forwarding to the slot's `{Op}Rhs` impl.
+    /// is `Self`, forwarding to the slot's `{Op}Rhs` impl. `panics`: that
+    /// impl can panic.
     pub(crate) fn facet_assign_impl(
         &self,
         operator: &OpSpec,
         slot: &Slot,
+        panics: bool,
     ) -> TokenStream {
         let target = self.target.ty();
         let generics = self.target.external_generics();
@@ -613,6 +631,8 @@ impl Maker {
         let doc = self.proof_doc(self.slot_proven(operator, slot));
         let is_konst = self.ctx.cfg.konst_for(&operator.assign_konsts());
         let konst = Konst::konst(is_konst);
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
 
         return quote! {
             #konst impl #parameters ::core::ops::#assign_trait<#rhs_ty>
@@ -620,6 +640,7 @@ impl Maker {
             #where_clause {
                 #doc
                 #[inline(always)]
+                #track_caller
                 fn #assign_method(
                     &mut self,
                     rhs: #rhs_ty,
@@ -790,6 +811,32 @@ impl Maker {
             seal_cfg,
             capability_cfgs,
             within: within.then(|| self.within_doc(friend)),
+            make_panics: self.make_panics(friend),
+        });
+    }
+
+    /// Whether `friend`'s `make` (or `try_make`) can panic, by the
+    /// constructor it calls. `_or_err`, where construction reports failure,
+    /// and the constructors of a `Within` or `unsafe` friend only write the
+    /// storage; every other friend goes through `_or_panic`.
+    fn make_panics(
+        &self,
+        friend: &Friend,
+    ) -> bool {
+        let writes = self.fixed_form().is_none()
+            || friend.has(Capability::Within)
+            || friend.has(Capability::Unsafe);
+        return match writes {
+            true => self.storage.write_panics(),
+            false => self.validation_panics(),
+        };
+    }
+
+    /// Whether `of` (or `try_of`) can panic: some `Make` friend's `make`
+    /// can.
+    pub(crate) fn of_panics(&self) -> bool {
+        return self.ctx.cfg.friends.iter().any(|it| {
+            return it.has(Capability::Make) && self.make_panics(it);
         });
     }
 

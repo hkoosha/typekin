@@ -38,7 +38,7 @@ first instead, to the tree as it stood with `panic_at` (ADR 0028), so that
   |---|---|---|
   | Operation | an `OpSpec` row (operators), a `CoreFwd` row (named forms), an ingress constructor | identity, arity, flags, `konst_*` flags, closure op, how it can panic |
   | Right-hand side | a `Slot` of the wrapper's `Slots` | same type, raw amount, friend, facet slot; arithmetic; `produce` |
-  | Computation | `Maker::compute(row, slot) -> Body { tokens, fails }` | profile arithmetic, `panic_at`, proofs |
+  | Computation | `Maker::compute(row: OpRef) -> Body { tokens, fails, panics }` (an operator with its slot, a forward row, a `Step`, a fold) | profile arithmetic, `panic_at`, proofs |
   | Construction | `Validation` (the conjuncts), `Check`, `OnInvalid`, `StoragePlan` | validate, proven, `Within`; the storage base |
   | Form | `translate(fails, panic_at, fixed_output)` and one form emitter | trait impl or named method, assignment, `Step` |
 
@@ -80,10 +80,18 @@ first instead, to the tree as it stood with `panic_at` (ADR 0028), so that
   most likely to cross FFI, so a rewritten storage (`PLAN.md`'s enum storage,
   ADR 0034's niche storage) will need an explicit opt-in in the nested
   configuration.
-- **D0.6, one attribute rule.** `#[track_caller]` on every generated function
-  and trait method whose body can panic; `#[must_use]` on every inherent
-  function that returns a value; `#[inline(always)]` where it was. The rule is
-  derived from the form and `Body::fails`, never set per row.
+- **D0.6, one attribute rule** (`zz_lib::FnAttrs`). `#[track_caller]` on every
+  generated function and trait method whose body can panic: the computation
+  panics (rustc's overflow, division and shift checks, `sequential`'s panic, a
+  forward row's `panics` column), the translation is `Unwrap`, or the storage
+  write tests for zero; transitively over generated callers. A proof's
+  `debug_assert!` does not count, and an unvalidated type loses the attribute
+  where nothing can panic. `#[must_use]` on every inherent function that
+  returns a value, unless the return type is itself `#[must_use]` (`Result`,
+  `impl Iterator`): measured on expanded examples, marking those too raises
+  `clippy::double_must_use`. `#[inline(always)]` stays where it was. The rule
+  is derived from the form, its `Body` and its `Translation`, never set per
+  row.
 - **D0.7, closure eligibility is unchanged.** Proofs stay gated by the plain
   interval shape; widening it is future work (`PLAN_0.md` §12.1).
 - **D0.8, rustdoc.** The fixed-profile macros and `float` refer to
@@ -137,6 +145,21 @@ first instead, to the tree as it stood with `panic_at` (ADR 0028), so that
   `without = fn_push` with "removes nothing" instead of "unknown flag".
 - Generated items moved relative to each other once (D0.1); the checked-in
   `_exp.rs` examples were regenerated.
+- The source did not get smaller, against the plan's estimate (about 29.2k
+  lines in `src/*.rs` before and after). The tables and shared emitters
+  removed about 750 lines; the slot/`compute`/`translate` model and the
+  attribute rule added them back, because the helper layer and both operator
+  paths stay until `PLAN.md` removes them.
+- Constructor bodies took one shape (`return if … { … } else { … };`); the
+  token changes are listed in `PLAN_0.md` §13.
+- Not verified when this landed: the slow suite (fixture crates, assembly
+  comparisons) was last run before `assign_xor`, the slot model and the
+  attribute rule; `#[track_caller]` in particular needs the assembly
+  comparisons.
+- Known gaps of the attribute rule: text's `try_insert`, `try_insert_str`,
+  `try_replace_range` and `try_truncate` carry `#[track_caller]`, but their
+  `String` call sits in a closure, so a panic there still reports generated
+  code; packed's `__typekin_packed_valid` is unmarked.
 
 ## Left for `PLAN.md`
 

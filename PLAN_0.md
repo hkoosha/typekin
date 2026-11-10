@@ -882,7 +882,7 @@ subject exists only in PLAN.md; each such part already has its owner.
 | W5 `OpSpec` | done | `zz_values::{Op, OpKind, OpSpec, OPS}`, `IntegralFlag::of_op` | prechecks and `try_` names per operator |
 | W6 slots | done | `zz_profile_integral::{Slot, RhsKind, Slots}`: one slot list per operator for both paths, built once (facet rows in `resolve`, root rows in `settle`); each orchestrator is one section list (P3) | `{Op}Rhs` dispatch for non-facet wrappers (the helpers and the two generated shapes stay until then) |
 | W7 `CoreFwd` rows | done | `zz_forward::{CoreFwd, CORE_INT, CORE_FLOAT, FLOAT_MATH}`, one emitter in `integral_forward.rs` | the `forms` column (`try_`) |
-| W8 `compute()` | done | `integral_compute.rs`: `Maker::compute(row: OpRef, slot) -> Body { tokens, fails }` writes the profile arithmetic, `Neg`, `Not`, shifts, the `panic_at` level and `Step`; the old `Arithmetic::make_*` emitters are gone | the `lax` guard, `pedantic` prechecks, U3/U4 |
+| W8 `compute()` | done | `integral_compute.rs`: `Maker::compute(row: OpRef) -> Body { tokens, fails, panics }` writes the profile arithmetic, `Neg`, `Not`, shifts, the `panic_at` level, `Step`, the forwards' calls and the `Sum`/`Product` folds; the old `Arithmetic::make_*` emitters are gone | the `lax` guard, `pedantic` prechecks, U3/U4 |
 | W9 `translate()` | done | `integral_cfg::translate(fails, panic_at, fixed_output) -> Option<Translation>`, read by `of`/`try_of`, `map`, `_or_panic`/`_or_err`, assignments, `Step`, the friend `Make` and the forwards | R8 |
 | W10 construction | done | `zz_lib::{Validation, Check, OnInvalid, unwrap_or_panic}`, `Maker::construction`, `StoragePlan { raw, base, wrapping }` | `Base::Enum`, U1/U2/U5, implied conjuncts (Q31) |
 | W11 removal keys | done | `Removals` keyed by `(Form, FnName)`; text's `Try*` names are `(Try, name)` | `Try` forms of integral forwards |
@@ -892,7 +892,7 @@ subject exists only in PLAN.md; each such part already has its owner.
 | D0.2 `assign_xor` | done | `IntegralFlag::AssignXor`, in `ASSIGN_FLAGS`, `INT_ONLY_FLAGS`, `RESTRICTED_MATH_FLAGS`, `FACET_ASSIGNMENTS`; facet xor slots with a `Self` output gain `BitXorAssign<Rhs>` | |
 | D0.3 key spans | done | every `rejection` row reports at the key; a facet rejects `precedes` whatever its profile | |
 | D0.5 bitflag storage | done as far as it has a subject | bitflag constructs through `StoragePlan`; storage stays primitive | the `enum_storage` opt-in |
-| D0.6 attributes | see below | | |
+| D0.6 attributes | done | `zz_lib::FnAttrs::of(panics, output)`: `#[track_caller]` where the body can panic (`Body::panics`, an `Unwrap` translation, the `NonZero` zero test; transitive), `#[must_use]` on inherent functions returning a value whose type is not itself `#[must_use]` (`Result`, `impl Iterator`) | |
 | D0.7 | kept | closure eligibility unchanged | |
 | D0.8 rustdoc | done | `src/lib.rs` | |
 

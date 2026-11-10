@@ -504,7 +504,7 @@ impl FacetCfg {
 pub(crate) enum RhsKind {
     /// The wrapper itself: `Add for Ty`.
     Same,
-    /// A raw `usize` amount: a shift's bits, a step's count.
+    /// A raw `usize` amount: a shift's bits.
     Amount,
     /// Any friend holding the capability, converted by the seal:
     /// `Add<T> for Ty where T: Math + Seal`.
@@ -536,17 +536,6 @@ pub(crate) struct Slot {
 }
 
 impl Slot {
-    /// The count a `core::iter::Step` method steps by, under `arithmetic`.
-    pub(crate) fn count(arithmetic: Arithmetic) -> Self {
-        return Self {
-            rhs: RhsKind::Amount,
-            arithmetic,
-            produce: SelfConverter::default(),
-            regular: true,
-            assign: false,
-        };
-    }
-
     /// Whether the slot dispatches through its operator's `{Op}Rhs` trait
     /// rather than through the operator's helper.
     pub(crate) fn is_facet(&self) -> bool {

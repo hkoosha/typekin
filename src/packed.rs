@@ -73,12 +73,14 @@ use crate::zz_hide::{
     inner_visibility,
 };
 use crate::zz_lib::{
+    FnAttrs,
     Key,
     Konst,
     KonstFamily,
     Konsts,
     NUMERIC_LINTS,
     Named as _,
+    Output,
     Site,
     lint_scope,
     one_or_list,
@@ -876,6 +878,26 @@ impl Maker {
         };
     }
 
+    /// `#[track_caller]` for a function that builds the record: `NonZero`
+    /// storage tests the bits for zero. The `debug_assert!` of the fit
+    /// proof does not count.
+    fn track_write(&self) -> Option<TokenStream> {
+        return FnAttrs::of(self.storage.write_panics(), Output::Unmarked)
+            .track_caller;
+    }
+
+    /// `#[track_caller]` for a function that reads `fields`: a wrapper
+    /// field's getter re-checks its bits through the field type's
+    /// `try_make` and panics on an `Err`.
+    fn track_read<'a>(
+        fields: impl IntoIterator<Item = &'a Field>
+    ) -> Option<TokenStream> {
+        let checks = fields
+            .into_iter()
+            .any(|it| matches!(it.shape, Shape::Wrapper));
+        return FnAttrs::of(checks, Output::Unmarked).track_caller;
+    }
+
     /// `make` from the values struct and `fields` back to it.
     fn values_fns(&self) -> Option<TokenStream> {
         if !self.cfg.flags.has(PackedFlag::ValuesStruct) {
@@ -893,12 +915,15 @@ impl Maker {
         });
         let names = self.fields.iter().map(|it| &it.name);
         let construct = self.construct();
+        let track_write = self.track_write();
+        let track_read = Self::track_read(&self.fields);
         return Some(quote! {
             /// Builds the record from its field values. Cannot fail: each
             /// value is valid for its type, and each type's values fit its
             /// bits (proven at compile time).
             #[must_use]
             #[inline(always)]
+            #track_write
             pub #konst fn #make(values: #values) -> Self {
                 let raw: #el = #(#parts)|*;
                 #construct
@@ -907,6 +932,7 @@ impl Maker {
             /// The record's field values.
             #[must_use]
             #[inline(always)]
+            #track_read
             pub #konst fn #fields(self) -> #values {
                 return #values {
                     #(#names: Self::#names(self),)*
@@ -944,10 +970,12 @@ impl Maker {
                 quote! { return #value; }
             }
         };
+        let track_caller = Self::track_read([field]);
         return quote! {
             #(#docs)*
             #[must_use]
             #[inline(always)]
+            #track_caller
             #vis #konst fn #name(self) -> #ty {
                 let raw: #el = #self_raw;
                 #body
@@ -976,10 +1004,12 @@ impl Maker {
             Self::mask(ones(repr_bits(self.repr)) & !field.window.mask());
         let value = self.encode(field, &quote! { #name });
         let construct = self.construct();
+        let track_caller = self.track_write();
         return quote! {
             #(#docs)*
             #[must_use]
             #[inline(always)]
+            #track_caller
             #vis #konst fn #setter(self, #name: #ty) -> Self {
                 let raw: #el = (#self_raw & #kept) | #value;
                 #construct
@@ -1000,8 +1030,10 @@ impl Maker {
             let text = name.unraw().to_string();
             return quote! { .field(#text, &Self::#name(*self)) };
         });
+        let track_caller = Self::track_read(&self.fields);
         return quote! {
             impl ::core::fmt::Debug for #ty {
+                #track_caller
                 fn fmt(
                     &self,
                     f: &mut ::core::fmt::Formatter<'_>,

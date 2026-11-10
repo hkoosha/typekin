@@ -364,7 +364,14 @@ constness, and runtime cost as API behavior.
   `NonZeroX::new` and read with `get()`, never `new_unchecked` or a pointer
   cast. `unsafe` appears only as the blind-trust friend capability.
 - Continue using `#[inline(always)]` on small generated forwarding and
-  conversion paths where the existing generators do.
+  conversion paths where the existing generators do. `#[track_caller]` and
+  `#[must_use]` follow one rule (`zz_lib::FnAttrs`), never a per-function
+  choice: `#[track_caller]` on every generated function and trait method
+  whose body can panic (validation that panics, rustc's own checks, the
+  `NonZero` zero test; transitively over generated callers, a proof's
+  `debug_assert!` excluded), and `#[must_use]` on every inherent function that
+  returns a value whose type is not itself `#[must_use]` (`Result`,
+  `impl Iterator`).
 - Use `::core` in generated code where possible. Text chooses `::std` by default
   and `::alloc` with `std = false`; the latter must remain usable in a `no_std`
   consumer with `extern crate alloc` and an unqualified `String` in scope.
@@ -521,9 +528,9 @@ constness, and runtime cost as API behavior.
   (ADR 0033): the operation is a row (`OpSpec`, `CoreFwd`) or an ingress
   constructor; its right-hand side is a `Slot` of the wrapper's `Slots`
   (`RhsKind`, arithmetic, `produce`), built once from the root or the facets;
-  `Maker::compute(row, slot)` alone writes the computation (profile
-  arithmetic, the `panic_at` level, `Step`) and says whether it can fail
-  (`Body`); construction goes through `Maker::construction`; and
+  `Maker::compute(row)` alone writes the computation (profile arithmetic, the
+  `panic_at` level, `Step`, a forward's call, a fold) and says whether it can
+  fail or panic (`Body`); construction goes through `Maker::construction`; and
   `integral_cfg::translate(fails, panic_at, fixed_output)` alone decides
   whether a form exists and whether a failure is passed on or panics. Do not
   branch on `panic_at`, a proof, or "facets or not" in an emitter; read the

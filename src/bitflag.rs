@@ -50,12 +50,14 @@ use crate::zz_hide::{
     HideIn,
 };
 use crate::zz_lib::{
+    FnAttrs,
     Key,
     Konst,
     KonstFamily,
     Konsts,
     NUMERIC_LINTS,
     Named as _,
+    Output,
     lint_scope,
     reject_generics,
     repr_transparent,
@@ -535,6 +537,14 @@ impl Maker {
         );
     }
 
+    /// `#[track_caller]` for a function that builds a value through
+    /// `from_bits_retain`, itself or in a function it calls: that panics on
+    /// bits the nested validation rejects.
+    fn track_retain(&self) -> Option<TokenStream> {
+        let validated = self.cfg.int.validation.has_validation();
+        return FnAttrs::of(validated, Output::Unmarked).track_caller;
+    }
+
     /// `bits`, `from_bits_retain`, `empty` and the `all*` values.
     fn vl_construction_fns(&self) -> TokenStream {
         let ty = &self.ty;
@@ -542,6 +552,7 @@ impl Maker {
         let raw = &self.raw;
         let konst = &self.konst.value;
         let from_bits = self.vl_from_bits_body();
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
@@ -552,36 +563,42 @@ impl Maker {
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn from_bits_retain(bits: #el) -> Self {
                 return #from_bits;
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn empty() -> Self {
                 return Self::from_bits_retain(0);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn all() -> Self {
                 return #ty::all();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn all_named() -> Self {
                 return Self::all();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn all_known() -> Self {
                 return Self::all();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn all_unknown() -> Self {
                 return Self::from_bits_retain(!Self::all().bits());
             }
@@ -592,40 +609,47 @@ impl Maker {
     fn vl_known_bits_fns(&self) -> TokenStream {
         let el = &self.el;
         let konst = &self.konst.value;
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn known_bits(self) -> #el {
                 return self.bits() & Self::all().bits();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn unknown_bits(self) -> #el {
                 return self.bits() & !Self::all().bits();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn into_known_bits(self) -> Self {
                 return Self::from_bits_retain(self.known_bits());
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn into_unknown_bits(self) -> Self {
                 return Self::from_bits_retain(self.unknown_bits());
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn contains_unknown_bits(self) -> bool {
                 return self.unknown_bits() != Self::empty().bits();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn from_bits(bits: #el) -> Option<Self> {
                 let value = Self::from_bits_retain(bits);
                 return if value.contains_unknown_bits() {
@@ -637,6 +661,7 @@ impl Maker {
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn try_as_known_bits_only(self) -> Result<Self, Self> {
                 return if self.contains_unknown_bits() {
                     Err(self)
@@ -648,17 +673,20 @@ impl Maker {
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn from_bits_truncate(bits: #el) -> Self {
                 return Self::from_bits_retain(bits).truncated();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn truncated_into_known_bits(self) -> Self {
                 return self.truncated();
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn truncate_into_known_bits(&mut self) {
                 self.truncate();
             }
@@ -670,10 +698,12 @@ impl Maker {
         let ty = &self.ty;
         let konst = &self.konst.value;
         let from_konst = &self.konst.conversion;
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #from_konst fn from_name(name: &str) -> Option<Self> {
                 return match #ty::from_name(name) {
                     Some(flag) => Some(flag.into_value()),
@@ -682,6 +712,7 @@ impl Maker {
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn into_flag(self) -> Result<#ty, Self> {
                 let items = #ty::items();
                 let max = items.len();
@@ -706,7 +737,6 @@ impl Maker {
         let iterator_konst = &self.konst.iterator;
 
         return quote! {
-            #[must_use]
             #[inline(always)]
             pub #iterator_konst fn iter_known_flags(self) -> impl Iterator<Item = #ty> {
                 return IterFlags {
@@ -715,7 +745,6 @@ impl Maker {
                 };
             }
 
-            #[must_use]
             #[inline(always)]
             pub #iterator_konst fn iter(self) -> impl Iterator<Item = Self> {
                 return IterValues {
@@ -724,7 +753,6 @@ impl Maker {
                 };
             }
 
-            #[must_use]
             #[inline(always)]
             pub fn iter_names(self) -> impl Iterator<Item = (&'static str, Self)> {
                 return self
@@ -732,13 +760,11 @@ impl Maker {
                     .map(|flag| (flag.name(), flag.into_value()));
             }
 
-            #[must_use]
             #[inline(always)]
             pub fn iter_defined_names() -> impl Iterator<Item = (&'static str, Self)> {
                 return #ty::iter().map(|flag| (flag.name(), flag.into_value()));
             }
 
-            #[must_use]
             #[inline(always)]
             pub fn iter_equal_names(self) -> impl Iterator<Item = &'static str> {
                 return #ty::iter()
@@ -751,6 +777,7 @@ impl Maker {
     /// `is_empty` … `contains_any`.
     fn vl_query_fns(&self) -> TokenStream {
         let konst = &self.konst.value;
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
@@ -761,12 +788,14 @@ impl Maker {
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn is_all(self) -> bool {
                 return self.contains_all(Self::all());
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn is_exactly_all_known_bits(self) -> bool {
                 return self.bits() == Self::all().bits();
             }
@@ -779,6 +808,7 @@ impl Maker {
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub fn contains<T>(self, that: T) -> bool
             where
                 T: Into<Self>,
@@ -803,53 +833,63 @@ impl Maker {
     /// The set algebra: `truncated` … `clear`.
     fn vl_set_algebra_fns(&self) -> TokenStream {
         let konst = &self.konst.value;
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn truncated(self) -> Self {
                 return Self::from_bits_retain(self.known_bits());
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn truncate(&mut self) {
                 *self = self.truncated();
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn inserted(self, that: Self) -> Self {
                 return Self::from_bits_retain(self.bits() | that.bits());
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn insert(&mut self, that: Self) {
                 *self = self.inserted(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn removed(self, that: Self) -> Self {
                 return Self::from_bits_retain(self.bits() & !that.bits());
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn remove(&mut self, that: Self) {
                 *self = self.removed(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn toggled(self, that: Self) -> Self {
                 return Self::from_bits_retain(self.bits() ^ that.bits());
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn toggle(&mut self, that: Self) {
                 *self = self.toggled(that);
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn set(&mut self, that: Self, value: bool) {
                 if value {
                     self.insert(that);
@@ -860,6 +900,7 @@ impl Maker {
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn clear(&mut self) {
                 *self = Self::empty();
             }
@@ -869,56 +910,66 @@ impl Maker {
     /// The set algebra, continued: `with` … `complement`.
     fn vl_set_operation_fns(&self) -> TokenStream {
         let konst = &self.konst.value;
+        let track_caller = self.track_retain();
 
         return quote! {
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn with(self, that: Self) -> Self {
                 return self.inserted(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn without(self, that: Self) -> Self {
                 return self.removed(that);
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn unset(&mut self, that: Self) {
                 self.remove(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn intersection(self, that: Self) -> Self {
                 return Self::from_bits_retain(self.bits() & that.bits());
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn union(self, that: Self) -> Self {
                 return self.inserted(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn difference(self, that: Self) -> Self {
                 return self.removed(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn symmetric_difference(self, that: Self) -> Self {
                 return self.toggled(that);
             }
 
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub #konst fn complemented(self) -> Self {
                 return Self::from_bits_retain(!self.bits() & Self::all().bits());
             }
 
             #[inline(always)]
+            #track_caller
             pub #konst fn complement(&mut self) {
                 *self = self.complemented();
             }
@@ -1343,10 +1394,12 @@ impl Maker {
         let ty = &self.ty;
         let vl = &self.vl;
         let konst = &self.konst.not;
+        let track_caller = self.track_retain();
 
         return quote! {
             impl ::core::convert::From<#ty> for #vl {
                 #[inline(always)]
+                #track_caller
                 fn from(flag: #ty) -> Self {
                     return flag.into_value();
                 }
@@ -1356,6 +1409,7 @@ impl Maker {
                 type Output = Self;
 
                 #[inline(always)]
+                #track_caller
                 fn not(self) -> Self::Output {
                     return self.complemented();
                 }
@@ -1370,52 +1424,59 @@ impl Maker {
         let vl = &self.vl;
         let el = &self.el;
         let konst = &self.konst.value;
+        let track_caller = self.track_retain();
 
         return quote! {
             impl #ty {
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn from_bits_retain(bits: #el) -> #vl {
                     return #vl::from_bits_retain(bits);
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn empty() -> #vl {
                     return #vl::empty();
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn all_named() -> #vl {
                     return #vl::all();
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn all_known() -> #vl {
                     return #vl::all();
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn all_unknown() -> #vl {
                     return #vl::from_bits_retain(!#vl::all().bits());
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn from_bits(bits: #el) -> Option<#vl> {
                     return #vl::from_bits(bits);
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn from_bits_truncate(bits: #el) -> #vl {
                     return #vl::from_bits_truncate(bits);
                 }
 
-                #[must_use]
                 #[inline(always)]
                 pub fn iter_defined_names() -> impl Iterator<Item = (&'static str, #vl)> {
                     return #vl::iter_defined_names();
@@ -1432,6 +1493,7 @@ impl Maker {
         let konst = &self.konst.value;
         let from_konst = &self.konst.conversion;
         let iterator_konst = &self.konst.iterator;
+        let track_caller = self.track_retain();
 
         let name_arms = self
             .items
@@ -1488,6 +1550,7 @@ impl Maker {
                 }
 
                 #[inline(always)]
+                #track_caller
                 #[must_use]
                 pub #konst fn into_value(self) -> #vl {
                     return #vl::from_bits_retain(self.raw());
@@ -1495,25 +1558,26 @@ impl Maker {
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn all() -> #vl {
                     #[allow(clippy::unnecessary_cast)]
                     return #vl::from_bits_retain(0 as #el #(| (#ty::#all_bits as #el))*);
                 }
 
-                #[must_use]
                 #[inline(always)]
                 pub #iterator_konst fn iter() -> impl Iterator<Item = Self> {
                     return IterItems { index: 0 };
                 }
 
-                #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #iterator_konst fn iter_values() -> impl Iterator<Item = #vl> {
                     return #vl::all().iter();
                 }
 
                 #[must_use]
                 #[inline(always)]
+                #track_caller
                 pub #konst fn inserted(self, that: Self) -> #vl {
                     return self.into_value().inserted(that.into_value());
                 }
@@ -1584,11 +1648,19 @@ impl Maker {
         let operator = format_ident!("{}", op.trait_name);
         let method = format_ident!("{}", op.method);
         let symbol = op.token();
+        // The value type's shift can panic by itself: rustc checks the
+        // amount.
+        let arithmetic = self.cfg.int.profile.arithmetic();
+        let panics = self.cfg.int.validation.has_validation()
+            || crate::integral_compute::arithmetic_panics(arithmetic, op);
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
         return quote! {
             #konst impl ::core::ops::#operator<usize> for #ty {
                 type Output = #value;
 
                 #[inline(always)]
+                #track_caller
                 fn #method(self, rhs: usize) -> Self::Output {
                     return self.into_value() #symbol rhs;
                 }
@@ -1613,6 +1685,7 @@ impl Maker {
         let operator = format_ident!("{}", op.trait_name);
         let method = format_ident!("{}", op.method);
         let set_method = set_method(op.op);
+        let track_caller = self.track_retain();
         return quote! {
             #konst impl<T> ::core::ops::#operator<T> for #ty
             where
@@ -1621,6 +1694,7 @@ impl Maker {
                 type Output = #value;
 
                 #[inline(always)]
+                #track_caller
                 fn #method(self, rhs: T) -> Self::Output {
                     let rhs = #seal::#fn_conv(rhs);
                     return self.into_value().#set_method(
@@ -1681,12 +1755,14 @@ impl Maker {
         let ty = &self.ty;
         let value = &self.vl;
         let konst = &self.konst.not;
+        let track_caller = self.track_retain();
 
         return quote! {
             #konst impl ::core::ops::Not for #ty {
                 type Output = #value;
 
                 #[inline(always)]
+                #track_caller
                 fn not(self) -> Self::Output {
                     return self.into_value().complemented();
                 }
@@ -1701,6 +1777,7 @@ impl Maker {
         let vl = &self.vl;
         let konst = &self.konst.iterator;
         let raw = &self.raw;
+        let track_caller = self.track_retain();
 
         return quote! {
             struct IterItems {
@@ -1739,6 +1816,7 @@ impl Maker {
             #konst impl core::iter::Iterator for IterFlags {
                 type Item = #ty;
 
+                #track_caller
                 fn next(&mut self) -> Option<Self::Item> {
                     let items = #ty::items();
                     let max = items.len();
@@ -1770,6 +1848,7 @@ impl Maker {
             #konst impl Iterator for IterValues {
                 type Item = #vl;
 
+                #track_caller
                 fn next(&mut self) -> Option<Self::Item> {
                     let items = #ty::items();
                     let max = items.len();
@@ -1873,6 +1952,7 @@ impl Maker {
             seal_cfg: TokenStream::new(),
             capability_cfgs: Default::default(),
             within: None,
+            make_panics: false,
         };
     }
 }

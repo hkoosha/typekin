@@ -123,13 +123,6 @@ pub(crate) enum Ret {
     Pair(RetEl, RetEl),
 }
 
-impl Ret {
-    /// An invalid result panics: a validated `Self` cannot report it.
-    pub(crate) fn panics(self) -> bool {
-        return matches!(self, Self::Wrap | Self::Pair(..));
-    }
-}
-
 /// One result of a `Ret::Pair`, with the name the generated code binds it
 /// to.
 #[derive(Clone, Copy)]
@@ -201,13 +194,16 @@ impl Structural {
     }
 }
 
-/// Whether the primitive function itself panics. `panic_at` asks only for
-/// a raw result: below `anything` a validated `Self` is left out anyway.
+/// Whether the primitive function itself panics. A forward that can panic
+/// reports its caller, and `panic_at` leaves one out that would have to: it
+/// asks that only of a raw result, since below `anything` a validated
+/// `Self` is left out anyway.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) enum Panics {
     Never,
-    /// On some inputs, as `ilog2` on a non-positive value does: left out
-    /// where `panic_at` checks division.
+    /// On some inputs, as `ilog2` on a non-positive value, a division by
+    /// zero or an overflow under rustc's overflow checks: left out where
+    /// `panic_at` checks division.
     Arithmetic,
 }
 
@@ -338,6 +334,16 @@ const fn lens(
     return CoreFwd { lens, ..it };
 }
 
+/// The primitive function panics on some inputs: a zero divisor, an
+/// overflow where rustc checks or the function is strict, a negative
+/// `isqrt`, an amount past the width, float `clamp` bounds out of order.
+const fn panicking(it: CoreFwd) -> CoreFwd {
+    return CoreFwd {
+        panics: Panics::Arithmetic,
+        ..it
+    };
+}
+
 /// The `core_int` forwards, in emission order: the functions a `domain`
 /// applies and its predicates (domain diagnostics list both in this
 /// order), then the common rows, the signed, and the unsigned ones.
@@ -389,10 +395,10 @@ pub(crate) const CORE_INT: &[CoreFwd] = {
     &[
         signed(lens(
             Int(L::UnsignedAbs),
-            CoreFwd {
+            panicking(CoreFwd {
                 structural: Some(Structural::Abs),
                 ..proven(FnName::Abs, Wrap, UNARY, Abs, W)
-            },
+            }),
         )),
         signed(lens(
             Int(L::UnsignedAbs),
@@ -408,13 +414,16 @@ pub(crate) const CORE_INT: &[CoreFwd] = {
         lens(Int(L::TrailingOnes), read(FnName::TrailingOnes, U32)),
         lens(
             Int(L::RemEuclid),
-            proven(FnName::RemEuclid, Wrap, SAME, RemEuclid, W),
+            panicking(proven(FnName::RemEuclid, Wrap, SAME, RemEuclid, W)),
         ),
         lens(
             Int(L::DivEuclid),
-            proven(FnName::DivEuclid, Wrap, SAME, DivEuclid, W),
+            panicking(proven(FnName::DivEuclid, Wrap, SAME, DivEuclid, W)),
         ),
-        lens(Int(L::Isqrt), proven(FnName::Isqrt, Wrap, UNARY, Isqrt, C)),
+        lens(
+            Int(L::Isqrt),
+            panicking(proven(FnName::Isqrt, Wrap, UNARY, Isqrt, C)),
+        ),
         unsigned(lens(Predicate, row(FnName::IsPowerOfTwo, Raw(Bool), UNARY))),
         signed(lens(Predicate, row(FnName::IsPositive, Raw(Bool), UNARY))),
         signed(lens(Predicate, row(FnName::IsNegative, Raw(Bool), UNARY))),
@@ -472,58 +481,58 @@ pub(crate) const CORE_INT: &[CoreFwd] = {
         proven(FnName::SaturatingAdd, Wrap, SAME, Add, S),
         proven(FnName::SaturatingSub, Wrap, SAME, Sub, S),
         proven(FnName::SaturatingMul, Wrap, SAME, Mul, S),
-        proven(FnName::SaturatingDiv, Wrap, SAME, Div, S),
+        panicking(proven(FnName::SaturatingDiv, Wrap, SAME, Div, S)),
         row(FnName::SaturatingPow, Wrap, EXP),
         proven(FnName::WrappingAdd, Wrap, SAME, Add, W),
         proven(FnName::WrappingSub, Wrap, SAME, Sub, W),
         proven(FnName::WrappingNeg, Wrap, UNARY, Neg, W),
         proven(FnName::WrappingMul, Wrap, SAME, Mul, W),
-        proven(FnName::WrappingDiv, Wrap, SAME, Div, W),
-        proven(FnName::WrappingRem, Wrap, SAME, Rem, W),
-        proven(FnName::WrappingDivEuclid, Wrap, SAME, DivEuclid, W),
-        proven(FnName::WrappingRemEuclid, Wrap, SAME, RemEuclid, W),
+        panicking(proven(FnName::WrappingDiv, Wrap, SAME, Div, W)),
+        panicking(proven(FnName::WrappingRem, Wrap, SAME, Rem, W)),
+        panicking(proven(FnName::WrappingDivEuclid, Wrap, SAME, DivEuclid, W)),
+        panicking(proven(FnName::WrappingRemEuclid, Wrap, SAME, RemEuclid, W)),
         row(FnName::WrappingShl, Wrap, RHS),
         proven(FnName::WrappingShr, Wrap, RHS, Shr, W),
         row(FnName::WrappingPow, Wrap, EXP),
-        row(FnName::Pow, Wrap, EXP),
-        proven(FnName::StrictAdd, Wrap, SAME, Add, C),
-        proven(FnName::StrictSub, Wrap, SAME, Sub, C),
-        proven(FnName::StrictNeg, Wrap, UNARY, Neg, C),
-        proven(FnName::StrictMul, Wrap, SAME, Mul, C),
-        proven(FnName::StrictDiv, Wrap, SAME, Div, C),
-        proven(FnName::StrictRem, Wrap, SAME, Rem, C),
-        proven(FnName::StrictDivEuclid, Wrap, SAME, DivEuclid, C),
-        proven(FnName::StrictRemEuclid, Wrap, SAME, RemEuclid, C),
-        row(FnName::StrictShl, Wrap, RHS),
-        proven(FnName::StrictShr, Wrap, RHS, Shr, C),
-        row(FnName::StrictPow, Wrap, EXP),
+        panicking(row(FnName::Pow, Wrap, EXP)),
+        panicking(proven(FnName::StrictAdd, Wrap, SAME, Add, C)),
+        panicking(proven(FnName::StrictSub, Wrap, SAME, Sub, C)),
+        panicking(proven(FnName::StrictNeg, Wrap, UNARY, Neg, C)),
+        panicking(proven(FnName::StrictMul, Wrap, SAME, Mul, C)),
+        panicking(proven(FnName::StrictDiv, Wrap, SAME, Div, C)),
+        panicking(proven(FnName::StrictRem, Wrap, SAME, Rem, C)),
+        panicking(proven(FnName::StrictDivEuclid, Wrap, SAME, DivEuclid, C)),
+        panicking(proven(FnName::StrictRemEuclid, Wrap, SAME, RemEuclid, C)),
+        panicking(row(FnName::StrictShl, Wrap, RHS)),
+        panicking(proven(FnName::StrictShr, Wrap, RHS, Shr, C)),
+        panicking(row(FnName::StrictPow, Wrap, EXP)),
         proven(FnName::OverflowingAdd, OVERFLOWING, SAME, Add, W),
         proven(FnName::OverflowingSub, OVERFLOWING, SAME, Sub, W),
         proven(FnName::OverflowingNeg, OVERFLOWING, UNARY, Neg, W),
         proven(FnName::OverflowingMul, OVERFLOWING, SAME, Mul, W),
-        proven(FnName::OverflowingDiv, OVERFLOWING, SAME, Div, W),
-        proven(FnName::OverflowingRem, OVERFLOWING, SAME, Rem, W),
-        proven(
+        panicking(proven(FnName::OverflowingDiv, OVERFLOWING, SAME, Div, W)),
+        panicking(proven(FnName::OverflowingRem, OVERFLOWING, SAME, Rem, W)),
+        panicking(proven(
             FnName::OverflowingDivEuclid,
             OVERFLOWING,
             SAME,
             DivEuclid,
             W,
-        ),
-        proven(
+        )),
+        panicking(proven(
             FnName::OverflowingRemEuclid,
             OVERFLOWING,
             SAME,
             RemEuclid,
             W,
-        ),
+        )),
         row(FnName::OverflowingShl, OVERFLOWING, RHS),
         proven(FnName::OverflowingShr, OVERFLOWING, RHS, Shr, W),
         row(FnName::OverflowingPow, OVERFLOWING, EXP),
         signed(row(FnName::CastUnsigned, Raw(Unsigned), UNARY)),
         signed(proven(FnName::CheckedAbs, Opt, UNARY, Abs, C)),
         signed(proven(FnName::CheckedIsqrt, Opt, UNARY, Isqrt, C)),
-        signed(proven(FnName::StrictAbs, Wrap, UNARY, Abs, C)),
+        signed(panicking(proven(FnName::StrictAbs, Wrap, UNARY, Abs, C))),
         signed(proven(FnName::SaturatingNeg, Wrap, UNARY, Neg, S)),
         signed(proven(FnName::SaturatingAbs, Wrap, UNARY, Abs, S)),
         signed(proven(FnName::WrappingAbs, Wrap, UNARY, Abs, W)),
@@ -532,17 +541,17 @@ pub(crate) const CORE_INT: &[CoreFwd] = {
         unsigned(row(FnName::BitWidth, Raw(U32), UNARY)),
         unsigned(gated(
             Gate::NightlyKonst,
-            row(FnName::FunnelShl, Wrap, FUNNEL),
+            panicking(row(FnName::FunnelShl, Wrap, FUNNEL)),
         )),
         unsigned(gated(
             Gate::NightlyKonst,
-            row(FnName::FunnelShr, Wrap, FUNNEL),
+            panicking(row(FnName::FunnelShr, Wrap, FUNNEL)),
         )),
         unsigned(row(FnName::IsMultipleOf, Raw(Bool), SAME)),
-        unsigned(row(FnName::NextPowerOfTwo, Wrap, UNARY)),
+        unsigned(panicking(row(FnName::NextPowerOfTwo, Wrap, UNARY))),
         unsigned(row(FnName::CheckedNextPowerOfTwo, Opt, UNARY)),
-        unsigned(row(FnName::DivCeil, Wrap, SAME)),
-        unsigned(row(FnName::NextMultipleOf, Wrap, SAME)),
+        unsigned(panicking(row(FnName::DivCeil, Wrap, SAME))),
+        unsigned(panicking(row(FnName::NextMultipleOf, Wrap, SAME))),
         unsigned(row(FnName::CheckedNextMultipleOf, Opt, SAME)),
         unsigned(not_const(row(FnName::CarryingAdd, CARRIED, CARRY))),
         unsigned(not_const(row(FnName::BorrowingSub, BORROWED, BORROW))),
@@ -590,7 +599,7 @@ pub(crate) const CORE_FLOAT: &[CoreFwd] = {
         row(FnName::Midpoint, Wrap, THAT),
         gated(Gate::Unordered, row(FnName::Min, Wrap, THAT)),
         gated(Gate::Unordered, row(FnName::Max, Wrap, THAT)),
-        gated(Gate::Unordered, row(FnName::Clamp, Wrap, BOUNDS)),
+        gated(Gate::Unordered, panicking(row(FnName::Clamp, Wrap, BOUNDS))),
         read(FnName::Classify, Category),
         read(FnName::ToBits, Unsigned),
         from(FnName::FromBits, BITS),

@@ -1872,4 +1872,50 @@ mod tests {
             "{input}"
         );
     }
+
+    /// What stands before the `fn` of the function named `name`, back to
+    /// the item before it: its attributes, visibility and qualifiers.
+    fn head_of<'a>(
+        expansion: &'a str,
+        name: &str,
+    ) -> &'a str {
+        let function = format!("fn {name} (");
+        let at = expansion.find(&function);
+        assert!(at.is_some(), "{function}: {expansion}");
+        let at = at.unwrap();
+        let start = expansion[..at].rfind('}').map_or(0, |it| it + 1);
+        return &expansion[start..at];
+    }
+
+    #[test]
+    fn must_use_follows_what_an_inherent_function_returns() {
+        let input = "konst = none, domain = 2..";
+        let expansion = expansion_of(input);
+        let forward = head_of(&expansion, "count_ones");
+        let helper = head_of(&expansion, "_add");
+        let result = head_of(&expansion, "try_make");
+
+        assert!(forward.contains("# [must_use]"), "{input}: {forward}");
+        assert!(helper.contains("# [must_use]"), "{input}: {helper}");
+        assert!(!result.contains("# [must_use]"), "{input}: {result}");
+    }
+
+    #[test]
+    fn track_caller_follows_what_a_body_can_do() {
+        let input = "konst = none";
+        let expansion = expansion_of(input);
+        let overflowing = head_of(&expansion, "_add");
+        let bitwise = head_of(&expansion, "_bitand");
+        let unvalidated = head_of(&expansion, "_result_or_panic");
+
+        assert!(
+            overflowing.contains("# [track_caller]"),
+            "{input}: {overflowing}"
+        );
+        assert!(!bitwise.contains("# [track_caller]"), "{input}: {bitwise}");
+        assert!(
+            !unvalidated.contains("# [track_caller]"),
+            "{input}: {unvalidated}"
+        );
+    }
 }

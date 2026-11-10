@@ -22,9 +22,11 @@ use crate::integral_compute::{
 use crate::zz_friend::Capability;
 use crate::zz_lib::{
     Check,
+    FnAttrs,
     Konst,
     Konsts,
     OnInvalid,
+    Output,
 };
 use crate::zz_profile_integral::{
     RhsKind,
@@ -42,6 +44,16 @@ use crate::zz_values::{
 enum OpForm {
     Value,
     Assign,
+}
+
+/// One form a slot gets.
+#[derive(Clone, Copy)]
+struct SlotForm {
+    form: OpForm,
+    /// What the form does with a failing body.
+    translation: Translation,
+    /// Whether the form can panic: its body does, or its translation.
+    panics: bool,
 }
 
 /// What one binary operator impl calls and how it is marked.
@@ -122,10 +134,9 @@ impl Maker {
         let is_konst = self.ctx.cfg.konst_for(&[Konsts::Iterator]);
         let start = self.storage.extract(quote! { start.0 });
         let end = self.storage.extract(quote! { end.0 });
-        let count = Slot::count(self.ctx.cfg.profile.arithmetic());
         let (Some(forward), Some(backward)) = (
-            self.step_direction("forward", &count),
-            self.step_direction("backward", &count),
+            self.step_direction("forward"),
+            self.step_direction("backward"),
         )
         else {
             return TokenStream::new();
@@ -153,25 +164,28 @@ impl Maker {
     }
 
     /// `Step`'s checked and overflowing methods in `direction` (`forward`
-    /// or `backward`), each a step by `count`. `Step` fixes their outputs:
+    /// or `backward`), each a step by a count. `Step` fixes their outputs:
     /// `None` where a step could fail and may not panic.
     fn step_direction(
         &self,
         direction: &str,
-        count: &Slot,
     ) -> Option<TokenStream> {
         let checked = format_ident!("{}_checked", direction);
         let overflowing = format_ident!("{}_overflowing", direction);
-        let stepped = self.compute(OpRef::Step(&checked), count);
-        let wrapped = self.compute(OpRef::Step(&overflowing), count);
+        let stepped = self.compute(OpRef::Step(&checked));
+        let wrapped = self.compute(OpRef::Step(&overflowing));
         let translation =
             translate(stepped.fails, self.ctx.cfg.wide.panic_at, true)?;
         let constructed =
             self.constructed(stepped.fails, translation, quote! { value });
+        let panics = self.form_panics(stepped.panics, translation);
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
         let (stepped, wrapped) = (stepped.tokens, wrapped.tokens);
 
         return Some(quote! {
             #[inline(always)]
+            #track_caller
             fn #checked(
                 start: Self,
                 count: usize,
@@ -187,6 +201,7 @@ impl Maker {
             }
 
             #[inline(always)]
+            #track_caller
             fn #overflowing(
                 start: Self,
                 count: usize,
@@ -229,6 +244,7 @@ impl Maker {
             Check::Validate,
             OnInvalid::Err(quote! { () }),
         );
+        let track_caller = self.track_write();
         return self.impl_trait(
             false,
             quote! { ::core::str::FromStr },
@@ -236,6 +252,7 @@ impl Maker {
                 type Err = ();
 
                 #[inline(always)]
+                #track_caller
                 fn from_str(
                     source: &str,
                 ) -> ::core::result::Result<Self, Self::Err> {
@@ -288,8 +305,10 @@ impl Maker {
                 );
             }
         };
+        let track_caller = self.track_write();
         let deserialize = quote! {
             #[inline(always)]
+            #track_caller
             fn deserialize<#deserializer>(
                 deserializer: #deserializer,
             ) -> ::core::result::Result<Self, #deserializer::Error>
@@ -540,45 +559,53 @@ impl Maker {
 
     /// One operator's impls: for each slot, the operator and then its
     /// assignment. A row that facets dispatch starts with the `core::ops`
-    /// impl forwarding to its `{Op}Rhs` trait.
+    /// impl forwarding to its `{Op}Rhs` trait, which can panic when a slot
+    /// it dispatches to can.
     fn make_operator(
         &self,
         operator: &OpSpec,
     ) -> TokenStream {
         let slots = self.ctx.cfg.slots.of(operator.op);
-        let row = OpRef::Operator {
-            spec: operator,
-            konst: self.ctx.cfg.konst_for(&operator.konsts()),
-        };
-        let mut stream = self.facet_operator_impl(operator, slots);
-        for slot in slots {
-            let body = self.compute(row, slot);
-            let forms = self.slot_forms(slot, body.fails);
-            for (form, translation) in forms.into_iter().flatten() {
-                stream.extend(self.make_form(
-                    operator,
-                    slot,
-                    form,
-                    translation,
-                    &body,
-                ));
+        let konst = self.ctx.cfg.konst_for(&operator.konsts());
+        let computed = slots.iter().map(|slot| {
+            let body = self.compute(OpRef::Operator {
+                spec: operator,
+                slot,
+                konst,
+            });
+            let forms = self.slot_forms(slot, &body);
+            return (slot, body, forms);
+        });
+        let computed = computed.collect::<Vec<_>>();
+        let dispatch_panics = computed.iter().any(|(_, _, forms)| {
+            return forms.iter().flatten().any(|it| it.panics);
+        });
+        let mut stream =
+            self.facet_operator_impl(operator, slots, dispatch_panics);
+        for (slot, body, forms) in &computed {
+            for form in forms.iter().flatten() {
+                stream.extend(self.make_form(operator, slot, form, body));
             }
         }
         return stream;
     }
 
-    /// The forms `slot` gets, in form order, each with what it does with a
-    /// failing body: the operator, whose `Output` is free, then the
-    /// assignment, whose output is fixed.
+    /// The forms `slot` gets, in form order, each with what it does with
+    /// `body` failing and whether it can panic: the operator, whose
+    /// `Output` is free, then the assignment, whose output is fixed.
     fn slot_forms(
         &self,
         slot: &Slot,
-        fails: bool,
-    ) -> [Option<(OpForm, Translation)>; 2] {
+        body: &Body,
+    ) -> [Option<SlotForm>; 2] {
         let panic_at = self.ctx.cfg.wide.panic_at;
         let form = |on: bool, form: OpForm, fixed_output: bool| {
-            let translation = translate(fails, panic_at, fixed_output)?;
-            return on.then_some((form, translation));
+            let translation = translate(body.fails, panic_at, fixed_output)?;
+            return on.then(|| SlotForm {
+                form,
+                translation,
+                panics: self.form_panics(body.panics, translation),
+            });
         };
         return [
             form(slot.regular, OpForm::Value, false),
@@ -593,22 +620,25 @@ impl Maker {
         &self,
         operator: &OpSpec,
         slot: &Slot,
-        form: OpForm,
-        translation: Translation,
+        form: &SlotForm,
         body: &Body,
     ) -> TokenStream {
-        return match (&slot.rhs, form) {
-            (RhsKind::Facet { .. }, OpForm::Value) => {
-                self.facet_rhs_impl(operator, slot, translation, body)
-            }
+        return match (&slot.rhs, form.form) {
+            (RhsKind::Facet { .. }, OpForm::Value) => self.facet_rhs_impl(
+                operator,
+                slot,
+                form.translation,
+                body,
+                form.panics,
+            ),
             (RhsKind::Facet { .. }, OpForm::Assign) => {
-                self.facet_assign_impl(operator, slot)
+                self.facet_assign_impl(operator, slot, form.panics)
             }
             (RhsKind::Unary, _) => {
-                self.make_math_unary(operator, slot, translation, body.fails)
+                self.make_math_unary(operator, slot, form, body.fails)
             }
             (RhsKind::Same | RhsKind::Friend(_) | RhsKind::Amount, _) => {
-                self.make_op_impl(operator, slot, form, translation, body.fails)
+                self.make_op_impl(operator, slot, form, body.fails)
             }
         };
     }
@@ -688,10 +718,16 @@ impl Maker {
         &self,
         operator: &OpSpec,
         slot: &Slot,
-        form: OpForm,
-        translation: Translation,
+        form: &SlotForm,
         fails: bool,
     ) -> TokenStream {
+        let SlotForm {
+            form,
+            translation,
+            panics,
+        } = *form;
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(panics, Output::Unmarked);
         let param = match (&slot.rhs, form) {
             (RhsKind::Amount, OpForm::Assign) => format_ident!("that"),
             _ => format_ident!("rhs"),
@@ -716,6 +752,7 @@ impl Maker {
 
                     #doc
                     #[inline(always)]
+                    #track_caller
                     fn #method(
                         self,
                         #param: #param_ty,
@@ -728,6 +765,7 @@ impl Maker {
             OpForm::Assign => quote! {
                 #doc
                 #[inline(always)]
+                #track_caller
                 fn #method(
                     &mut self,
                     #param: #param_ty,
@@ -772,10 +810,10 @@ impl Maker {
         &self,
         operator: &OpSpec,
         slot: &Slot,
-        translation: Translation,
+        form: &SlotForm,
         fails: bool,
     ) -> TokenStream {
-        let output = self.output_of(slot, false, fails, translation);
+        let output = self.output_of(slot, false, fails, form.translation);
         let is_konst = self.ctx.cfg.konst_for(&operator.konsts());
         let output_ty = output.ty();
         let trait_name = format_ident!("{}", operator.trait_name);
@@ -783,6 +821,8 @@ impl Maker {
         let helper = format_ident!("_{}", method);
         let result = output.convert(quote! { self.#helper() });
         let doc = self.proof_doc(self.slot_proven(operator, slot));
+        let FnAttrs { track_caller, .. } =
+            FnAttrs::of(form.panics, Output::Unmarked);
         return self.impl_trait(
             is_konst,
             quote! { ::core::ops::#trait_name },
@@ -791,6 +831,7 @@ impl Maker {
 
                 #doc
                 #[inline(always)]
+                #track_caller
                 fn #method(self) -> Self::Output {
                     return #result;
                 }

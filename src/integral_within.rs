@@ -145,6 +145,7 @@ impl Maker {
         let name = self.ctx.names.get(IntegralName::WithinRawFn);
         return Some(quote! {
             #[doc(hidden)]
+            #[must_use]
             #[inline(always)]
             pub const fn #name(self) -> #el {
                 return #raw;
@@ -391,6 +392,7 @@ impl Maker {
             Check::DebugOnly(violated),
             OnInvalid::Panic(violated),
         );
+        let track_caller = self.track_write();
         return quote! {
             /// Builds a value from a `Within` friend, whose every value
             /// lies in the domain (proven at compile time); debug builds
@@ -398,6 +400,7 @@ impl Maker {
             #[doc(hidden)]
             #[must_use]
             #[inline(always)]
+            #track_caller
             pub(self) #konst fn #name(raw: #el) -> Self {
                 #body
             }

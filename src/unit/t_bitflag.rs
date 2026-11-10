@@ -660,4 +660,26 @@ mod tests {
             "{source}",
         );
     }
+
+    #[test]
+    fn iterator_functions_carry_no_must_use() {
+        let source = "#[repr(u8)] pub enum Flag { Read = 1 }";
+        let this = expand(source);
+        assert!(this.is_ok(), "{source}");
+        let expansion = this.unwrap().to_string();
+        let head_of = |function: &str| {
+            let at = expansion.find(function).unwrap_or(0);
+            let start = expansion[..at].rfind('}').map_or(0, |it| it + 1);
+            return &expansion[start..at];
+        };
+        let iterator = head_of("fn iter_known_flags (");
+        let option = head_of("fn from_bits (");
+
+        assert!(
+            iterator.contains("# [inline (always)]"),
+            "{source}: {iterator}"
+        );
+        assert!(!iterator.contains("# [must_use]"), "{source}: {iterator}");
+        assert!(option.contains("# [must_use]"), "{source}: {option}");
+    }
 }

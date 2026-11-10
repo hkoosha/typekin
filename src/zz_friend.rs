@@ -30,8 +30,10 @@ use syn::{
 
 use crate::zz_lib as zz;
 use crate::zz_lib::{
+    FnAttrs,
     Konst,
     Named,
+    Output,
     PathIdentity,
     arg_or_list,
     one_or_list,
@@ -586,6 +588,9 @@ pub(crate) struct ProtocolFriend {
     /// A `Within` friend's `make` doc: it constructs through the proven
     /// constructor.
     pub(crate) within: Option<TokenStream>,
+    /// Whether the friend's `make` (or `try_make`) can panic: the
+    /// constructor it calls can.
+    pub(crate) make_panics: bool,
 }
 
 pub(crate) struct Construction {
@@ -829,10 +834,13 @@ fn emit_friend_capability(
             let raw = quote! {
                 let raw = <Self as #seal #arguments>::#conversion(self);
             };
+            let FnAttrs { track_caller, .. } =
+                FnAttrs::of(friend.make_panics, Output::Unmarked);
             if let Some(or_err) = &construction.or_err {
                 let relation = &protocol.relation;
                 return quote! {
                     #[inline(always)]
+                    #track_caller
                     fn try_make(
                         self,
                     ) -> ::core::result::Result<#target, #relation> {
@@ -862,6 +870,7 @@ fn emit_friend_capability(
             return quote! {
                 #doc
                 #[inline(always)]
+                #track_caller
                 fn make(self) -> #target {
                     #raw
                     return #constructor(raw);

@@ -50,9 +50,11 @@ use crate::zz_friend::{
 use crate::zz_hide::Envelope;
 use crate::zz_lib::{
     Check,
+    FnAttrs,
     Konst,
     NUMERIC_LINTS,
     OnInvalid,
+    Output,
     lint_scope,
     repr_transparent,
 };
@@ -773,6 +775,12 @@ impl StoragePlan {
         return self.base != Base::Plain || self.wrapping;
     }
 
+    /// Whether writing a raw value to the storage can panic: `NonZero`
+    /// tests it for zero, also after validation or a proof ruled zero out.
+    pub(crate) fn write_panics(&self) -> bool {
+        return self.base == Base::NonZero;
+    }
+
     fn non_zero_name(&self) -> &'static str {
         return self
             .raw
@@ -1108,6 +1116,22 @@ impl Maker {
         return translate(true, self.ctx.cfg.wide.panic_at, true);
     }
 
+    /// Whether a constructor that validates a raw value and panics on an
+    /// invalid one can panic (`_or_panic`, `_result_or_panic`, `map`):
+    /// there is validation to fail, or the storage tests for zero. Without
+    /// either it just constructs.
+    pub(crate) fn validation_panics(&self) -> bool {
+        return self.ctx.cfg.validation.has_validation()
+            || self.storage.write_panics();
+    }
+
+    /// `#[track_caller]` for a function that builds `Self` and has no
+    /// panic of its own: only the storage's test for zero can panic.
+    pub(crate) fn track_write(&self) -> Option<TokenStream> {
+        return FnAttrs::of(self.storage.write_panics(), Output::Unmarked)
+            .track_caller;
+    }
+
     /// The error in a form's output: `Option<Raw>` when its body `fails`
     /// and `translation` passes the `Result` on.
     pub(crate) fn passed_failure(
@@ -1149,15 +1173,39 @@ impl Maker {
         fails: bool,
         translation: Translation,
     ) -> Option<Path> {
+        let or_panic = self.ctx.fp_or_panic.clone();
+        return self.constructor_through(or_panic, fails, translation);
+    }
+
+    /// `constructor` for a named form (a forward, `Sum`, `Product`): its
+    /// failure panics in `_result_or_panic`, which is also what an
+    /// unvalidated type constructs through.
+    pub(crate) fn result_constructor(
+        &self,
+        fails: bool,
+        translation: Translation,
+    ) -> Option<Path> {
+        let result_or_panic = parse_quote! { Self::_result_or_panic };
+        return self.constructor_through(result_or_panic, fails, translation);
+    }
+
+    /// `constructor`, `panicking` being the constructor a failure panics
+    /// in.
+    fn constructor_through(
+        &self,
+        panicking: Path,
+        fails: bool,
+        translation: Translation,
+    ) -> Option<Path> {
         return match (translation, fails) {
-            (Translation::Unwrap(_), _) => Some(self.ctx.fp_or_panic.clone()),
+            (Translation::Unwrap(_), _) => Some(panicking),
             (Translation::Pass, true) => {
                 let or_err = self.ctx.names.get(IntegralName::OrErr);
                 Some(parse_quote! { Self::#or_err })
             }
             (Translation::Pass, false) => {
                 if !self.ctx.cfg.validation.has_validation() {
-                    Some(self.ctx.fp_or_panic.clone())
+                    Some(panicking)
                 }
                 else if self.proofs_available() {
                     Some(parse_quote! { Self::_proven })
@@ -1177,7 +1225,26 @@ impl Maker {
         translation: Translation,
         value: TokenStream,
     ) -> TokenStream {
-        return match self.constructor(fails, translation) {
+        return self.built(self.constructor(fails, translation), value);
+    }
+
+    /// `constructed` for a named form: through `result_constructor`.
+    pub(crate) fn result_constructed(
+        &self,
+        fails: bool,
+        translation: Translation,
+        value: TokenStream,
+    ) -> TokenStream {
+        return self.built(self.result_constructor(fails, translation), value);
+    }
+
+    /// `value` through `constructor`; without one, `Self` built directly.
+    fn built(
+        &self,
+        constructor: Option<Path>,
+        value: TokenStream,
+    ) -> TokenStream {
+        return match constructor {
             Some(constructor) => quote! { #constructor(#value) },
             None => self.construct_self(value),
         };

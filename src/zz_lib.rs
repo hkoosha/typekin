@@ -494,6 +494,45 @@ pub(crate) fn repr_transparent(enabled: bool) -> Option<TokenStream> {
     return enabled.then(|| quote! { #[repr(transparent)] });
 }
 
+/// What a generated function returns, as far as `#[must_use]` goes.
+#[derive(Clone, Copy)]
+pub(crate) enum Output {
+    /// A trait method's output, which is the trait's to mark, or nothing.
+    Unmarked,
+    /// An inherent function's value.
+    Value,
+    /// An inherent function's value of a type that is `#[must_use]` itself
+    /// (`Result`, `impl Iterator`): a second attribute adds nothing, and
+    /// `clippy::double_must_use` reports it in expanded source.
+    MustUseType,
+}
+
+/// The attributes one rule gives every generated function, from two facts:
+/// whether its body can panic, and what it returns.
+pub(crate) struct FnAttrs {
+    /// `#[must_use]` on an inherent function that returns a value; written
+    /// before `#[inline(always)]`.
+    pub(crate) must_use: Option<TokenStream>,
+    /// `#[track_caller]` on a function or trait method whose body can
+    /// panic, so that the panic reports the caller; written after
+    /// `#[inline(always)]`. A function that calls one that can panic can
+    /// panic: the location passes only through an unbroken chain.
+    pub(crate) track_caller: Option<TokenStream>,
+}
+
+impl FnAttrs {
+    pub(crate) fn of(
+        panics: bool,
+        output: Output,
+    ) -> Self {
+        return Self {
+            must_use: matches!(output, Output::Value)
+                .then(|| quote! { #[must_use] }),
+            track_caller: panics.then(|| quote! { #[track_caller] }),
+        };
+    }
+}
+
 /// A lint a family allows on the `const _` scope of its generated code.
 #[derive(Clone, Copy)]
 pub(crate) enum ScopeLint {
